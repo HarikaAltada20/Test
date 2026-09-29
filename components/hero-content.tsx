@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+import { Caveat } from "next/font/google";
 
 import {
   ArrowRight,
@@ -16,6 +17,7 @@ import {
   Users,
   Gamepad2,
   Headset,
+  Upload,
   Sparkles,
   Crown,
   Globe,
@@ -25,12 +27,648 @@ import {
   Heart,
   User,
   Users2,
+  Wallet,
+  ChevronDown,
 } from "lucide-react";
+import { SiYoutube } from "react-icons/si";
 import { useSwipeable } from "react-swipeable";
 import Testimonials from "./Testimonials";
 import FAQ from "./FAQ";
-import CtcBanner from "./CtcBanner";
 import NumbersSection from "./NumberSection";
+import { useThemeMode } from "@/hooks/use-theme-mode";
+
+const FORM_DEMO_TITLE = "Podcasts Clipping Challenge (Dual Rewards)";
+const FORM_DEMO_THUMB = "/images/9ec348288ce12767ffa9907081b7c37124c89470.png";
+const FORM_DEMO_CURSOR = "/images/Frame (5).png";
+const FORM_DEMO_CAMPAIGN_TYPES = [
+  "Leaderboard",
+  "CPM",
+  "Milestone",
+  "Dual Rewards",
+] as const;
+
+type FormCursorTarget =
+  | "title"
+  | "budget"
+  | "launch"
+  | "campaignType"
+  | "thumbnail"
+  | "creatorCard";
+
+const caveat = Caveat({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+function BrandFormMockup({ isLight }: { isLight: boolean }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLDivElement>(null);
+  const budgetRef = useRef<HTMLDivElement>(null);
+  const launchRef = useRef<HTMLDivElement>(null);
+  const campaignTypeRef = useRef<HTMLDivElement>(null);
+  const thumbnailRef = useRef<HTMLDivElement>(null);
+
+  const [title, setTitle] = useState("");
+  const [platformReady, setPlatformReady] = useState(false);
+  const [typeReady, setTypeReady] = useState(false);
+  const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+  const [selectedCampaignType, setSelectedCampaignType] = useState<
+    (typeof FORM_DEMO_CAMPAIGN_TYPES)[number] | null
+  >(null);
+  const [budgetText, setBudgetText] = useState("$0");
+  const [budgetTyping, setBudgetTyping] = useState(false);
+  const [showThumb, setShowThumb] = useState(false);
+  const [isDraggingThumb, setIsDraggingThumb] = useState(false);
+  const [rocketFlying, setRocketFlying] = useState(false);
+  const [demoKey, setDemoKey] = useState(0);
+
+  const [cursorVisible, setCursorVisible] = useState(false);
+  const [cursorClicking, setCursorClicking] = useState(false);
+  const [cursorPos, setCursorPos] = useState({ x: 40, y: 320 });
+  const [showClickBurst, setShowClickBurst] = useState(false);
+
+  const getTargetPos = (target: FormCursorTarget) => {
+    const root = rootRef.current;
+    if (!root) return null;
+    if (target === "creatorCard") {
+      const rootRect = root.getBoundingClientRect();
+      return {
+        x: rootRect.width + 180,
+        y: 350,
+      };
+    }
+    const el =
+      target === "title"
+        ? titleRef.current
+        : target === "budget"
+          ? budgetRef.current
+          : target === "campaignType"
+            ? campaignTypeRef.current
+            : target === "thumbnail"
+              ? thumbnailRef.current
+              : launchRef.current;
+    if (!el) return null;
+    const rootRect = root.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width * 0.55 - rootRect.left,
+      y: rect.top + rect.height * 0.55 - rootRect.top,
+    };
+  };
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setTitle(FORM_DEMO_TITLE);
+      setPlatformReady(true);
+      setTypeReady(true);
+      setSelectedCampaignType("Leaderboard");
+      setTypeDropdownOpen(false);
+      setBudgetText("$2400");
+      setShowThumb(true);
+      return;
+    }
+
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const wait = (ms: number) =>
+      new Promise<void>((resolve) => {
+        timers.push(setTimeout(resolve, ms));
+      });
+
+    let cancelled = false;
+
+    const moveCursorTo = async (target: FormCursorTarget) => {
+      const pos = getTargetPos(target);
+      if (!pos) return;
+      setCursorVisible(true);
+      setCursorPos(pos);
+      await wait(650);
+    };
+
+    const clickCursor = async () => {
+      setCursorClicking(true);
+      setShowClickBurst(true);
+      await wait(220);
+      setCursorClicking(false);
+      setShowClickBurst(false);
+      await wait(120);
+    };
+
+    const run = async () => {
+      setTitle("");
+      setPlatformReady(false);
+      setTypeReady(false);
+      setTypeDropdownOpen(false);
+      setSelectedCampaignType(null);
+      setBudgetText("$0");
+      setBudgetTyping(false);
+      setShowThumb(false);
+      setIsDraggingThumb(false);
+      setRocketFlying(false);
+      setCursorVisible(false);
+      setCursorClicking(false);
+      setShowClickBurst(false);
+      setCursorPos({ x: 48, y: 300 });
+
+      await wait(450);
+      if (cancelled) return;
+
+      // Cursor clicks title field, then typing starts
+      await moveCursorTo("title");
+      if (cancelled) return;
+      await clickCursor();
+      if (cancelled) return;
+
+      for (let i = 1; i <= FORM_DEMO_TITLE.length; i++) {
+        if (cancelled) return;
+        setTitle(FORM_DEMO_TITLE.slice(0, i));
+        await wait(36);
+      }
+
+      await wait(350);
+      if (cancelled) return;
+      setPlatformReady(true);
+
+      // Cursor opens campaign type dropdown, then picks Leaderboard
+      await wait(350);
+      if (cancelled) return;
+      await moveCursorTo("campaignType");
+      if (cancelled) return;
+      await clickCursor();
+      if (cancelled) return;
+      setTypeDropdownOpen(true);
+
+      await wait(550);
+      if (cancelled) return;
+      setSelectedCampaignType("Leaderboard");
+      setTypeReady(true);
+
+      await wait(420);
+      if (cancelled) return;
+      setTypeDropdownOpen(false);
+
+      await wait(400);
+      if (cancelled) return;
+
+      // Cursor clicks budget, then types digit-by-digit
+      await moveCursorTo("budget");
+      if (cancelled) return;
+      await clickCursor();
+      if (cancelled) return;
+
+      setBudgetTyping(true);
+      setBudgetText("$");
+      await wait(200);
+      for (const ch of "2400") {
+        if (cancelled) return;
+        setBudgetText((prev) => prev + ch);
+        await wait(180);
+      }
+      await wait(260);
+      setBudgetTyping(false);
+
+      await wait(350);
+      if (cancelled) return;
+
+      // Cursor moves across to the 2nd Creator Card on the right, grabs it and drags to thumbnail box
+      await moveCursorTo("creatorCard");
+      if (cancelled) return;
+      await clickCursor();
+      if (cancelled) return;
+
+      setIsDraggingThumb(true);
+      await moveCursorTo("thumbnail");
+      if (cancelled) return;
+      await clickCursor();
+      if (cancelled) return;
+
+      setIsDraggingThumb(false);
+      setShowThumb(true);
+      await wait(450);
+      if (cancelled) return;
+
+      // Cursor clicks Launch → rocket slides right inside the colored button
+      await moveCursorTo("launch");
+      if (cancelled) return;
+      await clickCursor();
+      if (cancelled) return;
+
+      setRocketFlying(true);
+      await wait(1100);
+      if (cancelled) return;
+      setCursorVisible(false);
+      setRocketFlying(false);
+
+      await wait(700);
+      if (!cancelled) setDemoKey((k) => k + 1);
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+    };
+  }, [demoKey]);
+
+  return (
+    <div ref={rootRef} className="pointer-events-none absolute inset-0 z-30">
+      {/* FORM MOCKUP */}
+      <div
+        className={cn(
+          "absolute left-2 right-2 top-[248px] h-[440px] overflow-visible rounded-t-[20px] border sm:left-[24px] sm:right-[24px] sm:top-[266px] md:left-[44px] md:right-[44px]",
+          isLight
+            ? "border-[#0000000D] bg-[#ECECEC] text-black shadow-[inset_0_0_4.43px_0_#0000001A]"
+            : "border-white/[0.10] bg-[#121212] text-white shadow-[0_-10px_40px_rgba(0,0,0,.15)]",
+        )}
+      >
+        {/* Launch */}
+        <div ref={launchRef} className="absolute right-0 top-3 z-20 sm:top-4">
+          <div className="relative">
+            {!isLight ? (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -inset-2 rounded-lg bg-[radial-gradient(circle,rgba(187,0,255,0.45)_0%,transparent_70%)] opacity-55 blur-[10px]"
+              />
+            ) : null}
+
+            <div
+              className={cn(
+                "relative w-[100px] overflow-hidden rounded-[6px] px-3.5 py-2 text-[14px] font-medium",
+                isLight
+                  ? "border border-black/[0.06] bg-white text-[#7C3AED]"
+                  : "bg-[#201E1E] text-white",
+              )}
+            >
+              {!isLight ? (
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute bottom-[-6px] left-1/2 h-[14px] w-[78%] -translate-x-1/2 rounded-[100%] bg-[linear-gradient(180deg,rgba(187,0,255,0.6)_0%,rgba(217,217,217,0.55)_100%)] blur-[7px]"
+                />
+              ) : null}
+
+              <span className="relative z-10 flex h-4 items-center gap-1.5">
+                <span
+                  className={cn(
+                    "inline-flex h-4 w-4 shrink-0 items-center justify-center",
+                    rocketFlying && "animate-form-rocket-fly",
+                  )}
+                >
+                  {isLight ? (
+                    <Rocket
+                      className="h-4 w-4 text-[#7C3AED]"
+                      strokeWidth={2}
+                    />
+                  ) : (
+                    <Image
+                      src="/images/Frame.png"
+                      alt=""
+                      width={16}
+                      height={16}
+                      className="h-4 w-4 object-contain mix-blend-screen"
+                    />
+                  )}
+                </span>
+                {!rocketFlying ? <span>Launch</span> : null}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Form header */}
+        <div className="flex items-center justify-between px-5 pt-5">
+          <div className="flex items-center gap-2.5">
+            <span
+              className={cn(
+                "flex h-6 w-6 items-center justify-center rounded-full text-[11px]",
+                isLight
+                  ? "bg-[#7C3AED]/15 text-[#7C3AED]"
+                  : "bg-[#292929] text-white",
+              )}
+            >
+              1
+            </span>
+            <span
+              className={cn(
+                "text-[16px] font-medium",
+                isLight ? "text-black" : "text-white",
+              )}
+            >
+              Details
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-5 h-[calc(100%-54px)] overflow-hidden px-5">
+          {/* Campaign title */}
+          <div className="flex items-center justify-between">
+            <label
+              className={cn(
+                "text-[11px]",
+                isLight ? "text-black/70" : "text-white/75",
+              )}
+            >
+              Campaign title
+              <span className="text-red-400"> *</span>
+            </label>
+            <span
+              className={cn(
+                "text-[10px]",
+                isLight ? "text-black/35" : "text-white/35",
+              )}
+            >
+              {title.length}/100
+            </span>
+          </div>
+
+          <div
+            ref={titleRef}
+            className={cn(
+              "mt-1.5 flex h-[34px] items-center rounded-md border px-3.5 text-[10.5px] transition-colors duration-300",
+              isLight
+                ? "border-[#0000000D] bg-white"
+                : "border-white/[0.06] bg-[#292929]",
+              title
+                ? isLight
+                  ? "text-black/80"
+                  : "text-white/85"
+                : isLight
+                  ? "text-black/40"
+                  : "text-white/25",
+            )}
+          >
+            <span className="truncate">
+              {title || "e.g., Create a Viral shorts/video for our New App"}
+            </span>
+            {title.length > 0 && title.length < FORM_DEMO_TITLE.length ? (
+              <span
+                className={cn(
+                  "ml-0.5 inline-block h-3.5 w-px animate-form-caret",
+                  isLight ? "bg-[#7C3AED]" : "bg-white/70",
+                )}
+              />
+            ) : null}
+          </div>
+
+          {/* Platform + Campaign type */}
+          <div className="mt-4 grid grid-cols-2 gap-3.5">
+            <div>
+              <label
+                className={cn(
+                  "text-[11px]",
+                  isLight ? "text-black/70" : "text-white/75",
+                )}
+              >
+                Platform
+                <span className="text-red-400"> *</span>
+              </label>
+              <div
+                className={cn(
+                  "mt-1.5 flex h-[34px] items-center justify-between rounded-md border px-3.5 text-[11px] transition-all duration-300",
+                  isLight
+                    ? "border-[#0000000D] bg-white"
+                    : "border-white/[0.06] bg-[#292929]",
+                  platformReady
+                    ? isLight
+                      ? "text-black/80"
+                      : "text-white/85"
+                    : isLight
+                      ? "text-black/40"
+                      : "text-white/25",
+                )}
+              >
+                {platformReady ? (
+                  <span className="flex items-center gap-1.5">
+                    <SiYoutube className="h-4 w-4 text-[#737373]" />
+                    YouTube
+                  </span>
+                ) : (
+                  <span>Select platform</span>
+                )}
+                <span>⌄</span>
+              </div>
+            </div>
+
+            <div className="relative" ref={campaignTypeRef}>
+              <label
+                className={cn(
+                  "text-[11px]",
+                  isLight ? "text-black/70" : "text-white/75",
+                )}
+              >
+                Campaign type
+              </label>
+              <div
+                className={cn(
+                  "mt-1.5 flex h-[34px] items-center justify-between rounded-md border px-3.5 text-[11px] transition-all duration-300",
+                  isLight
+                    ? "border-[#0000000D] bg-white"
+                    : "border-white/[0.06] bg-[#292929]",
+                  typeDropdownOpen &&
+                    (isLight
+                      ? "border-[#7C3AED]/35 ring-1 ring-[#7C3AED]/20"
+                      : "border-white/20 ring-1 ring-white/10"),
+                  typeReady || selectedCampaignType
+                    ? isLight
+                      ? "text-black/80"
+                      : "text-white/85"
+                    : isLight
+                      ? "text-black/40"
+                      : "text-white/25",
+                )}
+              >
+                <span>{selectedCampaignType ?? "Select campaign type"}</span>
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 shrink-0 transition-transform duration-300 ease-out",
+                    typeDropdownOpen && "rotate-180",
+                    isLight ? "text-black/45" : "text-white/45",
+                  )}
+                  strokeWidth={2.2}
+                />
+              </div>
+
+              {typeDropdownOpen ? (
+                <div
+                  className={cn(
+                    "absolute left-0 right-0 top-[calc(100%+4px)] z-40 origin-top overflow-hidden rounded-md border py-1 shadow-[0_12px_28px_rgba(0,0,0,0.18)] animate-form-dropdown-in",
+                    isLight
+                      ? "border-[#0000000D] bg-white"
+                      : "border-white/[0.08] bg-[#292929]",
+                  )}
+                >
+                  {FORM_DEMO_CAMPAIGN_TYPES.map((type) => {
+                    const isSelected = selectedCampaignType === type;
+                    return (
+                      <div
+                        key={type}
+                        className={cn(
+                          "flex h-[32px] items-center px-3.5 text-[11px] transition-colors duration-200",
+                          isSelected
+                            ? isLight
+                              ? "bg-[#7C3AED]/10 text-[#7C3AED]"
+                              : "bg-white/10 text-white"
+                            : isLight
+                              ? "text-black/70"
+                              : "text-white/70",
+                        )}
+                      >
+                        {type}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Upload / thumbnail */}
+          <div
+            ref={thumbnailRef}
+            className={cn(
+              "relative mt-5 flex h-[132px] items-center justify-center overflow-hidden rounded-md border border-dashed transition-all duration-500",
+              isLight
+                ? "border-[#0000001A] bg-white"
+                : "border-white/[0.08] bg-[#242424]",
+            )}
+          >
+            {showThumb ? (
+              <div className="absolute inset-0 animate-form-thumb-in">
+                <Image
+                  src={FORM_DEMO_THUMB}
+                  alt=""
+                  fill
+                  className="object-cover"
+                  sizes="320px"
+                />
+              </div>
+            ) : (
+              <div className="flex flex-col items-center text-center">
+                <Upload
+                  className={cn(
+                    "h-6 w-6",
+                    isLight ? "text-black/35" : "text-white/30",
+                  )}
+                />
+                <div
+                  className={cn(
+                    "mt-1.5 text-[11px]",
+                    isLight ? "text-black/50" : "text-white/45",
+                  )}
+                >
+                  Drag, drop or{" "}
+                  <span
+                    className={cn("underline", isLight ? "text-[#7C3AED]" : "")}
+                  >
+                    browse
+                  </span>{" "}
+                  thumbnail
+                </div>
+                <div
+                  className={cn(
+                    "mt-1 text-[9px]",
+                    isLight ? "text-black/35" : "text-white/25",
+                  )}
+                >
+                  Max file size: 5MB
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* FLOATING BUDGET */}
+      <div
+        ref={budgetRef}
+        className={cn(
+          "absolute bottom-[8px] left-[10px] sm:left-[20px] z-10 w-[140px] sm:w-[176px] rounded-[12px] sm:rounded-[14px] border p-3",
+          isLight
+            ? "border-[#0000000D] bg-[#ECECEC] shadow-[0_10px_28px_rgba(20,16,40,0.08)]"
+            : "border-white/[0.12] bg-[#1b1b1b] shadow-[0_15px_35px_rgba(0,0,0,.45)]",
+        )}
+      >
+        <div
+          className={cn(
+            "flex items-center gap-1.5 sm:gap-2 text-[12px] sm:text-[14px] font-medium",
+            isLight ? "text-black" : "text-white",
+          )}
+        >
+          <Image
+            src="/images/Clip%20path%20group%20(2).png"
+            alt="Budget icon"
+            width={20}
+            height={20}
+            className="h-[16px] w-[16px] shrink-0 object-contain sm:h-[18px] sm:w-[18px]"
+          />
+          Budget
+        </div>
+
+        <div
+          className={cn(
+            "mt-2.5 flex h-[32px] sm:h-[38px] items-center rounded-md border px-2.5 sm:px-3.5 text-[12px] sm:text-[14px] tabular-nums transition-all duration-200",
+            isLight
+              ? budgetTyping
+                ? "border-[#7C3AED]/45 bg-white text-black shadow-[0_0_0_2px_rgba(124,58,237,0.12)]"
+                : "border-[#0000000D] bg-white text-black/70"
+              : budgetTyping
+                ? "border-white/35 bg-[#292929] text-white shadow-[0_0_0_2px_rgba(255,255,255,0.06)]"
+                : "border-white/[0.07] bg-[#292929] text-white/80",
+          )}
+        >
+          <span>{budgetText}</span>
+          {budgetTyping ? (
+            <span
+              className={cn(
+                "ml-0.5 inline-block h-4 w-[1.5px] animate-form-caret",
+                isLight ? "bg-[#7C3AED]" : "bg-white",
+              )}
+            />
+          ) : null}
+        </div>
+      </div>
+
+      {/* Animated cursor arrow — clicks fields, drags thumbnail from 2nd card, then Launch */}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute z-50 transition-[left,top,opacity,transform] duration-700 ease-in-out",
+          cursorVisible ? "opacity-100" : "opacity-0",
+          cursorClicking && "scale-90",
+        )}
+        style={{
+          left: cursorPos.x,
+          top: cursorPos.y,
+          width: 28,
+          height: 28,
+        }}
+      >
+        {isDraggingThumb ? (
+          <div className="pointer-events-none absolute -left-12 -top-10 h-14 w-24 overflow-hidden rounded-md border border-white/40 shadow-2xl rotate-[-6deg] animate-pulse">
+            <Image
+              src={FORM_DEMO_THUMB}
+              alt=""
+              fill
+              className="object-cover"
+            />
+          </div>
+        ) : null}
+
+        {showClickBurst ? (
+          <span className="pointer-events-none absolute -left-1 -top-1 h-5 w-5 animate-ping rounded-full bg-white/45" />
+        ) : null}
+        <Image
+          src={FORM_DEMO_CURSOR}
+          alt=""
+          width={28}
+          height={28}
+          className="relative h-[28px] w-[28px] object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.65)]"
+          priority
+        />
+      </div>
+    </div>
+  );
+}
+
 const steps = [
   {
     step: 1,
@@ -58,6 +696,27 @@ const steps = [
     image: "/images/f4d15163b849dc0a3621c67aba3032911859d498.avif",
     icon: <Sparkles className="w-6 h-6 text-white" />,
   },
+];
+
+const creatorsCollageTopImages = [
+  "/images/1ad1c9f574ea6d160a89ed07d1b57719736a1741.png",
+  "/images/fa2936792bd0f4aac9c0930fabbd4e09bf1395f3.png",
+  "/images/9ec348288ce12767ffa9907081b7c37124c89470.png",
+];
+
+const creatorsCollageBottomImages = [
+  "/images/ab2f5e265b64dc9fb7ab055b55edf04d30267135.png",
+  "/images/9fdb16697941ae684b84575d2a61602b36d7b034.png",
+  "/images/b03ad3334c0eaa641c588a3a9bfc08a66de184ac.png",
+];
+
+const brandImages: string[] = [
+  "/images/ba54cd16167abac1d45d63109c16d6999d67e552.png",
+  "/images/image 277.png",
+  "/images/7e659d660283b02da97f42ede238f8b03b35cb37.png",
+  "/images/image 276.png",
+  "/images/Frame 2147243949.png",
+  "/images/0046b3171bb1d05ed8f26833e71c449ca7073d81.png",
 ];
 // const features = [
 //   {
@@ -100,11 +759,149 @@ const steps = [
 //     description: "Our gaming experts are always ready to help you win big!",
 //     icon: "/images/support-icon.png",
 //   },
-// ];
+const CREATORS_NETWORK_NUMBERS = [
+  "1,000+",
+  "4,500+",
+  "8,200+",
+  "12,000+",
+  "14,800+",
+  "16,700+",
+];
+const VIEWS_GENERATED_NUMBERS = [
+  "10M+",
+  "40M+",
+  "75M+",
+  "110M+",
+  "140M+",
+  "160M+",
+];
+
+function RollingDigitChar({
+  char,
+  isLight,
+  delay = 0,
+}: {
+  char: string;
+  isLight: boolean;
+  delay?: number;
+}) {
+  const isDigit = /^[0-9]$/.test(char);
+  const textGradient = isLight
+    ? "bg-gradient-to-b from-black via-[#3a3a3a] to-[#9a9a9a]"
+    : "bg-[linear-gradient(180deg,#555555_0%,#D8D8D8_45%,#FFFFFF_90%)]";
+
+  if (!isDigit) {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center justify-center bg-clip-text text-transparent select-none px-[0.02em]",
+          textGradient,
+        )}
+      >
+        {char}
+      </span>
+    );
+  }
+
+  const numericValue = parseInt(char, 10);
+
+  return (
+    <span className="relative inline-block h-[64px] sm:h-[76px] md:h-[92px] lg:h-[112px] overflow-hidden align-top select-none">
+      <span
+        className="flex flex-col transition-transform duration-450 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        style={{
+          transform: `translateY(-${numericValue * 10}%)`,
+          transitionDelay: `${delay}ms`,
+        }}
+      >
+        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((val) => (
+          <span
+            key={val}
+            className={cn(
+              "flex h-[64px] sm:h-[76px] md:h-[92px] lg:h-[112px] shrink-0 items-center justify-center bg-clip-text text-transparent",
+              textGradient,
+            )}
+          >
+            {val}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
+function HeroStatBlock({
+  numbers,
+  label,
+  isLight,
+}: {
+  numbers: string[];
+  label: string;
+  isLight: boolean;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [step, setStep] = useState(0);
+  const [animate, setAnimate] = useState(false);
+
+  const maxSteps = numbers.length - 1;
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setAnimate(true);
+        }
+      },
+      { threshold: 0.05 },
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (animate && step < maxSteps) {
+      const timeout = setTimeout(() => {
+        setStep((prev) => prev + 1);
+      }, 300);
+      return () => clearTimeout(timeout);
+    }
+  }, [animate, step, maxSteps]);
+
+  const currentStr = numbers[step] || numbers[0];
+
+  return (
+    <div className="flex flex-col items-center text-center" ref={containerRef}>
+      <div className="flex items-center justify-center font-extrabold leading-none tracking-[-0.055em] text-[64px] sm:text-[76px] md:text-[92px] lg:text-[112px]">
+        {currentStr.split("").map((ch, i) => (
+          <RollingDigitChar
+            key={`${i}-${currentStr.length}`}
+            char={ch}
+            isLight={isLight}
+            delay={i * 25}
+          />
+        ))}
+      </div>
+
+      <p
+        className={cn(
+          "mt-5 text-[22px] font-semibold tracking-[-0.02em] sm:text-[25px] md:text-[29px]",
+          isLight ? "text-black/45" : "text-[#969696]",
+        )}
+      >
+        {label}
+      </p>
+    </div>
+  );
+}
 
 export default function HeroContent() {
   const router = useRouter();
   const pathname = usePathname();
+  const { isLight } = useThemeMode();
   const [heroNavPending, setHeroNavPending] = useState<
     "brand" | "creator" | null
   >(null);
@@ -132,7 +929,10 @@ export default function HeroContent() {
   }, [pathname, heroNavPending]);
 
   useEffect(() => {
-    const mq = typeof window !== "undefined" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+    const mq =
+      typeof window !== "undefined"
+        ? window.matchMedia("(prefers-reduced-motion: reduce)")
+        : null;
     if (!mq) return;
     setPrefersReducedMotion(mq.matches);
     const handler = () => setPrefersReducedMotion(mq.matches);
@@ -211,776 +1011,1018 @@ export default function HeroContent() {
 
   return (
     <div>
-      <section className="relative flex flex-col items-center justify-center py-16 text-center text-white overflow-hidden">
-        {/* Background Circles */}
-
-        <div className="inset-0 z-10 pointer-events-none">
-          <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
-          <Sparkles
-            className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
-            style={{ animationDelay: "1s" }}
-          />
-          <Star
-            className="absolute top-40 left-1/4 h-9 w-9 text-purple-400/30 animate-pulse"
-            style={{ animationDelay: "2s" }}
-          />
-          <Heart
-            className="absolute top-60 right-1/3 h-5 w-5 text-pink-400/40 animate-bounce"
-            style={{ animationDelay: "0.5s" }}
-          />
-          <Palette
-            className="absolute bottom-40 left-16 h-6 w-6 text-indigo-400/30 animate-pulse"
-            style={{ animationDelay: "1.5s" }}
-          />
-          <Trophy
-            className="absolute bottom-32 right-12 h-9 w-9 text-amber-400/40 animate-bounce"
-            style={{ animationDelay: "0.8s" }}
-          />
-        </div>
-        <div
-          className={`absolute w-[600px] h-[600px] border-[2px] border-purple-500/20 rounded-full`}
-        ></div>
-        <div
-          className={`absolute w-[800px] h-[800px] border-[2px] border-purple-500/20 rounded-full`}
-        ></div>
-        <div
-          className={`absolute w-[1000px] h-[1000px] border-[2px] border-purple-500/20 rounded-full`}
-        ></div>
-
-        {/* Revolving arc */}
-        <div className="absolute w-[800px] h-[800px] rounded-full animate-spin-slow">
-          <div
-            className={`absolute inset-0 rounded-full border-[3px] border-transparent border-t-purple-500`}
-            style={{
-              clipPath: "polygon(50% 0%, 100% 0%, 100% 40%, 50% 40%)",
-            }}
-          ></div>
-        </div>
-        <div className="absolute w-[1000px] h-[1000px] rounded-full animate-spin-slow-reverse">
-          <div
-            className={`absolute inset-0 rounded-full border-[3px] border-transparent border-t-purple-500`}
-            style={{
-              clipPath: "polygon(50% 0%, 100% 0%, 100% 40%, 50% 40%)",
-            }}
-          ></div>
-        </div>
-
-        <div className="inline-flex items-center gap-2.5 bg-[#FFFFFF0F] border border-[#FFFFFF1A] rounded-full px-5 py-2.5 mb-8 backdrop-blur-sm">
-          <span className="flex items-center justify-center h-6 w-6 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shrink-0 shadow-[0_0_8px_rgba(251,191,36,0.5)]">
-            <Crown className="h-3.5 w-3.5 text-white" />
-          </span>
-          <span className="text-base font-semibold bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
-            #1 Creator Marketing Platform
-          </span>
-        </div>
-
-        {/* Logos */}
-        <div className="flex justify-center mb-8">
-          <div className="relative flex items-center justify-center gap-1">
-
-            {/* Twitter (X) Card - Far Left */}
-            <motion.div
-              initial={{
-                rotate: -14,
-                boxShadow: "0 0 12px rgba(255,255,255,0.4)",
-              }}
-              {...(prefersReducedMotion ? {} : {
-                whileHover: {
-                  scale: 1.15,
-                  y: -12,
-                  rotate: -14,
-                  boxShadow: "0 0 26px rgba(255,255,255,0.9)",
-                  zIndex: 20,
-                  transition: { type: "spring", stiffness: 320, damping: 22 },
-                },
-              })}
-              style={{ zIndex: 1 }}
-              className="relative flex items-center justify-center w-[60px] h-[60px] rounded-[18px] bg-gradient-to-br from-gray-800 to-black border-[2px] border-white cursor-default"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none rounded-[16px]"></div>
-              <svg viewBox="0 0 24 24" className="w-[28px] h-[28px] text-white" fill="currentColor" aria-hidden="true">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-              </svg>
-            </motion.div>
-
-            {/* Instagram Card - Center Left */}
-            <motion.div
-              initial={{
-                rotate: -5,
-                boxShadow: "0 0 12px rgba(225,48,108,0.5)",
-              }}
-              {...(prefersReducedMotion ? {} : {
-                whileHover: {
-                  scale: 1.15,
-                  y: -12,
-                  rotate: -5,
-                  boxShadow: "0 0 26px rgba(225,48,108,0.9)",
-                  zIndex: 20,
-                  transition: { type: "spring", stiffness: 320, damping: 22 },
-                },
-              })}
-              style={{
-                zIndex: 2,
-                background:
-                  "radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%)",
-              }}
-              className="relative flex items-center justify-center w-[60px] h-[60px] rounded-[18px] border-[2px] border-white cursor-default overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none rounded-[16px]"></div>
-              <svg viewBox="0 0 24 24" className="w-[30px] h-[30px] text-white" fill="currentColor" aria-hidden="true">
-                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
-              </svg>
-            </motion.div>
-
-            {/* YouTube Card - Center Right */}
-            <motion.div
-              initial={{
-                rotate: 5,
-                boxShadow: "0 0 12px rgba(255,0,0,0.5)",
-              }}
-              {...(prefersReducedMotion ? {} : {
-                whileHover: {
-                  scale: 1.15,
-                  y: -12,
-                  rotate: 5,
-                  boxShadow: "0 0 26px rgba(255,0,0,0.9)",
-                  zIndex: 20,
-                  transition: { type: "spring", stiffness: 320, damping: 22 },
-                },
-              })}
-              style={{ zIndex: 2 }}
-              className="relative flex items-center justify-center w-[60px] h-[60px] rounded-[18px] bg-gradient-to-br from-red-600 to-red-800 border-[2px] border-white cursor-default"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none rounded-[16px]"></div>
-              {/* YouTube SVG icon */}
-              <svg viewBox="0 0 24 24" className="w-[32px] h-[32px] text-white" fill="currentColor" aria-hidden="true">
-                <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-              </svg>
-            </motion.div>
-
-            {/* TikTok Card - Far Right */}
-            <motion.div
-              initial={{
-                rotate: 14,
-                boxShadow: "0 0 12px rgba(0,242,234,0.4)",
-              }}
-              {...(prefersReducedMotion ? {} : {
-                whileHover: {
-                  scale: 1.15,
-                  y: -12,
-                  rotate: 14,
-                  boxShadow: "0 0 26px rgba(0,242,234,0.9)",
-                  zIndex: 20,
-                  transition: { type: "spring", stiffness: 320, damping: 22 },
-                },
-              })}
-              style={{ zIndex: 1 }}
-              className="relative flex items-center justify-center w-[60px] h-[60px] rounded-[18px] bg-gradient-to-br from-gray-900 to-black border-[2px] border-white cursor-default"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none rounded-[16px]"></div>
-              <svg viewBox="0 0 24 24" className="w-[28px] h-[28px] text-white" fill="currentColor" aria-hidden="true">
-                <path d="M12.53.02C13.84 0 15.14.01 16.44 0c.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.06-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.9-.32-1.98-.23-2.82.31-.81.53-1.36 1.43-1.44 2.39-.12 1.2.61 2.39 1.65 3.02.5.34 1.12.47 1.72.44.86-.03 1.69-.42 2.25-1.07.61-.7.86-1.65.86-2.58.04-4.8.02-9.59.03-14.39.01-.02.01-.03.01-.05z" />
-              </svg>
-            </motion.div>
-
-          </div>
-        </div>
-        {/* Title */}
-        <h1
-          className="text-4xl flex justify-center gap-x-3 md:text-6xl lg:text-7xl mb-6 leading-tight slide-up"
-          style={{ animationDelay: "1s" }}
-        >
-          Game <span className="text-white">Of</span>{" "}
-          <span
-            className="bg-clip-text text-transparent"
-            style={{
-              backgroundImage:
-                "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
-            }}
-          >
-            Creators
-          </span>
-        </h1>
-
-        <p
-          className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
-          style={{ animationDelay: "2s" }}
-        >
-          Where <span className="text-orange-400">Creators</span> and{" "}
-          <span className="text-purple-400">Brands</span> Win Together
-        </p>
-
-        {/* Buttons */}
-
-        <div className="flex flex-col sm:flex-row gap-4 mt-8 sm:mt-10 relative items-center justify-center">
-          <Link
-            href="/brands"
-            prefetch
-            aria-busy={heroNavPending === "brand"}
-            onClick={() => setHeroNavPending("brand")}
-            className={cn(
-              "rounded-3xl relative text-white font-bold px-6 sm:px-8 py-3 text-base sm:text-lg overflow-hidden flex items-center gap-2 w-full sm:w-auto justify-center transition-[opacity,transform] active:scale-[0.98] sm:whitespace-nowrap",
-              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40",
-              heroNavPending === "brand" && "pointer-events-none opacity-85",
-            )}
-            style={{
-              background:
-                "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-            }}
-          >
-            <div className="scan-line"></div>
-            {heroNavPending === "brand" ? (
-              <ButtonLoadingSpinner />
-            ) : (
-              <Crown className="h-5 w-5 shrink-0" />
-            )}
-            Launch your campaign
-            <ArrowRight className="h-5 w-5 shrink-0" />
-          </Link>
-          <Link
-            href="/creators"
-            prefetch
-            aria-busy={heroNavPending === "creator"}
-            onClick={() => setHeroNavPending("creator")}
-            className={cn(
-              "rounded-3xl relative text-white font-bold px-6 sm:px-8 py-3 text-base sm:text-lg overflow-hidden flex items-center gap-2 bg-gradient-to-r from-orange-500 to-orange-700 w-full sm:w-auto justify-center transition-[opacity,transform] active:scale-[0.98] sm:whitespace-nowrap",
-              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40",
-              heroNavPending === "creator" && "pointer-events-none opacity-85",
-            )}
-          >
-            <div className="scan-line"></div>
-            {heroNavPending === "creator" ? (
-              <ButtonLoadingSpinner />
-            ) : (
-              <Sparkles className="h-5 w-5 shrink-0" />
-            )}
-            Start Earning
-            <ArrowRight className="h-5 w-5 shrink-0" />
-          </Link>
-        </div>
-      </section>
-      {/* <div className="ellipse-design"></div> */}
-
-      <section
-        className="relative h-[250px] sm:h-[300px] md:h-[400px] lg:h-[500px] z-10 overflow-hidden"
-        ref={sectionRef}
+      {/* Hero */}
+      <main
+        className={cn(
+          "relative min-h-screen overflow-hidden transition-colors duration-300",
+          isLight ? "bg-transparent text-black" : "bg-[#000000] text-white",
+        )}
       >
-        {/* Semi-circle background */}
-        <div
-          className="absolute top-0 left-0 w-full flex flex-col text-center"
-          style={{
-            height: "50vw", // scales with screen width
-            borderTopLeftRadius: "50vw",
-            borderTopRightRadius: "50vw",
-            background:
-              "linear-gradient(360deg, rgba(55, 37, 110, 0.5) 0%, rgba(0, 8, 37, 0.5) 34.49%)",
-            boxShadow:
-              "1px -5px 20px 0px #D0BCFF42, 0px 46px 91.9px 0px #BC83FA91 inset",
-            backdropFilter: "blur(34.2px)",
-          }}
-        >
-          <div className="mt-8 sm:mt-14 md:mt-20 lg:mt-40">
-            <h2
-              className={`text-white text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold ${animate ? "slide-up" : "opacity-0"
-                }`}
-            >
-              <span className="text-purple-400">Creative</span>{" "}
-              <span className="text-orange-400">Showcase</span>
-            </h2>
+        {/* =========================================================
+          BACKGROUND + CONCENTRIC ORBIT RINGS
+      ========================================================= */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          {isLight ? (
+            <>
+              {/* <div className="absolute left-[-10%] top-[-20%] h-[70%] w-[55%] rounded-full bg-[radial-gradient(circle,rgba(186,160,255,0.35)_0%,transparent_68%)] blur-2xl" />
+              <div className="absolute right-[-5%] top-[5%] h-[55%] w-[50%] rounded-full bg-[radial-gradient(circle,rgba(140,190,255,0.28)_0%,transparent_70%)] blur-2xl" />
+              <div className="absolute bottom-[-10%] left-[20%] h-[45%] w-[60%] rounded-full bg-[radial-gradient(circle,rgba(255,200,160,0.18)_0%,transparent_70%)] blur-2xl" /> */}
+            </>
+          ) : (
+            <div className="absolute left-1/2 top-[15%] h-[750px] w-[1000px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.035),transparent_68%)]" />
+          )}
 
-            <div className="flex flex-col sm:flex-row items-center justify-center mt-4 gap-3 sm:gap-5 flex-wrap">
-              <span
-                className={`text-gray-300 text-sm sm:text-base md:text-lg font-medium ${animate ? "slide-left" : "opacity-0"
-                  }`}
-                style={{ animationDelay: "0.3s" }}
+          {/* Two gray orbit circles — purple travels on outer, yellow on inner */}
+          <svg
+            className={cn(
+              "absolute left-1/2 top-[0%] aspect-square w-[min(112vw,1080px)] max-w-none -translate-x-1/2 sm:top-[-4%] sm:w-[min(108vw,1180px)] lg:top-[-20%] lg:w-[min(98vw,1280px)]",
+              isLight ? "opacity-45" : "opacity-100",
+            )}
+            viewBox="0 0 1000 1000"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden
+            preserveAspectRatio="xMidYMid meet"
+          >
+            <defs>
+              {/* Inner circle border */}
+              <linearGradient
+                id="heroCircleBorderInner"
+                x1="500"
+                y1="90"
+                x2="500"
+                y2="910"
+                gradientUnits="userSpaceOnUse"
               >
-                Join 8,000+ Creators
-              </span>
+                <stop
+                  offset="0%"
+                  stopColor="rgb(37, 37, 37)"
+                  stopOpacity="0.074"
+                />
+                <stop
+                  offset="50%"
+                  stopColor="rgb(88, 88, 88)"
+                  stopOpacity="0.37"
+                />
+                <stop
+                  offset="100%"
+                  stopColor="rgb(139, 139, 139)"
+                  stopOpacity="0"
+                />
+              </linearGradient>
+              <linearGradient id="heroYellowOrbit" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#c9a016" stopOpacity="0" />
+                <stop offset="30%" stopColor="#e8b820" stopOpacity="0.5" />
+                <stop offset="50%" stopColor="#FFE566" stopOpacity="1" />
+                <stop offset="70%" stopColor="#e8b820" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#c9a016" stopOpacity="0" />
+              </linearGradient>
+              <linearGradient id="heroPurpleOrbit" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#72129a" stopOpacity="0" />
+                <stop offset="30%" stopColor="#9b1fd4" stopOpacity="0.55" />
+                <stop offset="50%" stopColor="#C84BFF" stopOpacity="1" />
+                <stop offset="70%" stopColor="#9b1fd4" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#72129a" stopOpacity="0" />
+              </linearGradient>
+              <filter
+                id="heroYellowGlow"
+                x="-50%"
+                y="-50%"
+                width="200%"
+                height="200%"
+              >
+                <feGaussianBlur stdDeviation="6" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+              <filter
+                id="heroPurpleGlow"
+                x="-50%"
+                y="-50%"
+                width="200%"
+                height="200%"
+              >
+                <feGaussianBlur stdDeviation="6" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
 
-              {/* Avatar Stack */}
+            {/* Outer circle — no border, purple arc only */}
+            {/* Inner circle — gradient border (5px) */}
+            <circle
+              cx="500"
+              cy="500"
+              r="420"
+              stroke="url(#heroCircleBorderInner)"
+              strokeWidth="5"
+            />
+
+            {/* Traveling glow arcs */}
+            {!prefersReducedMotion ? (
+              <>
+                {/* Outer — purple */}
+                <circle
+                  className="animate-hero-orbit-purple"
+                  cx="500"
+                  cy="500"
+                  r="420"
+                  stroke="url(#heroPurpleOrbit)"
+                  strokeWidth="2.75"
+                  strokeLinecap="round"
+                  strokeDasharray="150 2928"
+                  filter="url(#heroPurpleGlow)"
+                />
+                {/* Inner — yellow */}
+                <circle
+                  className="animate-hero-orbit-yellow"
+                  cx="500"
+                  cy="500"
+                  r="490"
+                  stroke="url(#heroYellowOrbit)"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeDasharray="130 3100"
+                  filter="url(#heroYellowGlow)"
+                />
+              </>
+            ) : null}
+          </svg>
+        </div>
+
+        {/* =========================================================
+          HERO
+      ========================================================= */}
+
+        <div className="relative z-20 mx-auto max-w-[1200px] px-6 lg:px-8">
+          {/* Trusted */}
+          <div className="flex justify-center pt-10 sm:pt-14">
+            <div className="flex items-center gap-2.5">
+              {/* Avatar 1 */}
               <div
-                className={`flex -space-x-2 sm:-space-x-3 ${animate ? "slide-up" : "opacity-0"
-                  }`}
-                style={{ animationDelay: "0.6s" }}
+                className={cn(
+                  "relative z-10 h-10 w-10 overflow-hidden rounded-full border-2 bg-white",
+                  isLight ? "border-white" : "border-[#030303]",
+                )}
               >
-                {[
-                  "434ce5e441255007a5349fd85232df9726062927.avif",
-                  "028df62b75a0a5e07e3025b313d8b74cda06d987.avif",
-                  "f3a549313a8c77a542d9239fdd18733c34787a69.avif",
-                  "f0c4aef454fceee8af51bb454a70238d17ad978a.avif",
-                  "776584be4e29200a5a72df8ebba39153a4aa21b6.avif",
-                ].map((img, idx) => (
-                  <Image
-                    key={idx}
-                    src={`/images/${img}`}
-                    alt={`Creator ${idx + 1}`}
-                    width={48}
-                    height={48}
-                    loading="lazy"
-                    className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-full border-2 border-gray-500"
-                    sizes="(min-width: 1024px) 48px, (min-width: 640px) 40px, 32px"
-                  />
-                ))}
+                <Image
+                  src="/images/39da146881792a5ee763fad443e4c9b4c3e835a5.png"
+                  alt=""
+                  fill
+                  className="object-cover"
+                  sizes="32px"
+                />
               </div>
 
-              {/* <span
-                  className={`text-gray-300 text-sm sm:text-base md:text-lg font-medium ${
-                    chooseVisible ? "slide-right" : "opacity-0"
-                  }`}
-                  style={{ animationDelay: "1.2s" }}
+              {/* Avatar 2 */}
+              <div
+                className={cn(
+                  "relative -ml-4 h-10 w-10 overflow-hidden rounded-full border-2 bg-yellow-300",
+                  isLight ? "border-white" : "border-[#030303]",
+                )}
+              >
+                <Image
+                  src="/images/7a17402e3a42cf5d6cf5d8f830d884ce8a940dcc.png"
+                  alt=""
+                  fill
+                  className="object-cover"
+                  sizes="32px"
+                />
+              </div>
+
+              <span
+                className={cn(
+                  "ml-1 text-[17px]",
+                  isLight ? "text-black/55" : "text-[#C4C4C4]",
+                )}
+              >
+                Trusted by Top Brands &amp; Creators
+              </span>
+            </div>
+          </div>
+
+          {/* Heading */}
+          <div className="mx-auto mt-7 max-w-[1000px] text-center">
+            <h1
+              className={cn(
+                "text-[42px] font-semibold leading-[1.05] tracking-[-0.05em] sm:text-[50px] md:text-[52px] font-['Inter'] font-bold leading-[110%] tracking-[-4%] text-center",
+                isLight ? "text-black/75" : "text-white",
+              )}
+            >
+              <span className={isLight ? "text-black/60" : "text-[#757575]"}>
+                Creators earn on{" "}
+              </span>
+              <span className="inline-flex items-center gap-2">
+                {/* Performance icon — opt out of text fill so the badge stays visible */}
+                <span
+                  className="
+                    inline-flex
+                    h-[60.64px]
+                    w-[63.11px]
+                    shrink-0
+                    rotate-[8.81deg]
+                    items-center
+                    justify-center
+                    rounded-[16.09px]
+                    bg-[linear-gradient(180deg,#FF8800_0%,#FFA53E_50%,#FFC27C_100%)]
+                    shadow-[0px_3.71px_4.95px_0px_#FFFFFF40_inset,3.71px_-8.66px_4.95px_0px_#FFD2D20D_inset,6.19px_-11.14px_13.36px_0px_#FFF4F440_inset,13.61px_13.61px_49.5px_0px_#FFAD0038,3.71px_4.95px_29.7px_0px_#FFAD0026,1.24px_3.71px_8.17px_0px_#FFAD001A]
+                    [background-clip:padding-box]
+                    [-webkit-text-fill-color:initial]
+                  "
                 >
-                  3000+ Active Creators
-                </span> */}
+                  <Image
+                    src="/images/Vector1234.png"
+                    alt=""
+                    width={32}
+                    height={32}
+                    className="h-[32px] w-[32px] object-contain"
+                  />
+                </span>
+                <span className={isLight ? "text-black" : "text-white"}>
+                  performance
+                </span>
+              </span>{" "}
+              <br />
+              <span className={isLight ? "text-black/60" : "text-[#757575]"}>
+                Brands grow on{" "}
+              </span>
+              <span className={isLight ? "text-black" : "text-white"}>
+                results.
+              </span>
+            </h1>
+
+            {/* Description */}
+            <p
+              className={cn(
+                "mx-auto mt-7 max-w-[600px] font-['Inter'] text-[17px] font-medium leading-[150%] tracking-[-0.51px] text-center",
+                isLight ? "text-black/50" : "text-[#8E8E8E]",
+              )}
+            >
+              Launch performance-driven campaigns that turn creator content into
+              measurable results.
+            </p>
+
+            {/* =====================================================
+              CTA BUTTONS
+          ====================================================== */}
+
+            <div className="mt-6 flex flex-col justify-center gap-3 sm:mt-8 sm:flex-row">
+              <Link
+                href="/brands"
+                className={cn(
+                  "group flex h-[51px] min-w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
+                  isLight
+                    ? "bg-[#7c3aed] text-white shadow-[0_12px_30px_rgba(124,58,237,0.28)] hover:bg-[#6d28d9]"
+                    : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-white/30 hover:bg-white/[0.08]",
+                )}
+              >
+                For Brands
+                <ArrowRight
+                  className="
+                  ml-2
+                  h-4
+                  w-4
+                  transition-transform
+                  group-hover:translate-x-1
+                "
+                />
+              </Link>
+
+              <Link
+                href="/creators"
+                className={cn(
+                  "group flex h-[51px] min-w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
+                  isLight
+                    ? "border border-black/10 bg-white text-black shadow-[0_8px_24px_rgba(15,15,30,0.06)] hover:bg-white hover:border-black/20"
+                    : "bg-[#DEDEDE] text-[#26133d] shadow-[0_10px_35px_rgba(200,170,230,0.10)] hover:bg-white",
+                )}
+              >
+                For Creators
+                <ArrowRight
+                  className="
+                  ml-2
+                  h-4
+                  w-4
+                  transition-transform
+                  group-hover:translate-x-1
+                "
+                />
+              </Link>
             </div>
           </div>
         </div>
-      </section>
-
-      <div className="absolute bottom-[80px] lg:bottom-[90px] left-1/2 -translate-x-1/2 z-20 w-full scroll-container">
-        <div className="scroll-track">
-          {[
-            { src: "/videos/SnapInsta.to_AQNd.mp4", poster: "/images/thumb_AQNd.jpg" },
-            { src: "/videos/SnapInsta.to_AQMAznjnb2VYJ.mp4", poster: "/images/thumb_AQMAznjnb2VYJ.jpg" },
-            { src: "/videos/SnapInsta.to_AQNxeCNjx2k.mp4", poster: "/images/thumb_AQNxeCNjx2k.jpg" },
-            { src: "/videos/SnapInsta.to_AQNVKvZ3ezk6J.mp4", poster: "/images/thumb_AQNVKvZ3ezk6J.jpg" },
-            { src: "/videos/SnapInsta.to_AQPB-nUfz2at6Wa.mp4", poster: "/images/thumb_AQPB-nUfz2at6Wa.jpg" },
-            { src: "/videos/SnapInsta.to_AQMa90k.mp4", poster: "/images/thumb_AQMa90k.jpg" },
-          ]
-            .concat([
-              { src: "/videos/SnapInsta.to_AQNd.mp4", poster: "/images/thumb_AQNd.jpg" },
-              { src: "/videos/SnapInsta.to_AQMAznjnb2VYJ.mp4", poster: "/images/thumb_AQMAznjnb2VYJ.jpg" },
-              { src: "/videos/SnapInsta.to_AQNxeCNjx2k.mp4", poster: "/images/thumb_AQNxeCNjx2k.jpg" },
-              { src: "/videos/SnapInsta.to_AQNVKvZ3ezk6J.mp4", poster: "/images/thumb_AQNVKvZ3ezk6J.jpg" },
-              { src: "/videos/SnapInsta.to_AQPB-nUfz2at6Wa.mp4", poster: "/images/thumb_AQPB-nUfz2at6Wa.jpg" },
-              { src: "/videos/SnapInsta.to_AQMa90k.mp4", poster: "/images/thumb_AQMa90k.jpg" },
-            ]) // duplicate videos for seamless loop
-            .map(({ src, poster }, idx) => (
+        {/* =========================================================
+          VISUAL / ORBIT AREA
+      ========================================================= */}
+        <section className="relative mx-auto w-full max-w-[1400px] px-4 pb-8 mt-6 sm:px-6 sm:pb-12 mt-14 sm:mt-18 lg:mt-24 lg:h-[550px] lg:px-0 lg:pb-0">
+          {/* =====================================================
+            LEFT CAMPAIGN CARD
+        ===================================================== */}
+          <div
+            className={cn(
+              "absolute left-[2%] top-[35px] z-20 hidden w-[200px] rotate-[7deg] rounded-[23px] p-[15px] xl:left-[4%] xl:w-[220px] lg:block",
+              isLight
+                ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
+                : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
+            )}
+          >
+            {/* Card header */}
+            <div className="flex items-center gap-2">
               <div
-                key={idx}
-                className="relative w-[110px] h-[180px] md:w-[190px] md:h-[300px] rounded-[10px] overflow-hidden shadow-lg mx-6 border-2 border-purple-500/70"
+                className={cn(
+                  "flex h-[29px] w-[29px] items-center justify-center rounded-[8px]",
+                  isLight ? "bg-[#efe8f8]" : "bg-[#40344c]",
+                )}
               >
-                <video
-                  src={src}
-                  poster={poster}
-                  className="absolute inset-0 w-full h-full object-cover"
-                  preload={idx < 2 ? "auto" : "metadata"}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
+                <Users
+                  className={cn(
+                    "h-[15px] w-[15px]",
+                    isLight ? "text-[#7c3aed]" : "text-white/80",
+                  )}
                 />
               </div>
-            ))}
-        </div>
-      </div>
 
-      <section
-        ref={worksRef}
-        className="text-white px-8 py-0 md:py-16 relative"
-      >
-        <div className="max-w-7xl custom-max-w mx-auto text-center relative">
-          {/* Tagline */}
-          <div className="flex justify-center mb-5">
-            <span className="bg-[#2C3247] text-sm sm:text-base md:text-lg px-3 sm:px-4 py-1 sm:py-2 rounded-full flex items-center gap-2">
-              <Image
-                src="/images/streamline-sharp_user-work-laptop-wifi.png"
-                alt="Work laptop with wifi icon"
-                width={24}
-                height={24}
-                className="w-5 h-5 sm:w-6 sm:h-6"
-                loading="lazy"
+              <span
+                className={cn(
+                  "text-[13px]",
+                  isLight ? "text-black/55" : "text-white/75",
+                )}
+              >
+                Brand
+              </span>
+            </div>
+
+            {/* Title */}
+            <div
+              className={cn(
+                "mt-3 text-[15px] font-medium",
+                isLight ? "text-black" : "text-white",
+              )}
+            >
+              Podcasts Clip Challenge
+            </div>
+
+            {/* Tags */}
+            <div className="mt-3 flex flex-wrap gap-[7px]">
+              {["Clipping", "Paid","Podcast"].map((tag) => (
+                <span
+                  key={tag}
+                  className={cn(
+                    "rounded-full px-[9px] py-[5px] text-[12px]",
+                    isLight
+                      ? "bg-[#f3eaff] text-[#7c3aed]"
+                      : "bg-[#2B1F3B] text-[#BB00FF]",
+                  )}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+
+            {/* Bottom */}
+            <div className="mt-3 flex items-end justify-between">
+              <img
+                src="/images/e9ecc19156964f29ca20b5f8080671042162b486.png"
+                alt="Creator"
+                className="h-[72px] w-[72px] rounded-md object-cover"
               />
-              Enhance your Marketing skills
+
+              <div
+                className={cn(
+                  "flex h-[35px] w-[35px] items-center justify-center rounded-full text-[18px]",
+                  isLight
+                    ? "bg-[#f3eaff] text-[#7c3aed]"
+                    : "bg-[#351149] text-[#c239f5]",
+                )}
+              >
+                →
+              </div>
+            </div>
+          </div>
+
+          {/* =====================================================
+            LEFT TEXT
+        ===================================================== */}
+          <div
+            className={cn(
+              "absolute left-[6%] top-[260px] z-20 hidden rotate-[-4deg] text-[26px] xl:left-[9%] lg:block",
+              caveat.className,
+              isLight ? "text-black/70" : "text-white/85",
+            )}
+          >
+            <div className="relative ml-[70px] mt-0.5">
+              <Image
+                src="/images/Vector 945.png"
+                alt=""
+                width={46}
+                height={79}
+                className={cn(
+                  "h-[78px] w-auto object-contain",
+                  isLight && "invert",
+                )}
+              />
+            </div>
+            <div>Brands launch campaigns</div>
+          </div>
+
+          {/* =====================================================
+            CENTER TEXT
+        ===================================================== */}
+          <div
+            className={cn(
+              "relative z-20 mx-auto mb-8 text-center text-[20px] leading-[24px] sm:text-[26px] sm:leading-[28px] lg:absolute lg:left-1/2 lg:top-[0px] lg:mb-0 lg:-translate-x-1/2 lg:whitespace-nowrap lg:text-[24px] lg:leading-[28px]",
+              caveat.className,
+              isLight ? "text-black/70" : "text-white/85",
+            )}
+          >
+            Creator create content
+            <br />
+            that performs
+          </div>
+
+          {/* =====================================================
+            CENTRAL CREATOR CARD
+        ===================================================== */}
+          <div
+            className={cn(
+              "relative z-20 mx-auto h-[380px] w-[min(100%,280px)] overflow-hidden rounded-[24px] sm:h-[420px] sm:w-[300px] lg:absolute lg:left-1/2 lg:top-[75px] lg:mx-0 lg:h-[455px] lg:w-[335px] lg:-translate-x-1/2",
+              isLight
+                ? "border border-black/[0.06] bg-[#FFFFFF] shadow-[inset_0px_5px_4px_2px_#575757CC]"
+                : "border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)]",
+            )}
+          >
+            <Image
+              src="/images/39e512460e9052a19bf4ea8b3ca0c6cdd8086315.png"
+              alt="Creators"
+              fill
+              className="object-cover"
+              sizes="(max-width: 1024px) 300px, 335px"
+              priority
+            />
+            <span className="absolute bottom-3 left-3 z-10 text-[11px] text-white/70">
+              creator
             </span>
           </div>
 
-          {/* Title */}
-          <h2
-            className={`text-center text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold mb-4 leading-snug ${worksVisible ? "slide-up" : "opacity-0"
-              }`}
-          >
-            How <span className="text-purple-400">Game</span> of{" "}
-            <span className="text-orange-400">Creators</span> Works
-          </h2>
-
-          {/* Subtitle */}
-          <p
-            className={`text-center text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto mb-8 md:mb-12 px-2 ${worksVisible ? "slide-left" : "opacity-0"
-              }`}
-          >
-            Three simple steps to launch your viral marketing campaign and
-            dominate the game
-          </p>
-
-          {/* Active Step */}
+          {/* =====================================================
+            RIGHT ANALYTICS CARD
+        ===================================================== */}
           <div
-            {...handlers}
-            className="flex flex-col gap-1 md:flex-row max-w-[1250px] mx-auto relative"
+            className={cn(
+              "absolute right-[2%] top-[130px] z-20 hidden w-[240px] rotate-[-15deg] rounded-[22px] p-4 xl:right-[4%] xl:w-[280px] lg:block",
+              isLight
+                ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_6.02px_0px_#FFFFFF40]"
+                : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
+            )}
           >
-            {/* Left Arrow */}
-            <button
-              onClick={handlePrev}
-              aria-label="Previous slide"
-              className="hidden md:flex absolute arrow-btn -left-20 top-1/2 -translate-y-1/2 border-2 rounded-full transition w-12 h-12 items-center justify-center"
+            {/* Tabs */}
+            <div
+              className={cn(
+                "flex flex-wrap items-center gap-1 text-[11px]",
+                isLight ? "text-black/35" : "text-white/35",
+              )}
             >
-              <ArrowLeft className="w-7 h-7 text-white" />
-            </button>
+              <span
+                className={cn(
+                  "rounded-[9px] px-3 py-[9px]",
+                  isLight
+                    ? "bg-black/[0.06] text-black/80"
+                    : "bg-white/[0.08] text-white/80",
+                )}
+              >
+                Overview
+              </span>
 
-            {/* Image */}
-            <div className="w-full md:w-1/2 relative aspect-square md:aspect-auto md:h-auto">
+              <span className="px-2">Submissions</span>
+
+              <span className="px-2">Analytics</span>
+            </div>
+
+            {/* Stats */}
+            <div className="mt-7 flex items-end justify-between gap-3">
+              <div>
+                <div className="flex items-baseline gap-1.5">
+                  <span
+                    className={cn(
+                      "text-[25px] font-medium tracking-[-1px]",
+                      isLight ? "text-black" : "text-white",
+                    )}
+                  >
+                    46.2M
+                  </span>
+                  <span
+                    className={cn(
+                      "text-[10px]",
+                      isLight ? "text-black/45" : "text-white/50",
+                    )}
+                  >
+                    Views
+                  </span>
+                </div>
+
+                <div
+                  className={cn(
+                    "mt-3 max-w-[120px] text-[12px] leading-[15px]",
+                    isLight ? "text-black/40" : "text-white/35",
+                  )}
+                >
+                  Your top 10% creators are getting the most views
+                </div>
+              </div>
+
+              {/* Chart */}
+              <div className="flex items-end gap-[8px] pb-0.5">
+                {[
+                  { label: "April", height: "h-[42px]", active: false },
+                  { label: "May", height: "h-[28px]", active: false },
+                  { label: "June", height: "h-[36px]", active: false },
+                  { label: "July", height: "h-[54px]", active: true },
+                ].map((bar) => (
+                  <div
+                    key={bar.label}
+                    className="flex flex-col items-center gap-1.5"
+                  >
+                    <div
+                      className={`w-[14px] rounded-t-[4px] ${bar.height} ${
+                        bar.active
+                          ? "bg-[#3B82F6]"
+                          : isLight
+                            ? "bg-gradient-to-b from-[#d4d4d4] to-[#b8b8b8]"
+                            : "bg-gradient-to-b from-[#5a5a5a] to-[#2e2e2e]"
+                      }`}
+                    />
+                    <span
+                      className={cn(
+                        "origin-top text-[10px]",
+                        isLight ? "text-black/40" : "text-white/35",
+                      )}
+                    >
+                      {bar.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* =====================================================
+            RIGHT TEXT
+        ===================================================== */}
+          <div
+            className={cn(
+              "absolute right-[6%] top-[10px] z-20 hidden rotate-[3deg] text-center text-[26px] leading-[28px] xl:right-[10%] lg:block",
+              caveat.className,
+              isLight ? "text-black/70" : "text-white/85",
+            )}
+          >
+            Performance drives
+            <br />
+            real results
+            <div className="mt-0.5 flex justify-center">
               <Image
-                src={steps[activeIndex].image}
-                alt={steps[activeIndex].title}
-                fill
-                className="object-cover rounded-xl"
-                sizes="(min-width: 1024px) 50vw, 100vw"
+                src="/images/Vector 946.png"
+                alt=""
+                width={42}
+                height={81}
+                className={cn(
+                  "h-[78px] w-auto object-contain",
+                  isLight && "invert",
+                )}
               />
             </div>
+          </div>
+        </section>
 
-            {/* Content */}
-            <div className="w-full md:w-1/2 border-2 rounded-xl p-6 border-gray-600 sm:p-8 flex flex-col justify-start relative left-0 lg:left-2 text-left">
-              {/* Step Indicator */}
-              <div className="flex mb-4 sm:mb-6 items-center justify-between">
-                <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-white/60 bg-transparent">
-                  {steps[activeIndex].icon}
-                </div>
+        {/* =========================================================
+          BRAND LOGOS STRIP
+      ========================================================= */}
+        <section
+          className={cn(
+            "overflow-hidden pb-14 pt-16 transition-colors duration-300",
+            isLight ? "bg-[#F1F1F1]" : "bg-black",
+          )}
+        >
+          <p
+            className={cn(
+              "mb-6 px-4 text-center text-sm sm:mb-8 sm:text-base",
+              isLight ? "text-black/45" : "text-zinc-500",
+            )}
+          >
+            Work with Top Brands and Creators
+          </p>
 
-                <div className="relative px-3 py-0.5 sm:px-5 sm:py-1 rounded-full text-md sm:text-lg font-semibold text-white border-2 border-white/60">
-                  Step {steps[activeIndex].step}
-                </div>
-              </div>
-
-              <div className="mt-6 sm:mt-10">
-                {/* Title */}
-                <h3 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4 text-left">
-                  {steps[activeIndex].title}
-                </h3>
-
-                {/* Description */}
-                <p className="text-gray-300 text-base sm:text-lg md:text-xl mb-6 sm:mb-10 text-left">
-                  {steps[activeIndex].description}
-                </p>
-
-                <Link
-                  href="/dashboard"
-                  className="flex items-center gap-2 relative z-10"
-                >
-                  <button
-                    className="px-5 mb-4 sm:px-6 py-1.5 sm:py-2 relative rounded-full inline-flex items-center gap-2 overflow-hidden self-start text-sm md:text-lg sm:text-base"
-                    style={{
-                      background:
-                        "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-                    }}
-                    onClick={() => {
-                      setStartNowLoading(true);
-                      setTimeout(() => {
-                        window.location.href = '/dashboard';
-                      }, 100);
-                    }}
-                    disabled={startNowLoading}
+          <div className="relative mx-auto w-full max-w-[1100px] overflow-hidden">
+            <div className="flex w-max animate-scroll-left items-center gap-10 py-3 sm:gap-14 md:gap-16">
+              {[...brandImages, ...brandImages].map((image, index) => {
+                const isCircle = image.includes("image 276");
+                return (
+                  <div
+                    key={`${image}-${index}`}
+                    className={cn(
+                      "flex shrink-0 items-center justify-center",
+                      isCircle
+                        ? "h-12 w-12 sm:h-14 sm:w-14"
+                        : "h-10 w-[120px] sm:h-12 sm:w-[150px] md:h-14 md:w-[180px]",
+                    )}
                   >
-                    <div className="scan-line"></div>
-                    {startNowLoading ? (
-                      <ButtonLoadingSpinner />
-                    ) : null}
-                    Start Now
-                    <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
-                  </button>
-                </Link>
+                    <Image
+                      src={image}
+                      alt={`Brand logo ${index + 1}`}
+                      width={isCircle ? 50 : 180}
+                      height={isCircle ? 56 : 56}
+                      className={cn(
+                        "h-full w-full object-contain",
+                        isCircle && "rounded-full",
+                        isLight && !isCircle && "brightness-0",
+                      )}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* =========================================================
+          CONTACT ANCHOR
+      ========================================================= */}
+        <div id="contact" className="absolute bottom-0 left-0" />
+      </main>
+
+      <main
+        className={cn(
+          "min-h-screen px-4 py-16 sm:px-5 sm:py-20 md:py-24 transition-colors duration-300",
+          isLight ? "bg-transparent text-black" : "bg-black text-white",
+        )}
+      >
+        <section className="mx-auto max-w-[1200px]">
+          {/* =====================================================
+            HEADING
+        ===================================================== */}
+          <h1
+            className={cn(
+              "mx-auto max-w-[650px] text-center text-[32px] font-semibold leading-[1.08] tracking-[-1.5px] sm:text-[40px] sm:tracking-[-2px] md:text-[52px] md:tracking-[-2.5px]",
+              isLight ? "text-black" : "text-white",
+            )}
+          >
+            Both sides work together
+            <br />
+            as one System
+          </h1>
+
+          {/* =====================================================
+            CARDS
+        ===================================================== */}
+          <div className="mt-10 grid grid-cols-1 gap-5 sm:mt-14 md:mt-[72px] lg:grid-cols-2">
+            {/* =================================================
+              BRANDS CARD
+          ================================================= */}
+            <div
+              className={cn(
+                "relative min-h-[510px] overflow-hidden rounded-[20px] px-5 pt-7 sm:min-h-[555px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[580px] md:min-h-0",
+                isLight
+                  ? "border border-black/[0.04] bg-[#f5f5f7] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
+                  : "border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] shadow-[inset_0_1px_0_rgba(255,255,255,.025)]",
+              )}
+            >
+              {/* Bottom white shade */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-24 sm:h-28"
+              >
+                <div
+                  className={cn(
+                    "absolute inset-x-0 bottom-0 h-full",
+                    isLight
+                      ? "bg-[radial-gradient(ellipse_at_bottom,rgba(124,58,237,0.06)_0%,transparent_70%)]"
+                      : "bg-[radial-gradient(ellipse_at_bottom,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.06)_40%,transparent_72%)]",
+                  )}
+                />
+                <div
+                  className={cn(
+                    "absolute inset-x-0 bottom-0 h-14 sm:h-16",
+                    isLight
+                      ? "bg-gradient-to-t from-white/70 via-transparent to-transparent"
+                      : "bg-gradient-to-t from-white/[0.10] via-white/[0.03] to-transparent",
+                  )}
+                />
               </div>
+
+              {/* Badge */}
+              <div
+                className={cn(
+                  "relative z-[2] inline-flex rounded-full border px-3 py-[6px] text-[13px]",
+                  isLight
+                    ? "border-black/[0.08] bg-white text-black/60"
+                    : "border-white/[0.08] bg-[#353535] text-white/65",
+                )}
+              >
+                For Brands
+              </div>
+
+              {/* Title */}
+              <h2
+                className={cn(
+                  "mt-5 max-w-[440px] text-[20px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]",
+                  isLight ? "text-black" : "text-white",
+                )}
+              >
+                Pay for actual performance, not
+                <br className="hidden sm:block" /> followers
+              </h2>
+
+              {/* Description */}
+              <p
+                className={cn(
+                  "mt-3 max-w-[500px] text-[14px] leading-[21px] sm:text-[16px] sm:leading-[23px]",
+                  isLight ? "text-black/50" : "text-white/45",
+                )}
+              >
+                Set your budget and brief. Your campaign runs across a network
+                <br className="hidden xl:block" />
+                of 15,700+ creators, and you pay for verified content and
+                <br className="hidden xl:block" />
+                performance.
+              </p>
+
+              <BrandFormMockup isLight={isLight} />
             </div>
 
-            {/* Right Arrow */}
-            <button
-              onClick={handleNext}
-              aria-label="Next slide"
-              className="hidden md:flex absolute arrow-btn -right-20 top-1/2 -translate-y-1/2 border-2 rounded-full transition w-12 h-12 items-center justify-center"
+            {/* =================================================
+              CREATORS CARD
+          ================================================= */}
+            <div
+              className={cn(
+                "relative min-h-[510px] overflow-hidden rounded-[20px] px-5 pt-7 sm:min-h-[555px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[580px] md:min-h-0",
+                isLight
+                  ? "border border-black/[0.04] bg-[#f5f5f7] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
+                  : "border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] shadow-[inset_0_1px_0_rgba(255,255,255,.025)]",
+              )}
             >
-              <ArrowRight className="w-7 h-7 text-white" />
-            </button>
-          </div>
+              {/* Bottom shade */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-24 sm:h-28"
+              >
+                <div
+                  className={cn(
+                    "absolute inset-x-0 bottom-0 h-full",
+                    isLight
+                      ? "bg-[radial-gradient(ellipse_at_bottom,rgba(124,58,237,0.06)_0%,transparent_70%)]"
+                      : "bg-[radial-gradient(ellipse_at_bottom,rgba(0,0,0,0.4)_0%,transparent_72%)]",
+                  )}
+                />
+                <div
+                  className={cn(
+                    "absolute inset-x-0 bottom-0 h-14 sm:h-16",
+                    isLight
+                      ? "bg-gradient-to-t from-white/70 via-transparent to-transparent"
+                      : "",
+                  )}
+                />
+              </div>
 
-          {/* Dots Navigation */}
-          <div className="flex justify-center mt-6 sm:mt-10 gap-2">
-            {steps.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setActiveIndex(index)}
-                aria-label={`Go to step ${index + 1}`}
-                className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-colors ${activeIndex === index ? "bg-purple-600" : "bg-gray-600"
-                  }`}
-              ></button>
-            ))}
+
+              {/* Badge */}
+              <div
+                className={cn(
+                  "relative z-[2] inline-flex rounded-full border px-3 py-[6px] text-[13px]",
+                  isLight
+                    ? "border-black/[0.08] bg-white text-black/60"
+                    : "border-white/[0.08] bg-[#353535] text-white/65",
+                )}
+              >
+                For Creators
+              </div>
+
+              {/* Title */}
+              <h2
+                className={cn(
+                  "mt-5 max-w-[450px] text-[20px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]",
+                  isLight ? "text-black" : "text-white",
+                )}
+              >
+                Get paid for performance, not
+                <br className="hidden sm:block" /> followers.
+              </h2>
+
+              {/* Description */}
+              <p
+                className={cn(
+                  "mt-3 max-w-[510px] text-[14px] leading-[21px] sm:text-[16px] sm:leading-[23px]",
+                  isLight ? "text-black/50" : "text-white/45",
+                )}
+              >
+                Pick brand campaigns you want. You get paid based on how well
+                <br className="hidden xl:block" />
+                your posts do even if you have 0 followers
+              </p>
+
+              {/* =================================================
+                PAYMENT POPUP - LEFT
+            ================================================= */}
+              <div
+                className={cn(
+                  "absolute left-3 top-[222px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:left-[25px] sm:top-[256px] sm:w-[225px] sm:px-3 rotate-[-3.78deg]",
+                  isLight
+                    ? "border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(20,16,40,0.12)]"
+                    : "border-white/[0.08] bg-[#191919] shadow-[0_12px_35px_rgba(0,0,0,.45)]",
+                )}
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="relative h-[31px] w-[31px] shrink-0 overflow-hidden rounded-full">
+                    <Image
+                      src="/images/Ellipse 2355 (1).avif"
+                      alt=""
+                      fill
+                      className="object-cover"
+                      sizes="31px"
+                    />
+                  </div>
+
+                  <div className="min-w-0">
+                    <div
+                      className={cn(
+                        "truncate text-[10px] font-medium",
+                        isLight ? "text-black" : "text-white",
+                      )}
+                    >
+                      Hey Ashok
+                    </div>
+
+                    <div
+                      className={cn(
+                        "text-[8px] leading-[10px]",
+                        isLight ? "text-black/40" : "text-[#8E8E93]",
+                      )}
+                    >
+                      You can withdraw your
+                      <br />
+                      money now
+                    </div>
+                  </div>
+                </div>
+
+                <span className="shrink-0 text-[11px] font-medium text-[#43df3d]">
+                  $44,090
+                </span>
+              </div>
+
+              {/* =================================================
+                PAYMENT POPUP - RIGHT
+            ================================================= */}
+              <div
+                className={cn(
+                  "absolute right-3 top-[222px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:right-[25px] sm:top-[256px] sm:w-[220px] sm:px-3 rotate-[2.85deg]",
+                  isLight
+                    ? "border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(20,16,40,0.12)]"
+                    : "border-white/[0.08] bg-[#191919] shadow-[0_12px_35px_rgba(0,0,0,.45)]",
+                )}
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="relative h-[31px] w-[31px] shrink-0 overflow-hidden rounded-full">
+                    <Image
+                      src="/images/Ellipse 2355 (3).avif"
+                      alt=""
+                      fill
+                      className="object-cover"
+                      sizes="31px"
+                    />
+                  </div>
+
+                  <div className="min-w-0">
+                    <div
+                      className={cn(
+                        "truncate text-[10px] font-medium",
+                        isLight ? "text-black" : "text-white",
+                      )}
+                    >
+                      Hey Riya!
+                    </div>
+
+                    <div
+                      className={cn(
+                        "text-[8px] leading-[10px]",
+                        isLight ? "text-black/40" : "text-[#8E8E93]",
+                      )}
+                    >
+                      Your rank 1st in Leader board
+                      <br />
+                      Campaign
+                    </div>
+                  </div>
+                </div>
+
+                <span className="shrink-0 text-[11px] font-medium text-[#43df3d]">
+                  $490
+                </span>
+              </div>
+
+              {/* =================================================
+                CREATOR CONTENT GRID
+            ================================================= */}
+              <div className="absolute bottom-0 left-0 right-0 h-[272px] overflow-hidden">
+                <div className="absolute inset-0 flex flex-col gap-2.5">
+                  <div className="relative min-h-0 flex-[135] overflow-hidden">
+                    <div className="flex h-full animate-creators-collage-left">
+                      {[0, 1].map((copy) => (
+                        <div
+                          key={`creators-collage-top-copy-${copy}`}
+                          className="flex h-full shrink-0 gap-2.5 pr-2.5"
+                        >
+                          {creatorsCollageTopImages.map((src, index) => (
+                            <Image
+                              key={`creators-collage-top-${copy}-${index}`}
+                              src={src}
+                              alt=""
+                              width={1280}
+                              height={720}
+                              className="h-full w-auto max-w-none shrink-0 rounded-lg object-cover"
+                              sizes="320px"
+                              priority={copy === 0 && index === 0}
+                            />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="relative min-h-0 flex-[115] overflow-hidden">
+                    <div className="flex h-full animate-creators-collage-right">
+                      {[0, 1].map((copy) => (
+                        <div
+                          key={`creators-collage-bot-copy-${copy}`}
+                          className="flex h-full shrink-0 gap-2.5 pr-2.5"
+                        >
+                          {creatorsCollageBottomImages.map((src, index) => (
+                            <Image
+                              key={`creators-collage-bot-${copy}-${index}`}
+                              src={src}
+                              alt=""
+                              width={1280}
+                              height={720}
+                              className="h-full w-auto max-w-none shrink-0 rounded-lg object-cover"
+                              sizes="320px"
+                            />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Left / right edge shades */}
+                <div
+                  aria-hidden
+                  className={cn(
+                    "pointer-events-none absolute inset-y-0 left-0 z-10 w-16 sm:w-24",
+                    isLight
+                      ? "bg-[linear-gradient(90deg,#f5f5f7_0%,rgba(245,245,247,0)_100%)]"
+                      : "bg-[linear-gradient(90deg,#151515_0%,rgba(21,21,21,0)_100%)]",
+                  )}
+                />
+                <div
+                  aria-hidden
+                  className={cn(
+                    "pointer-events-none absolute inset-y-0 right-0 z-10 w-16 scale-x-[-1] sm:w-24",
+                    isLight
+                      ? "bg-[linear-gradient(90deg,#f5f5f7_0%,rgba(245,245,247,0)_100%)]"
+                      : "bg-[linear-gradient(90deg,#151515_0%,rgba(21,21,21,0)_100%)]",
+                  )}
+                />
+              </div>
+
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
       {/* Reasons to Select Us */}
 
-      <section ref={reasonsRef} className="text-white px-10 py-20">
-        <div className="max-w-[1250px] mx-auto">
-          {/* Tagline */}
-          <div className="text-center mb-12">
-            <div className="flex justify-center mb-5">
-              <span className="bg-[#2C3247] text-sm sm:text-base md:text-lg px-3 sm:px-4 py-1 sm:py-2 rounded-full flex items-center gap-2">
-                <img
-                  src="./images/tabler_award.png"
-                  alt="icon"
-                  className="w-5 h-5"
-                />
-                Reasons to Select Us
-              </span>
-            </div>
-
-            {/* <button className="bg-[#2C3247] text-base sm:text-lg px-4 py-1 rounded-full mb-6">
-                Reasons to Select Us
-              </button> */}
-            <h2
-              className={`text-2xl sm:text-3xl md:text-5xl font-bold mb-4 leading-snug ${reasonsVisible ? "slide-up" : "opacity-0"
-                }`}
-            >
-              Why Choose{" "}
-              <span className="bg-gradient-to-r from-purple-500 to-orange-400 bg-clip-text text-transparent">
-                Game of Creators
-              </span>
-            </h2>
-            <p
-              className={`text-gray-300 text-base sm:text-lg md:text-xl ${reasonsVisible ? "slide-left" : "opacity-0"
-                }`}
-            >
-              We're not just a platform – we're your competitive advantage in
-              the creator economy.
-            </p>
-          </div>
-
-          {/* Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* 1 */}
-            <div className="border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative overflow-hidden group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/5b9ccb0130cdd4c8b6a76dccd99f879f41ba8fe2.avif')",
-                }}
-              ></div>
-              <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
-
-              <h3 className="text-xl sm:text-2xl font-semibold mb-2 relative z-10">
-                Organic Content at Scale
-              </h3>
-              <p className="text-gray-400 text-base md:text-md relative z-10">
-                With Game of Creators, you generate a high volume of diverse,
-                high-quality content-without the hassle of sourcing,
-                negotiating, or managing creators manually.
-              </p>
-            </div>
-
-            {/* 2 */}
-            <div
-              className="sm:col-span-2 h-auto border border-gray-700 rounded-xl overflow-hidden flex flex-col sm:flex-row items-center p-4 sm:p-6 relative group
-           
-              [@media(min-width:1000px)_and_(max-width:1246px)]:h-[300px] 
-              
-              [@media(min-width:1246px)]:h-[250px] "
-            >
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/477657f97d63845e03dfc9060e1005e8d8d651df.avif')",
-                }}
-              ></div>
-              <div className="absolute inset-0 bg-[#000825]/40 group-hover:opacity-0 transition-opacity duration-300"></div>
-
-              <div className="flex-1 relative z-10 mb-4">
-                <h3 className="text-lg sm:text-xl font-semibold mb-2">
-                  Supply and Demand Based Platform
-                </h3>
-                <p className="text-gray-400 text-base sm:text-lg">
-                  Game of Creators operated on a supply and demand model.
-                  Creators complete, allowing the best ideas to surface
-                  organically and driving higher engagement and reach.
-                </p>
-              </div>
-              <div
-                className="relative w-[200px] h-[200px] 
-               sm:w-[250px] sm:h-[250px] 
-               md:w-[250px] md:h-[250px] 
-               [@media(min-width:1000px)_and_(max-width:1080px)]:w-[200px] 
-              [@media(min-width:1000px)_and_(max-width:1080px)]:h-[200px] 
-               [@media(min-width:1080px)_and_(max-width:1200px)]:w-[250px] 
-              [@media(min-width:1000px)_and_(max-width:1200px)]:h-[250px] 
-               [@media(min-width:1200px)]:w-[300px] 
-              [@media(min-width:1200px)]:h-[300px] 
-                 flex-shrink-0"
-              >
-                <Image
-                  src="/images/bb14a2a8c3979fb268076c3bbb96eaf152d1a0f8.avif"
-                  alt="Calendar"
-                  fill
-                  className="object-contain"
-                  sizes="(min-width: 1200px) 300px, (min-width: 1080px) 250px, (min-width: 1000px) 200px, 200px"
-                />
-                <div className="absolute inset-0 bg-[#000825]/60 group-hover:opacity-0 transition-opacity duration-300"></div>
-              </div>
-            </div>
-
-            {/* 3 */}
-            <div className="border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative overflow-hidden group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/cc72cdf71f826fc780265eb7ba34b2b7a5e3c2c2.avif')",
-                }}
-              ></div>
-              <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
-
-              <h3 className="text-xl sm:text-2xl font-semibold mb-2 relative z-10">
-                Find Content- market Fit
-              </h3>
-              <p className="text-gray-400 text-base sm:text-lg relative z-10">
-                Validate creative concepts with real audience engagement.
-              </p>
-            </div>
-
-            {/* 4 */}
-            <div className="border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/55970240f7b24d6eff2af2d8d8537bd017058e58.avif')",
-                }}
-              ></div>
-              <div className="absolute inset-0 bg-[#000825]/40 group-hover:opacity-0 transition-opacity duration-300"></div>
-
-              <Rocket className="text-white mb-4 relative z-10" size={26} />
-              <h3 className="text-lg sm:text-xl mb-2 relative z-10">
-                Only Pay for Top Performing Content
-              </h3>
-              <p className="text-gray-400 text-base sm:text-lg relative z-10">
-                Stop wasting money on content that doesn’t covert. Pay only for
-                videos that perform.
-              </p>
-            </div>
-
-            {/* 6 */}
-            <div className="border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative overflow-hidden group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/b4273c077c336d85dd75502201d73084ea5fba73.avif')",
-                }}
-              ></div>
-              <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
-              <Users2 className="text-white mb-4 relative z-10" size={26} />
-              <h3 className="text-xl sm:text-xl mb-2 relative z-10">
-                Skip the Creator Outreach Hassle
-              </h3>
-              <p className="text-gray-400 text-base sm:text-lg relative z-10">
-                No more hours spent negotiating, coordinating, and following up.
-                With Game of Creators, the creators come to you.
-              </p>
-            </div>
-
-            <div className="sm:col-span-2 border border-gray-700 rounded-xl p-4 flex flex-col sm:flex-row justify-center items-center text-start relative overflow-hidden group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/2a6d9ad13dd40e9b3b4f90b35cf0f9324af8dda7.avif')",
-                }}
-              ></div>
-              <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
-
-              <div className="flex-1 mb-4 sm:mb-0 px-2 relative z-10">
-                <h3 className="text-lg sm:text-xl font-semibold mb-2">
-                  Scale Winners on Paid Ads
-                </h3>
-                <p className="text-gray-400 text-base sm:text-lg">
-                  Identify the best-performing content and seamlessly scale it
-                  into paid campaigns. With proven, audience-validated content,
-                  your ads drive higher engagement, lower costs, and better
-                  conversions.
-                </p>
-              </div>
-              <div className="relative w-[180px] h-[180px] sm:w-[200px] sm:h-[200px] lg:w-[230px] lg:h-[230px] flex-shrink-0">
-                <Image
-                  src="/images/0045df9e9f7db84c983cc6c5675c55189fa040a2.avif"
-                  alt="Target"
-                  fill
-                  className="object-contain"
-                  sizes="(min-width: 1024px) 230px, (min-width: 640px) 200px, 180px"
-                />
-                <div className="absolute inset-0 bg-[#000825]/60 group-hover:opacity-0 transition-opacity duration-300"></div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-            <div className="border border-gray-700 rounded-xl p-8 md:p-10 flex flex-col justify-center items-center text-center relative group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/c90e07a57a2d08340f7c0d3c57b1fde4a6f0f9cd.avif')",
-                }}
-              ></div>
-
-              <Globe className="text-white mb-4 relative z-10" size={30} />
-              <h3 className="text-lg md:text-2xl font-semibold mb-3 relative z-10">
-                Democratised Brands Deals
-              </h3>
-              <p className="text-gray-400 text-base text-md md:text-lg relative z-10">
-                Every creator, no . matter their follower count, can join and
-                win. Success is based on creativity and performance-not just
-                popularity.
-              </p>
-            </div>
-
-            <div className="border border-gray-700 rounded-xl p-8 md:p-10 flex flex-col justify-center items-center text-center relative group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/f1dc449ff317e5ede74929b2af2d4ef5b82c298f.avif')",
-                }}
-              ></div>
-
-              <Headset className="text-white mb-4 relative z-10" size={30} />
-              <h3 className="text-lg md:text-2xl font-semibold mb-3 relative z-10">
-                24/7 Support
-              </h3>
-              <p className="text-gray-400 text-base text-md md:text-xl relative z-10">
-                Our team is always ready to help you win big with Game of
-                Creators!
-              </p>
-            </div>
-
-            <div className="border border-gray-700 rounded-xl p-8 md:p-10 flex flex-col justify-center items-center text-center relative group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/5ce917bc44f4c6db1590e3478c916a367eacfe8a.avif')",
-                }}
-              ></div>
-
-              <Palette className="text-white mb-4 relative z-10" size={30} />
-              <h3 className="text-lg md:text-2xl font-semibold mb-3 relative z-10">
-                Creator Freedom of Choice
-              </h3>
-              <p className="text-gray-400 text-base text-md md:text-lg relative z-10">
-                Creators choose which brands and campaigns to promote,
-                empowering them to work with what they love and get paid for it.
-              </p>
-            </div>
-          </div>
+      <section
+        className={cn(
+          "flex min-h-[50vh] items-center justify-center px-4 py-16 sm:min-h-[60vh] sm:px-6 sm:py-20 md:min-h-screen transition-colors duration-300",
+          isLight ? "bg-transparent" : "bg-black",
+        )}
+      >
+        <div className="flex w-full max-w-5xl flex-col items-center justify-center gap-12 sm:gap-16 md:flex-row md:gap-40">
+          <HeroStatBlock
+            numbers={CREATORS_NETWORK_NUMBERS}
+            label="Creators Network"
+            isLight={isLight}
+          />
+          <HeroStatBlock
+            numbers={VIEWS_GENERATED_NUMBERS}
+            label="Views Generated"
+            isLight={isLight}
+          />
         </div>
       </section>
+
+      <FAQ />
       {/* <NumbersSection
           items={[
             {

@@ -23,7 +23,8 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Image from "next/image";
-import logo from "@/public/images/gold_logo_horizontal.svg";
+import Link from "next/link";
+import logo from "@/public/images/Primary Logo white 1.png";
 import { createClient } from "@/utils/supabase/client";
 import {
   validatePassword,
@@ -887,10 +888,10 @@ export default function ChooseUsernamePage() {
 
   if (isLoadingProfile) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#000825] dark:bg-gray-900 px-4 pt-4 pb-16">
+      <div className="flex min-h-screen items-center justify-center bg-black px-4 pt-4 pb-16">
         <div className="w-full max-w-md text-center">
           <Loader2 className="h-12 w-12 mx-auto animate-spin text-slate-400 mb-4" />
-          <p className="text-slate-300 text-lg">Loading your profile...</p>
+          <p className="text-white text-lg">Loading your profile...</p>
         </div>
       </div>
     );
@@ -924,7 +925,7 @@ export default function ChooseUsernamePage() {
             animation: border-flow 5s linear infinite;
           }
         `}</style>
-        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-purple-950 to-blue-950 dark:bg-gray-900 px-4 pt-4 pb-16">
+        <div className="flex min-h-screen items-center justify-center bg-black px-4 pt-4 pb-16">
           <div className="w-full max-w-md">
             <div className="mb-10 flex flex-col items-center">
               <Image
@@ -936,7 +937,7 @@ export default function ChooseUsernamePage() {
               />
             </div>
             <div className="p-[2.5px] rounded-xl bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 animate-border-flow shadow-2xl">
-              <div className="bg-[#0B0F11] dark:bg-gray-800 rounded-lg p-8 text-center">
+              <div className="bg-black rounded-lg p-8 text-center">
                 <h1 className="text-3xl font-bold text-white mb-4">
                   Error Loading Profile
                 </h1>
@@ -984,31 +985,17 @@ export default function ChooseUsernamePage() {
           animation: border-flow 5s linear infinite;
         }
       `}</style>
-      <div className="min-h-screen bg-[#000825] overflow-hidden relative">
-        {/* Floating Gaming Elements */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-20 left-10 w-8 h-8 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg rotate-45 opacity-60 animate-pulse"></div>
-          <div
-            className="absolute top-40 right-20 w-6 h-6 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full opacity-60 animate-pulse"
-            style={{ animationDelay: "2s" }}
-          ></div>
-          <div
-            className="absolute bottom-60 left-20 w-4 h-4 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full opacity-60 animate-pulse"
-            style={{ animationDelay: "4s" }}
-          ></div>
-          <Trophy
-            className="absolute top-32 right-10 h-6 w-6 text-yellow-400/60 animate-bounce"
-            style={{ animationDelay: "1s" }}
-          />
-          <Star
-            className="absolute bottom-40 right-40 h-5 w-5 text-pink-400/60 animate-pulse"
-            style={{ animationDelay: "3s" }}
-          />
-          <CheckCircle
-            className="absolute top-60 left-40 h-7 w-7 text-cyan-400/60 animate-bounce"
-            style={{ animationDelay: "5s" }}
-          />
+      <div className="min-h-screen bg-black overflow-hidden relative">
+        {/* Top Gray Shade */}
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 z-0 h-28 sm:h-48 overflow-hidden"
+          aria-hidden="true"
+        >
+          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/60 to-transparent z-10" />
+          <div className="absolute inset-x-0 top-0 h-full bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.22)_0%,rgba(255,255,255,0.08)_35%,transparent_70%)]" />
         </div>
+
+
 
         <div className="relative z-20 flex items-center justify-center min-h-screen p-4">
           <div className="w-full max-w-2xl">
@@ -1016,14 +1003,16 @@ export default function ChooseUsernamePage() {
             <div className="text-center">
               <div className="relative group">
                 <div className="absolute inset-0 transition-opacity duration-500"></div>
-                <div className="relative  p-4 ">
+                <div className="relative pt-6 pb-0">
+                <Link href="/">
                   <Image
                     src={logo}
                     alt="Game of Creators"
-                    width={200}
-                    height={70}
-                    className="mx-auto"
+                    width={260}
+                    height={90}
+                    className="mx-auto cursor-pointer"
                   />
+                </Link>
                 </div>
               </div>
             </div>
@@ -1035,10 +1024,10 @@ export default function ChooseUsernamePage() {
               <div className="relative">
                 {/* Gaming Header */}
                 <div className="mb-8 text-center">
-                  <h1 className="text-4xl md:text-5xl font-black text-white drop-shadow-2xl mb-4">
+                  <h1 className="mt-4 text-3xl md:text-4xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent drop-shadow-2xl mb-4">
                     Complete Your Profile
                   </h1>
-                  <p className="text-slate-300 leading-relaxed">
+                  <p className="text-slate-400 text-lg leading-relaxed">
                     {userData?.isGoogleUser
                       ? "Almost there! Complete your gaming profile to unlock all features."
                       : userData?.needsUserTypeSelection ||
@@ -1053,9 +1042,9 @@ export default function ChooseUsernamePage() {
                   {userData?.needsFullName && (
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="firstName" className="text-slate-300">
+                        <Label htmlFor="firstName" className="text-white font-medium text-sm">
                           First Name
-                          <span className="ml-2 text-xs text-slate-400">
+                          <span className="ml-2 text-xs text-[#8E8E8E]">
                             {getCharacterCountDisplay(
                               firstName.length,
                               NAME_CONSTRAINTS.FIRST_NAME_MAX,
@@ -1070,7 +1059,7 @@ export default function ChooseUsernamePage() {
                           onChange={(e) =>
                             handleFirstNameChange(e.target.value)
                           }
-                          className={`h-11 bg-[#000825] border-slate-700 placeholder:text-slate-400 text-white focus:border-amber-500 focus:ring-amber-500 ${
+                          className={`h-11 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 ${
                             firstNameError
                               ? "border-red-500 focus:border-red-500 focus:ring-red-500"
                               : ""
@@ -1094,9 +1083,9 @@ export default function ChooseUsernamePage() {
                         )}
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="lastName" className="text-slate-300">
+                        <Label htmlFor="lastName" className="text-white font-medium text-sm">
                           Last Name
-                          <span className="ml-2 text-xs text-slate-400">
+                          <span className="ml-2 text-xs text-[#8E8E8E]">
                             {getCharacterCountDisplay(
                               lastName.length,
                               NAME_CONSTRAINTS.LAST_NAME_MAX,
@@ -1109,7 +1098,7 @@ export default function ChooseUsernamePage() {
                           type="text"
                           value={lastName}
                           onChange={(e) => handleLastNameChange(e.target.value)}
-                          className={`h-11 bg-[#000825] border-slate-700 placeholder:text-slate-400 text-white focus:border-amber-500 focus:ring-amber-500 ${
+                          className={`h-11 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 ${
                             lastNameError
                               ? "border-red-500 focus:border-red-500 focus:ring-red-500"
                               : ""
@@ -1139,7 +1128,7 @@ export default function ChooseUsernamePage() {
                   {userData?.needsPassword && (
                     <>
                       <div className="space-y-2">
-                        <Label htmlFor="password" className="text-slate-300">
+                        <Label htmlFor="password" className="text-white font-medium text-sm">
                           Password
                         </Label>
                         <div className="relative">
@@ -1149,7 +1138,7 @@ export default function ChooseUsernamePage() {
                             type={showPassword ? "text" : "password"}
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="h-11 bg-[#000825] border-slate-700 placeholder:text-slate-400 text-white focus:border-amber-500 focus:ring-amber-500 pr-10"
+                            className="h-11 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 pr-10"
                             placeholder="Enter your password"
                             autoComplete="new-password"
                             required
@@ -1157,7 +1146,7 @@ export default function ChooseUsernamePage() {
                           <button
                             type="button"
                             onClick={() => setShowPassword(!showPassword)}
-                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-300"
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white focus:outline-none"
                           >
                             {showPassword ? (
                               <EyeOff className="h-4 w-4" />
@@ -1170,7 +1159,7 @@ export default function ChooseUsernamePage() {
                       <div className="space-y-2">
                         <Label
                           htmlFor="confirmPassword"
-                          className="text-slate-300"
+                          className="text-white font-medium text-sm"
                         >
                           Confirm Password
                         </Label>
@@ -1181,7 +1170,7 @@ export default function ChooseUsernamePage() {
                             type={showConfirmPassword ? "text" : "password"}
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="h-11 bg-[#000825] border-slate-700 placeholder:text-slate-400 text-white focus:border-amber-500 focus:ring-amber-500 pr-10"
+                            className="h-11 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 pr-10"
                             placeholder="Confirm your password"
                             autoComplete="new-password"
                             required
@@ -1191,7 +1180,7 @@ export default function ChooseUsernamePage() {
                             onClick={() =>
                               setShowConfirmPassword(!showConfirmPassword)
                             }
-                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-300"
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white focus:outline-none"
                           >
                             {showConfirmPassword ? (
                               <EyeOff className="h-4 w-4" />
@@ -1213,7 +1202,7 @@ export default function ChooseUsernamePage() {
 
                   {/* Username Field */}
                   <div className="space-y-2">
-                    <Label htmlFor="username" className="text-slate-300">
+                    <Label htmlFor="username" className="text-white font-medium text-sm">
                       Username
                     </Label>
                     <div className="relative">
@@ -1227,12 +1216,12 @@ export default function ChooseUsernamePage() {
                         required
                         minLength={3}
                         maxLength={20}
-                        className={`h-11 bg-[#000825] border-slate-700 placeholder:text-slate-400 text-white focus:border-amber-500 focus:ring-amber-500 pr-10 ${
+                        className={`h-11 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 pr-10 ${
                           usernameAvailable === true
-                            ? "border-green-500"
+                            ? "!border-emerald-500/50 focus:!border-emerald-500 focus:!ring-emerald-500"
                             : usernameAvailable === false
-                              ? "border-red-500"
-                              : "border-slate-700"
+                              ? "!border-red-500/50 focus:!border-red-500 focus:!ring-red-500"
+                              : ""
                         }`}
                         autoCapitalize="none"
                         autoCorrect="off"
@@ -1240,33 +1229,33 @@ export default function ChooseUsernamePage() {
                       />
                       <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                         {isCheckingUsername && (
-                          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+                          <Loader2 className="h-5 w-5 animate-spin text-[#8E8E8E]" />
                         )}
                         {usernameAvailable === true &&
                           username.length >= 3 &&
                           /^[a-zA-Z0-9_]+$/.test(username) &&
                           !isCheckingUsername && (
-                            <CheckCircle className="h-5 w-5 text-green-500" />
+                            <CheckCircle className="h-5 w-5 text-emerald-400" />
                           )}
                         {usernameAvailable === false &&
                           username.length >= 3 &&
                           !isCheckingUsername && (
-                            <XCircle className="h-5 w-5 text-red-500" />
+                            <XCircle className="h-5 w-5 text-red-400" />
                           )}
                       </div>
                     </div>
                     <div className="mt-1.5 space-y-1">
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-[#8E8E8E]">
                         Letters, numbers, and underscores only. 3-20 characters.
                       </p>
                       {username.length > 0 && username.length < 3 && (
-                        <p className="text-xs text-red-500">
+                        <p className="text-xs text-red-400">
                           Must be at least 3 characters.
                         </p>
                       )}
                       {username.length >= 3 &&
                         !/^[a-zA-Z0-9_]+$/.test(username) && (
-                          <p className="text-xs text-red-500">
+                          <p className="text-xs text-red-400">
                             Invalid format: Only letters, numbers, and
                             underscores allowed.
                           </p>
@@ -1275,7 +1264,7 @@ export default function ChooseUsernamePage() {
                         username.length >= 3 &&
                         /^[a-zA-Z0-9_]+$/.test(username) &&
                         !isCheckingUsername && (
-                          <p className="text-xs text-red-500">
+                          <p className="text-xs text-red-400">
                             This username is already taken. Please try another.
                           </p>
                         )}
@@ -1283,11 +1272,11 @@ export default function ChooseUsernamePage() {
                         username.length >= 3 &&
                         /^[a-zA-Z0-9_]+$/.test(username) &&
                         !isCheckingUsername && (
-                          <p className="text-sm text-green-500">
+                          <p className="text-xs text-emerald-400">
                             This username is available!
                           </p>
                         )}
-                      <ul className="text-sm text-slate-400 list-disc list-inside pl-1 space-y-0.5 mt-1">
+                      <ul className="text-xs text-[#8E8E8E] list-disc list-inside pl-1 space-y-0.5 mt-1">
                         <li>
                           This will be your public identity and referral code.
                         </li>
@@ -1299,7 +1288,7 @@ export default function ChooseUsernamePage() {
                   {/* User Type Selection - show if needed */}
                   {userData?.needsUserTypeSelection && (
                     <div className="space-y-2">
-                      <Label className="text-slate-300">I am a</Label>
+                      <Label className="text-white font-medium text-sm">I am a</Label>
                       <Tabs
                         value={userType}
                         onValueChange={(value) =>
@@ -1307,34 +1296,30 @@ export default function ChooseUsernamePage() {
                         }
                         className="w-full"
                       >
-                        <TabsList className="grid w-full grid-cols-2 bg-[#000825] overflow-hidden">
+                        <TabsList className="grid w-full grid-cols-2 bg-[#0A0A0A] border border-white/10 rounded-2xl p-1.5 h-auto gap-1">
                           <TabsTrigger
                             value="creator"
-                            className="text-lg hover:text-white data-[state=active]:text-white"
+                            className="text-lg py-3.5 rounded-xl transition-all duration-300 text-[#8E8E8E] hover:text-white hover:bg-white/5 border border-transparent data-[state=active]:!text-white data-[state=active]:!scale-100 data-[state=active]:!ring-0 data-[state=active]:!shadow-none"
                             style={{
-                              background:
-                                userType === "creator"
-                                  ? "linear-gradient(90deg, #4C238B 0%, #7F39EC 50%, #4C238B 100%)"
-                                  : undefined,
+                              background: userType === 'creator' ? 'linear-gradient(0deg, #000000 0%, #353535 138.24%)' : 'transparent',
+                              borderColor: userType === 'creator' ? 'rgba(255,255,255,0.2)' : 'transparent'
                             }}
                           >
                             Creator
                           </TabsTrigger>
                           <TabsTrigger
                             value="advertiser"
-                            className="text-lg hover:text-white data-[state=active]:text-white"
+                            className="text-lg py-3.5 rounded-xl transition-all duration-300 text-[#8E8E8E] hover:text-white hover:bg-white/5 border border-transparent data-[state=active]:!text-white data-[state=active]:!scale-100 data-[state=active]:!ring-0 data-[state=active]:!shadow-none"
                             style={{
-                              background:
-                                userType === "advertiser"
-                                  ? "linear-gradient(90deg, #4C238B 0%, #7F39EC 50%, #4C238B 100%)"
-                                  : undefined,
+                              background: userType === 'advertiser' ? 'linear-gradient(0deg, #000000 0%, #353535 138.24%)' : 'transparent',
+                              borderColor: userType === 'advertiser' ? 'rgba(255,255,255,0.2)' : 'transparent'
                             }}
                           >
                             Brand
                           </TabsTrigger>
                         </TabsList>
                       </Tabs>
-                      <p className="text-sm text-slate-400">
+                      <p className="text-xs text-[#8E8E8E]">
                         Choose "Creator" if you create content, "Brand" if
                         you're advertising products/services.
                       </p>
@@ -1344,10 +1329,10 @@ export default function ChooseUsernamePage() {
                   {/* Referral Code Input - moved to the end */}
                   {userData?.needsReferralCodeInput && (
                     <div className="space-y-2">
-                      <Label htmlFor="referralCode" className="text-slate-300">
+                      <Label htmlFor="referralCode" className="text-white font-medium text-sm">
                         Referral Code{" "}
-                        <span className="text-slate-500">(Optional)</span>
-                        <span className="ml-2 text-sm text-slate-400">
+                        <span className="text-[#8E8E8E]">(Optional)</span>
+                        <span className="ml-2 text-xs text-[#8E8E8E]">
                           {referralCode.length}/20
                         </span>
                       </Label>
@@ -1358,7 +1343,7 @@ export default function ChooseUsernamePage() {
                         onChange={(e) =>
                           handleReferralCodeChange(e.target.value)
                         }
-                        className={`h-11 bg-[#000825] border-slate-700 placeholder:text-slate-400 text-white focus:border-amber-500 focus:ring-amber-500 ${
+                        className={`h-11 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 ${
                           referralCodeError
                             ? "border-red-500 focus:border-red-500 focus:ring-red-500"
                             : ""
@@ -1373,43 +1358,34 @@ export default function ChooseUsernamePage() {
                           {referralCodeError}
                         </p>
                       ) : (
-                        <p className="text-sm text-slate-400">
+                        <p className="text-xs text-[#8E8E8E]">
                           Have a referral code? Enter it here to earn bonus
                           rewards! (3-20 characters, letters, numbers,
                           underscores only)
                         </p>
                       )}
                       {userType === "creator" && (
-                        <Alert
-                          variant="default"
-                          className="mt-2 bg-emerald-950/40 border-emerald-700 text-emerald-300"
-                        >
-                          <AlertDescription>
+                        <div className="mt-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">
+                          <p className="text-emerald-400 text-sm">
                             Use a valid referral code to get $0.50 cash bonus
                             (50 cents) added to your withdrawable balance.
-                          </AlertDescription>
-                        </Alert>
+                          </p>
+                        </div>
                       )}
                     </div>
                   )}
 
                   {error && (
-                    <Alert variant="destructive" className="mt-4">
-                      <AlertDescription>{error}</AlertDescription>
-                    </Alert>
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 mt-4">
+                      <p className="text-red-400 text-sm">{error}</p>
+                    </div>
                   )}
 
                   {/* Gaming CTA Button */}
                   <Button
                     type="submit"
-                    className="group relative w-full bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 text-white font-bold px-8 py-4 text-lg rounded-xl shadow-2xl shadow-violet-500/40 hover:shadow-violet-500/60 transition-all duration-300 hover:scale-105 border border-violet-400/30 overflow-hidden"
-                    disabled={
-                      isLoading ||
-                      isRedirecting ||
-                      isCheckingUsername ||
-                      usernameAvailable !== true ||
-                      username.length < 3
-                    }
+                    className="group relative w-full text-white font-bold px-8 py-6 text-lg rounded-xl border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] hover:bg-white/10 transition-all duration-300 overflow-hidden"
+                    disabled={isLoading || isRedirecting}
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
                     {isLoading || isRedirecting ? (

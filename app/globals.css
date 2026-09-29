@@ -102,6 +102,148 @@ body {
   animation: scroll-right 40s linear infinite;
 }
 
+/* PickWhatFitsCard — filter chip marquees */
+.animate-pick-fits-left {
+  animation: scroll-left 18s linear infinite;
+  width: max-content;
+}
+
+.animate-pick-fits-right {
+  animation: scroll-right 20s linear infinite;
+  width: max-content;
+}
+
+.animate-pick-fits-paused {
+  animation-play-state: paused;
+}
+
+/* Moving gray highlight on PaidDirectlyCard dashed connector — one pass only */
+@keyframes paid-dash-flow {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(280%);
+  }
+}
+
+.animate-paid-dash-flow-once {
+  animation: paid-dash-flow 3.5s ease-in-out forwards;
+}
+
+/* KnowYourNumbersCard — soft badge float */
+@keyframes know-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.animate-know-float {
+  animation: know-float 2.8s ease-in-out infinite;
+}
+
+.animate-know-float-delayed {
+  animation: know-float 2.8s ease-in-out 0.35s infinite;
+}
+
+@keyframes form-launch-glow {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scale(1);
+    filter: blur(14px);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.28);
+    filter: blur(18px);
+  }
+}
+
+.animate-form-launch-glow {
+  animation: form-launch-glow 1.05s ease-in-out infinite;
+}
+
+@keyframes form-caret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.animate-form-caret {
+  animation: form-caret 0.9s step-end infinite;
+}
+
+@keyframes form-rocket-fly {
+  0% {
+    transform: translateX(0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  25% {
+    /* Rotate right first */
+    transform: translateX(4px) rotate(45deg) scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    /* Slide fully past the right edge of the button while facing right */
+    transform: translateX(96px) rotate(45deg) scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-form-rocket-fly {
+  animation: form-rocket-fly 0.85s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes form-thumb-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-form-thumb-in {
+  animation: form-thumb-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes form-dropdown-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px) scaleY(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+.animate-form-dropdown-in {
+  animation: form-dropdown-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-form-launch-glow,
+  .animate-form-thumb-in,
+  .animate-form-caret,
+  .animate-form-rocket-fly,
+  .animate-form-dropdown-in {
+    animation: none;
+  }
+}
+
 .hide-before-animate {
   opacity: 0;
 }
@@ -266,6 +408,172 @@ body {
 
 .animate-spin-slow-reverse {
   animation: spin-slow-reverse 15s linear infinite;
+}
+
+/* Hero — gray rings with traveling purple / yellow glow arcs */
+@keyframes hero-orbit-cw {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -3079;
+  }
+}
+
+@keyframes hero-orbit-ccw {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 2702;
+  }
+}
+
+.animate-hero-orbit-purple {
+  animation: hero-orbit-cw 14s linear infinite;
+}
+
+.animate-hero-orbit-yellow {
+  animation: hero-orbit-ccw 18s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-hero-orbit-purple,
+  .animate-hero-orbit-yellow {
+    animation: none;
+  }
+}
+
+/* Creators card — payment pills float + collage marquee */
+@keyframes creators-payment-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+.animate-creators-payment-float {
+  animation: creators-payment-float 3.2s ease-in-out infinite;
+}
+
+.animate-creators-payment-float-delayed {
+  animation: creators-payment-float 3.2s ease-in-out 0.55s infinite;
+}
+
+@keyframes creators-collage-left {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes creators-collage-right {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.animate-creators-collage-left {
+  animation: creators-collage-left 22s linear infinite;
+  width: max-content;
+  will-change: transform;
+}
+
+.animate-creators-collage-right {
+  animation: creators-collage-right 22s linear infinite;
+  width: max-content;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-creators-payment-float,
+  .animate-creators-payment-float-delayed,
+  .animate-creators-collage-left,
+  .animate-creators-collage-right {
+    animation: none;
+  }
+}
+
+/* Brands "Connected at the source" — platform icons orbit the hub */
+@keyframes source-orbit-cw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes source-orbit-ccw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes source-api-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.animate-source-orbit-outer {
+  animation: source-orbit-cw 10s linear infinite;
+}
+
+.animate-source-orbit-outer-counter {
+  animation: source-orbit-ccw 10s linear infinite;
+}
+
+.animate-source-orbit-inner {
+  animation: source-orbit-cw 10s linear infinite;
+}
+
+.animate-source-orbit-inner-counter {
+  animation: source-orbit-ccw 10s linear infinite;
+}
+
+.animate-source-api-pulse {
+  animation: source-api-pulse 2.2s ease-in-out infinite;
+}
+
+/* Real Engagement card — profiles scroll down behind the scanner */
+@keyframes engagement-profiles-scroll {
+  0% {
+    transform: translate3d(-50%, -50%, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.animate-engagement-profiles-scroll {
+  animation: engagement-profiles-scroll 8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-source-orbit-outer,
+  .animate-source-orbit-outer-counter,
+  .animate-source-orbit-inner,
+  .animate-source-orbit-inner-counter,
+  .animate-source-api-pulse,
+  .animate-engagement-profiles-scroll {
+    animation: none;
+  }
 }
 
 .bg-orange-ellipse {
@@ -520,7 +828,7 @@ body {
 
 @media (min-width: 1110px) {
   .text-resp {
-    font-size: 1rem; 
+    font-size: 1rem;
   }
 }
 
@@ -594,5 +902,66 @@ body {
 @media (min-width: 1100px) and (max-width: 1250px) {
   .custom-max-w {
     max-width: 950px !important;
+  }
+}
+
+/* Brands map — ambient motion + flowing connectors */
+@keyframes map-breathe {
+  0%,
+  100% {
+    opacity: 0.88;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.012);
+  }
+}
+
+.animate-map-breathe {
+  animation: map-breathe 5.5s ease-in-out infinite;
+  transform-origin: center center;
+  will-change: transform, opacity;
+}
+
+@keyframes map-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+}
+
+.animate-map-glow-pulse {
+  animation: map-glow-pulse 4.5s ease-in-out infinite;
+}
+
+@keyframes map-text-rotate {
+  0% {
+    opacity: 0;
+    transform: rotateX(85deg);
+  }
+  100% {
+    opacity: 1;
+    transform: rotateX(0deg);
+  }
+}
+
+.animate-map-text-rotate {
+  animation: map-text-rotate 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: center top;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-map-breathe,
+  .animate-map-glow-pulse,
+  .animate-map-text-rotate {
+    animation: none;
   }
 }

@@ -1,18 +1,22 @@
-import Testimonials from "./Testimonials";
-import FAQ from "./FAQ";
+"use client";
+
 import CtcBanner from "./CtcBanner";
-import NumbersSection from "./NumberSection";
 import HeroContent from "./hero-content";
+import { useThemeMode } from "@/hooks/use-theme-mode";
+import { cn } from "@/lib/utils";
 
 export function HeroSection() {
+  const { isLight } = useThemeMode();
+
   return (
-    <div className="relative min-h-screen bg-[#000825] text-white overflow-hidden">
-      {/* Refined Background Elements - More Subtle */}
-      <div className="relative z-20">
-      
+    <div
+      className={cn(
+        "relative min-h-screen overflow-x-hidden transition-colors duration-300",
+        isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
+      )}
+    >
+      <div className="relative z-20 w-full">
         <HeroContent />
-        <Testimonials />
-        <FAQ />
         <CtcBanner />
       </div>
     </div>

@@ -52,10 +52,8 @@ export function BlogPostsGrid({ posts }: BlogPostsGridProps) {
           <Link
             key={post.id}
             href={`/blog/${post.id}`}
-            className="group relative rounded-2xl border border-[#7F39EC]/70 bg-black/80 backdrop-blur-sm  overflow-hidden flex flex-col transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_26px_70px_rgba(76,35,141,0.6)] hover:border-[#7F39EC] hover:ring-2 hover:ring-[#7F39EC]/60"
+            className="group relative rounded-2xl border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.05)_0%,rgba(0,0,0,0.8)_100%)] overflow-hidden flex flex-col transition-all duration-500 hover:-translate-y-2 hover:border-white/20"
           >
-            {/* subtle purple glow (stronger on hover) */}
-            <div className="pointer-events-none absolute inset-px rounded-2xl opacity-60 group-hover:opacity-100 transition-opacity duration-500 bg-[radial-gradient(circle_at_top,_rgba(127,57,236,0.32),_transparent_60%),radial-gradient(circle_at_bottom,_rgba(76,35,141,0.38),_transparent_55%)]" />
 
             {post.thumbnail && (
               <div className="relative w-full h-72 bg-slate-900/10 overflow-hidden">
@@ -70,8 +68,8 @@ export function BlogPostsGrid({ posts }: BlogPostsGridProps) {
                 {/* top-right status / read-time pill when image exists */}
                 <div className="absolute top-3 right-3 flex gap-2 text-[11px] font-medium">
                   {post.read_time_minutes ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-black/80 border border-[#7F39EC]/70 px-2.5 py-1 text-violet-100 shadow-lg backdrop-blur">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#7F39EC] shadow-[0_0_10px_rgba(127,57,236,0.9)]" />
+                    <span className="inline-flex items-center gap-1 rounded-full bg-black/80 border border-white/20 px-2.5 py-1 text-white shadow-lg backdrop-blur">
+                      <span className="h-1.5 w-1.5 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)]" />
                       {post.read_time_minutes} min read
                     </span>
                   ) : null}
@@ -80,23 +78,20 @@ export function BlogPostsGrid({ posts }: BlogPostsGridProps) {
             )}
 
             <div className="relative p-7 flex flex-col gap-4 flex-1">
-              {/* accent bar */}
-              <div className="h-0.5 w-10 rounded-full bg-gradient-to-r from-[#4C238D] via-[#7F39EC] to-fuchsia-400 mb-1 group-hover:w-16 transition-all duration-500" />
-
               {/* Category badge above title */}
               {post.category && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/40 bg-purple-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#C4A3FF] w-fit">
-                  <span className="h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.85)]" />
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white w-fit">
+                  <span className="h-1.5 w-1.5 rounded-full bg-white shadow-[0_0_12px_rgba(255,255,255,0.5)]" />
                   {post.category}
                 </span>
               )}
 
-              <h2 className="font-semibold text-lg lg:text-xl line-clamp-2 text-slate-50 group-hover:text-[#C4A3FF] transition-colors duration-300">
+              <h2 className="font-semibold text-lg lg:text-xl line-clamp-2 text-white group-hover:text-gray-300 transition-colors duration-300">
                 {post.title}
               </h2>
 
               {stripHtml(post.short_description).length > 0 && (
-                <p className="text-sm lg:text-[15px] text-slate-300/90 leading-relaxed line-clamp-3 group-hover:text-slate-100 transition-colors">
+                <p className="text-sm lg:text-[15px] text-[#8E8E8E] leading-relaxed line-clamp-3 transition-colors">
                   {stripHtml(post.short_description)}
                 </p>
               )}

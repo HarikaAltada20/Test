@@ -144,26 +144,9 @@ export default async function RootLayout({
     }
   }
 
-  // Determine initial theme mode on the server from cookies to avoid white flash
-  const presetCookie = cookieStore.get("dashboard-preset")?.value as
-    | "game-of-creators"
-    | "clean-professional"
-    | "dark-professional"
-    | undefined;
-  const modeCookie = cookieStore.get("dashboard-mode")?.value as
-    | "light"
-    | "dark"
-    | undefined;
-  const presetToMode: Record<string, "light" | "dark"> = {
-    "game-of-creators": "dark",
-    "clean-professional": "light",
-    "dark-professional": "dark",
-  };
-  const initialMode: "light" | "dark" = presetCookie
-    ? presetToMode[presetCookie] || "light"
-    : modeCookie === "dark" || modeCookie === "light"
-      ? modeCookie
-      : "light";
+  // Marketing pages (home/creators/brands) are dark-only.
+  // /dashboard FOUC script applies dashboard-mode independently.
+  const initialMode: "light" | "dark" = "dark";
 
   return (
     <html lang="en" data-theme={initialMode} suppressHydrationWarning>
@@ -173,7 +156,7 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               html{background:${
-                initialMode === "dark" ? "#07031E" : "#ffffff"
+                initialMode === "dark" ? "#000000" : "#F1F1F1"
               };color:${
                 initialMode === "dark" ? "rgb(248, 250, 252)" : "#111827"
               }}
@@ -190,19 +173,30 @@ export default async function RootLayout({
                   var get = function(k){
                     try { return window.localStorage.getItem(k); } catch(e) { return null; }
                   };
-                  var mode = 'light';
-                  var preset = get('dashboard-preset');
-                  var presetToMode = { 'game-of-creators': 'dark', 'clean-professional': 'light', 'dark-professional': 'dark' };
-                  if (preset && presetToMode[preset]) {
-                    mode = presetToMode[preset];
-                  } else {
+                  var path = (window.location && window.location.pathname) || '';
+                  var isDashboard = path.indexOf('/dashboard') === 0;
+                  var mode = 'dark';
+                  if (isDashboard) {
+                    mode = 'light';
                     var savedMode = get('dashboard-mode');
-                    if (savedMode === 'dark' || savedMode === 'light') mode = savedMode;
+                    var preset = get('dashboard-preset');
+                    var presetToMode = { 'game-of-creators': 'dark', 'clean-professional': 'light', 'dark-professional': 'dark' };
+                    if (savedMode === 'dark' || savedMode === 'light') {
+                      mode = savedMode;
+                    } else if (preset && presetToMode[preset]) {
+                      mode = presetToMode[preset];
+                    }
                   }
+                  // Marketing pages always dark (light mode disabled).
                   d.setAttribute('data-theme', mode);
                   if (mode === 'dark') {
-                    d.style.backgroundColor = '#07031E';
+                    d.classList.add('dark');
+                    d.style.backgroundColor = '#000000';
                     d.style.color = 'rgb(248, 250, 252)';
+                  } else {
+                    d.classList.remove('dark');
+                    d.style.backgroundColor = '#F1F1F1';
+                    d.style.color = '#111827';
                   }
                 } catch(e) {}
               })();

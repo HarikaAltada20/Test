@@ -21,7 +21,7 @@ import {
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import logo from "@/public/images/gold_logo_horizontal.svg";
+import logo from "@/public/images/Primary Logo white 1.png";
 
 export default function VerifyOTPPage() {
   const [email, setEmail] = useState("");
@@ -150,35 +150,17 @@ export default function VerifyOTPPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#000825] overflow-hidden relative">
-      {/* Floating Gaming Elements */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-20 left-10 w-8 h-8 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg rotate-45 opacity-60 animate-pulse"></div>
-        <div
-          className="absolute top-40 right-20 w-6 h-6 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full opacity-60 animate-pulse"
-          style={{ animationDelay: "2s" }}
-        ></div>
-        <div
-          className="absolute bottom-60 left-20 w-4 h-4 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full opacity-60 animate-pulse"
-          style={{ animationDelay: "4s" }}
-        ></div>
-        <Trophy
-          className="absolute top-32 right-10 h-6 w-6 text-yellow-400/60 animate-bounce"
-          style={{ animationDelay: "1s" }}
-        />
-        <Star
-          className="absolute bottom-40 right-40 h-5 w-5 text-pink-400/60 animate-pulse"
-          style={{ animationDelay: "3s" }}
-        />
-        <Shield
-          className="absolute top-60 left-40 h-7 w-7 text-cyan-400/60 animate-bounce"
-          style={{ animationDelay: "5s" }}
-        />
-        <CheckCircle
-          className="absolute bottom-20 right-20 h-6 w-6 text-emerald-400/60 animate-pulse"
-          style={{ animationDelay: "2.5s" }}
-        />
+    <div className="min-h-screen bg-black overflow-hidden relative">
+      {/* Top Gray Shade */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-0 h-28 sm:h-48 overflow-hidden"
+        aria-hidden="true"
+      >
+        <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/60 to-transparent z-10" />
+        <div className="absolute inset-x-0 top-0 h-full bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.22)_0%,rgba(255,255,255,0.08)_35%,transparent_70%)]" />
       </div>
+
+
 
       <div className="relative z-20 flex items-center justify-center min-h-screen p-4">
         <div className="w-full max-w-2xl">
@@ -186,14 +168,16 @@ export default function VerifyOTPPage() {
           <div className="text-center">
             <div className="relative group">
               <div className="absolute inset-0 transition-opacity duration-500"></div>
-              <div className="relative  p-4 ">
-                <Image
-                  src={logo}
-                  alt="Game of Creators"
-                  width={200}
-                  height={70}
-                  className="mx-auto"
-                />
+              <div className="relative pt-6 pb-0">
+                <Link href="/">
+                  <Image
+                    src={logo}
+                    alt="Game of Creators"
+                    width={260}
+                    height={90}
+                    className="mx-auto cursor-pointer"
+                  />
+                </Link>
               </div>
             </div>
           </div>
@@ -205,27 +189,16 @@ export default function VerifyOTPPage() {
             <div className="relative p-8 rounded-2xl">
               {/* Gaming Header */}
               <div className="mb-8 text-center">
-                <h1 className="text-4xl md:text-5xl font-black text-white drop-shadow-2xl mb-4">
+                <h1 className="text-4xl md:text-5xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent drop-shadow-2xl mb-4">
                   Check Your Email
                 </h1>
-                <p className="text-slate-300 text-lg leading-relaxed mb-8">
+                <p className="text-[#8E8E8E] text-lg leading-relaxed mb-8">
                   Start your creator journey and unlock epic opportunities
                 </p>
-                <p className="text-slate-300 text-lg leading-relaxed mb-2">
+                <p className="text-[#8E8E8E] text-lg leading-relaxed mb-2">
                   We sent a 6-digit verification code to
                 </p>
-                <p
-                  className="text-lg"
-                  style={{
-                    background:
-                      "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    backgroundClip: "text",
-
-                    display: "inline",
-                  }}
-                >
+                <p className="text-lg text-white font-medium">
                   {email}
                 </p>
               </div>
@@ -233,7 +206,7 @@ export default function VerifyOTPPage() {
               <form onSubmit={handleVerifyOTP} className="space-y-6">
                 {/* OTP Input Field */}
                 <div className="space-y-2">
-                  <Label htmlFor="otp" className="text-slate-300 font-medium">
+                  <Label htmlFor="otp" className="text-white font-medium text-sm">
                     Verification Code
                   </Label>
                   <Input
@@ -244,7 +217,7 @@ export default function VerifyOTPPage() {
                     onChange={(e) =>
                       setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
                     }
-                    className="text-center text-2xl tracking-[0.5em] h-16 bg-[#000825] border-slate-600/50 placeholder:text-slate-400 text-white focus:border-emerald-500 focus:ring-emerald-500 rounded-xl font-mono font-bold"
+                    className="text-center text-2xl tracking-[0.5em] h-16 bg-black border-white/20 placeholder:text-slate-400 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl font-mono font-bold"
                     maxLength={6}
                     required
                     disabled={isLoading}
@@ -261,13 +234,10 @@ export default function VerifyOTPPage() {
                 {/* Gaming Verify Button */}
                 <Button
                   type="submit"
-                  className="group relative w-full text-white font-bold px-8 py-6 text-lg rounded-3xl transition-all duration-300 overflow-hidden"
-                  style={{
-                    background:
-                      "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-                  }}
-                  disabled={isLoading || otp.length !== 6}
+                  className="group relative w-full text-white font-bold px-8 py-6 text-lg rounded-xl border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] hover:bg-white/10 transition-all duration-300 overflow-hidden"
+                  disabled={isLoading}
                 >
+                  <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
                   {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -283,11 +253,11 @@ export default function VerifyOTPPage() {
 
               {/* Resend Section */}
               <div className="mt-8 text-lg text-center flex items-center justify-center gap-2">
-                <p className="text-slate-400">Didn't receive the code?</p>
+                <p className="text-[#8E8E8E]">Didn't receive the code?</p>
                 <Button
                   onClick={handleResendOTP}
                   variant="ghost"
-                  className="text-violet-400 hover:text-violet-300 p-0 hover:bg-violet-500/10 font-semibold transition-all duration-300"
+                  className="text-white hover:text-gray-300 p-0 hover:bg-transparent font-semibold transition-all duration-300"
                   disabled={isResending}
                 >
                   {isResending ? (
@@ -307,7 +277,7 @@ export default function VerifyOTPPage() {
               <div className="mt-8 text-center">
                 <Link
                   href="/auth/signin"
-                  className="inline-flex items-center text-slate-400 hover:text-slate-300 transition-colors font-medium"
+                  className="inline-flex items-center text-[#8E8E8E] hover:text-white transition-colors font-medium"
                 >
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Return to arena entrance

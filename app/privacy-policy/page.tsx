@@ -1,46 +1,23 @@
 export default function PrivacyPolicyPage() {
   return (
-    <div
-      className="min-h-screen text-white border-b border-[#A87313]"
-      style={{ backgroundColor: "#000825" }}
-    >
+    <div className="min-h-screen text-white bg-black pt-[10px]">
       <div className="container mx-auto px-2 py-12 max-w-[1250px]">
         {/* Header */}
         <div className="mb-12">
-          <h1
-            className="text-4xl md:text-5xl font-bold whitespace-nowrap"
-           
-          >
-            <span
-              style={{
-                background:
-                  "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-
-                display: "inline",
-              }}
-            >
-              Privacy&nbsp;
-            </span>
-            <span className="text-white">Policy</span>
+          <h1 className="text-4xl md:text-5xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent drop-shadow-2xl mb-4">
+            Privacy Policy
           </h1>
 
-          <p className="text-slate-300 mt-4 text-lg">
+          <p className="text-[#8E8E8E] mt-4 text-lg font-medium">
             Last Updated: {new Date("2025-08-01").toLocaleDateString("en-GB")}
           </p>
         </div>
 
         {/* Content */}
-        <div className="space-y-9 text-slate-100 leading-relaxed">
+        <div className="space-y-9 text-[#8E8E8E] leading-relaxed">
           {/* Section 1 */}
           <section className="relative">
-            {/* Purple circle touching right edge */}
-            <div
-              className="absolute top-10 right-0 w-44 h-44 rounded-full opacity-20 blur-3xl -z-10"
-              style={{ backgroundColor: "#7F39EC" }}
-            ></div>
+
 
             <h2 className="text-2xl font-semibold mb-4 text-white">
               1. Introduction

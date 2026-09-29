@@ -4,26 +4,19 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 
-import NumbersSection from "@/components/NumberSection";
 import {
   ArrowRight,
-  Star,
+  ArrowUpRight,
   Users,
-  Crown,
   Target,
   Trophy,
-  Palette,
   Camera,
-  Heart,
-  Gift,
-  Sparkles,
-  Clock,
-  Calendar,
-  DollarSign,
   Eye,
-  ShoppingBag,
   Wallet,
-  Coins,
+  DollarSign,
+  Send,
+  TrendingUp,
+  MousePointer2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
@@ -40,13 +33,18 @@ import { Badge } from "@/components/ui/badge";
 import CtcBanner from "@/components/CtcBanner";
 import Testimonials from "../../components/Testimonials";
 import FAQ from "@/components/FAQ";
-import { SOCIAL_LINKS } from "@/constants/socialLinks";
-import { FaDiscord } from "react-icons/fa";
+import PaidDirectlyCard from "@/components/PaidDirectlyCard";
+import KnowYourNumbersCard from "@/components/KnowYourNumbersCard";
+import PickWhatFitsCard from "@/components/PickWhatFitsCard";
 import { createClient } from "@/utils/supabase/client";
 import { formatLocalDateTime } from "@/lib/utils";
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
-import { isCpmContestType } from "@/lib/contest-type";
+import {
+  getPoolBudgetCentsFromDetails,
+  isCpmContestType,
+} from "@/lib/contest-type";
+
 import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
 import {
   parseVideoContestPlatforms,
@@ -54,8 +52,7 @@ import {
   resolveContestPoolBudgetCents,
 } from "@/lib/video-platform-campaigns";
 import { cn } from "@/lib/utils";
-// Placeholder for social icons image - replace with actual path if different
-import socialPair from "@/public/images/social_pair.avif";
+import { useThemeMode } from "@/hooks/use-theme-mode";
 
 // const creatorTestimonials = [
 //   {
@@ -107,6 +104,14 @@ import socialPair from "@/public/images/social_pair.avif";
 //     avatar: "/images/avatar_placeholder.png",
 //   },
 // ];
+const brandImages: string[] = [
+  "/images/ba54cd16167abac1d45d63109c16d6999d67e552.png",
+  "/images/image 277.png",
+  "/images/7e659d660283b02da97f42ede238f8b03b35cb37.png",
+  "/images/image 276.png",
+  "/images/Frame 2147243949.png",
+  "/images/0046b3171bb1d05ed8f26833e71c449ca7073d81.png",
+];
 const creatorsteps = [
   {
     number: "1",
@@ -146,22 +151,76 @@ const creatorsteps = [
   },
 ];
 
+const creatorEasySteps = [
+  {
+    title: "Find the right campaign",
+    description:
+      "Browse campaigns that match your content, interests, and style.",
+  },
+  {
+    title: "Create video & publish",
+    description:
+      "Create content your way, follow the brief, and publish it on your social channels.",
+  },
+  {
+    title: "Track your performance",
+    description:
+      "Watch views, rankings, and earnings update live as your content performs.",
+  },
+  {
+    title: "Get rewarded",
+    description:
+      "Earn based on the verified performance your content generates.",
+  },
+] as const;
+
+const easyStepImages: readonly (readonly string[])[] = [
+  ["/images/Frame 2147243801.png", "/images/Frame 2147243800.png"],
+  ["/images/Frame 2147243895.png"],
+  ["/images/Frame 2147243895 (1).png"],
+  ["/images/Frame 2147243895 (2).png"],
+] as const;
+
 const images: string[] = [
   "/images/ce93873a8bcf3c08e216b5793f968f3722178789.avif",
   "/images/844d84fa7fc8646e15494703ec37e2d880bb59e5.avif",
   "/images/fb3e50b77241ebb8e7cd1813fae1eecbe92b7432.avif",
+];
+const creators = [
+  {
+    src: "/images/Ellipse 2355 (1).avif",
+    alt: "Creator 1",
+  },
+  {
+    src: "/images/Ellipse 2355 (2).avif",
+    alt: "Creator 2",
+  },
+  {
+    src: "/images/Ellipse 2355 (3).avif",
+    alt: "Creator 3",
+  },
+  {
+    src: "/images/Ellipse 2355 (4).avif",
+    alt: "Creator 4",
+  },
+  {
+    src: "/images/Ellipse 2355 (6).avif",
+    alt: "Creator 5",
+  },
 ];
 
 interface CreatorsClientProps {
   totalViews: number;
   totalMoneyCreditedCents: number;
   initialContests?: any[];
+  initialTheme?: "light" | "dark";
 }
 
 export default function CreatorsClient({
-  totalViews,
+  totalViews: _totalViews,
   totalMoneyCreditedCents,
   initialContests = [],
+  initialTheme,
 }: CreatorsClientProps) {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [fade, setFade] = useState<boolean>(true);
@@ -179,14 +238,19 @@ export default function CreatorsClient({
 
   const [contests, setContests] = useState<any[]>(initialContests);
   const [userType, setUserType] = useState<"creator" | "advertiser" | null>(
-    null
+    null,
   );
   const [showAdvertiserModal, setShowAdvertiserModal] = useState(false);
   const [isCheckingStartEarning, setIsCheckingStartEarning] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
-  const [navigatingContestId, setNavigatingContestId] = useState<string | null>(null);
+  const [navigatingContestId, setNavigatingContestId] = useState<string | null>(
+    null,
+  );
+  const { isLight } = useThemeMode(initialTheme);
   const [isNavigatingViewMore, setIsNavigatingViewMore] = useState(false);
+  const [easyStep, setEasyStep] = useState(0);
+  const [easyStepProgress, setEasyStepProgress] = useState(0);
 
   const handleNavigation = () => {
     setIsNavigating(true);
@@ -228,7 +292,7 @@ export default function CreatorsClient({
           }
         });
       },
-      { threshold: 0.3 } // Use lower threshold to ensure all trigger
+      { threshold: 0.3 }, // Use lower threshold to ensure all trigger
     );
 
     if (sectionRef.current) observer.observe(sectionRef.current);
@@ -251,6 +315,31 @@ export default function CreatorsClient({
 
     return () => clearInterval(interval);
   }, []);
+
+  // Auto-advance "As easy as you think" steps
+  useEffect(() => {
+    setEasyStepProgress(0);
+    const tickMs = 50;
+    const stepDurationMs = 4000;
+    const interval = setInterval(() => {
+      setEasyStepProgress((prev) => {
+        const next = prev + tickMs / stepDurationMs;
+        if (next >= 1) {
+          return 1;
+        }
+        return next;
+      });
+    }, tickMs);
+
+    const stepTimeout = setTimeout(() => {
+      setEasyStep((s) => (s + 1) % creatorEasySteps.length);
+    }, stepDurationMs);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(stepTimeout);
+    };
+  }, [easyStep]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -290,7 +379,7 @@ export default function CreatorsClient({
           `
           *,
           contest_based_details
-        `
+        `,
         )
         .eq("moderation_status", "published")
         .not("status", "eq", "incomplete")
@@ -375,10 +464,27 @@ export default function CreatorsClient({
   // Get pathname for route change detection
   const pathname = usePathname();
 
-  // Reset navigating contest ID when route changes
+  // Reset navigating state when route changes
   useEffect(() => {
     setNavigatingContestId(null);
     setIsNavigatingViewMore(false);
+    setIsCheckingStartEarning(false);
+    setIsSigningOut(false);
+    setIsNavigating(false);
+  }, [pathname]);
+
+  // Smooth-scroll to hash targets (navbar anchors)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash.replace("#", "");
+    if (!hash) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 100);
+    return () => window.clearTimeout(timer);
   }, [pathname]);
 
   // Get the "View More" link based on user type
@@ -408,6 +514,7 @@ export default function CreatorsClient({
 
         if (userData?.user_type === "advertiser") {
           setShowAdvertiserModal(true);
+          setIsCheckingStartEarning(false);
           return;
         }
       }
@@ -415,11 +522,12 @@ export default function CreatorsClient({
       localStorage.setItem("signupRole", "creator");
       router.push("/auth/signup");
     } catch (error) {
-      console.error("Failed to verify account type before creator sign-up:", error);
+      console.error(
+        "Failed to verify account type before creator sign-up:",
+        error,
+      );
       localStorage.setItem("signupRole", "creator");
       router.push("/auth/signup");
-    } finally {
-      setIsCheckingStartEarning(false);
     }
   };
 
@@ -433,13 +541,16 @@ export default function CreatorsClient({
       router.push("/auth/signup");
       router.refresh();
     } catch (error) {
-      console.error("Failed to sign out advertiser before creator sign-up:", error);
-    } finally {
+      console.error(
+        "Failed to sign out advertiser before creator sign-up:",
+        error,
+      );
       setIsSigningOut(false);
     }
   };
 
   const handleContinueAsAdvertiser = () => {
+    setIsNavigating(true);
     setShowAdvertiserModal(false);
     router.push("/dashboard/contests");
   };
@@ -447,7 +558,7 @@ export default function CreatorsClient({
   // Helper function to get contests with live/upcoming priority, filling with ended if needed
   const getContestsWithFallback = (sourceContests: any[], limit: number) => {
     const liveFiltered = sourceContests.filter(
-      (c) => c.status === "active" || c.status === "upcoming"
+      (c) => c.status === "active" || c.status === "upcoming",
     );
     const endedFiltered = sourceContests.filter((c) => c.status === "ended");
 
@@ -463,10 +574,10 @@ export default function CreatorsClient({
   // Helper function to get both live and ended contests if live contests exist
   const getContestsWithLiveAndEnded = (
     sourceContests: any[],
-    limit: number
+    limit: number,
   ) => {
     const liveFiltered = sourceContests.filter(
-      (c) => c.status === "active" || c.status === "upcoming"
+      (c) => c.status === "active" || c.status === "upcoming",
     );
     const endedFiltered = sourceContests.filter((c) => c.status === "ended");
 
@@ -489,7 +600,6 @@ export default function CreatorsClient({
     return resolveContestPoolBudgetCents(
       contest.contest_type,
       contest.contest_based_details,
-      contest.platform,
     );
   };
 
@@ -590,7 +700,7 @@ export default function CreatorsClient({
 
   // Get IDs of contests used in Most Popular section
   const mostPopularContestIds = new Set(
-    finalMostPopularContests.map((c) => c.id)
+    finalMostPopularContests.map((c) => c.id),
   );
 
   // STEP 2: Instagram and YouTube contests - use remaining contests (active, upcoming, and ended)
@@ -598,24 +708,24 @@ export default function CreatorsClient({
   const instagramContests = getContestsWithLiveAndEnded(
     contests.filter(
       (c) =>
-        parseVideoContestPlatforms(c.platform).includes("instagram") &&
-        !mostPopularContestIds.has(c.id)
+        c.platform?.toLowerCase() === "instagram" &&
+        !mostPopularContestIds.has(c.id),
     ),
-    5
+    5,
   );
   const youtubeContests = getContestsWithLiveAndEnded(
     contests.filter(
       (c) =>
-        parseVideoContestPlatforms(c.platform).includes("youtube") &&
-        !mostPopularContestIds.has(c.id)
+        c.platform?.toLowerCase() === "youtube" &&
+        !mostPopularContestIds.has(c.id),
     ),
-    5
+    5,
   );
 
   // Calculate total budget for all campaigns (live, upcoming, and ended)
   const totalBudget = contests.reduce(
     (sum, contest) => sum + getContestBudgetCents(contest),
-    0
+    0,
   );
 
   // Calculate total contests published
@@ -636,7 +746,7 @@ export default function CreatorsClient({
     if (totalBudget > 0) {
       budgetUsedPercent = Math.min(
         Math.round((budgetSpent / totalBudget) * 100),
-        100
+        100,
       );
     }
 
@@ -655,7 +765,7 @@ export default function CreatorsClient({
         onClick={() => handleViewContest(contest.id)}
         className={cn(
           "relative w-[180px] sm:w-[200px] md:w-[220px] lg:w-[240px] flex-shrink-0 overflow-hidden rounded-2xl border border-slate-700 bg-[#06021D] p-1 pb-2 font-medium transition-transform duration-150 ease-in-out hover:scale-105 hover:border-orange-400 cursor-pointer my-2",
-          navigatingContestId === contest.id && "opacity-70 cursor-not-allowed"
+          navigatingContestId === contest.id && "opacity-70 cursor-not-allowed",
         )}
       >
         {/* Loading overlay with spinner */}
@@ -736,165 +846,333 @@ export default function CreatorsClient({
   };
 
   return (
-    <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
+    <div
+      className={cn(
+        "min-h-screen overflow-x-hidden transition-colors duration-300",
+        isLight
+          ? "border-black/5 bg-[#F1F1F1] text-black"
+          : "border-white/10 bg-black text-white",
+      )}
+    >
       <div className="relative z-20">
-        <section className="pt-20 pb-16 md:pt-28 md:pb-24 relative overflow-hidden">
-          {/* Strategic Background Elements */}
+        <section
+          id="home"
+          className="relative overflow-hidden pt-8 pb-10 sm:pt-10 sm:pb-12 md:pt-16 md:pb-16"
+        >
+          <div className="relative z-10 mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-12">
+            <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-8">
+              {/* Left: copy + CTAs */}
+              <div className="text-left">
+                <h1
+                  className={cn(
+                    "mb-4 text-[2rem] font-semibold leading-[1.1] tracking-tight sm:mb-5 sm:text-5xl md:text-[3.35rem] lg:text-[4rem]",
+                    isLight
+                      ? "text-black"
+                      : "bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent",
+                  )}
+                  // style={{ animationDelay: "0.15s" }}
+                >
+                  Big following?
+                  <br />
+                  Small following?
+                  <br />
+                  Doesn&apos;t matter here.
+                </h1>
 
-          {/* Floating Creative Elements */}
-          <div className="inset-0 z-10 pointer-events-none">
-            <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
-            <Sparkles
-              className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
-              style={{ animationDelay: "1s" }}
-            />
-            <Star
-              className="absolute top-40 left-1/4 h-9 w-9 text-purple-400/30 animate-pulse"
-              style={{ animationDelay: "2s" }}
-            />
-            <Heart
-              className="absolute top-60 right-1/3 h-5 w-5 text-pink-400/40 animate-bounce"
-              style={{ animationDelay: "0.5s" }}
-            />
-            <Palette
-              className="absolute bottom-40 left-16 h-6 w-6 text-indigo-400/30 animate-pulse"
-              style={{ animationDelay: "1.5s" }}
-            />
-            <Trophy
-              className="absolute bottom-32 right-12 h-9 w-9 text-amber-400/40 animate-bounce"
-              style={{ animationDelay: "0.8s" }}
-            />
-          </div>
-          {/* Orange Ellipse Background Glow */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] w-[1250px] h-[600px] rounded-full blur-3xl opacity-50 pointer-events-none bg-orange-ellipse"></div>
+                <p
+                  className={cn(
+                    "mb-6 max-w-xl text-base leading-relaxed sm:mb-8 sm:text-lg md:text-xl",
+                    isLight ? "text-black/50" : "text-zinc-400",
+                  )}
+                  // style={{ animationDelay: "0.35s" }}
+                >
+                  Anyone can join. What you earn depends on how your content
+                  performs — not your follower count.
+                </p>
 
-          <div className="container mx-auto px-6 sm:px-10 lg:px-16 text-center relative z-10">
-            {/* Premium Badge */}
-            <div className="inline-flex items-center gap-2.5 bg-[#FFFFFF0F] border border-[#FFFFFF1A] rounded-full px-4 py-2 sm:px-5 sm:py-2.5 mb-8 mx-auto backdrop-blur-sm">
-              <span className="relative flex h-2 w-2 shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-400"></span>
-              </span>
-              <span className="text-xs sm:text-base font-semibold text-white leading-tight">
-                <span className="text-orange-400">
-                  {totalViews.toLocaleString("en-US")}+
-                </span>{" "}
-                views generated so far!
-              </span>
-            </div>
+                <div className="mb-6 flex flex-col items-stretch gap-3 sm:mb-8 sm:flex-row sm:items-center">
+                  <Button
+                    type="button"
+                    onClick={handleStartEarningClick}
+                    disabled={isCheckingStartEarning}
+                    className={cn(
+                      "inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-base font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
+                      isLight
+                        ? "bg-[#FF6A1A] text-white hover:bg-[#ff7a33] shadow-lg shadow-orange-500/25"
+                        : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white hover:border-white/35 hover:bg-[#242424]",
+                    )}
+                  >
+                    {isCheckingStartEarning ? <ButtonLoadingSpinner /> : null}
+                    <span>Start Earning →</span>
+                  </Button>
 
-            {/* Enhanced Social Icons */}
-            <div className="flex justify-center mb-8">
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-orange-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
-                <div className="relative">
-                  <Image
-                    src={socialPair}
-                    alt="Social Media Icons"
-                    width={200}
-                    height={55}
-                    className="relative z-10"
-                  />
+                  <Button
+                    type="button"
+                    onClick={handleViewMoreClick}
+                    disabled={isNavigatingViewMore}
+                    className={cn(
+                      "inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-base font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
+                      isLight
+                        ? "border border-black/15 bg-white text-black hover:bg-[#f7f7f7]"
+                        : "bg-[#DEDEDE] text-black hover:bg-white",
+                    )}
+                  >
+                    {isNavigatingViewMore ? <ButtonLoadingSpinner /> : null}
+                    <span>Browse Campaigns →</span>
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex -space-x-2.5">
+                    {[
+                      "/images/Ellipse 2355.avif",
+                      "/images/Ellipse 2355 (1).avif",
+                      "/images/Ellipse 2355 (2).avif",
+                    ].map((src, i) => (
+                      <div
+                        key={src}
+                        className={cn(
+                          "relative h-8 w-8 overflow-hidden rounded-full border-2 bg-zinc-800",
+                          isLight ? "border-white" : "border-black",
+                        )}
+                        style={{ zIndex: 3 - i }}
+                      >
+                        <Image
+                          src={src}
+                          alt=""
+                          fill
+                          className="object-cover"
+                          sizes="32px"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <p
+                    className={cn(
+                      "text-sm",
+                      isLight ? "text-black/50" : "text-zinc-400",
+                    )}
+                  >
+                    16k+ creators have already Joined
+                  </p>
                 </div>
               </div>
-            </div>
 
-            {/* Massive Gaming Title */}
-            <h1
-              className="text-4xl md:text-6xl lg:text-7xl mb-6 leading-tight slide-up"
-              style={{ animationDelay: "1s" }}
-            >
-              <span
-                className="font-semibold  text-white drop-shadow-2xl"
-                style={{ fontFamily: "Montserrat, sans-serif" }}
-              >
-                Turn Your Creativity Into
-              </span>
-              <span
-                className="block font-semibold text-white drop-shadow-2xl"
-                style={{ fontFamily: "Montserrat, sans-serif" }}
-              >
-                <span className="relative">
-                  <span
-                    className="bg-clip-text text-transparent"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
-                    }}
+              {/* Right: layered hero visual */}
+              <div className="relative flex justify-center lg:justify-end">
+                <div className="relative h-[380px] w-full max-w-[420px] overflow-hidden sm:h-[480px] sm:max-w-[560px] sm:overflow-visible lg:h-[560px]">
+                  {/* Dollar sign — behind girl, shifted left */}
+                  <div className="pointer-events-none absolute left-[-8%] right-[10%] top-[-2%] bottom-[6%] z-0 select-none sm:left-[-18%] sm:right-[18%]">
+                    <Image
+                      src="/images/attach-money.png"
+                      alt=""
+                      fill
+                      className="object-contain object-center opacity-90"
+                      sizes="(max-width: 1024px) 70vw, 440px"
+                      priority
+                    />
+                  </div>
+
+                  {/* Last Month Earnings — behind girl (tucked under right shoulder) */}
+                  <div
+                    className={cn(
+                      "pointer-events-none absolute top-[28%] right-[4%] z-[5] rounded-2xl border px-3 py-2 backdrop-blur-md sm:top-[38%] sm:right-[10%] sm:px-4 sm:py-3 rotate-[6deg]",
+                      isLight
+                        ? "border-black/[0.06] bg-[#ECECEC] shadow-[inset_0px_0px_5.26px_0px_#CDCDCD40]"
+                        : "border-white/10 bg-[#1E1E1E] shadow-[inset_0_0_5.26px_0_#FFFFFF40]",
+                    )}
                   >
-                    Income
-                  </span>
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl "></div>
-                </span>
-              </span>
-            </h1>
+                    <div className="mb-0.5 flex items-center gap-2">
+                      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-600 text-[9px] font-bold text-black shadow-sm sm:h-[18px] sm:w-[18px] sm:text-[10px]">
+                        $
+                      </span>
+                      <span
+                        className={cn(
+                          "whitespace-nowrap text-[11px] sm:text-xs",
+                          isLight ? "text-[#353535]" : "text-zinc-300",
+                        )}
+                      >
+                        Last Month Earnings
+                      </span>
+                    </div>
+                    <p
+                      className={cn(
+                        "pl-0.5 text-xl font-semibold tracking-tight sm:text-2xl",
+                        isLight ? "text-black" : "text-white",
+                      )}
+                    >
+                      $4,500
+                    </p>
+                  </div>
 
-            {/* Strategic Subtitle */}
-            <p
-              className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
-              style={{ animationDelay: "2s" }}
-            >
-              Join{" "}
-              <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">
-                Game of Creators
-              </span>{" "}
-              and get paid based on{" "}
-              <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">
-                views or ranking
-              </span>{" "}
-              — even if you have 0 followers
-            </p>
+                  {/* Girl — in front of dollar + earnings card */}
+                  <div className="pointer-events-none absolute inset-0 z-10 flex items-end justify-center">
+                    <div className="relative -mb-[4%] h-[88%] w-[98%] sm:w-[86%]">
+                      <Image
+                        src="/images/88ea43859c754cb864b7440ecca779c37d8d6e5d.png"
+                        alt="Creator checking earnings on Game of Creators"
+                        fill
+                        priority
+                        className="origin-bottom scale-[1.12] object-contain object-bottom"
+                        sizes="(max-width: 1024px) 90vw, 480px"
+                      />
+                    </div>
+                  </div>
 
-            {/* Call-to-Action Buttons */}
-            <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8">
-              <Button
-                type="button"
-                onClick={handleStartEarningClick}
-                disabled={isCheckingStartEarning}
-                className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {isCheckingStartEarning ? <ButtonLoadingSpinner /> : <Sparkles className="h-4 w-4" />}
-                <span>Start Earning →</span>
-              </Button>
+                  {/* Bottom blur → black fade (over image, under notification) */}
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 bottom-0 top-[94%] z-[15] h-[22%] sm:h-[14%]"
+                  >
+                    <div
+                      className="absolute inset-0"
+                      style={{
+                        WebkitMaskImage:
+                          "linear-gradient(to top, black 0%, black 45%, transparent 100%)",
+                        maskImage:
+                          "linear-gradient(to top, black 0%, black 45%, transparent 100%)",
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
+                  </div>
 
-              <Button
-                variant="outline"
-                className="rounded-3xl border-2 border-slate-400/40 text-slate-300 font-semibold px-8 py-6 text-lg hover:border-orange-400/50 hover:text-orange-400 transition-all duration-300 bg-transparent hover:bg-slate-800/20 hover:shadow-lg"
-                asChild
-              >
-                <a
-                  href="https://youtu.be/KrtpC2DB9zk?si=2OOUFF1803HDiC6N"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Watch Demo
-                </a>
-              </Button>
-            </div>
-
-            {/* Creator Discord link (replaces social proof line) */}
-            <div className="flex justify-center items-center mb-8">
-              <a
-                href={SOCIAL_LINKS.discord}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border border-[#5865F2]/30 bg-[#5865F2]/10 px-4 py-2 text-sm text-[#C7CEFF] hover:bg-[#5865F2]/20 hover:shadow-[0_0_18px_rgba(88,101,242,0.35)] hover:ring-1 hover:ring-[#5865F2]/40 transition-all"
-              >
-                <FaDiscord className="h-4 w-4 text-[#5865F2]" />
-                Join Creator Community
-              </a>
+                  {/* $600 credited notification — in front of girl */}
+                  <div
+                    className="pointer-events-none   bg-[#FFFFFFCC]
+  border-[0.64px]
+  border-[#FFFFFF40]
+  backdrop-blur-[19.0909px]
+  shadow-[0px_10.18px_20.36px_-2.55px_#00000026] absolute left-[2%] top-[68%] z-20 w-[min(94%,260px)] rounded-2xl px-3 py-2.5 text-black sm:left-[18%] sm:top-[65%] sm:w-[300px] sm:px-3.5 sm:py-3"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <div className="relative mt-0.5 flex h-[38px] w-[38px] shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-white">
+                        <Image
+                          src="/images/Group.png"
+                          alt=""
+                          width={18}
+                          height={18}
+                          className="h-[18px] w-[18px] scale-[1.55] object-contain"
+                          sizes="18px"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1 pt-0.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-[13px] leading-snug text-zinc-900 sm:text-sm">
+                            <span className="font-semibold">GOC</span>{" "}
+                            <span className="font-semibold">
+                              $600 credited!
+                            </span>
+                          </p>
+                          <span className="shrink-0 pt-0.5 text-[10px] text-zinc-500 sm:text-[11px]">
+                            now
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] leading-snug text-zinc-600 sm:text-xs">
+                          from GlowNaturally Campaign 🪄
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
+        {/* Brand logos strip */}
+        <section
+          className={cn(
+            "overflow-hidden pb-14 pt-2 transition-colors duration-300",
+            isLight ? "bg-[#F1F1F1]" : "bg-black",
+          )}
+        >
+          <p
+            className={cn(
+              "mb-6 px-4 text-center text-sm sm:mb-8 sm:text-base",
+              isLight ? "text-black/45" : "text-zinc-500",
+            )}
+          >
+            Work with Top Brands and Creators
+          </p>
+          <div className="relative mx-auto w-full max-w-[1100px] overflow-hidden">
+            {/* Logos scroll sideways only inside this clipped band */}
+            <div
+              className="flex w-max animate-scroll-left items-center gap-10 py-3 sm:gap-14 md:gap-16"
+              // style={{
+              //   WebkitMaskImage:
+              //     "linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)",
+              //   maskImage:
+              //     "linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)",
+              // }}
+            >
+              {[...brandImages, ...brandImages].map((image, index) => {
+                const isCircle = image.includes("image 276");
+                return (
+                  <div
+                    key={`${image}-${index}`}
+                    className={cn(
+                      "flex shrink-0 items-center justify-center",
+                      isCircle
+                        ? "h-12 w-12 sm:h-14 sm:w-14"
+                        : "h-10 w-[120px] sm:h-12 sm:w-[150px] md:h-14 md:w-[180px]",
+                    )}
+                  >
+                    <Image
+                      src={image}
+                      alt={`Brand logo ${index + 1}`}
+                      width={isCircle ? 50 : 180}
+                      height={isCircle ? 56 : 56}
+                      className={cn(
+                        "h-full w-full object-contain",
+                        isCircle && "rounded-full",
+                        isLight && !isCircle && "brightness-0",
+                      )}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Black blur edges */}
+            {/* <div
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute inset-y-0 left-0 z-10 w-28 sm:w-40 md:w-52",
+                isLight
+                  ? "bg-gradient-to-r from-[#F1F1F1] via-[#F1F1F1]/70 to-transparent"
+                  : "bg-gradient-to-r from-black via-black/70 to-transparent backdrop-blur-[2px]",
+              )}
+            /> */}
+            {/* <div
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute inset-y-0 right-0 z-10 w-28 sm:w-40 md:w-52",
+                isLight
+                  ? "bg-gradient-to-l from-[#F1F1F1] via-[#F1F1F1]/70 to-transparent"
+                  : "bg-gradient-to-l from-black via-black/70 to-transparent backdrop-blur-[2px]",
+              )}
+            /> */}
+          </div>
+        </section>
+
         {/* Contests Section */}
-        <section className="text-white py-16 px-4 overflow-visible">
-          <div className="max-w-[1400px] mx-auto space-y-12 overflow-visible">
+        <section
+          className={cn(
+            "overflow-visible px-3 py-10 sm:px-4 sm:py-16 transition-colors duration-300",
+            isLight ? "text-black" : "text-white",
+          )}
+        >
+          <div className="mx-auto max-w-[1400px] space-y-10 overflow-visible sm:space-y-12">
             {/* Most Popular Contests */}
             {finalMostPopularContests.length > 0 && (
               <div className="overflow-visible">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 px-2 sm:px-16 gap-3 sm:gap-0">
-                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
+                <div className="mb-4 flex flex-col items-start justify-between gap-3 px-2 sm:mb-6 sm:flex-row sm:items-center sm:gap-0 sm:px-8 md:px-16">
+                  <h2
+                    className={cn(
+                      "text-xl font-bold sm:text-2xl md:text-3xl",
+                      isLight ? "text-black" : "text-white",
+                    )}
+                  >
                     Most Popular Campaigns
                   </h2>
                 </div>
@@ -907,7 +1185,7 @@ export default function CreatorsClient({
                     onClick={handleViewMoreClick}
                     className={cn(
                       "relative w-[180px] sm:w-[200px] md:w-[220px] lg:w-[240px] flex-shrink-0 overflow-hidden rounded-2xl border border-slate-700 bg-[#06021D] p-2 font-medium transition-transform duration-150 ease-in-out hover:scale-105 hover:border-orange-400 cursor-pointer my-2 flex items-center justify-center",
-                      isNavigatingViewMore && "opacity-70 cursor-not-allowed"
+                      isNavigatingViewMore && "opacity-70 cursor-not-allowed",
                     )}
                   >
                     {/* Loading overlay with spinner */}
@@ -973,93 +1251,139 @@ export default function CreatorsClient({
           </div>
         </section>
 
-        {/* Why Join as Creator - Gaming Style */}
-        <section className="text-white py-16" ref={animationRef}>
-          <div className="max-w-[1200px] mx-auto px-4 md:px-12 xl:px-4 text-center">
-            {/* Heading */}
+        {/* As easy as you think */}
+        <section
+          id="why-goc"
+          className={cn(
+            "scroll-mt-24 py-12 sm:py-16 md:py-20 transition-colors duration-300",
+            isLight ? "text-black" : "text-white",
+          )}
+          ref={animationRef}
+        >
+          <div className="mx-auto max-w-[1200px] px-4 md:px-8 xl:px-4">
             <h2
-              className={`text-3xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
-                isAnimated ? "slide-up" : "hide-before-animate"
-              }`}
-              style={{ animationDelay: "0.2s" }}
+              className={cn(
+                "mb-8 sm:mb-10 sm:text-4xl md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
+                isAnimated ? "slide-up" : "hide-before-animate",
+                isLight ? "text-black" : "text-[#EFEFEF]",
+              )}
             >
-              Why Join as a{" "}
-              <span className="bg-gradient-to-r from-orange-500 to-yellow-500 bg-clip-text text-transparent">
-                Creator
-              </span>
+              As easy as you think
             </h2>
-            <p
-              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${
-                isAnimated ? "slide-left" : "hide-before-animate"
-              }`}
-              style={{ animationDelay: "1s" }}
-            >
-              Unlock your creative potential and monetise your passion
-            </p>
-            <div className="grid gap-6 md:grid-cols-3">
-              {[
-                {
-                  title: "Earn Money",
-                  description:
-                    "Get paid for creating content for brands you love through campaigns and collaborations.",
-                  number: "1",
-                  image:
-                    "/images/c89a26089c94c4806f6c5d35d5a13d7b9b4abe4d.avif", // first card image
-                },
-                {
-                  title: "Build Your Portfolio",
-                  description:
-                    "Create professional content for recognized brands to showcase in your portfolio.",
-                  number: "2",
-                  image:
-                    "/images/6260ed20a17f3e1217628986a9525a3a5987b46f.avif", // second card image
-                },
-                {
-                  title: "Grow Your Audience",
-                  description:
-                    "Gain exposure when brands share and promote your content to their followers.",
-                  number: "3",
-                  image:
-                    "/images/e8e9c22eb82571682f04cec79d2d2cb1276138fc.avif", // third card image
-                },
-              ].map((item) => (
-                <div
-                  key={item.number}
-                  className="cursor-pointer relative border border-gray-500 rounded-xl p-[50px] flex flex-col items-center text-center hover:shadow-lg transition overflow-hidden group"
-                >
-                  <div
-                    className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                    style={{
-                      backgroundImage: `url(${item.image})`,
-                      backgroundSize: "cover",
-                      backgroundPosition: "center",
-                    }}
-                  ></div>
 
-                  {/* Shade Overlay */}
-                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-b from-[#00000066] to-[#00000099]"></div>
-
+            <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
+              {/* Left: campaign collage + CTA */}
+              <div
+                className={cn(
+                  "relative rounded-2xl overflow-hidden",
+                  isLight
+                    ? "border border-[#0000000D] bg-[#ECECEC]"
+                    : "border border-white/10 bg-[#0a0a0a]",
+                )}
+                style={{ animationDelay: "0.3s" }}
+              >
+                <div className="relative h-[320px] sm:h-[400px] md:h-[460px]">
                   <div
-                    className="relative z-10 w-[50px] h-[50px] text-3xl flex items-center justify-center rounded-full text-white font-bold mb-4"
-                    style={{
-                      background:
-                        "linear-gradient(180deg, #DC7308 0%, #FF652D 100%)",
-                    }}
+                    key={easyStep}
+                    className="absolute inset-0 flex flex-col gap-1 transition-opacity duration-300"
                   >
-                    {item.number}
+                    {(easyStepImages[easyStep] || easyStepImages[0]).map(
+                      (src, idx) => (
+                        <div
+                          key={`${easyStep}-${src}-${idx}`}
+                          className="relative flex-1 min-h-0"
+                        >
+                          <Image
+                            src={src}
+                            alt=""
+                            fill
+                            className="object-cover object-center transition-all duration-300"
+                            sizes="(max-width: 1024px) 90vw, 560px"
+                            priority
+                          />
+                        </div>
+                      ),
+                    )}
                   </div>
-
-                  {/* Title */}
-                  <h3 className="relative z-10 text-2xl md:text-3xl mt-5 font-semibold mb-2">
-                    {item.title}
-                  </h3>
-
-                  {/* Description */}
-                  <p className="relative z-10 text-gray-300 mt-5 text-lg lg:text-xl">
-                    {item.description}
-                  </p>
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
+                  <div className="absolute inset-x-0 bottom-5 flex justify-center z-10">
+                    <Button
+                      type="button"
+                      onClick={handleViewMoreClick}
+                      disabled={isNavigatingViewMore}
+                      className="inline-flex items-center justify-center gap-2 rounded-full bg-[#FF6A1A] hover:bg-[#ff7a33] text-white font-semibold px-6 py-6 text-sm sm:text-base shadow-lg shadow-orange-900/40 disabled:opacity-70"
+                    >
+                      {isNavigatingViewMore ? <ButtonLoadingSpinner /> : null}
+                      <span>Explore Campaigns →</span>
+                    </Button>
+                  </div>
                 </div>
-              ))}
+              </div>
+
+              {/* Right: interactive steps */}
+              <div className="flex flex-col justify-center">
+                <ul className="space-y-1">
+                  {creatorEasySteps.map((step, index) => {
+                    const isActive = easyStep === index;
+                    return (
+                      <li key={step.title}>
+                        <button
+                          type="button"
+                          onClick={() => setEasyStep(index)}
+                          className="w-full text-left py-4 group"
+                        >
+                          <h3
+                            className={cn(
+                              "text-xl sm:text-2xl md:text-[1.65rem] font-semibold transition-colors duration-300",
+                              isActive
+                                ? isLight
+                                  ? "text-black"
+                                  : "text-white"
+                                : isLight
+                                  ? "text-black/40 group-hover:text-black/60"
+                                  : "text-zinc-500 group-hover:text-zinc-300",
+                            )}
+                          >
+                            {step.title}
+                          </h3>
+                          <div
+                            className={cn(
+                              "grid transition-all duration-300 ease-out",
+                              isActive
+                                ? "grid-rows-[1fr] opacity-100 mt-2"
+                                : "grid-rows-[0fr] opacity-0",
+                            )}
+                          >
+                            <div className="overflow-hidden">
+                              <p
+                                className={cn(
+                                  "text-[16px] leading-relaxed max-w-xl pb-3",
+                                  isLight ? "text-black/50" : "text-[#8E8E8E]",
+                                )}
+                              >
+                                {step.description}
+                              </p>
+                              <div
+                                className={cn(
+                                  "h-px w-full overflow-hidden rounded-full",
+                                  isLight ? "bg-black/10" : "bg-zinc-800",
+                                )}
+                              >
+                                <div
+                                  className="h-full bg-[#FF6A1A] rounded-full transition-none"
+                                  style={{
+                                    width: `${Math.min(easyStepProgress, 1) * 100}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </div>
           </div>
         </section>
@@ -1155,129 +1479,354 @@ export default function CreatorsClient({
           </div>
         </section> */}
 
-        {/* How it Works - New Design */}
+        {/* Why Creators Choose GoC */}
         <section
-          className="py-16 px-4 md:px-16 xl:px-4 text-white"
+          id="how-it-works"
+          className={cn(
+            "scroll-mt-24 px-4 py-12 sm:py-16 md:py-20 transition-colors duration-300",
+            isLight ? "text-black" : "text-white",
+          )}
           ref={howItWorksRef}
         >
-          <div className="container mx-auto max-w-[1250px]">
-            <div className="text-center mb-12">
-              <h2
-                className={`text-3xl md:text-5xl text-slate-300 font-bold max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
-                  howItWorksAnimated ? "slide-up" : "hide-before-animate"
-                }`}
-                style={{ animationDelay: "0.1s" }}
-              >
-                How it{" "}
-                <span className="bg-gradient-to-r from-orange-500 to-yellow-500 bg-clip-text text-transparent">
-                  works
-                </span>
-              </h2>
-              <p
-                className={`text-lg md:text-xl text-gray-300 ${
-                  howItWorksAnimated ? "slide-left" : "hide-before-animate"
-                }`}
-                style={{ animationDelay: "0.5s" }}
-              >
-                The easiest way to get paid for your content.
-              </p>
-            </div>
+          <div className="container mx-auto max-w-[1150px]">
+            <h2
+              className={cn(
+                "mb-8 sm:mb-10 sm:text-4xl md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
+                isAnimated ? "slide-up" : "hide-before-animate",
+                isLight ? "text-black" : "text-[#EFEFEF]",
+              )}
+            >
+              Why Creators Choose GoC
+            </h2>
 
-            <div className="grid md:grid-cols-3 gap-8 mb-12">
-              {/* Link Account Card */}
-              <div className="group relative rounded-2xl border border-[#FFB366]/70 backdrop-blur-sm overflow-hidden flex flex-col transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_26px_70px_rgba(255,179,102,0.6)] hover:border-[#FF8C42] hover:ring-2 hover:ring-[#FFB366]/60">
-                <div className="relative w-full h-80 md:h-96 bg-slate-900/10 overflow-hidden">
-                  {/* light gradient only at bottom for text readability */}
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
-                  <Image
-                    src="/images/link---account.avif"
-                    alt="Link account"
-                    fill
-                    className="object-contain group-hover:scale-[1.06] transition-transform duration-700 ease-out"
-                  />
-                </div>
+            <div className="grid gap-4 md:gap-5">
+              {/* Top row — 2 wide cards */}
+              <div className="grid gap-4 md:grid-cols-2 md:gap-5">
+                {/* Get Paid Directly */}
+                <PaidDirectlyCard isLight={isLight} />
 
-                <div className="relative p-7 flex flex-col gap-4 flex-1">
-                  {/* accent bar */}
-                  <div className="h-0.5 w-10 rounded-full bg-gradient-to-r from-[#FFD700] via-[#FFB366] to-[#FF8C42] mb-1 group-hover:w-16 transition-all duration-500" />
+                {/* Create Together */}
+                <div
+                  className={cn(
+                    "relative flex h-[340px] w-full flex-col justify-between overflow-hidden rounded-[20px] px-6 pb-9 pt-12 sm:h-[365px] sm:px-8",
+                    isLight
+                      ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
+                      : "border border-white/10 bg-[#171717]",
+                  )}
+                >
+                  {/* Dotted Curved Lines (Commented Out) */}
+                  {/* <svg
+                    className="pointer-events-none absolute left-0 top-8 h-[180px] w-full"
+                    viewBox="0 0 570 180"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    ...
+                  </svg> */}
 
-                  <h3 className="font-semibold text-lg lg:text-xl text-slate-50 group-hover:text-[#FFB366] transition-colors duration-300">
-                    Link account
-                  </h3>
-                  <p className="text-sm lg:text-[15px] text-slate-300/90 leading-relaxed group-hover:text-slate-100 transition-colors">
-                    Connect your social profiles to Game of Creators to verify
-                    ownership.
-                  </p>
+                  {/* Network Graphic Image */}
+                  <div className="pointer-events-none absolute inset-x-0 top-16 h-[140px] px-6 sm:px-8">
+                    <div className="relative h-full w-full">
+                      <Image
+                        src="/images/Group 29.png"
+                        alt="Creator Network"
+                        fill
+                        className="object-contain object-top"
+                        priority
+                      />
+                    </div>
+                  </div>
+
+                  {/* Creator Images */}
+                  <div className="relative z-10 flex h-[180px] items-start justify-center">
+                    {/* Top Creator */}
+                    <div className="absolute left-1/2 top-0 -translate-x-1/2">
+                      <div className="h-14 w-14 overflow-hidden rounded-full bg-[#111] p-[2px]">
+                        <Image
+                          src="/images/Ellipse 2355.avif"
+                          alt="Creator"
+                          width={48}
+                          height={48}
+                          className="h-full w-full rounded-full object-cover"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Left Creator */}
+                    <div className="absolute left-[22%] top-[90px]">
+                      <div className="h-13 w-13 overflow-hidden rounded-full  bg-[#222] p-[2px]">
+                        <Image
+                          src="/images/Ellipse 2355 (1).avif"
+                          alt="Creator"
+                          width={40}
+                          height={40}
+                          className="h-full w-full rounded-full object-cover"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Right Creator */}
+                    <div className="absolute right-[22%] top-[90px]">
+                      <div className="h-13 w-13 overflow-hidden rounded-full  bg-[#222] p-[2px]">
+                        <Image
+                          src="/images/Ellipse 2355 (2).avif"
+                          alt="Creator"
+                          width={40}
+                          height={40}
+                          className="h-full w-full rounded-full object-cover"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bottom-left Creator */}
+                    <div className="absolute left-[35%] top-[130px]">
+                      <div className="h-13 w-13 overflow-hidden rounded-full  bg-[#222] p-[2px]">
+                        <Image
+                          src="/images/Ellipse 2355 (3).avif"
+                          alt="Creator"
+                          width={40}
+                          height={40}
+                          className="h-full w-full rounded-full object-cover"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bottom-right Creator */}
+                    <div className="absolute right-[35%] top-[130px]">
+                      <div className="h-13 w-13 overflow-hidden rounded-full  bg-[#222] p-[2px]">
+                        <Image
+                          src="/images/Ellipse 2355 (4).avif"
+                          alt="Creator"
+                          width={40}
+                          height={40}
+                          className="h-full w-full rounded-full object-cover"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Text — aligned horizontally with PaidDirectlyCard */}
+                  <div className="relative z-10 mt-6 sm:mt-[40px]">
+                    <h3
+                      className={cn(
+                        "text-[18px] font-semibold leading-[26px] tracking-[-0.5px] sm:text-[22px] sm:leading-[28px]",
+                        isLight ? "text-black" : "text-[#d0d0d0]",
+                      )}
+                    >
+                      Create Together
+                    </h3>
+
+                    <p
+                      className={cn(
+                        "mt-[7px] text-[14px] font-normal leading-[22px] tracking-[-0.2px] sm:text-[17px] sm:leading-[24px]",
+                        isLight ? "text-black/50" : "text-[#858585]",
+                      )}
+                    >
+                      Connect with creators and share opportunities.
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              {/* Submit Content Card */}
-              <div className="group relative rounded-2xl border border-[#FFB366]/70 backdrop-blur-sm overflow-hidden flex flex-col transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_26px_70px_rgba(255,179,102,0.6)] hover:border-[#FF8C42] hover:ring-2 hover:ring-[#FFB366]/60">
-                <div className="relative w-full h-80 md:h-96 bg-slate-900/10 overflow-hidden">
-                  {/* light gradient only at bottom for text readability */}
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
-                  <Image
-                    src="/images/content.avif"
-                    alt="Submit content"
-                    fill
-                    className="object-contain group-hover:scale-[1.06] transition-transform duration-700 ease-out"
+              {/* Bottom row — 3 cards */}
+              <div className="grid gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-3">
+                {/* Know Your Numbers */}
+                <KnowYourNumbersCard isLight={isLight} />
+
+                {/* Pick What Fits */}
+                <PickWhatFitsCard isLight={isLight} />
+
+                {/* Grow With Every Campaign */}
+                <div
+                  className={cn(
+                    "relative h-[340px] w-full min-w-0 overflow-hidden rounded-[20px] sm:col-span-2 sm:h-[365px] lg:col-span-1",
+                    isLight
+                      ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
+                      : "border border-white/[0.08] bg-[#171717]",
+                  )}
+                >
+                  {/* Dashboard image — Figma Mask Group effect */}
+                  <div
+                    className="absolute left-3 right-3 top-3 h-[190px] overflow-hidden sm:left-5 sm:right-5 sm:top-5 sm:h-[210px]"
+                    style={{
+                      WebkitMaskImage:
+                        "radial-gradient(ellipse 85% 85% at 50% 40%, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%)",
+                      maskImage:
+                        "radial-gradient(ellipse 85% 85% at 50% 40%, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%)",
+                    }}
+                  >
+                    <img
+                      src={
+                        isLight
+                          ? "/images/a8cebf9956a898eff2d6dfe3fe37bced6fe30b81.png"
+                          : "/images/b8bc146b928ab4b457b74850bfdaf6ab72f59d8e.png"
+                      }
+                      alt="Campaign dashboard"
+                      className="h-full w-full object-cover object-top"
+                    />
+                    {/* Soft edge shade overlays — fades image smoothly on all 4 sides */}
+                    <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-inherit via-inherit/70 to-transparent" />
+                    <div
+                      className={cn(
+                        "pointer-events-none absolute inset-y-0 left-0 w-12",
+                        isLight
+                          ? "bg-gradient-to-r from-[#ECECEC] via-[#ECECEC]/70 to-transparent"
+                          : "bg-gradient-to-r from-[#171717] via-[#171717]/70 to-transparent",
+                      )}
+                    />
+                    <div
+                      className={cn(
+                        "pointer-events-none absolute inset-y-0 right-0 w-12",
+                        isLight
+                          ? "bg-gradient-to-l from-[#ECECEC] via-[#ECECEC]/70 to-transparent"
+                          : "bg-gradient-to-l from-[#171717] via-[#171717]/70 to-transparent",
+                      )}
+                    />
+                    <div
+                      className={cn(
+                        "pointer-events-none absolute inset-x-0 top-0 h-10",
+                        isLight
+                          ? "bg-gradient-to-b from-[#ECECEC] via-[#ECECEC]/60 to-transparent"
+                          : "bg-gradient-to-b from-[#171717] via-[#171717]/60 to-transparent",
+                      )}
+                    />
+                    <div
+                      className={cn(
+                        "pointer-events-none absolute inset-x-0 bottom-0 h-[65%]",
+                        isLight
+                          ? "bg-gradient-to-t from-[#ECECEC] via-[#ECECEC]/85 to-transparent"
+                          : "bg-gradient-to-t from-[#171717] via-[#171717]/85 to-transparent",
+                      )}
+                    />
+                  </div>
+
+                  {/* Card fade into text area */}
+                  <div
+                    className={cn(
+                      "pointer-events-none absolute inset-x-0 bottom-0 h-[48%] bg-gradient-to-t to-transparent",
+                      isLight
+                        ? "from-[#ECECEC] via-[#ECECEC]/95"
+                        : "from-[#171717] via-[#171717]/90",
+                    )}
                   />
-                </div>
 
-                <div className="relative p-7 flex flex-col gap-4 flex-1">
-                  {/* accent bar */}
-                  <div className="h-0.5 w-10 rounded-full bg-gradient-to-r from-[#FFD700] via-[#FFB366] to-[#FF8C42] mb-1 group-hover:w-16 transition-all duration-500" />
+                  {/* Text — aligned with Know Your Numbers */}
+                  <div className="absolute bottom-5 left-4 right-4 z-10 sm:bottom-6 sm:left-6 sm:right-6">
+                    <h3
+                      className={cn(
+                        "text-[18px] font-semibold leading-tight sm:text-[21px]",
+                        isLight ? "text-black" : "text-white/80",
+                      )}
+                    >
+                      Grow With Every Campaign
+                    </h3>
 
-                  <h3 className="font-semibold text-lg lg:text-xl text-slate-50 group-hover:text-[#FFB366] transition-colors duration-300">
-                    Submit content
-                  </h3>
-                  <p className="text-sm lg:text-[15px] text-slate-300/90 leading-relaxed group-hover:text-slate-100 transition-colors">
-                    Create and post content, then submit your link to start
-                    tracking views.
-                  </p>
-                </div>
-              </div>
-
-              {/* Get Paid Card */}
-              <div className="group relative rounded-2xl border border-[#FFB366]/70 backdrop-blur-sm overflow-hidden flex flex-col transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_26px_70px_rgba(255,179,102,0.6)] hover:border-[#FF8C42] hover:ring-2 hover:ring-[#FFB366]/60">
-                <div className="relative w-full h-80 md:h-96 bg-slate-900/10 overflow-hidden">
-                  {/* light gradient only at bottom for text readability */}
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
-                  <Image
-                    src="/images/balance.avif"
-                    alt="Get paid"
-                    fill
-                    className="object-contain group-hover:scale-[1.06] transition-transform duration-700 ease-out"
-                  />
-                </div>
-
-                <div className="relative p-7 flex flex-col gap-4 flex-1">
-                  {/* accent bar */}
-                  <div className="h-0.5 w-10 rounded-full bg-gradient-to-r from-[#FFD700] via-[#FFB366] to-[#FF8C42] mb-1 group-hover:w-16 transition-all duration-500" />
-
-                  <h3 className="font-semibold text-lg lg:text-xl text-slate-50 group-hover:text-[#FFB366] transition-colors duration-300">
-                    Get paid
-                  </h3>
-                  <p className="text-sm lg:text-[15px] text-slate-300/90 leading-relaxed group-hover:text-slate-100 transition-colors">
-                    Earn automatically for every verified view your content
-                    generates.
-                  </p>
+                    <p
+                      className={cn(
+                        "mt-2 text-[14px] leading-5 sm:text-[16px] sm:leading-6",
+                        isLight ? "text-black/50" : "text-white/45",
+                      )}
+                    >
+                      Build experience, performance, and
+                      <br className="hidden sm:block" /> earning potential.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
+          </div>
+        </section>
 
-            {/* Start Earning Button */}
-            <div className="text-center">
-              <Button
-                type="button"
-                onClick={handleStartEarningClick}
-                disabled={isCheckingStartEarning}
-                className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {isCheckingStartEarning ? <ButtonLoadingSpinner /> : null}
-                Start earning
-              </Button>
-            </div>
+        <Testimonials />
+
+        <section
+          className={cn(
+            "relative flex min-h-[420px] w-full items-center justify-center overflow-hidden px-4 py-16 sm:min-h-[560px] sm:py-20 md:min-h-[600px] transition-colors duration-300",
+            isLight ? "bg-[#F1F1F1]" : "bg-black",
+          )}
+        >
+          {/* Orange glow */}
+          <div
+            className={cn(
+              "pointer-events-none absolute left-1/2 top-1/2 h-[320px] w-[320px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[100px] sm:h-[500px] sm:w-[500px]",
+              isLight ? "bg-orange-500/20" : "bg-orange-500/10",
+            )}
+          />
+
+          {/* Content */}
+          <div className="relative z-10 flex flex-col items-center px-2 text-center">
+            {/* Number */}
+            <h1
+              className={cn(
+                "flex items-center justify-center text-[52px] font-bold leading-none tracking-[-0.04em] sm:text-[100px] md:text-[120px] lg:text-[124px]",
+                isLight ? "text-black" : "text-white",
+              )}
+            >
+              {"16,700+".split("").map((ch, idx) => {
+                const isDigit = /^[0-9]$/.test(ch);
+                if (!isDigit) {
+                  return <span key={idx}>{ch}</span>;
+                }
+                const val = parseInt(ch, 10);
+                const targetIdx = val === 0 ? 10 : val;
+                const digitItems = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+                return (
+                  <span
+                    key={idx}
+                    className="relative inline-block h-[52px] sm:h-[100px] md:h-[120px] lg:h-[124px] overflow-hidden align-top select-none"
+                  >
+                    <span
+                      className="flex flex-col transition-transform duration-1000 ease-[cubic-bezier(0.12,0.8,0.2,1)]"
+                      style={{
+                        transform: `translateY(-${(targetIdx * 100) / digitItems.length}%)`,
+                        transitionDelay: `${idx * 75}ms`,
+                      }}
+                    >
+                      {digitItems.map((d, dIdx) => (
+                        <span
+                          key={dIdx}
+                          className="flex h-[52px] sm:h-[100px] md:h-[120px] lg:h-[124px] shrink-0 items-center justify-center"
+                        >
+                          {d}
+                        </span>
+                      ))}
+                    </span>
+                  </span>
+                );
+              })}
+            </h1>
+
+            {/* Subtitle */}
+            <p
+              className={cn(
+                "mt-4 text-[16px] font-semibold tracking-[-0.02em] sm:mt-5 sm:text-[21px] md:text-[22px]",
+                isLight ? "text-black/55" : "text-white/70",
+              )}
+            >
+              creators have already Joined
+            </p>
+
+            {/* Button */}
+            <button
+              type="button"
+              className={cn(
+                "group mt-6 flex items-center gap-3 rounded-[22px] border border-orange-400 px-5 py-3.5 text-[15px] font-semibold shadow-[0_0_25px_rgba(255,120,0,0.45)] transition-all duration-300 hover:scale-105 hover:shadow-[0_0_35px_rgba(255,120,0,0.65)] sm:mt-8 sm:px-6 sm:py-4 sm:text-[17px]",
+                isLight
+                  ? "bg-[#FF6A1A] text-white"
+                  : "bg-white text-orange-500",
+              )}
+            >
+              <span>Make you turn</span>
+
+              <ArrowRight
+                size={22}
+                strokeWidth={1.8}
+                className="
+              transition-transform duration-300
+              group-hover:translate-x-1
+            "
+              />
+            </button>
           </div>
         </section>
 
@@ -1326,7 +1875,7 @@ export default function CreatorsClient({
             </div>
           </div>
         </section> */}
-        <Testimonials />
+
         {/* Gaming Testimonials Section */}
         {/* <section className="py-20 md:py-32 relative">
           <div className="absolute inset-0 bg-gradient-to-r from-slate-900/50 to-slate-800/50 backdrop-blur-sm"></div>
@@ -1428,62 +1977,65 @@ export default function CreatorsClient({
         {/* Epic Final CTA */}
         <CtcBanner />
 
-        <Dialog open={showAdvertiserModal} onOpenChange={setShowAdvertiserModal}>
+        <Dialog
+          open={showAdvertiserModal}
+          onOpenChange={setShowAdvertiserModal}
+        >
           <DialogContent className="bg-[#050816] border border-orange-500/30 text-white rounded-2xl shadow-2xl shadow-orange-900/40 sm:max-w-xl p-8">
             <DialogHeader>
               {/* <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-r from-orange-500/30 to-amber-500/30 border border-orange-400/30">
                 <Sparkles className="h-6 w-6 text-orange-300" />
               </div> */}
-                <DialogTitle
-              className="text-xl mb-2 lg:text-2xl leading-tight"
-
-            >
-              <span
-                className="font-semibold text-white drop-shadow-2xl"
-                style={{ fontFamily: "Montserrat, sans-serif" }}
-              >
-                 You are logged in as {" "}
-              </span>
-              <span
-                className="font-semibold text-white drop-shadow-2xl"
-                style={{ fontFamily: "Montserrat, sans-serif" }}
-              >
-                <span className="relative">
-                  <span
-                    className="bg-clip-text text-transparent"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
-                    }}
-                  >
-                    a brand
-                  </span>
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl "></div>
+              <DialogTitle className="text-xl mb-2 lg:text-2xl leading-tight">
+                <span
+                  className="font-semibold text-white drop-shadow-2xl"
+                  style={{ fontFamily: "Montserrat, sans-serif" }}
+                >
+                  You are logged in as{" "}
                 </span>
-              </span>
-            </DialogTitle>
+                <span
+                  className="font-semibold text-white drop-shadow-2xl"
+                  style={{ fontFamily: "Montserrat, sans-serif" }}
+                >
+                  <span className="relative">
+                    <span
+                      className="bg-clip-text text-transparent"
+                      style={{
+                        backgroundImage:
+                          "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
+                      }}
+                    >
+                      a brand
+                    </span>
+                    <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl "></div>
+                  </span>
+                </span>
+              </DialogTitle>
               {/* <DialogTitle className="text-2xl font-bold text-white">
                 You are logged in as a brand
               </DialogTitle> */}
               <DialogDescription className="text-base text-slate-300 leading-relaxed">
-                To continue as a creator, please sign out from your brand account first, then log in or sign up as a creator account.
+                To continue as a creator, please sign out from your brand
+                account first, then log in or sign up as a creator account.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="mt-4 flex-col gap-4 sm:flex-row sm:justify-center">
               <Button
                 variant="outline"
-                className="w-full sm:w-auto border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5"
+                className="inline-flex w-full items-center justify-center gap-2 border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5 sm:w-auto"
                 onClick={handleContinueAsAdvertiser}
-                disabled={isSigningOut}
+                disabled={isSigningOut || isNavigating}
               >
-                Continue as Brand
+                {isNavigating ? <ButtonLoadingSpinner /> : null}
+                <span>Continue as Brand</span>
               </Button>
               <Button
-                className="w-full sm:w-auto bg-gradient-to-r from-[#DD7209] to-[#FF652D] text-md text-white hover:from-[#DD7209]/90 hover:to-[#FF652D]/90 px-6 py-5"
+                className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-[#DD7209] to-[#FF652D] text-md text-white hover:from-[#DD7209]/90 hover:to-[#FF652D]/90 px-6 py-5 sm:w-auto"
                 onClick={handleSignOutAndContinueCreator}
-                disabled={isSigningOut}
+                disabled={isSigningOut || isNavigating}
               >
-                 Sign out & Continue as Creator
+                {isSigningOut ? <ButtonLoadingSpinner /> : null}
+                <span>Sign out & Continue as Creator</span>
               </Button>
             </DialogFooter>
           </DialogContent>

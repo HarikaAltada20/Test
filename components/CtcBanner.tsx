@@ -1,7 +1,8 @@
 "use client";
-import { ArrowRight, Rocket, ShieldCheck, Zap, CheckCircle, Globe } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import Image from "next/image";
 import { createClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
@@ -13,6 +14,62 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useThemeMode } from "@/hooks/use-theme-mode";
+import { cn } from "@/lib/utils";
+
+function AnimatedBackgroundArcs({ isLight }: { isLight: boolean }) {
+  return (
+    <>
+      {/* Concentric circle borders */}
+      <div
+        className={cn(
+          "pointer-events-none absolute left-1/2 top-[58%] -translate-x-1/2 -translate-y-1/2 w-[280px] h-[280px] sm:w-[380px] sm:h-[380px] md:w-[480px] md:h-[480px] rounded-full border",
+          isLight ? "border-black/[0.08]" : "border-white/[0.08]",
+        )}
+      />
+      <div
+        className={cn(
+          "pointer-events-none absolute left-1/2 top-[58%] -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] sm:w-[480px] sm:h-[480px] md:w-[600px] md:h-[600px] rounded-full border",
+          isLight ? "border-black/[0.06]" : "border-white/[0.06]",
+        )}
+      />
+      <div
+        className={cn(
+          "pointer-events-none absolute left-1/2 top-[58%] -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] sm:w-[560px] sm:h-[560px] md:w-[720px] md:h-[720px] rounded-full border",
+          isLight ? "border-black/[0.04]" : "border-white/[0.04]",
+        )}
+      />
+
+      {/* Single animated glowing arc highlight */}
+      <div className="pointer-events-none absolute left-1/2 top-[58%] -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] sm:w-[480px] sm:h-[480px] md:w-[600px] md:h-[600px]">
+        {/* Glow backdrop */}
+        <div
+          className="absolute inset-0 w-full h-full rounded-full animate-spin-slow opacity-70 blur-[3px]"
+          style={{
+            background:
+              "conic-gradient(from 10deg, transparent 0deg, transparent 40deg, rgba(255,106,26,0.9) 70deg, rgba(168,85,247,0.9) 110deg, transparent 140deg, transparent 360deg)",
+            maskImage:
+              "radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 2px))",
+            WebkitMaskImage:
+              "radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 2px))",
+          }}
+        />
+        {/* Main sharp arc */}
+        <div
+          className="w-full h-full rounded-full animate-spin-slow"
+          style={{
+            background:
+              "conic-gradient(from 10deg, transparent 0deg, transparent 40deg, rgba(255,106,26,0.95) 70deg, rgba(168,85,247,0.95) 110deg, transparent 140deg, transparent 360deg)",
+            maskImage:
+              "radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px))",
+            WebkitMaskImage:
+              "radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px))",
+          }}
+        />
+      </div>
+    </>
+  );
+}
 
 export default function CtcBanner() {
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -20,6 +77,7 @@ export default function CtcBanner() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+  const { isLight } = useThemeMode();
   const [showAdvertiserModal, setShowAdvertiserModal] = useState(false);
   const [showCreatorModal, setShowCreatorModal] = useState(false);
   const [isCheckingAccount, setIsCheckingAccount] = useState(false);
@@ -30,28 +88,6 @@ export default function CtcBanner() {
   const isBrands = pathname === "/brands";
   const isCreators = pathname === "/creators";
   const isHome = pathname === "/";
-
-  // Styles
-  const styles = {
-    creators: {
-      bgGradient:
-        "linear-gradient(180deg, #161C34 0%, rgba(231, 93, 13, 0.56) 166.78%)",
-      circleColor: "border-orange-500",
-      arcColor: "border-t-orange-500",
-      textGradient: "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
-      btnGradient: "linear-gradient(90deg, #DD7209 0%, #FF652D 100%)",
-    },
-    brands: {
-      bgGradient: "linear-gradient(180deg, #161C34 0%, #7F39EC 166.78%)",
-      circleColor: "border-purple-500",
-      arcColor: "border-t-purple-500",
-      textGradient: "linear-gradient(180deg, #B16FF4 33.29%, #7F39EC 81.2%)",
-      btnGradient: "linear-gradient(90deg, #7F39EC 0%, #B16FF4 100%)",
-    },
-  };
-
-  // Theme selection: / and /brands share the brands theme
-  const theme = isCreators ? styles.creators : styles.brands;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -162,99 +198,221 @@ export default function CtcBanner() {
 
   return (
     <section
-      className="relative flex flex-col items-center justify-center min-h-[500px] text-center text-white overflow-hidden"
+      className={cn(
+        "relative flex flex-col items-center justify-start pt-20 sm:pt-30 md:pt-40 pb-12 sm:pb-16 text-center overflow-hidden transition-colors duration-300",
+        isLight
+          ? "bg-[#F1F1F1] text-black"
+          : "bg-black text-white",
+      )}
       ref={sectionRef}
-      style={{ background: theme.bgGradient }}
     >
-      {/* Background Rings */}
-      <div
-        className={`absolute w-[500px] h-[500px] border ${theme.circleColor}/20 rounded-full`}
-      ></div>
-      <div
-        className={`absolute w-[700px] h-[700px] border ${theme.circleColor}/20 rounded-full`}
-      ></div>
-      <div
-        className={`absolute w-[900px] h-[900px] border ${theme.circleColor}/20 rounded-full`}
-      ></div>
+      {isHome ? (
+        <>
+          <div className="relative z-10 flex flex-col items-center px-4 w-full">
+            <div
+              className={cn(
+                "mt-4 sm:mt-6 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm",
+                isLight
+                  ? "border-black/[0.06] bg-white text-black/55 shadow-sm"
+                  : "border-[#434343] bg-[#353535] text-zinc-200",
+              )}
+            >
+              <ShieldCheck
+                className={cn(
+                  "h-4 w-4",
+                  isLight ? "text-black/45" : "text-zinc-200",
+                )}
+              />
+              Pay for Performance
+            </div>
 
-      {/* Revolving arc */}
-      <div className="absolute w-[900px] h-[900px] rounded-full animate-spin-slow">
-        <div
-          className={`absolute inset-0 rounded-full border-[3px] border-transparent ${theme.arcColor}`}
-          style={{ clipPath: "polygon(50% 0%, 100% 0%, 100% 40%, 50% 40%)" }}
-        ></div>
-      </div>
-      <div className="absolute w-[700px] h-[700px] rounded-full animate-spin-slow-reverse">
-        <div
-          className={`absolute inset-0 rounded-full border-[3px] border-transparent ${theme.arcColor}`}
-          style={{ clipPath: "polygon(50% 0%, 100% 0%, 100% 40%, 50% 40%)" }}
-        ></div>
-      </div>
+            <div className="relative mt-2 flex flex-col items-center justify-center w-full max-w-[780px] pt-6 pb-4 sm:pt-8 sm:pb-6 md:pt-8 md:pb-6">
+              <AnimatedBackgroundArcs isLight={isLight} />
 
-      {/* Tagline */}
-      <div className="flex items-center mt-3 md:mt-0 gap-2 px-4 py-2 bg-[#2C3148] rounded-full text-lg z-10">
-        <Rocket className="w-4 h-4" />
-        <span>
-          {isHome
-            ? "Ready to go viral?"
-            : isBrands
-              ? "Ready to go viral?"
-              : "Ready to get paid?"}
-        </span>
-      </div>
+              <div
+                className={cn(
+                  "pointer-events-none absolute left-1/2 top-[36%] z-0 h-[180px] w-[180px] sm:h-[220px] sm:w-[220px] md:h-[400px] md:w-[400px] -translate-x-1/2 -translate-y-1/2 rotate-[25.29deg]",
+                  isLight ? "opacity-40" : "opacity-85",
+                )}
+              >
+                <Image
+                  src="/images/attach-money.png"
+                  alt=""
+                  fill
+                  className="object-contain"
+                  sizes="260px"
+                  priority
+                />
+              </div>
 
-      {/* Main Heading */}
-      <h1
-        className={`mt-6 text-3xl md:text-5xl font-bold z-10 ${inView ? "slide-up" : "opacity-0 translate-y-10"
-          }`}
-      >
-        {isHome
-          ? "Join the "
-          : "Ready to Transform Your "}{" "}
-        <span
-          className="bg-clip-text text-transparent"
-          style={{ backgroundImage: theme.textGradient }}
-        >
-          {isCreators
-            ? "Creativity"
-            : isHome
-              ? "Creator Revolutions "
-              : "Content Strategy"}
-        </span>
-        ?
-      </h1>
+              <h2
+  className={cn(
+    `relative z-10 flex flex-col items-center text-center text-3xl font-['Inter'] font-bold md:text-[52px] leading-[110%] tracking-[-4%] text-center ${
+      inView ? "" : "opacity-0 translate-y-10"
+    }`,
+    isLight ? "text-black" : "bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,#FFFFFF_0%,#999999_100%)] bg-clip-text text-transparent",
+  )}
 
-      {/* Subtitle */}
-      <p
-        className={`mt-4 max-w-2xl text-xl text-gray-200 z-10 ${inView ? "slide-left" : "opacity-0 translate-x-10"
-          }`}
-      >
-        {isHome
-          ? "50,000+ creators, 1000+ brands, millions of viral moments. Your turn to dominate!"
-          : isCreators
-            ? "Join thousands of creators and brands. Sign up today and unlock your potential!"
-            : "Launch your first contest today and witness the power of creator-generated content."}
-      </p>
+>
+  <span className="block">Brands Get Results.</span>
+  <span className="mt-1 block">Creators Get Rewarded.</span>
+</h2>
 
-      {/* CTA Button */}
-      <div className="flex justify-center items-center mt-12">
-        <button
-          type="button"
-          onClick={handleMainCtaClick}
-          disabled={isCheckingAccount}
-          className="relative z-10 rounded-3xl text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-          style={{ backgroundImage: theme.btnGradient }}
-        >
-          <div className="scan-line"></div>
-          {(isNavigating || isCheckingAccount) ? <ButtonLoadingSpinner /> : <Rocket className="w-4 h-4" />}
-          {isHome
-            ? "Join Game Of Creators"
-            : isCreators
-              ? "Start Earning"
-              : "Launch a Campaign"}
-          <ArrowRight className="h-5 w-5" />
-        </button>
-      </div>
+              <div className="relative z-10 mt-5 sm:mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsNavigating(true);
+                    router.push("/brands");
+                  }}
+                  disabled={isNavigating}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                    isLight
+                      ? "bg-black text-white hover:bg-black/90"
+                      : "border border-white/25 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white hover:bg-white/10",
+                  )}
+                >
+                  {isNavigating ? <ButtonLoadingSpinner /> : null}
+                  For Brands →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsNavigating(true);
+                    router.push("/creators");
+                  }}
+                  disabled={isNavigating}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                    isLight
+                      ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
+                      : "bg-[#F0E6F6] text-black hover:bg-zinc-100",
+                  )}
+                >
+                  {isNavigating ? <ButtonLoadingSpinner /> : null}
+                  For Creators →
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="relative z-10 flex flex-col items-center px-4 w-full">
+            <div
+              className={cn(
+                "mt-4 sm:mt-6 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm",
+                isLight
+                  ? "border-black/[0.06] bg-white text-black/55 shadow-sm"
+                  : "border-[#434343] bg-[#353535] text-zinc-200",
+              )}
+            >
+              <ShieldCheck
+                className={cn(
+                  "h-4 w-4",
+                  isLight ? "text-black/45" : "text-zinc-200",
+                )}
+              />
+              Pay for Performance
+            </div>
+
+            {/* Static circles around heading + buttons */}
+            <div className="relative  flex flex-col items-center justify-center w-full max-w-[780px] pb-4  sm:pb-6 mt-4 md:pb-6">
+              <AnimatedBackgroundArcs isLight={isLight} />
+
+              <div
+                className={cn(
+                  "pointer-events-none absolute left-1/2 top-[36%] z-0 h-[180px] w-[180px] sm:h-[220px] sm:w-[220px] md:h-[400px] md:w-[400px] -translate-x-1/2 -translate-y-1/2 rotate-[25.29deg]",
+                  isLight ? "opacity-40" : "opacity-85",
+                )}
+              >
+                <Image
+                  src="/images/attach-money.png"
+                  alt=""
+                  fill
+                  className="object-contain"
+                  sizes="260px"
+                  priority
+                />
+              </div>
+
+             <h2
+  className={cn(
+    `relative z-10 flex flex-col items-center text-center text-3xl font-['Inter'] font-bold md:text-[52px] leading-[110%] tracking-[-4%] text-center ${
+      inView ? "" : "opacity-0 translate-y-10"
+    }`,
+    isLight ? "text-black" : "bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,#FFFFFF_0%,#999999_100%)] bg-clip-text text-transparent",
+  )}
+
+>
+  {isBrands ? (
+    <>
+      <span>Run campaigns</span>
+      <span className="mt-1">that drive results.</span>
+    </>
+  ) : (
+    <span>Start Earning as a Creator</span>
+  )}
+</h2>
+
+              <div className="relative z-10 mt-5 sm:mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+                {isBrands ? (
+                  <button
+                    type="button"
+                    onClick={handleMainCtaClick}
+                    disabled={isNavigating || isCheckingAccount}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                      isLight
+                        ? "bg-black text-white hover:bg-black/90"
+                        : "border border-white/25 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)]  text-white hover:bg-white/10",
+                    )}
+                  >
+                    {isNavigating || isCheckingAccount ? (
+                      <ButtonLoadingSpinner />
+                    ) : null}
+                    Launch a Campaign →
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsNavigating(true);
+                      router.push("/dashboard/opportunities");
+                    }}
+                    disabled={isNavigating || isCheckingAccount}
+                   className={cn(
+                      "inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                      isLight
+                        ? "bg-black text-white hover:bg-black/90"
+                        : "border border-white/25 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)]  text-white hover:bg-white/10",
+                    )}
+                  >
+                    {isNavigating || isCheckingAccount ? (
+                      <ButtonLoadingSpinner />
+                    ) : null}
+                    Browse Campaigns →
+                  </button>
+                )}
+                <a
+                  href="https://calendly.com/guptavishesh2/30min"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-sm sm:text-base font-medium transition-colors",
+                    isLight
+                      ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
+                      : "bg-[#F0E6F6] text-black",
+                  )}
+                >
+                  Talk to team →
+                </a>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       <Dialog open={showAdvertiserModal} onOpenChange={setShowAdvertiserModal}>
         <DialogContent className="bg-[#050816] border border-orange-500/30 text-white rounded-2xl shadow-2xl shadow-orange-900/40 sm:max-w-xl p-8">
@@ -294,20 +452,20 @@ export default function CtcBanner() {
           <DialogFooter className="mt-2 flex-col gap-2 sm:flex-row sm:justify-center">
             <Button
               variant="outline"
-              className="w-full sm:w-auto border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5"
+              className="inline-flex w-full items-center justify-center gap-2 border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5 sm:w-auto"
               onClick={handleContinueAsAdvertiser}
               disabled={isSigningOut}
             >
               {isSigningOut ? <ButtonLoadingSpinner /> : null}
-              Continue as Brand
+              <span>Continue as Brand</span>
             </Button>
             <Button
-              className="w-full sm:w-auto bg-gradient-to-r from-[#DD7209] to-[#FF652D] text-base text-md text-white hover:from-[#DD7209]/90 hover:to-[#FF652D]/90 px-6 py-5"
+              className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-[#DD7209] to-[#FF652D] text-base text-md text-white hover:from-[#DD7209]/90 hover:to-[#FF652D]/90 px-6 py-5 sm:w-auto"
               onClick={handleSignOutAndContinueCreator}
               disabled={isSigningOut}
             >
               {isSigningOut ? <ButtonLoadingSpinner /> : null}
-              Sign out & Continue as Creator
+              <span>Sign out & Continue as Creator</span>
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -356,42 +514,24 @@ export default function CtcBanner() {
           <DialogFooter className="mt-2 flex-col gap-4 sm:flex-row sm:justify-center">
             <Button
               variant="outline"
-              className="w-full sm:w-auto border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5"
+              className="inline-flex w-full items-center justify-center gap-2 border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5 sm:w-auto"
               onClick={handleContinueAsCreator}
               disabled={isSigningOut}
             >
               {isSigningOut ? <ButtonLoadingSpinner /> : null}
-              Continue as Creator
+              <span>Continue as Creator</span>
             </Button>
             <Button
-              className="w-full sm:w-auto bg-gradient-to-r from-[#4C238B] to-[#7F39EC] text-base text-md text-white hover:from-[#4C238B]/90 hover:to-[#7F39EC]/90 px-6 py-5"
+              className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-[#4C238B] to-[#7F39EC] text-base text-md text-white hover:from-[#4C238B]/90 hover:to-[#7F39EC]/90 px-6 py-5 sm:w-auto"
               onClick={handleSignOutAndContinueBrand}
               disabled={isSigningOut}
             >
               {isSigningOut ? <ButtonLoadingSpinner /> : null}
-              Sign out & Continue as Brand
+              <span>Sign out & Continue as Brand</span>
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Feature Buttons for Home */}
-      {isHome && (
-        <div className="flex flex-wrap justify-center gap-6 mt-12 z-10">
-          <div className="flex items-center gap-2 px-4 py-2 border border-white rounded-full">
-            <ShieldCheck className="w-4 h-4" /> 100% Secure
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 border border-white rounded-full">
-            <Zap className="w-4 h-4" /> Instant Setup
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 border border-white rounded-full">
-            <CheckCircle className="w-4 h-4" /> Guaranteed Results
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 border border-white rounded-full">
-            <Globe className="w-4 h-4" /> Global Reach
-          </div>
-        </div>
-      )}
     </section>
   );
 }

@@ -77,7 +77,7 @@ export default function GetStartedClient() {
     );
 
   return (
-    <div className="min-h-screen bg-[#000825] text-white">
+    <div className="min-h-screen bg-black text-white">
 
       {/* ── Page Header ── */}
       <div className="pt-20 pb-10 text-center px-6">
@@ -90,16 +90,11 @@ export default function GetStartedClient() {
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-4 leading-tight">
           Let&apos;s make your brand
           <br />
-          <span style={{
-            background: "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
-          }}>
+          <span className="bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent">
             go viral
           </span>
         </h1>
-        <p className="text-slate-400 text-lg max-w-xl mx-auto">
+        <p className="text-[#8E8E8E] text-lg max-w-xl mx-auto">
           Start a free trial or just reach out — we&apos;ll figure out the best way to help you.
         </p>
       </div>
@@ -110,7 +105,7 @@ export default function GetStartedClient() {
             SECTION 1 — FREE TRIAL
         ══════════════════════════════════════ */}
         <div className="rounded-2xl border border-amber-500/25 overflow-hidden"
-          style={{ background: "linear-gradient(135deg, rgba(180,83,9,0.12) 0%, rgba(0,8,37,0.6) 60%)" }}>
+          style={{ background: "linear-gradient(135deg, rgba(180,83,9,0.12) 0%, rgba(0,0,0,0.6) 60%)" }}>
           <div className="p-8 sm:p-10">
 
             {/* Top row — label + badge */}
@@ -130,7 +125,7 @@ export default function GetStartedClient() {
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2 leading-snug">
               Launch your first campaign — <span className="text-amber-400">free</span>
             </h2>
-            <p className="text-slate-400 text-sm sm:text-base mb-8 max-w-xl">
+            <p className="text-[#8E8E8E] text-sm sm:text-base mb-8 max-w-xl">
               We personally review each brand and only work with those we&apos;re confident we can help.{" "}
               <span className="text-white font-semibold">No results? You don&apos;t pay anything.</span>
             </p>
@@ -147,7 +142,7 @@ export default function GetStartedClient() {
                     <span className="shrink-0 h-7 w-7 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center justify-center">
                       {num}
                     </span>
-                    <span className="text-sm sm:text-base text-slate-300">{text}</span>
+                    <span className="text-sm sm:text-base text-[#8E8E8E]">{text}</span>
                   </div>
                 ))}
               </div>
@@ -160,7 +155,7 @@ export default function GetStartedClient() {
                   <Rocket className="h-4 w-4" />
                   Apply Now
                 </Link>
-                <p className="text-center text-xs text-slate-600">Takes 2 minutes · Apply in-app</p>
+                <p className="text-center text-xs text-[#8E8E8E]">Takes 2 minutes · Apply in-app</p>
               </div>
             </div>
 
@@ -170,7 +165,7 @@ export default function GetStartedClient() {
         {/* Divider */}
         <div className="flex items-center gap-4">
           <div className="flex-1 h-px bg-white/5" />
-          <span className="text-slate-600 text-sm font-medium px-2">or just reach out</span>
+          <span className="text-[#8E8E8E] text-sm font-medium px-2">or just reach out</span>
           <div className="flex-1 h-px bg-white/5" />
         </div>
 
@@ -187,11 +182,11 @@ export default function GetStartedClient() {
               </div>
               <h2 className="text-lg font-bold text-white">Book a Call with Founder</h2>
             </div>
-            <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+            <p className="text-[#8E8E8E] text-sm mb-6 leading-relaxed">
               Talk directly with our team — we&apos;ll understand your goals and
               put together a plan on the spot.
             </p>
-            <ul className="space-y-2.5 mb-8 text-sm text-slate-300">
+            <ul className="space-y-2.5 mb-8 text-sm text-[#8E8E8E]">
               {[
                 { icon: Clock, text: "30-minute focused session" },
                 { icon: Users, text: "Talk directly with our team" },
@@ -209,7 +204,7 @@ export default function GetStartedClient() {
               Schedule a Free Call
               <ArrowRight className="h-4 w-4" />
             </a>
-            <p className="text-center text-xs text-slate-600 mt-2.5">Opens Calendly — pick a time that suits you</p>
+            <p className="text-center text-xs text-[#8E8E8E] mt-2.5">Opens Calendly — pick a time that suits you</p>
           </div>
 
           {/* Send a Message */}
@@ -225,7 +220,7 @@ export default function GetStartedClient() {
               <div className="flex-1 flex flex-col items-center justify-center py-8 text-center gap-3">
                 <CheckCircle2 className="h-12 w-12 text-green-400" />
                 <h3 className="text-lg font-bold">Got it!</h3>
-                <p className="text-slate-400 text-sm">We&apos;ll reply within 24 hours.</p>
+                <p className="text-[#8E8E8E] text-sm">We&apos;ll reply within 24 hours.</p>
                 <button onClick={() => setMsgSubmitted(false)}
                   className="mt-2 text-sm text-purple-400 hover:text-purple-300 underline underline-offset-4">
                   Send another
@@ -265,7 +260,7 @@ export default function GetStartedClient() {
                     </>
                   )}
                 </button>
-                <p className="text-center text-xs text-slate-600">We respond within 24 hours</p>
+                <p className="text-center text-xs text-[#8E8E8E]">We respond within 24 hours</p>
               </form>
             )}
           </div>
@@ -273,7 +268,7 @@ export default function GetStartedClient() {
 
         {/* Bottom — self-serve */}
         <div className="text-center pt-2">
-          <p className="text-slate-600 text-sm mb-2">Already know what you want?</p>
+          <p className="text-[#8E8E8E] text-sm mb-2">Already know what you want?</p>
           <Link href="/auth/signup?role=brand"
             className="inline-flex items-center gap-2 text-purple-400 hover:text-purple-300 font-medium text-sm transition-colors">
             Create your brand account
