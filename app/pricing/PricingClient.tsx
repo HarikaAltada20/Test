@@ -21,8 +21,8 @@ import {
   AlertTriangle,
   Building2,
   Loader2,
-  UserCheck,
   CheckCircle2,
+  Gem,
 } from "lucide-react";
 import {
   Card,
@@ -121,6 +121,51 @@ const plans = [
       "Safe and secure payment handling for all contest prizes and platform fees.",
   },
 ];
+const getFormattedFeaturesList = (plan: SubscriptionPlan) => {
+  const name = plan.name.toUpperCase();
+  const minBudgetFormatted = formatCurrencyFromCents(plan.features.minContestBudget);
+
+  const list: string[] = [
+    `Min. budget ${minBudgetFormatted}`,
+    `Up to ${plan.features.maxWinnersPerContest} winners`,
+    `${plan.features.commissionPercentage}% commission`,
+  ];
+
+  if (name === "EXPLORER") {
+    list.push("Leaderboard-based contests only");
+    list.push("CPM contests available in paid plans");
+    list.push("Advanced");
+  } else if (name === "STARTER") {
+    list.push("Leaderboard & CPM-based contests");
+    list.push("Both contest types available");
+    list.push("Advanced");
+  } else if (name === "BUILDER") {
+    list.push("Leaderboard & CPM-based contests");
+    list.push("Both contest types available");
+    list.push("Prioritized customer support");
+  } else if (name === "CHAMPION") {
+    list.push("Leaderboard & CPM-based contests");
+    list.push("Both contest types available");
+    list.push("Premium 24/7 dedicated support");
+  } else {
+    if (plan.features.contestTypes?.includes("cpm")) {
+      list.push("Leaderboard & CPM-based contests");
+      list.push("Both contest types available");
+    } else {
+      list.push("Leaderboard-based contests only");
+    }
+    if (plan.features.support === "priority") {
+      list.push("Prioritized customer support");
+    } else if (plan.features.support === "premium") {
+      list.push("Premium 24/7 dedicated support");
+    } else {
+      list.push("Advanced");
+    }
+  }
+
+  return list;
+};
+
 export default function PricingClient() {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">(
     "monthly"
@@ -388,11 +433,7 @@ export default function PricingClient() {
   // Show loading state while checking user authentication
   if (isLoadingUser) {
     return (
-      <div className="container min-h-screen bg-[#000825] flex items-center justify-center">
-        {/* <div className="flex items-center space-x-2">
-          <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
-          <p className="text-gray-300 text-lg">Loading...</p>
-        </div> */}
+      <div className="min-h-screen w-full bg-black text-white flex items-center justify-center">
         <PageLoadingSpinner mode="dark" />
       </div>
     );
@@ -401,7 +442,7 @@ export default function PricingClient() {
   // Show creator message if logged in as creator
   if (user && userType === "creator") {
     return (
-      <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
+      <div className="min-h-screen bg-black text-white overflow-hidden ">
         {/* <div className="text-center mb-8">
             <div className="mx-auto p-4 rounded-full bg-blue-100 w-fit mb-4">
               <UserCheck className="h-8 w-8 text-blue-600" />
@@ -418,32 +459,8 @@ export default function PricingClient() {
           {/* Strategic Background Elements */}
 
           {/* Floating Creative Elements */}
-          <div className="inset-0 z-10 pointer-events-none">
-            <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
-            <Sparkles
-              className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
-              style={{ animationDelay: "1s" }}
-            />
-            <Star
-              className="absolute top-40 left-1/4 h-9 w-9 text-purple-400/30 animate-pulse"
-              style={{ animationDelay: "2s" }}
-            />
-            <Heart
-              className="absolute top-60 right-1/3 h-5 w-5 text-pink-400/40 animate-bounce"
-              style={{ animationDelay: "0.5s" }}
-            />
-            <Palette
-              className="absolute bottom-40 left-16 h-6 w-6 text-indigo-400/30 animate-pulse"
-              style={{ animationDelay: "1.5s" }}
-            />
-            <Trophy
-              className="absolute bottom-32 right-20 h-9 w-9 text-amber-400/40 animate-bounce"
-              style={{ animationDelay: "0.8s" }}
-            />
-          </div>
-          {/* Orange Ellipse Background Glow */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] w-[1100px] h-[500px] rounded-full blur-3xl opacity-50 pointer-events-none bg-blue-ellipse"></div>
-
+        
+         
           <div className="container mx-auto px-4 text-center relative z-10">
             {/* Premium Badge */}
             <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-4 sm:py-2 md:px-6 md:py-3 mb-6 sm:mb-8 flex-wrap justify-center max-w-full">
@@ -471,7 +488,7 @@ export default function PricingClient() {
 
             {/* Massive Gaming Title */}
             <h1
-              className="text-3xl sm:text-3xl md:text-5xl lg:text-6xl xl:text-7xl flex flex-wrap justify-center gap-x-2 gap-y-1 mb-6 leading-tight text-center slide-up"
+              className="bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent text-3xl sm:text-3xl md:text-5xl lg:text-6xl xl:text-7xl flex flex-wrap justify-center gap-x-2 gap-y-1 mb-6 leading-tight text-center slide-up "
               style={{ animationDelay: "1s" }}
             >
               <span
@@ -488,21 +505,18 @@ export default function PricingClient() {
                 <span className="relative">
                   <span
                     className="bg-clip-text text-transparent"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(180deg, #7F39EC 34.91%, #BC83FA 78.79%)",
-                    }}
+                   
                   >
                     Detected
                   </span>
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl"></div>
+                
                 </span>
               </span>
             </h1>
 
             {/* Strategic Subtitle */}
             <p
-              className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
+              className="text-lg md:text-2xl text-slate-400 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
               style={{ animationDelay: "2s" }}
             >
               This pricing page is designed for brands and advertisers who want
@@ -654,7 +668,7 @@ export default function PricingClient() {
       </section>
 
       {/* All Pricing Plans */}
-      <div id="pricing" className="scroll-mt-20 px-4">
+      <div id="pricing" className="scroll-mt-20 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
         {/* Show subscription management for authenticated advertisers */}
         {user && userType === "advertiser" ? (
           <div className="mx-auto">
@@ -667,26 +681,18 @@ export default function PricingClient() {
               </p> */}
 
               <h2
-                className="text-3xl md:text-5xl slide-up font-semibold transition-all duration-700 mb-4 ease-out transform"
+                className="text-3xl md:text-5xl text-white slide-up font-semibold transition-all duration-700 mb-4 ease-out transform"
                 style={{ animationDelay: "1s" }}
               >
                 Manage Your{" "}
                 <span
-                  style={{
-                    background:
-                      "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    backgroundClip: "text",
-
-                    display: "inline",
-                  }}
+                
                 >
                   Subscription
                 </span>
               </h2>
               <p
-                className="text-lg slide-left md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg"
+                className="text-lg slide-left md:text-xl text-slate-400 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg"
                 style={{ animationDelay: "1.5s" }}
               >
                 Upgrade, downgrade, or manage your current subscription plan
@@ -696,97 +702,48 @@ export default function PricingClient() {
           </div>
         ) : (
           <>
-            <div ref={section1Ref} className="text-center mt-10 mb-10">
-              {/* Header with Image */}
-              <div className="inline-flex items-center justify-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-full mb-4">
-                <img
-                  src="/images/Vector.png" // ← replace with your actual image path
-                  alt="Payment Plan"
-                  className="w-5 h-5 opacity-80"
-                />
-                <span className="text-sm text-gray-300">Select the ideal payment plan</span>
-              </div>
+            <div ref={section1Ref} className="text-center mt-10 mb-12">
               <h2
-                className={`text-4xl md:text-5xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent mb-4 ${
+                className={`text-3xl sm:text-4xl md:text-5xl font-extrabold text-white mb-3 tracking-tight ${
                   section1Visible ? "slide-up" : "opacity-0"
                 }`}
               >
-                Choose Your Game Plan
+                Choose your Game Plan
               </h2>
               <p
                 className={`${
                   section1Visible ? "slide-left" : "opacity-0"
-                } text-[#8E8E8E] text-lg md:text-xl mb-8`}
+                } text-gray-400 text-sm md:text-base max-w-2xl mx-auto mb-8 leading-relaxed`}
               >
-                Select the perfect plan to start winning with creator contests
+                Set your campaign, your brief, and your budget. Game of Creators puts it in front of a creator network, and pays out on verified performance
               </p>
 
-              {/* Not logged in message */}
-              {/* {!user && (
-                <Alert className="mt-6 max-w-2xl mx-auto">
-                  <Info className="h-4 w-4" />
-                  <AlertDescription className="flex items-center justify-between">
-                    <span>
-                      <strong>Not logged in?</strong> You'll need to create a
-                      Brand account to subscribe to a plan.
-                    </span>
-                    <Button
-                      onClick={() => {
-                        localStorage.setItem("signupRole", "brand");
-                        router.push("/auth/signup");
-                      }}
-                      className="ml-4 bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700 text-white font-medium px-6 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 hover:scale-105 border-0"
-                    >
-                      Sign up here
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              )} */}
-
-              <div className="mt-6 flex justify-center">
-                <div className="flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-2 rounded-full flex-wrap justify-center">
-                  {/* Monthly label */}
-                  <span
-                    className={`cursor-pointer text-sm sm:text-lg font-medium transition-colors ${
-                      billingCycle === "monthly"
-                        ? "text-white"
-                        : "text-gray-400"
-                    }`}
-                    onClick={() => setBillingCycle("monthly")}
-                  >
-                    Monthly Subscription
-                  </span>
-
-                  {/* Toggle switch */}
+              {/* Monthly / Yearly Toggle */}
+              <div className="flex justify-center">
+                <div className="inline-flex items-center p-1 bg-[#141416] border border-neutral-800 rounded-full">
                   <button
-                    onClick={handleToggle}
-                    className={`relative w-12 h-6 sm:w-14 sm:h-7 rounded-full transition-colors flex-shrink-0 ${
+                    onClick={() => setBillingCycle("monthly")}
+                    className={`px-5 py-2 rounded-full text-xs font-bold tracking-wider transition-all ${
                       billingCycle === "monthly"
-                        ? "bg-white/20"
-                        : "bg-white/40"
+                        ? "bg-neutral-800 text-white shadow-sm"
+                        : "text-gray-400 hover:text-white"
                     }`}
                   >
-                    <span
-                      className={`absolute top-0.5 left-0.5 sm:top-1 sm:left-1 w-4 h-4 sm:w-5 sm:h-5 bg-white rounded-full shadow transition-transform ${
-                        billingCycle === "yearly"
-                          ? "translate-x-6 sm:translate-x-7"
-                          : "translate-x-0"
-                      }`}
-                    />
+                    MONTHLY
                   </button>
-
-                  {/* Yearly label with badge */}
-                  <span
-                    className={`cursor-pointer text-sm sm:text-lg font-medium flex items-center gap-1 transition-colors ${
-                      billingCycle === "yearly" ? "text-white" : "text-gray-400"
-                    }`}
+                  <button
                     onClick={() => setBillingCycle("yearly")}
+                    className={`px-5 py-2 rounded-full text-xs font-bold tracking-wider transition-all flex items-center gap-1.5 ${
+                      billingCycle === "yearly"
+                        ? "bg-neutral-800 text-white shadow-sm"
+                        : "text-gray-400 hover:text-white"
+                    }`}
                   >
-                    Yearly Subscription
-                    <span className="hidden sm:block ml-1 border border-gray-300 text-gray-300 text-[10px] px-2 py-0.5 rounded-full font-semibold">
-                      Save 20% now!
+                    <span>YEARLY</span>
+                    <span className="text-[10px] font-semibold text-[#22c55e] border border-[#22c55e]/30 bg-[#22c55e]/10 px-2 py-0.5 rounded-full lowercase first-letter:uppercase">
+                      Save 20% now
                     </span>
-                  </span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -808,163 +765,93 @@ export default function PricingClient() {
 
             {/* Display Plans only if not loading and no error */}
             {!isLoading && !error && (
-              <div className="max-w-[1350px] mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 justify-items-center">
+              <div className="max-w-[1320px] w-full mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16 justify-items-center items-stretch">
                 {dbSubscriptionPlans.map((plan) => {
                   const isMostPopular = plan.name.toUpperCase() === "BUILDER";
                   const isFree = plan.price === 0;
+                  const formattedFeatures = getFormattedFeaturesList(plan);
+
                   return (
                     <div
                       key={plan.id}
-                      className={`relative flex flex-col rounded-[20px] w-full max-w-sm mx-auto p-6 hover:shadow-lg hover:scale-105 transition bg-[#171717] 
-                      ${
+                      className={`w-full max-w-[317px] p-[26px_16px] rounded-[24px] flex flex-col justify-between items-center gap-8 transition-all duration-300 ${
                         isMostPopular
-                          ? "border border-white/40 shadow-[inset_0_1px_1px_rgba(255,255,255,0.8),_0_10px_40px_rgba(255,255,255,0.05)] z-10"
-                          : "border border-[#FFFFFF1A] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
+                          ? "bg-[linear-gradient(180deg,#353535_0%,#000000_100%)] outline-[2px] outline-[#914BFC] outline-solid shadow-[0_0_30px_rgba(145,75,252,0.4)]"
+                          : "bg-[linear-gradient(180deg,#353535_0%,#000000_100%)] border border-[#434343]"
                       }`}
+                      style={isMostPopular ? { outline: "2px #914BFC solid" } : undefined}
                     >
-                      {isMostPopular && (
-                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                          <Badge className="bg-white text-black font-semibold">
-                            Most Popular
-                          </Badge>
+                      {/* Top Header Section */}
+                      <div className="w-[288px] max-w-full flex flex-col items-center gap-[17px]">
+                        {/* Plan Pill Badge */}
+                        <div className="px-4 py-2.5 rounded-[103px]  bg-[linear-gradient(90deg,#212121_0%,#131313_100%)] border-[0.6px] border-solid shadow-[inset_0_-4px_8px_0_#FFFFFF14] flex items-center justify-center gap-2">
+                          <span className="text-white text-[12px] font-semibold font-sans leading-[16.8px]">
+                            {plan.displayName || `${plan.name} Plan`}
+                          </span>
                         </div>
-                      )}
-                      
-                      {/* Top Icon */}
-                      <div className="mb-4 flex items-center justify-start">
-                        <div className="p-3 rounded-xl bg-white/10 border border-white/20 text-white w-fit">
-                          {getPlanIcon(plan.name)}
-                        </div>
-                      </div>
 
-                      {/* Title & Description */}
-                      <div className="mb-6 text-left">
-                        <h3 className="text-xl md:text-2xl font-medium text-white mb-1">
-                          {plan.displayName || plan.name}
-                        </h3>
-                        <p className="text-sm text-gray-400">
-                          {plan.features.description}
-                        </p>
-                      </div>
-
-                      {/* Price */}
-                      <div className="mb-6 flex items-baseline justify-start">
-                        <span className="text-3xl md:text-4xl font-bold text-white">
-                          {formatCurrencyFromCents(
-                            billingCycle === "monthly"
-                              ? plan.price
-                              : getDiscountedPrice(plan.price)
-                          )}
-                        </span>
-                        <span className="text-xs md:text-sm text-gray-400 ml-2">
-                          / per {billingCycle === "monthly" ? "month" : "year"}
-                        </span>
-                      </div>
-
-                      {/* Button */}
-                      <div className="w-full mb-8">
-                        <Button
-                          className={`w-full rounded-xl relative border font-medium px-4 py-6 text-base overflow-hidden transition-all duration-300 ${
-                            isMostPopular 
-                              ? "bg-gradient-to-b from-white to-gray-300 text-black border-transparent hover:brightness-110" 
-                              : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
-                          }`}
-                          asChild
-                        >
-                          <Link href={`/signup?plan=${String(plan.id)}`}>
-                            Get Started
-                          </Link>
-                        </Button>
-                      </div>
-
-                      {/* Separator */}
-                      <div className="w-full h-px bg-white/10 mb-6"></div>
-
-                      {/* Features List */}
-                      <div className="text-left flex-grow">
-                        <h4 className="text-sm font-medium text-white mb-4">
-                          What you will get
-                        </h4>
-                        <div className="space-y-3">
-                          <div className="flex items-start gap-3">
-                            <CheckCircle2 className="h-4 w-4 mt-0.5 text-gray-400 flex-shrink-0" />
-                            <span className="text-sm text-gray-300">
-                              {plan.features.maxActiveContests} active contests
-                            </span>
-                          </div>
-                          <div className="flex items-start gap-3">
-                            <CheckCircle2 className="h-4 w-4 mt-0.5 text-gray-400 flex-shrink-0" />
-                            <span className="text-sm text-gray-300">
-                              Min. budget{" "}
+                        {/* Price & Description Container */}
+                        <div className="w-full flex flex-col items-center gap-3">
+                          <div className="flex items-baseline justify-center gap-1">
+                            <span className="text-white text-[30px] font-semibold leading-[42px]">
                               {formatCurrencyFromCents(
-                                plan.features.minContestBudget
+                                billingCycle === "monthly"
+                                  ? plan.price
+                                  : getDiscountedPrice(plan.price)
                               )}
                             </span>
-                          </div>
-                          <div className="flex items-start gap-3">
-                            <CheckCircle2 className="h-4 w-4 mt-0.5 text-gray-400 flex-shrink-0" />
-                            <span className="text-sm text-gray-300">
-                              Up to {plan.features.maxWinnersPerContest} winners
+                            <span className="text-white/60 text-base font-medium pb-1">
+                              /month
                             </span>
                           </div>
-                          <div className="flex items-start gap-3">
-                            <CheckCircle2 className="h-4 w-4 mt-0.5 text-gray-400 flex-shrink-0" />
-                            <span className="text-sm text-gray-300">
-                              {plan.features.commissionPercentage}% commission
-                            </span>
-                          </div>
-                          {plan.features.contestTypes && (
-                            <div className="flex items-start gap-3">
-                              <CheckCircle2 className="h-4 w-4 mt-0.5 text-gray-400 flex-shrink-0" />
-                              <span className="text-sm text-gray-300">
-                                {plan.features.contestTypes.includes("cpm") ? (
-                                  <>
-                                    Leaderboard & CPM-based contests
-                                    <span className="text-xs text-gray-400 block mt-0.5">
-                                      Both contest types available
-                                    </span>
-                                  </>
-                                ) : (
-                                  <>
-                                    Leaderboard-based contests only
-                                    {plan.name.toUpperCase() === "EXPLORER" && (
-                                      <span className="text-xs text-gray-500 block mt-0.5">
-                                        CPM contests available in paid plans
-                                      </span>
-                                    )}
-                                  </>
-                                )}
-                              </span>
-                            </div>
-                          )}
-                          {plan.features.analytics && (
-                            <div className="flex items-start gap-3">
-                              <CheckCircle2 className="h-4 w-4 mt-0.5 text-gray-400 flex-shrink-0" />
-                              <span className="text-sm text-gray-300">
-                                {plan.features.analytics === "basic"
-                                  ? "Advanced analytics & insights"
-                                  : plan.features.analytics === "advanced"
-                                  ? "Advanced analytics & insights"
-                                  : plan.features.analytics === "comprehensive"
-                                  ? "Comprehensive analytics dashboard"
-                                  : plan.features.analytics}
-                              </span>
-                            </div>
-                          )}
-                          {plan.features.support &&
-                            plan.features.support !== "basic" && (
-                              <div className="flex items-start gap-3">
-                                <CheckCircle2 className="h-4 w-4 mt-0.5 text-gray-400 flex-shrink-0" />
-                                <span className="text-sm text-gray-300">
-                                  {plan.features.support === "priority"
-                                    ? "Prioritized customer support"
-                                    : plan.features.support === "premium"
-                                    ? "Premium 24/7 dedicated support"
-                                    : plan.features.support}
-                                </span>
-                              </div>
-                            )}
+                          <p className="w-[267px] max-w-full text-center text-white/60 text-sm font-normal leading-[19.6px]">
+                            {plan.features.description}
+                          </p>
                         </div>
+                      </div>
+
+                      {/* Divider Line */}
+                      <div className="w-full h-px bg-white/10"></div>
+
+                      {/* Features List Section */}
+                      <div className="w-full flex flex-col items-start gap-6 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-[19px] h-[19px] flex items-center justify-center flex-shrink-0">
+                            <Gem className="w-[17px] h-[17px] text-white" />
+                          </div>
+                          <span className="text-white text-[18px] font-medium leading-[18px]">
+                            {plan.features.maxActiveContests} active contests
+                          </span>
+                        </div>
+
+                        <div className="w-full flex flex-col items-start gap-3">
+                          {formattedFeatures.map((feat, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-left">
+                              {/* Glowing Check Icon Container */}
+                              <div className="w-5 h-5 rounded-full bg-[linear-gradient(180deg,rgba(52,229,0,0.15)_0%,rgba(204,228,8,0.15)_49%,rgba(251,228,2,0.15)_100%)] flex items-center justify-center flex-shrink-0">
+                                <div className="w-[14.3px] h-[14.3px] rounded-full bg-[#00FF6C] flex items-center justify-center">
+                                  <Check className="w-2.5 h-2.5 text-black stroke-[3.5]" />
+                                </div>
+                              </div>
+                              <span className="text-white/70 text-sm font-normal leading-[19.6px]">
+                                {feat}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* CTA Button */}
+                      <div className="w-full p-[1px] bg-[linear-gradient(180deg,#434343_0%,#212121_100%)] rounded-[15px] overflow-hidden mt-auto">
+                        <Button
+                          className="w-full py-[14px] px-4 bg-[linear-gradient(360deg,#000000_0%,#353535_100%)] hover:opacity-90 rounded-[14px] flex flex-row items-center justify-center gap-2 text-white text-base font-semibold border-0 shadow-none h-auto whitespace-nowrap"
+                          asChild
+                        >
+                          <Link href={`/signup?plan=${String(plan.id)}`} className="inline-flex flex-row items-center justify-center gap-2 w-full whitespace-nowrap text-white">
+                            <span>{isFree ? "Start Free" : "Subscribe"}</span>
+                            <ArrowRight className="w-4 h-4 shrink-0" />
+                          </Link>
+                        </Button>
                       </div>
                     </div>
                   );

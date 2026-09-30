@@ -860,9 +860,9 @@ export default function CreatorsClient({
           className="relative overflow-hidden pt-8 pb-10 sm:pt-10 sm:pb-12 md:pt-16 md:pb-16"
         >
           <div className="relative z-10 mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-12">
-            <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-8">
+            <div className="grid items-center gap-8 min-[900px]:grid-cols-2 min-[900px]:gap-8">
               {/* Left: copy + CTAs */}
-              <div className="text-left">
+              <div className="text-center min-[900px]:text-left">
                 <h1
                   className={cn(
                     "mb-4 text-[2rem] font-semibold leading-[1.1] tracking-tight sm:mb-5 sm:text-5xl md:text-[3.35rem] lg:text-[4rem]",
@@ -881,7 +881,7 @@ export default function CreatorsClient({
 
                 <p
                   className={cn(
-                    "mb-6 max-w-xl text-base leading-relaxed sm:mb-8 sm:text-lg md:text-xl",
+                    "mx-auto mb-6 max-w-xl text-base leading-relaxed sm:mb-8 sm:text-lg md:text-xl min-[900px]:mx-0",
                     isLight ? "text-black/50" : "text-zinc-400",
                   )}
                   // style={{ animationDelay: "0.35s" }}
@@ -890,7 +890,7 @@ export default function CreatorsClient({
                   performs — not your follower count.
                 </p>
 
-                <div className="mb-6 flex flex-col items-stretch gap-3 sm:mb-8 sm:flex-row sm:items-center">
+                <div className="mb-6 flex flex-col items-stretch justify-center gap-3 sm:mb-8 sm:flex-row sm:items-center min-[900px]:justify-start">
                   <Button
                     type="button"
                     onClick={handleStartEarningClick}
@@ -922,7 +922,7 @@ export default function CreatorsClient({
                   </Button>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center gap-3 min-[900px]:justify-start">
                   <div className="flex -space-x-2.5">
                     {[
                       "/images/Ellipse 2355.avif",
@@ -959,8 +959,8 @@ export default function CreatorsClient({
               </div>
 
               {/* Right: layered hero visual */}
-              <div className="relative flex justify-center lg:justify-end">
-                <div className="relative h-[380px] w-full max-w-[420px] overflow-hidden sm:h-[480px] sm:max-w-[560px] sm:overflow-visible lg:h-[560px]">
+              <div className="relative flex justify-center min-[900px]:justify-end">
+                <div className="relative h-[380px] w-full max-w-[420px] overflow-hidden sm:h-[480px] sm:max-w-[560px] sm:overflow-visible min-[900px]:h-[560px]">
                   {/* Dollar sign — behind girl, shifted left */}
                   <div className="pointer-events-none absolute left-[-8%] right-[10%] top-[-2%] bottom-[6%] z-0 select-none sm:left-[-18%] sm:right-[18%]">
                     <Image
@@ -1263,7 +1263,7 @@ export default function CreatorsClient({
           <div className="mx-auto max-w-[1200px] px-4 md:px-8 xl:px-4">
             <h2
               className={cn(
-                "mb-8 sm:mb-10 sm:text-4xl md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
+                "mb-8 sm:mb-10 text-[28px] sm:text-[42px] md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
                 isAnimated ? "slide-up" : "hide-before-animate",
                 isLight ? "text-black" : "text-[#EFEFEF]",
               )}
@@ -1491,7 +1491,7 @@ export default function CreatorsClient({
           <div className="container mx-auto max-w-[1150px]">
             <h2
               className={cn(
-                "mb-8 sm:mb-10 sm:text-4xl md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
+                "mb-8 sm:mb-10 text-[28px] sm:text-[42px] md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
                 isAnimated ? "slide-up" : "hide-before-animate",
                 isLight ? "text-black" : "text-[#EFEFEF]",
               )}

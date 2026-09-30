@@ -1206,28 +1206,31 @@ export default function HeroContent() {
           </div>
 
           {/* Heading */}
-          <div className="mx-auto mt-7 max-w-[1000px] text-center">
+          <div className="mx-auto mt-7 max-w-[1000px] text-center px-2">
             <h1
               className={cn(
-                "text-[42px] font-semibold leading-[1.05] tracking-[-0.05em] sm:text-[50px] md:text-[52px] font-['Inter'] font-bold leading-[110%] tracking-[-4%] text-center",
+                "text-[30px] sm:text-[44px] md:text-[52px] font-['Inter'] font-bold leading-[115%] tracking-[-4%] text-center",
                 isLight ? "text-black/75" : "text-white",
               )}
             >
               <span className={isLight ? "text-black/60" : "text-[#757575]"}>
                 Creators earn on{" "}
               </span>
-              <span className="inline-flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 sm:gap-2">
                 {/* Performance icon — opt out of text fill so the badge stays visible */}
                 <span
                   className="
                     inline-flex
-                    h-[60.64px]
-                    w-[63.11px]
+                    h-[44px]
+                    w-[46px]
+                    sm:h-[60.64px]
+                    sm:w-[63.11px]
                     shrink-0
                     rotate-[8.81deg]
                     items-center
                     justify-center
-                    rounded-[16.09px]
+                    rounded-[12px]
+                    sm:rounded-[16.09px]
                     bg-[linear-gradient(180deg,#FF8800_0%,#FFA53E_50%,#FFC27C_100%)]
                     shadow-[0px_3.71px_4.95px_0px_#FFFFFF40_inset,3.71px_-8.66px_4.95px_0px_#FFD2D20D_inset,6.19px_-11.14px_13.36px_0px_#FFF4F440_inset,13.61px_13.61px_49.5px_0px_#FFAD0038,3.71px_4.95px_29.7px_0px_#FFAD0026,1.24px_3.71px_8.17px_0px_#FFAD001A]
                     [background-clip:padding-box]
@@ -1239,7 +1242,7 @@ export default function HeroContent() {
                     alt=""
                     width={32}
                     height={32}
-                    className="h-[32px] w-[32px] object-contain"
+                    className="h-[24px] w-[24px] sm:h-[32px] sm:w-[32px] object-contain"
                   />
                 </span>
                 <span className={isLight ? "text-black" : "text-white"}>
@@ -1258,7 +1261,7 @@ export default function HeroContent() {
             {/* Description */}
             <p
               className={cn(
-                "mx-auto mt-7 max-w-[600px] font-['Inter'] text-[17px] font-medium leading-[150%] tracking-[-0.51px] text-center",
+                "mx-auto mt-5 sm:mt-7 max-w-[600px] font-['Inter'] text-[15px] sm:text-[17px] font-medium leading-[150%] tracking-[-0.51px] text-center px-2",
                 isLight ? "text-black/50" : "text-[#8E8E8E]",
               )}
             >
@@ -1270,11 +1273,11 @@ export default function HeroContent() {
               CTA BUTTONS
           ====================================================== */}
 
-            <div className="mt-6 flex flex-col justify-center gap-3 sm:mt-8 sm:flex-row">
+            <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:mt-8 sm:flex-row px-4">
               <Link
                 href="/brands"
                 className={cn(
-                  "group flex h-[51px] min-w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
+                  "group flex h-[51px] w-full max-w-[300px] sm:w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
                   isLight
                     ? "bg-[#7c3aed] text-white shadow-[0_12px_30px_rgba(124,58,237,0.28)] hover:bg-[#6d28d9]"
                     : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-white/30 hover:bg-white/[0.08]",
@@ -1295,7 +1298,7 @@ export default function HeroContent() {
               <Link
                 href="/creators"
                 className={cn(
-                  "group flex h-[51px] min-w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
+                  "group flex h-[51px] w-full max-w-[300px] sm:w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
                   isLight
                     ? "border border-black/10 bg-white text-black shadow-[0_8px_24px_rgba(15,15,30,0.06)] hover:bg-white hover:border-black/20"
                     : "bg-[#DEDEDE] text-[#26133d] shadow-[0_10px_35px_rgba(200,170,230,0.10)] hover:bg-white",
@@ -1320,279 +1323,543 @@ export default function HeroContent() {
       ========================================================= */}
         <section className="relative mx-auto w-full max-w-[1400px] px-4 pb-8 mt-6 sm:px-6 sm:pb-12 mt-14 sm:mt-18 lg:mt-24 lg:h-[550px] lg:px-0 lg:pb-0">
           {/* =====================================================
-            LEFT CAMPAIGN CARD
+            MOBILE / TABLET 3 STEPS SHOWCASE (lg:hidden)
         ===================================================== */}
-          <div
-            className={cn(
-              "absolute left-[2%] top-[35px] z-20 hidden w-[200px] rotate-[7deg] rounded-[23px] p-[15px] xl:left-[4%] xl:w-[220px] lg:block",
-              isLight
-                ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
-                : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
-            )}
-          >
-            {/* Card header */}
-            <div className="flex items-center gap-2">
+          <div className="relative z-20 flex flex-col items-center gap-10 md:grid md:grid-cols-3 md:gap-6 md:items-start lg:hidden">
+            {/* STEP 1 */}
+            <div className="flex flex-col items-center text-center">
               <div
                 className={cn(
-                  "flex h-[29px] w-[29px] items-center justify-center rounded-[8px]",
-                  isLight ? "bg-[#efe8f8]" : "bg-[#40344c]",
+                  "mb-3 text-[22px] sm:text-[24px] leading-tight rotate-[-3deg]",
+                  caveat.className,
+                  isLight ? "text-black/70" : "text-white/85",
                 )}
               >
-                <Users
-                  className={cn(
-                    "h-[15px] w-[15px]",
-                    isLight ? "text-[#7c3aed]" : "text-white/80",
-                  )}
-                />
+                <div>Brands launch campaigns</div>
+                <div className="mt-1 flex justify-center">
+                  <Image
+                    src="/images/Vector 945.png"
+                    alt=""
+                    width={40}
+                    height={60}
+                    className={cn(
+                      "h-[50px] w-auto object-contain",
+                      isLight && "invert",
+                    )}
+                  />
+                </div>
               </div>
-
-              <span
-                className={cn(
-                  "text-[13px]",
-                  isLight ? "text-black/55" : "text-white/75",
-                )}
-              >
-                Brand
-              </span>
-            </div>
-
-            {/* Title */}
-            <div
-              className={cn(
-                "mt-3 text-[15px] font-medium",
-                isLight ? "text-black" : "text-white",
-              )}
-            >
-              Podcasts Clip Challenge
-            </div>
-
-            {/* Tags */}
-            <div className="mt-3 flex flex-wrap gap-[7px]">
-              {["Clipping", "Paid","Podcast"].map((tag) => (
-                <span
-                  key={tag}
-                  className={cn(
-                    "rounded-full px-[9px] py-[5px] text-[12px]",
-                    isLight
-                      ? "bg-[#f3eaff] text-[#7c3aed]"
-                      : "bg-[#2B1F3B] text-[#BB00FF]",
-                  )}
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-
-            {/* Bottom */}
-            <div className="mt-3 flex items-end justify-between">
-              <img
-                src="/images/e9ecc19156964f29ca20b5f8080671042162b486.png"
-                alt="Creator"
-                className="h-[72px] w-[72px] rounded-md object-cover"
-              />
 
               <div
                 className={cn(
-                  "flex h-[35px] w-[35px] items-center justify-center rounded-full text-[18px]",
+                  "w-[220px] sm:w-[240px] rotate-[4deg] rounded-[23px] p-[15px] transition-transform hover:rotate-0",
                   isLight
-                    ? "bg-[#f3eaff] text-[#7c3aed]"
-                    : "bg-[#351149] text-[#c239f5]",
+                    ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
+                    : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
                 )}
               >
-                →
-              </div>
-            </div>
-          </div>
-
-          {/* =====================================================
-            LEFT TEXT
-        ===================================================== */}
-          <div
-            className={cn(
-              "absolute left-[6%] top-[260px] z-20 hidden rotate-[-4deg] text-[26px] xl:left-[9%] lg:block",
-              caveat.className,
-              isLight ? "text-black/70" : "text-white/85",
-            )}
-          >
-            <div className="relative ml-[70px] mt-0.5">
-              <Image
-                src="/images/Vector 945.png"
-                alt=""
-                width={46}
-                height={79}
-                className={cn(
-                  "h-[78px] w-auto object-contain",
-                  isLight && "invert",
-                )}
-              />
-            </div>
-            <div>Brands launch campaigns</div>
-          </div>
-
-          {/* =====================================================
-            CENTER TEXT
-        ===================================================== */}
-          <div
-            className={cn(
-              "relative z-20 mx-auto mb-8 text-center text-[20px] leading-[24px] sm:text-[26px] sm:leading-[28px] lg:absolute lg:left-1/2 lg:top-[0px] lg:mb-0 lg:-translate-x-1/2 lg:whitespace-nowrap lg:text-[24px] lg:leading-[28px]",
-              caveat.className,
-              isLight ? "text-black/70" : "text-white/85",
-            )}
-          >
-            Creator create content
-            <br />
-            that performs
-          </div>
-
-          {/* =====================================================
-            CENTRAL CREATOR CARD
-        ===================================================== */}
-          <div
-            className={cn(
-              "relative z-20 mx-auto h-[380px] w-[min(100%,280px)] overflow-hidden rounded-[24px] sm:h-[420px] sm:w-[300px] lg:absolute lg:left-1/2 lg:top-[75px] lg:mx-0 lg:h-[455px] lg:w-[335px] lg:-translate-x-1/2",
-              isLight
-                ? "border border-black/[0.06] bg-[#FFFFFF] shadow-[inset_0px_5px_4px_2px_#575757CC]"
-                : "border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)]",
-            )}
-          >
-            <Image
-              src="/images/39e512460e9052a19bf4ea8b3ca0c6cdd8086315.png"
-              alt="Creators"
-              fill
-              className="object-cover"
-              sizes="(max-width: 1024px) 300px, 335px"
-              priority
-            />
-            <span className="absolute bottom-3 left-3 z-10 text-[11px] text-white/70">
-              creator
-            </span>
-          </div>
-
-          {/* =====================================================
-            RIGHT ANALYTICS CARD
-        ===================================================== */}
-          <div
-            className={cn(
-              "absolute right-[2%] top-[130px] z-20 hidden w-[240px] rotate-[-15deg] rounded-[22px] p-4 xl:right-[4%] xl:w-[280px] lg:block",
-              isLight
-                ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_6.02px_0px_#FFFFFF40]"
-                : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
-            )}
-          >
-            {/* Tabs */}
-            <div
-              className={cn(
-                "flex flex-wrap items-center gap-1 text-[11px]",
-                isLight ? "text-black/35" : "text-white/35",
-              )}
-            >
-              <span
-                className={cn(
-                  "rounded-[9px] px-3 py-[9px]",
-                  isLight
-                    ? "bg-black/[0.06] text-black/80"
-                    : "bg-white/[0.08] text-white/80",
-                )}
-              >
-                Overview
-              </span>
-
-              <span className="px-2">Submissions</span>
-
-              <span className="px-2">Analytics</span>
-            </div>
-
-            {/* Stats */}
-            <div className="mt-7 flex items-end justify-between gap-3">
-              <div>
-                <div className="flex items-baseline gap-1.5">
-                  <span
+                {/* Card header */}
+                <div className="flex items-center gap-2">
+                  <div
                     className={cn(
-                      "text-[25px] font-medium tracking-[-1px]",
-                      isLight ? "text-black" : "text-white",
+                      "flex h-[29px] w-[29px] items-center justify-center rounded-[8px]",
+                      isLight ? "bg-[#efe8f8]" : "bg-[#40344c]",
                     )}
                   >
-                    46.2M
-                  </span>
+                    <Users
+                      className={cn(
+                        "h-[15px] w-[15px]",
+                        isLight ? "text-[#7c3aed]" : "text-white/80",
+                      )}
+                    />
+                  </div>
+
                   <span
                     className={cn(
-                      "text-[10px]",
-                      isLight ? "text-black/45" : "text-white/50",
+                      "text-[13px]",
+                      isLight ? "text-black/55" : "text-white/75",
                     )}
                   >
-                    Views
+                    Brand
                   </span>
                 </div>
 
+                {/* Title */}
                 <div
                   className={cn(
-                    "mt-3 max-w-[120px] text-[12px] leading-[15px]",
-                    isLight ? "text-black/40" : "text-white/35",
+                    "mt-3 text-left text-[14px] sm:text-[15px] font-medium",
+                    isLight ? "text-black" : "text-white",
                   )}
                 >
-                  Your top 10% creators are getting the most views
+                  Podcasts Clip Challenge
+                </div>
+
+                {/* Tags */}
+                <div className="mt-3 flex flex-wrap gap-[7px]">
+                  {["Clipping", "Paid", "Podcast"].map((tag) => (
+                    <span
+                      key={tag}
+                      className={cn(
+                        "rounded-full px-[9px] py-[5px] text-[11px] sm:text-[12px]",
+                        isLight
+                          ? "bg-[#f3eaff] text-[#7c3aed]"
+                          : "bg-[#2B1F3B] text-[#BB00FF]",
+                      )}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Bottom */}
+                <div className="mt-3 flex items-end justify-between">
+                  <img
+                    src="/images/e9ecc19156964f29ca20b5f8080671042162b486.png"
+                    alt="Creator"
+                    className="h-[64px] w-[64px] rounded-md object-cover sm:h-[72px] sm:w-[72px]"
+                  />
+
+                  <div
+                    className={cn(
+                      "flex h-[35px] w-[35px] items-center justify-center rounded-full text-[18px]",
+                      isLight
+                        ? "bg-[#f3eaff] text-[#7c3aed]"
+                        : "bg-[#351149] text-[#c239f5]",
+                    )}
+                  >
+                    →
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* STEP 2 */}
+            <div className="flex flex-col items-center text-center">
+              <div
+                className={cn(
+                  "mb-3 text-[22px] sm:text-[24px] leading-tight",
+                  caveat.className,
+                  isLight ? "text-black/70" : "text-white/85",
+                )}
+              >
+                Creator create content
+                <br />
+                that performs
+              </div>
+
+              <div
+                className={cn(
+                  "relative h-[360px] w-[260px] sm:h-[400px] sm:w-[280px] overflow-hidden rounded-[24px]",
+                  isLight
+                    ? "border border-black/[0.06] bg-[#FFFFFF] shadow-[inset_0px_5px_4px_2px_#575757CC]"
+                    : "border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)]",
+                )}
+              >
+                <Image
+                  src="/images/39e512460e9052a19bf4ea8b3ca0c6cdd8086315.png"
+                  alt="Creators"
+                  fill
+                  className="object-cover"
+                  sizes="280px"
+                  priority
+                />
+                <span className="absolute bottom-3 left-3 z-10 text-[11px] text-white/70">
+                  creator
+                </span>
+              </div>
+            </div>
+
+            {/* STEP 3 */}
+            <div className="flex flex-col items-center text-center">
+              <div
+                className={cn(
+                  "mb-3 text-[22px] sm:text-[24px] leading-tight rotate-[2deg]",
+                  caveat.className,
+                  isLight ? "text-black/70" : "text-white/85",
+                )}
+              >
+                Performance drives
+                <br />
+                real results
+                <div className="mt-1 flex justify-center">
+                  <Image
+                    src="/images/Vector 946.png"
+                    alt=""
+                    width={40}
+                    height={60}
+                    className={cn(
+                      "h-[50px] w-auto object-contain",
+                      isLight && "invert",
+                    )}
+                  />
                 </div>
               </div>
 
-              {/* Chart */}
-              <div className="flex items-end gap-[8px] pb-0.5">
-                {[
-                  { label: "April", height: "h-[42px]", active: false },
-                  { label: "May", height: "h-[28px]", active: false },
-                  { label: "June", height: "h-[36px]", active: false },
-                  { label: "July", height: "h-[54px]", active: true },
-                ].map((bar) => (
-                  <div
-                    key={bar.label}
-                    className="flex flex-col items-center gap-1.5"
+              <div
+                className={cn(
+                  "w-[240px] sm:w-[260px] rotate-[-4deg] rounded-[22px] p-4 transition-transform hover:rotate-0 text-left",
+                  isLight
+                    ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_6.02px_0px_#FFFFFF40]"
+                    : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
+                )}
+              >
+                {/* Tabs */}
+                <div
+                  className={cn(
+                    "flex flex-wrap items-center gap-1 text-[11px]",
+                    isLight ? "text-black/35" : "text-white/35",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "rounded-[9px] px-3 py-[7px]",
+                      isLight
+                        ? "bg-black/[0.06] text-black/80"
+                        : "bg-white/[0.08] text-white/80",
+                    )}
                   >
+                    Overview
+                  </span>
+                  <span className="px-1.5">Submissions</span>
+                  <span className="px-1.5">Analytics</span>
+                </div>
+
+                {/* Stats */}
+                <div className="mt-5 flex items-end justify-between gap-2">
+                  <div>
+                    <div className="flex items-baseline gap-1">
+                      <span
+                        className={cn(
+                          "text-[22px] sm:text-[25px] font-medium tracking-[-1px]",
+                          isLight ? "text-black" : "text-white",
+                        )}
+                      >
+                        46.2M
+                      </span>
+                      <span
+                        className={cn(
+                          "text-[10px]",
+                          isLight ? "text-black/45" : "text-white/50",
+                        )}
+                      >
+                        Views
+                      </span>
+                    </div>
+
                     <div
-                      className={`w-[14px] rounded-t-[4px] ${bar.height} ${
-                        bar.active
-                          ? "bg-[#3B82F6]"
-                          : isLight
-                            ? "bg-gradient-to-b from-[#d4d4d4] to-[#b8b8b8]"
-                            : "bg-gradient-to-b from-[#5a5a5a] to-[#2e2e2e]"
-                      }`}
-                    />
-                    <span
                       className={cn(
-                        "origin-top text-[10px]",
+                        "mt-2 max-w-[110px] text-[11px] leading-[14px]",
                         isLight ? "text-black/40" : "text-white/35",
                       )}
                     >
-                      {bar.label}
-                    </span>
+                      Your top 10% creators are getting the most views
+                    </div>
                   </div>
-                ))}
+
+                  {/* Chart */}
+                  <div className="flex items-end gap-[6px] pb-0.5">
+                    {[
+                      { label: "April", height: "h-[36px]", active: false },
+                      { label: "May", height: "h-[24px]", active: false },
+                      { label: "June", height: "h-[30px]", active: false },
+                      { label: "July", height: "h-[48px]", active: true },
+                    ].map((bar) => (
+                      <div
+                        key={bar.label}
+                        className="flex flex-col items-center gap-1"
+                      >
+                        <div
+                          className={`w-[12px] rounded-t-[3px] ${bar.height} ${
+                            bar.active
+                              ? "bg-[#3B82F6]"
+                              : isLight
+                                ? "bg-gradient-to-b from-[#d4d4d4] to-[#b8b8b8]"
+                                : "bg-gradient-to-b from-[#5a5a5a] to-[#2e2e2e]"
+                          }`}
+                        />
+                        <span
+                          className={cn(
+                            "origin-top text-[9px]",
+                            isLight ? "text-black/40" : "text-white/35",
+                          )}
+                        >
+                          {bar.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
           {/* =====================================================
-            RIGHT TEXT
+            DESKTOP 3 STEPS ORBIT SHOWCASE (hidden on small screens, visible lg+)
         ===================================================== */}
-          <div
-            className={cn(
-              "absolute right-[6%] top-[10px] z-20 hidden rotate-[3deg] text-center text-[26px] leading-[28px] xl:right-[10%] lg:block",
-              caveat.className,
-              isLight ? "text-black/70" : "text-white/85",
-            )}
-          >
-            Performance drives
-            <br />
-            real results
-            <div className="mt-0.5 flex justify-center">
-              <Image
-                src="/images/Vector 946.png"
-                alt=""
-                width={42}
-                height={81}
+          <div className="hidden lg:block relative h-[550px] w-full">
+            {/* LEFT CAMPAIGN CARD */}
+            <div
+              className={cn(
+                "absolute left-[2%] top-[35px] z-20 w-[200px] rotate-[7deg] rounded-[23px] p-[15px] xl:left-[4%] xl:w-[220px]",
+                isLight
+                  ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
+                  : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
+              )}
+            >
+              {/* Card header */}
+              <div className="flex items-center gap-2">
+                <div
+                  className={cn(
+                    "flex h-[29px] w-[29px] items-center justify-center rounded-[8px]",
+                    isLight ? "bg-[#efe8f8]" : "bg-[#40344c]",
+                  )}
+                >
+                  <Users
+                    className={cn(
+                      "h-[15px] w-[15px]",
+                      isLight ? "text-[#7c3aed]" : "text-white/80",
+                    )}
+                  />
+                </div>
+
+                <span
+                  className={cn(
+                    "text-[13px]",
+                    isLight ? "text-black/55" : "text-white/75",
+                  )}
+                >
+                  Brand
+                </span>
+              </div>
+
+              {/* Title */}
+              <div
                 className={cn(
-                  "h-[78px] w-auto object-contain",
-                  isLight && "invert",
+                  "mt-3 text-[15px] font-medium",
+                  isLight ? "text-black" : "text-white",
                 )}
+              >
+                Podcasts Clip Challenge
+              </div>
+
+              {/* Tags */}
+              <div className="mt-3 flex flex-wrap gap-[7px]">
+                {["Clipping", "Paid", "Podcast"].map((tag) => (
+                  <span
+                    key={tag}
+                    className={cn(
+                      "rounded-full px-[9px] py-[5px] text-[12px]",
+                      isLight
+                        ? "bg-[#f3eaff] text-[#7c3aed]"
+                        : "bg-[#2B1F3B] text-[#BB00FF]",
+                    )}
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+
+              {/* Bottom */}
+              <div className="mt-3 flex items-end justify-between">
+                <img
+                  src="/images/e9ecc19156964f29ca20b5f8080671042162b486.png"
+                  alt="Creator"
+                  className="h-[72px] w-[72px] rounded-md object-cover"
+                />
+
+                <div
+                  className={cn(
+                    "flex h-[35px] w-[35px] items-center justify-center rounded-full text-[18px]",
+                    isLight
+                      ? "bg-[#f3eaff] text-[#7c3aed]"
+                      : "bg-[#351149] text-[#c239f5]",
+                  )}
+                >
+                  →
+                </div>
+              </div>
+            </div>
+
+            {/* LEFT TEXT */}
+            <div
+              className={cn(
+                "absolute left-[6%] top-[260px] z-20 rotate-[-4deg] text-[26px] xl:left-[9%]",
+                caveat.className,
+                isLight ? "text-black/70" : "text-white/85",
+              )}
+            >
+              <div className="relative ml-[70px] mt-0.5">
+                <Image
+                  src="/images/Vector 945.png"
+                  alt=""
+                  width={46}
+                  height={79}
+                  className={cn(
+                    "h-[78px] w-auto object-contain",
+                    isLight && "invert",
+                  )}
+                />
+              </div>
+              <div>Brands launch campaigns</div>
+            </div>
+
+            {/* CENTER TEXT */}
+            <div
+              className={cn(
+                "absolute left-1/2 top-[0px] z-20 -translate-x-1/2 whitespace-nowrap text-[24px] leading-[28px]",
+                caveat.className,
+                isLight ? "text-black/70" : "text-white/85",
+              )}
+            >
+              Creator create content
+              <br />
+              that performs
+            </div>
+
+            {/* CENTRAL CREATOR CARD */}
+            <div
+              className={cn(
+                "absolute left-1/2 top-[75px] z-20 h-[455px] w-[335px] -translate-x-1/2 overflow-hidden rounded-[24px]",
+                isLight
+                  ? "border border-black/[0.06] bg-[#FFFFFF] shadow-[inset_0px_5px_4px_2px_#575757CC]"
+                  : "border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)]",
+              )}
+            >
+              <Image
+                src="/images/39e512460e9052a19bf4ea8b3ca0c6cdd8086315.png"
+                alt="Creators"
+                fill
+                className="object-cover"
+                sizes="335px"
+                priority
               />
+              <span className="absolute bottom-3 left-3 z-10 text-[11px] text-white/70">
+                creator
+              </span>
+            </div>
+
+            {/* RIGHT ANALYTICS CARD */}
+            <div
+              className={cn(
+                "absolute right-[2%] top-[130px] z-20 w-[240px] rotate-[-15deg] rounded-[22px] p-4 xl:right-[4%] xl:w-[280px]",
+                isLight
+                  ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_6.02px_0px_#FFFFFF40]"
+                  : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
+              )}
+            >
+              {/* Tabs */}
+              <div
+                className={cn(
+                  "flex flex-wrap items-center gap-1 text-[11px]",
+                  isLight ? "text-black/35" : "text-white/35",
+                )}
+              >
+                <span
+                  className={cn(
+                    "rounded-[9px] px-3 py-[9px]",
+                    isLight
+                      ? "bg-black/[0.06] text-black/80"
+                      : "bg-white/[0.08] text-white/80",
+                  )}
+                >
+                  Overview
+                </span>
+
+                <span className="px-2">Submissions</span>
+
+                <span className="px-2">Analytics</span>
+              </div>
+
+              {/* Stats */}
+              <div className="mt-7 flex items-end justify-between gap-3">
+                <div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span
+                      className={cn(
+                        "text-[25px] font-medium tracking-[-1px]",
+                        isLight ? "text-black" : "text-white",
+                      )}
+                    >
+                      46.2M
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[10px]",
+                        isLight ? "text-black/45" : "text-white/50",
+                      )}
+                    >
+                      Views
+                    </span>
+                  </div>
+
+                  <div
+                    className={cn(
+                      "mt-3 max-w-[120px] text-[12px] leading-[15px]",
+                      isLight ? "text-black/40" : "text-white/35",
+                    )}
+                  >
+                    Your top 10% creators are getting the most views
+                  </div>
+                </div>
+
+                {/* Chart */}
+                <div className="flex items-end gap-[8px] pb-0.5">
+                  {[
+                    { label: "April", height: "h-[42px]", active: false },
+                    { label: "May", height: "h-[28px]", active: false },
+                    { label: "June", height: "h-[36px]", active: false },
+                    { label: "July", height: "h-[54px]", active: true },
+                  ].map((bar) => (
+                    <div
+                      key={bar.label}
+                      className="flex flex-col items-center gap-1.5"
+                    >
+                      <div
+                        className={`w-[14px] rounded-t-[4px] ${bar.height} ${
+                          bar.active
+                            ? "bg-[#3B82F6]"
+                            : isLight
+                              ? "bg-gradient-to-b from-[#d4d4d4] to-[#b8b8b8]"
+                              : "bg-gradient-to-b from-[#5a5a5a] to-[#2e2e2e]"
+                        }`}
+                      />
+                      <span
+                        className={cn(
+                          "origin-top text-[10px]",
+                          isLight ? "text-black/40" : "text-white/35",
+                        )}
+                      >
+                        {bar.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* RIGHT TEXT */}
+            <div
+              className={cn(
+                "absolute right-[6%] top-[10px] z-20 rotate-[3deg] text-center text-[26px] leading-[28px] xl:right-[10%]",
+                caveat.className,
+                isLight ? "text-black/70" : "text-white/85",
+              )}
+            >
+              Performance drives
+              <br />
+              real results
+              <div className="mt-0.5 flex justify-center">
+                <Image
+                  src="/images/Vector 946.png"
+                  alt=""
+                  width={42}
+                  height={81}
+                  className={cn(
+                    "h-[78px] w-auto object-contain",
+                    isLight && "invert",
+                  )}
+                />
+              </div>
             </div>
           </div>
         </section>
@@ -1677,7 +1944,7 @@ export default function HeroContent() {
           {/* =====================================================
             CARDS
         ===================================================== */}
-          <div className="mt-10 grid grid-cols-1 gap-5 sm:mt-14 md:mt-[72px] lg:grid-cols-2">
+          <div className="mt-10 grid grid-cols-1 gap-5 sm:mt-14 md:mt-[72px] min-[800px]:grid-cols-2">
             {/* =================================================
               BRANDS CARD
           ================================================= */}

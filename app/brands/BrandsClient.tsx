@@ -975,10 +975,10 @@ export default function BrandsClient({
               isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white"
             )}
           >
-            <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col justify-between px-6 py-10 sm:px-10 lg:px-16">
+            <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col justify-between px-4 py-2 sm:px-6 min-[760px]:py-6 lg:px-16">
               {/* Heading */}
-              <div className="pt-4 text-center sm:pt-8 shrink-0">
-                <h2 className="mx-auto max-w-[720px] text-center text-[28px] font-semibold leading-[1.08] tracking-[-1.5px] sm:text-[36px] sm:tracking-[-2px] md:text-[54px] md:tracking-[-2.5px]">
+              <div className="pt-1 text-center sm:pt-2 min-[760px]:pt-4 shrink-0">
+                <h2 className="mx-auto max-w-[720px] text-center text-3xl font-semibold leading-[1.1] tracking-[-1px] sm:text-4xl md:text-5xl lg:text-[52px] sm:tracking-[-1.5px] md:tracking-[-2.5px]">
                   The Old way of promoting
                   <br />
                   your brand
@@ -986,26 +986,26 @@ export default function BrandsClient({
               </div>
 
               {/* CONTENT GRID */}
-              <div className="grid flex-1 items-center gap-8 lg:grid-cols-[360px_1fr] my-auto">
+              <div className="grid flex-1 items-center gap-3 min-[650px]:gap-5 min-[760px]:gap-6 grid-cols-1 min-[760px]:grid-cols-[220px_1fr] md:grid-cols-[280px_1fr] lg:grid-cols-[360px_1fr] my-auto w-full">
                 {/* LEFT TIMELINE */}
-                <div className="relative mx-auto w-full max-w-[340px] lg:ml-[120px]">
+                <div className="relative mx-auto w-full max-w-[280px] min-[650px]:max-w-[360px] min-[760px]:max-w-none min-[760px]:ml-0 md:ml-[20px] lg:ml-[120px]">
                   {/* Grey line background */}
                   <div
                     className={cn(
-                      "absolute left-5 top-5 h-[calc(100%-40px)] w-px -translate-x-1/2",
+                      "absolute left-3.5 min-[650px]:left-4.5 min-[760px]:left-5 top-4 min-[760px]:top-5 h-[calc(100%-32px)] min-[650px]:h-[calc(100%-36px)] min-[760px]:h-[calc(100%-40px)] w-px -translate-x-1/2",
                       isLight ? "bg-black/15" : "bg-white/15"
                     )}
                   />
 
                   {/* Purple progress line */}
                   <div
-                    className="absolute left-5 top-5 w-px -translate-x-1/2 bg-violet-500 transition-all duration-500"
+                    className="absolute left-3.5 min-[650px]:left-4.5 min-[760px]:left-5 top-4 min-[760px]:top-5 w-px -translate-x-1/2 bg-violet-500 transition-all duration-500"
                     style={{
                       height: `calc((100% - 40px) * ${Math.min(oldWayStep / (oldWaySteps.length - 1), 1)})`,
                     }}
                   />
 
-                  <div className="relative flex flex-col gap-6 sm:gap-7">
+                  <div className="relative flex flex-col gap-2 min-[650px]:gap-3.5 min-[760px]:gap-5 md:gap-7">
                     {oldWaySteps.map((step, index) => {
                       const active = index === oldWayStep;
                       const passed = index < oldWayStep;
@@ -1013,12 +1013,12 @@ export default function BrandsClient({
                         <div
                           key={step.id}
                           onClick={() => handleOldWayStepClick(index)}
-                          className="flex min-h-[64px] items-center gap-4 cursor-pointer select-none group"
+                          className="flex min-h-[34px] min-[650px]:min-h-[44px] min-[760px]:min-h-[52px] md:min-h-[64px] items-center gap-2.5 min-[650px]:gap-3.5 min-[760px]:gap-4 cursor-pointer select-none group"
                         >
                           {/* Number Circle Badge */}
                           <div
                             className={cn(
-                              "relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-bold transition-all duration-500",
+                              "relative z-10 flex h-7 w-7 min-[650px]:h-9 min-[650px]:w-9 min-[760px]:h-9 min-[760px]:w-9 md:h-10 md:w-10 shrink-0 items-center justify-center rounded-full text-[11px] min-[650px]:text-[13px] min-[760px]:text-[13px] font-bold transition-all duration-500",
                               active
                                 ? isLight
                                   ? "border-2 border-violet-600 bg-white text-violet-600 shadow-[0_0_0_5px_rgba(124,58,237,0.16),0_0_28px_rgba(124,58,237,0.35)] scale-105"
@@ -1038,7 +1038,7 @@ export default function BrandsClient({
                           {/* Step Title */}
                           <span
                             className={cn(
-                              "text-[18px] sm:text-[20px] font-medium transition-all duration-500",
+                              "text-[13px] min-[650px]:text-[16px] min-[760px]:text-[17px] md:text-[20px] font-medium transition-all duration-500",
                               active
                                 ? isLight
                                   ? "translate-x-1 font-semibold text-black"
@@ -1057,7 +1057,7 @@ export default function BrandsClient({
                 </div>
 
                 {/* RIGHT ANIMATION STAGE */}
-                <div className="relative flex h-[420px] sm:h-[480px] items-center justify-end">
+                <div className="relative flex h-[190px] min-[650px]:h-[270px] min-[760px]:h-[360px] md:h-[420px] lg:h-[480px] items-center justify-center min-[760px]:justify-end">
                   <div className="relative h-full w-full max-w-[600px]">
                     {/* STEP 0: PICK A CREATOR */}
                     <div
@@ -1070,7 +1070,7 @@ export default function BrandsClient({
                     >
                       <div
                         className={cn(
-                          "relative z-10 w-full max-w-[420px] rotate-[-3deg] rounded-[25px] p-5 sm:rotate-[-7deg] sm:p-6",
+                          "relative z-10 w-full max-w-[260px] min-[650px]:max-w-[340px] min-[760px]:max-w-[360px] md:max-w-[420px] rotate-0 min-[760px]:rotate-[-7deg] rounded-[16px] min-[650px]:rounded-[22px] min-[760px]:rounded-[25px] p-3 min-[650px]:p-4.5 min-[760px]:p-5 md:p-6",
                           isLight
                             ? "border-[0.69px] border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000000D]"
                             : "border border-white/[0.13] bg-[#171717] shadow-[-10px_0_65px_-10px_rgba(255,255,255,0.28),-12px_0_32px_-12px_rgba(255,255,255,0.14),-18px_14px_55px_-22px_rgba(255,140,0,0.18)]",
@@ -1079,7 +1079,7 @@ export default function BrandsClient({
                         <div className="flex items-center justify-between">
                           <span
                             className={cn(
-                              "rounded-full px-3 py-1.5 text-[12px]",
+                              "rounded-full px-2 py-0.5 min-[650px]:px-2.5 min-[650px]:py-1 text-[10px] min-[650px]:text-[11px] min-[760px]:text-[12px]",
                               isLight
                                 ? "border border-[#0000000D] bg-white text-black/70"
                                 : "border border-white/[0.20] bg-white/[0.01] text-white/65",
@@ -1089,7 +1089,7 @@ export default function BrandsClient({
                           </span>
                           <span
                             className={cn(
-                              "rounded-full px-3 py-1.5 text-[12px]",
+                              "rounded-full px-2 py-0.5 min-[650px]:px-2.5 min-[650px]:py-1 text-[10px] min-[650px]:text-[11px] min-[760px]:text-[12px]",
                               isLight
                                 ? "border border-orange-500/25 bg-orange-500/15 text-orange-500"
                                 : "border border-orange-500/[0.35] bg-orange-500/[0.18] text-orange-400",
@@ -1099,16 +1099,16 @@ export default function BrandsClient({
                           </span>
                         </div>
 
-                        <div className="mt-5 flex items-center gap-3">
+                        <div className="mt-2 min-[650px]:mt-4 min-[760px]:mt-5 flex items-center gap-2.5 min-[650px]:gap-3">
                           <img
                             src="/images/b7df36a6062b7711918a958fcd444794e0abf80b.png"
                             alt="Creator"
-                            className="h-[72px] w-[72px] rounded-md object-cover"
+                            className="h-[40px] w-[40px] min-[650px]:h-[56px] min-[650px]:w-[56px] min-[760px]:h-[64px] min-[760px]:w-[64px] md:h-[72px] md:w-[72px] rounded-md object-cover"
                           />
                           <div>
                             <p
                               className={cn(
-                                "text-[15px]",
+                                "text-[11px] min-[650px]:text-[13px] min-[760px]:text-[14px] md:text-[15px]",
                                 isLight ? "text-black/45" : "text-white/50",
                               )}
                             >
@@ -1116,7 +1116,7 @@ export default function BrandsClient({
                             </p>
                             <p
                               className={cn(
-                                "text-[18px] font-medium",
+                                "text-[13px] min-[650px]:text-[16px] min-[760px]:text-[17px] md:text-[18px] font-medium",
                                 isLight ? "text-black" : "text-white/80",
                               )}
                             >
@@ -1124,7 +1124,7 @@ export default function BrandsClient({
                             </p>
                             <p
                               className={cn(
-                                "mt-1 text-[14px]",
+                                "mt-0.5 text-[10px] min-[650px]:text-[12px] min-[760px]:text-[13px] md:text-[14px]",
                                 isLight ? "text-black/40" : "text-white/40",
                               )}
                             >
@@ -1133,22 +1133,22 @@ export default function BrandsClient({
                           </div>
                         </div>
 
-                        <div className="mt-7 grid grid-cols-2 gap-5">
-                          <div className="flex items-start gap-3">
+                        <div className="mt-3 min-[650px]:mt-4.5 grid grid-cols-2 gap-2 min-[650px]:gap-3.5 min-[760px]:mt-6 min-[760px]:gap-4 md:gap-5">
+                          <div className="flex items-start gap-2 min-[650px]:gap-3">
                             <Image
                               src="/images/Frame (1).png"
                               alt=""
                               width={24}
                               height={24}
                               className={cn(
-                                "mt-1 h-6 w-6 shrink-0 object-contain",
+                                "mt-0.5 h-3.5 w-3.5 min-[650px]:h-4.5 min-[650px]:w-4.5 min-[760px]:h-5 min-[760px]:w-5 md:h-6 md:w-6 shrink-0 object-contain",
                                 isLight ? "opacity-60 brightness-0" : "opacity-40",
                               )}
                             />
                             <div>
                               <p
                                 className={cn(
-                                  "text-[14px]",
+                                  "text-[10px] min-[650px]:text-[12px] min-[760px]:text-[13px] md:text-[14px]",
                                   isLight ? "text-black/40" : "text-white/40",
                                 )}
                               >
@@ -1156,7 +1156,7 @@ export default function BrandsClient({
                               </p>
                               <p
                                 className={cn(
-                                  "mt-1 text-[15px]",
+                                  "mt-0.5 text-[11px] min-[650px]:text-[13.5px] min-[760px]:text-[14px] md:text-[15px]",
                                   isLight ? "text-black" : "text-white/80",
                                 )}
                               >
@@ -1164,19 +1164,19 @@ export default function BrandsClient({
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-start gap-3">
+                          <div className="flex items-start gap-2 min-[650px]:gap-3">
                             <CalendarDays
-                              size={24}
+                              size={18}
                               strokeWidth={1.5}
                               className={cn(
-                                "mt-1",
+                                "mt-0.5 h-3.5 w-3.5 min-[650px]:h-4.5 min-[650px]:w-4.5 min-[760px]:h-5 min-[760px]:w-5 md:h-6 md:w-6 shrink-0",
                                 isLight ? "text-black/40" : "text-white/40",
                               )}
                             />
                             <div>
                               <p
                                 className={cn(
-                                  "text-[14px]",
+                                  "text-[10px] min-[650px]:text-[12px] min-[760px]:text-[13px] md:text-[14px]",
                                   isLight ? "text-black/40" : "text-white/40",
                                 )}
                               >
@@ -1184,7 +1184,7 @@ export default function BrandsClient({
                               </p>
                               <p
                                 className={cn(
-                                  "mt-1 text-[15px]",
+                                  "mt-0.5 text-[11px] min-[650px]:text-[13.5px] min-[760px]:text-[14px] md:text-[15px]",
                                   isLight ? "text-black" : "text-white/80",
                                 )}
                               >
@@ -1205,21 +1205,21 @@ export default function BrandsClient({
                           : "translate-x-10 scale-95 opacity-0 pointer-events-none"
                       )}
                     >
-                      <div className="relative flex items-center justify-center w-full min-h-[160px] sm:min-h-[180px]">
+                      <div className="relative flex items-center justify-center w-full min-h-[110px] min-[650px]:min-h-[140px] min-[760px]:min-h-[160px]">
                         {/* Purple glow behind cards */}
                         <div className="absolute inset-0 z-0">
-                          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[220px] w-[420px] rounded-full bg-violet-600/30 blur-[70px]" />
+                          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[130px] min-[650px]:h-[180px] min-[760px]:h-[220px] w-[220px] min-[650px]:w-[320px] min-[760px]:w-[420px] rounded-full bg-violet-600/30 blur-[50px] min-[650px]:blur-[70px]" />
                         </div>
 
                         {/* Back card 2 (furthest - rotated left) */}
                         <div
                           className="
                             absolute z-[1]
-                            w-[310px] sm:w-[410.41px]
-                            h-[95px] sm:h-[123.12px] 
+                            w-[220px] min-[650px]:w-[300px] min-[760px]:w-[320px] md:w-[410.41px]
+                            h-[65px] min-[650px]:h-[88px] min-[760px]:h-[95px] md:h-[123.12px] 
                             -rotate-[7.98deg]
                             opacity-[0.64]
-                            rounded-[24px] sm:rounded-[32.83px]
+                            rounded-[14px] min-[650px]:rounded-[20px] min-[760px]:rounded-[24px] md:rounded-[32.83px]
                             bg-[#171717]
                             border border-white/10
                             shadow-[0px_3.52px_16.42px_0px_#6847E84D,0px_0px_4.69px_0px_#FFFFFF40_inset]
@@ -1231,11 +1231,11 @@ export default function BrandsClient({
                         <div
                           className="
                             absolute z-[2]
-                            w-[310px] sm:w-[410.41px]
-                            h-[95px] sm:h-[123.12px]
+                            w-[220px] min-[650px]:w-[300px] min-[760px]:w-[320px] md:w-[410.41px]
+                            h-[65px] min-[650px]:h-[88px] min-[760px]:h-[95px] md:h-[123.12px]
                             rotate-[15.92deg]
                             opacity-60
-                            rounded-[24px] sm:rounded-[32.83px]
+                            rounded-[14px] min-[650px]:rounded-[20px] min-[760px]:rounded-[24px] md:rounded-[32.83px]
                             bg-[#171717]
                             border border-white/10
                             shadow-[0px_3.52px_16.42px_0px_#6847E84D,0px_0px_4.69px_0px_#FFFFFF40_inset]
@@ -1247,12 +1247,12 @@ export default function BrandsClient({
                         <div
                           className={cn(
                             "relative z-[3] flex items-center opacity-100",
-                            "w-[310px] sm:w-[410.41px]",
-                            "h-[95px] sm:h-[123.12px]",
+                            "w-[220px] min-[650px]:w-[300px] min-[760px]:w-[320px] md:w-[410.41px]",
+                            "h-[65px] min-[650px]:h-[88px] min-[760px]:h-[95px] md:h-[123.12px]",
                             "rotate-[2.5deg]",
-                            "rounded-[24px] sm:rounded-[32.83px]",
-                            "pl-[24px] sm:pl-[53.94px] pr-[20px] sm:pr-[32.83px]",
-                            "gap-[16px] sm:gap-[21.11px]",
+                            "rounded-[14px] min-[650px]:rounded-[20px] min-[760px]:rounded-[24px] md:rounded-[32.83px]",
+                            "pl-[14px] min-[650px]:pl-[24px] min-[760px]:pl-[30px] md:pl-[53.94px] pr-[12px] min-[650px]:pr-[20px] min-[760px]:pr-[24px] md:pr-[32.83px]",
+                            "gap-[8px] min-[650px]:gap-[14px] min-[760px]:gap-[16px] md:gap-[21.11px]",
                             "shadow-[0px_3.52px_16.42px_0px_#6847E84D,0px_0px_4.69px_0px_#FFFFFF40_inset]",
                             isLight
                               ? "border border-black/10 bg-[#e8e8e8]"
@@ -1260,7 +1260,7 @@ export default function BrandsClient({
                           )}
                         >
                           {/* Purple checkmark circle */}
-                          <div className="flex h-[48px] w-[48px] sm:h-[56px] sm:w-[56px] shrink-0 items-center justify-center rounded-full bg-[#8b5cf6] shadow-[0_0_20px_rgba(139,92,246,0.5)]">
+                          <div className="flex h-[30px] w-[30px] min-[650px]:h-[42px] min-[650px]:w-[42px] min-[760px]:h-[46px] min-[760px]:w-[46px] md:h-[56px] md:w-[56px] shrink-0 items-center justify-center rounded-full bg-[#8b5cf6] shadow-[0_0_20px_rgba(139,92,246,0.5)]">
                             <svg
                               width="24"
                               height="24"
@@ -1270,7 +1270,7 @@ export default function BrandsClient({
                               strokeWidth="3"
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              className="h-5 w-5 sm:h-6 sm:w-6"
+                              className="h-3 w-3 min-[650px]:h-4.5 min-[650px]:w-4.5 min-[760px]:h-5 min-[760px]:w-5 md:h-6 md:w-6"
                             >
                               <path d="M20 6L9 17l-5-5" />
                             </svg>
@@ -1280,7 +1280,7 @@ export default function BrandsClient({
                           <div>
                             <p
                               className={cn(
-                                "text-[20px] sm:text-[24px] font-bold tracking-[-0.5px]",
+                                "text-[13px] min-[650px]:text-[18px] min-[760px]:text-[19px] md:text-[24px] font-bold tracking-[-0.5px]",
                                 isLight ? "text-black" : "text-white"
                               )}
                             >
@@ -1288,7 +1288,7 @@ export default function BrandsClient({
                             </p>
                             <p
                               className={cn(
-                                "mt-0.5 text-[14px] sm:text-[16px]",
+                                "mt-0.5 text-[10px] min-[650px]:text-[13px] min-[760px]:text-[14px] md:text-[16px]",
                                 isLight ? "text-black/50" : "text-white/50"
                               )}
                             >
@@ -1310,12 +1310,12 @@ export default function BrandsClient({
                     >
                       <div className="relative flex items-center justify-center w-full h-full">
                         {/* Container for three overlapping phone images */}
-                        <div className="relative h-[420px] w-[420px] sm:h-[460px] sm:w-[500px]">
+                        <div className="relative h-[180px] w-[230px] min-[650px]:h-[260px] min-[650px]:w-[330px] min-[760px]:h-[350px] min-[760px]:w-[380px] md:h-[460px] md:w-[500px]">
 
                           {/* Left image (behind) */}
                           <div
-                            className="absolute z-[4] h-[310px] w-[175px] sm:h-[400px] sm:w-[240px] overflow-hidden rounded-[16px] bg-black shadow-[0_15px_40px_rgba(0,0,0,0.4)]"
-                            style={{ left: "10%", top: "40px" }}
+                            className="absolute z-[4] h-[130px] w-[75px] min-[650px]:h-[200px] min-[650px]:w-[120px] min-[760px]:h-[280px] min-[760px]:w-[170px] md:h-[400px] md:w-[240px] overflow-hidden rounded-[8px] min-[650px]:rounded-[12px] min-[760px]:rounded-[14px] md:rounded-[16px] bg-black shadow-[0_15px_40px_rgba(0,0,0,0.4)]"
+                            style={{ left: "5%", top: "18px" }}
                           >
                             <img
                               src="/images/b9b2d7bf77d74fb124111c0e7c4f1ca20d43a5fa.png"
@@ -1326,8 +1326,8 @@ export default function BrandsClient({
 
                           {/* Center image (main, in front) */}
                           <div
-                            className="absolute z-10 h-[370px] w-[210px] sm:h-[480px] sm:w-[280px] overflow-hidden rounded-[16px] bg-black shadow-[0_25px_70px_rgba(0,0,0,0.6)]"
-                            style={{ left: "50%", top: "10px", transform: "translateX(-50%)" }}
+                            className="absolute z-10 h-[160px] w-[95px] min-[650px]:h-[240px] min-[650px]:w-[145px] min-[760px]:h-[330px] min-[760px]:w-[200px] md:h-[480px] md:w-[280px] overflow-hidden rounded-[10px] min-[650px]:rounded-[14px] min-[760px]:rounded-[15px] md:rounded-[16px] bg-black shadow-[0_25px_70px_rgba(0,0,0,0.6)]"
+                            style={{ left: "50%", top: "6px", transform: "translateX(-50%)" }}
                           >
                             <img
                               src="/images/b9b2d7bf77d74fb124111c0e7c4f1ca20d43a5fa.png"
@@ -1338,8 +1338,8 @@ export default function BrandsClient({
 
                           {/* Right image (behind) */}
                           <div
-                            className="absolute z-[5] h-[310px] w-[175px] sm:h-[400px] sm:w-[240px] overflow-hidden rounded-[16px] bg-black shadow-[0_15px_40px_rgba(0,0,0,0.4)]"
-                            style={{ right: "10%", top: "40px" }}
+                            className="absolute z-[5] h-[130px] w-[75px] min-[650px]:h-[200px] min-[650px]:w-[120px] min-[760px]:h-[280px] min-[760px]:w-[170px] md:h-[400px] md:w-[240px] overflow-hidden rounded-[8px] min-[650px]:rounded-[12px] min-[760px]:rounded-[14px] md:rounded-[16px] bg-black shadow-[0_15px_40px_rgba(0,0,0,0.4)]"
+                            style={{ right: "5%", top: "18px" }}
                           >
                             <img
                               src="/images/b9b2d7bf77d74fb124111c0e7c4f1ca20d43a5fa.png"
@@ -1361,31 +1361,22 @@ export default function BrandsClient({
                       )}
                     >
                       <div className="flex flex-col items-center justify-center">
-                        <div className="relative h-[160px] w-[160px] sm:h-[180px] sm:w-[180px] flex items-center justify-center">
+                        <div className="relative h-[100px] w-[100px] min-[650px]:h-[140px] min-[650px]:w-[140px] min-[760px]:h-[150px] min-[760px]:w-[150px] md:h-[180px] md:w-[180px] flex items-center justify-center">
                           {/* Background Track Circle */}
                           <div
                             className={cn(
-                              "absolute inset-0 rounded-full border-[13px]",
+                              "absolute inset-0 rounded-full border-[8px] min-[650px]:border-[11px] min-[760px]:border-[12px] md:border-[13px]",
                               isLight ? "border-black/10" : "border-white/15"
                             )}
                           />
 
                           {/* Purple Moving Spinner */}
-                          <div className="absolute inset-0 animate-spin rounded-full border-[13px] border-transparent border-l-violet-500 border-t-violet-500 [animation-duration:1.8s]" />
-
-                          {/* <div className="flex flex-col items-center justify-center">
-                            <span className={cn("text-[10px] font-bold uppercase tracking-widest", isLight ? "text-black/40" : "text-white/40")}>
-                              Status
-                            </span>
-                            <span className="mt-1 text-sm font-extrabold text-violet-500">
-                              Pending
-                            </span>
-                          </div> */}
+                          <div className="absolute inset-0 animate-spin rounded-full border-[8px] min-[650px]:border-[11px] min-[760px]:border-[12px] md:border-[13px] border-transparent border-l-violet-500 border-t-violet-500 [animation-duration:1.8s]" />
                         </div>
 
                         <p
                           className={cn(
-                            "mt-7 text-center font-serif text-[22px] sm:text-[25px] italic tracking-wide",
+                            "mt-2 min-[650px]:mt-4 min-[760px]:mt-6 text-center font-serif text-[14px] min-[650px]:text-[19px] min-[760px]:text-[22px] md:text-[25px] italic tracking-wide",
                             isLight ? "text-black/75" : "text-white/80"
                           )}
                         >
@@ -1474,7 +1465,7 @@ export default function BrandsClient({
             <div className="mb-10 text-center sm:mb-16">
               <h2
                 className={cn(
-                  "text-[28px] font-bold leading-tight md:text-[52px]",
+                  "text-3xl font-bold leading-tight sm:text-4xl md:text-5xl lg:text-[52px]",
                   isLight ? "text-black" : "text-white",
                 )}
               >
@@ -1485,7 +1476,7 @@ export default function BrandsClient({
             </div>
 
             {/* Cards */}
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:gap-5 min-[700px]:grid-cols-2 min-[900px]:grid-cols-3">
               {/* Card 1 */}
               <div
                 className={cn(
@@ -1782,22 +1773,22 @@ export default function BrandsClient({
     TABS
 ========================== */}
 
-                <div className="absolute inset-x-0 top-[260px] z-20 px-4 sm:left-5 sm:right-5 sm:top-[300px] sm:px-0">
+                <div className="absolute inset-x-2 top-[260px] z-20 sm:left-3 sm:right-3 sm:top-[300px]">
                   <div
                     className={cn(
-                      "flex items-center rounded-full p-1 backdrop-blur-lg",
+                      "flex items-center justify-between rounded-full p-0.5 sm:p-1 backdrop-blur-lg gap-0.5 sm:gap-1",
                       isLight
                         ? "border border-black/[0.06] bg-white shadow-[0_10px_30px_rgba(20,16,40,0.12)]"
                         : "border border-white/10 bg-[#2a2a2a]/90",
                     )}
                   >
-                    <button className="rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] px-2.5 py-1.5 text-xs text-white shadow-[0_4px_18px_rgba(124,58,237,0.55)] sm:px-3 sm:text-sm">
+                    <button className="rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] px-1.5 py-0.5 min-[400px]:px-2 min-[400px]:py-1 text-[8.5px] min-[400px]:text-[9.5px] sm:text-xs text-white shadow-[0_4px_18px_rgba(124,58,237,0.55)] shrink-0 font-medium">
                       CPM
                     </button>
 
                     <button
                       className={cn(
-                        "flex-1 text-xs sm:text-sm",
+                        "flex-1 text-[8.5px] min-[400px]:text-[9.5px] sm:text-xs text-center whitespace-nowrap px-0.5 font-medium",
                         isLight ? "text-black/55" : "text-gray-400",
                       )}
                     >
@@ -1806,7 +1797,7 @@ export default function BrandsClient({
 
                     <button
                       className={cn(
-                        "flex-1 text-xs sm:text-sm",
+                        "flex-1 text-[8.5px] min-[400px]:text-[9.5px] sm:text-xs text-center whitespace-nowrap px-0.5 font-medium",
                         isLight ? "text-black/55" : "text-gray-400",
                       )}
                     >
@@ -1815,7 +1806,7 @@ export default function BrandsClient({
 
                     <button
                       className={cn(
-                        "flex-1 text-xs sm:text-sm",
+                        "flex-1 text-[8.5px] min-[400px]:text-[9.5px] sm:text-xs text-center whitespace-nowrap px-0.5 font-medium",
                         isLight ? "text-black/55" : "text-gray-400",
                       )}
                     >
@@ -1979,7 +1970,7 @@ export default function BrandsClient({
               {/* Card 3 */}
               <div
                 className={cn(
-                  "relative min-h-[515px] overflow-hidden rounded-[20px]",
+                  "relative min-h-[515px] overflow-hidden rounded-[20px] min-[700px]:col-span-2 min-[900px]:col-span-1",
                   isLight
                     ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
                     : "border border-[#FFFFFF1A] bg-[#171717] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]",
@@ -1998,7 +1989,7 @@ export default function BrandsClient({
                 {/* Rewards panel */}
                 <div
                   className={cn(
-                    "absolute left-10 -right-6 top-10 rounded-2xl p-5 sm:left-14 sm:-right-6 sm:top-20 transition-all duration-300",
+                    "absolute left-4 right-4 top-8 sm:left-6 sm:right-6 min-[900px]:left-4 min-[900px]:-right-3 min-[1100px]:left-6 min-[1100px]:-right-4 sm:top-16 rounded-2xl p-4 sm:p-5 transition-all duration-300",
                     isLight
                       ? "border border-black/[0.06] bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
                       : "border border-[#353535] bg-[#1F1F1F]",
@@ -2213,7 +2204,7 @@ export default function BrandsClient({
           {/* Main glass container — outer shell for half-merged card */}
           <div
             className={cn(
-              "relative z-10 mx-auto flex h-[340px] w-full max-w-[730px] items-start justify-center overflow-hidden rounded-[16px] px-3 pt-6 sm:h-[400px] sm:w-[90%] sm:rounded-[18px] sm:px-4 sm:pt-10 md:h-[430px] md:pt-12",
+              "relative z-10 mx-auto flex min-h-[380px] w-full max-w-[730px] items-start justify-center overflow-hidden rounded-[16px] px-3 pt-5 pb-6 sm:h-[400px] sm:min-h-0 sm:pb-0 sm:w-[90%] sm:rounded-[18px] sm:px-4 sm:pt-10 md:h-[430px] md:pt-12",
               isLight
                 ? "border border-[#0000001A] bg-white"
                 : "border border-white/15 bg-[#121212] shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40]",
@@ -2230,18 +2221,18 @@ export default function BrandsClient({
             {/* Submission card — sits inside outer shell and is clipped at the bottom */}
             <div
               className={cn(
-                "relative z-10 w-full max-w-[485px] rounded-[16px] px-4 py-6 sm:rounded-[18px] sm:px-9 sm:py-9",
+                "relative z-10 w-full max-w-[485px] rounded-[16px] px-3.5 py-4 sm:rounded-[18px] sm:px-9 sm:py-9",
                 isLight
                   ? "bg-[#F8F8F8] shadow-[0_10.18px_20.36px_0_#6C6C6C1A] border border-[#0000000D]"
                   : "border border-[#353535] bg-[#171717] shadow-[8px_8px_50px_0px_#00000080] sm:shadow-[4px_12px_4px_0px_#0000001A]",
               )}
             >
               {/* Header */}
-              <div className="mb-5 flex items-start justify-between gap-3 sm:mb-7">
+              <div className="mb-4 flex items-start justify-between gap-3 sm:mb-7">
                 <div className="min-w-0">
                   <h2
                     className={cn(
-                      "text-lg font-medium sm:text-xl",
+                      "text-base font-medium sm:text-xl",
                       isLight ? "text-black" : "text-[#d8d8df]",
                     )}
                   >
@@ -2250,7 +2241,7 @@ export default function BrandsClient({
 
                   <p
                     className={cn(
-                      "mt-1 text-xs sm:text-sm",
+                      "mt-0.5 text-[11px] sm:text-sm",
                       isLight ? "text-black/45" : "text-[#92929a]",
                     )}
                   >
@@ -2260,7 +2251,7 @@ export default function BrandsClient({
 
                 <p
                   className={cn(
-                    "shrink-0 pt-1 text-lg font-medium sm:text-xl",
+                    "shrink-0 pt-0.5 text-base font-medium sm:text-xl",
                     isLight ? "text-black" : "text-[#d8d8df]",
                   )}
                 >
@@ -2274,17 +2265,17 @@ export default function BrandsClient({
                   <div
                     key={submission.name}
                     className={cn(
-                      "flex flex-wrap items-center justify-between gap-3 py-3 sm:py-4",
+                      "flex items-center justify-between gap-2.5 py-2.5 sm:py-4",
                       index !== submissions.length - 1 &&
                         (isLight
                           ? "border-b border-black/[0.06]"
                           : "border-b border-white/[0.04]"),
                     )}
                   >
-                    <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
                       <div
                         className={cn(
-                          "h-10 w-10 shrink-0 overflow-hidden rounded-full sm:h-11 sm:w-11",
+                          "h-8 w-8 shrink-0 overflow-hidden rounded-full sm:h-11 sm:w-11",
                           isLight ? "bg-[#DEDEDE]" : "bg-white/10",
                         )}
                       >
@@ -2300,7 +2291,7 @@ export default function BrandsClient({
                       <div className="min-w-0">
                         <h3
                           className={cn(
-                            "truncate text-[14px] font-medium sm:text-[16px]",
+                            "truncate text-[13px] font-medium sm:text-[16px]",
                             isLight ? "text-black" : "text-[#dedee3]",
                           )}
                         >
@@ -2309,7 +2300,7 @@ export default function BrandsClient({
 
                         <p
                           className={cn(
-                            "mt-0.5 text-xs sm:text-sm",
+                            "mt-0.5 truncate text-[11px] sm:text-sm",
                             isLight ? "text-black/45" : "text-[#92929a]",
                           )}
                         >
@@ -2321,7 +2312,7 @@ export default function BrandsClient({
                     {submission.approved ? (
                       <span
                         className={cn(
-                          "rounded-full px-3 py-1.5 text-xs font-medium sm:px-4 sm:py-2 sm:text-sm",
+                          "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium sm:px-4 sm:py-2 sm:text-sm",
                           isLight
                             ? "bg-[#E8F8F1] text-[#1EAA7D]"
                             : "bg-[#1eaa7d] text-white",
@@ -2332,7 +2323,7 @@ export default function BrandsClient({
                     ) : (
                       <span
                         className={cn(
-                          "flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs sm:px-3 sm:py-2 sm:text-sm",
+                          "shrink-0 flex items-center gap-1 rounded-full px-2 py-1 text-[11px] sm:px-3 sm:py-2 sm:text-sm",
                           isLight
                             ? "border border-[#0000000D] bg-[#DEDEDE] text-black/50"
                             : "border border-white/10 bg-white/[0.02] text-[#a3a3aa]",
@@ -2381,7 +2372,7 @@ export default function BrandsClient({
             {/* Heading */}
             <h2
               className={cn(
-                "relative mb-10 text-center text-3xl font-bold tracking-tight sm:mb-16 sm:text-4xl md:text-5xl",
+                "relative mb-10 text-center text-3xl font-bold tracking-tight sm:mb-16 sm:text-4xl md:text-5xl lg:text-[52px]",
                 isLight ? "text-black" : "text-white",
               )}
             >
@@ -2389,7 +2380,7 @@ export default function BrandsClient({
             </h2>
 
             {/* TOP TWO CARDS */}
-            <div className="relative grid gap-5 lg:grid-cols-2">
+            <div className="relative grid gap-5 grid-cols-1 min-[700px]:grid-cols-2">
               {/* REAL ENGAGEMENT */}
               <div
                 className={cn(
@@ -2507,20 +2498,20 @@ export default function BrandsClient({
                 </div>
 
                 {/* Pinched purple curve */}
-                <div className="pointer-events-none absolute inset-x-0 top-[5px] sm:top-[10px] z-[4] flex items-center justify-center">
+                <div className="pointer-events-none absolute inset-x-0 top-[15px] sm:top-[20px] md:top-[10px] z-[4] flex items-center justify-center">
                   <img
                     src="/images/Vector 958.png"
                     alt=""
                     className="w-full h-auto object-contain"
                   />
 
-                  <div className="absolute bottom-[80px] inset-0 flex items-center justify-center gap-2 px-4 sm:gap-2.5">
+                  <div className="absolute top-[38%] left-0 right-0 -translate-y-1/2 flex items-center justify-center gap-1.5 px-3 sm:gap-2.5 sm:px-4">
                     <img
                       src="/images/Frame (122312).png"
                       alt=""
-                      className="hidden shrink-0 h-5.5 w-5.5 sm:block object-contain"
+                      className="hidden shrink-0 h-4 w-4 sm:h-5 sm:w-5 sm:block object-contain"
                     />
-                    <span className="text-center text-[12px] font-medium tracking-[-0.02em] text-white sm:text-[15px]">
+                    <span className="text-center text-[11px] font-medium tracking-[-0.02em] text-white sm:text-[14px] md:text-[15px]">
                       Authentic Data. Verified Performance
                     </span>
                   </div>
@@ -2756,15 +2747,15 @@ export default function BrandsClient({
             {/* CAMPAIGN CARD */}
             <div
               className={cn(
-                "relative mt-6 w-full overflow-hidden rounded-[16px] px-4 py-6 sm:rounded-[20px] sm:px-6 sm:py-8 lg:px-9 lg:py-9",
+                "relative mt-6 w-full overflow-hidden rounded-[16px] px-4 pt-6 pb-0 sm:rounded-[20px] sm:px-6 sm:pt-8 sm:pb-0 lg:px-9 lg:pt-9 lg:pb-0",
                 isLight
                   ? "bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
                   : "border border-white/10 bg-[#151515]",
               )}
             >
-              <div className="relative flex flex-col xl:min-h-[390px] xl:flex-row">
+              <div className="relative flex flex-col min-[1000px]:min-h-[430px] min-[1000px]:flex-row">
                 {/* LEFT CONTENT */}
-                <div className="relative z-30 w-full shrink-0 xl:w-[310px]">
+                <div className="relative z-30 w-full shrink-0 pb-6 min-[1000px]:w-[260px] min-[1000px]:pb-9 lg:w-[310px]">
                   <h2
                     className={cn(
                       "text-[20px] font-semibold tracking-[-0.4px] sm:text-[22px]",
@@ -2784,18 +2775,18 @@ export default function BrandsClient({
                   </p>
                 </div>
 
-                {/* CARDS AREA — horizontal scroll on small screens, fan on xl */}
-                <div className="relative -mx-4 mt-6 overflow-x-auto pb-2 xl:absolute xl:left-[280px] xl:top-[-8px] xl:mx-0 xl:mt-0 xl:h-[460px] xl:w-[calc(100%-240px)] xl:overflow-visible xl:pb-0 2xl:left-[300px]">
-                  <div className="relative h-[400px] w-[780px] sm:h-[430px] sm:w-[860px] xl:h-[460px] xl:w-full">
+                {/* CARDS AREA — horizontal scroll on small screens, fan on min-[1000px]+ */}
+                <div className="relative -mx-4 mt-2 overflow-x-auto overflow-y-hidden pb-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden min-[1000px]:absolute min-[1000px]:left-[240px] min-[1000px]:top-[-16px] min-[1000px]:bottom-0 min-[1000px]:mx-0 min-[1000px]:mt-0 min-[1000px]:h-auto min-[1000px]:w-[calc(100%-210px)] min-[1000px]:overflow-visible lg:left-[280px] lg:w-[calc(100%-240px)] 2xl:left-[300px]">
+                  <div className="relative h-[440px] w-[780px] sm:h-[475px] sm:w-[860px] min-[1000px]:h-[485px] min-[1000px]:w-full">
                     {/* ================= CPM CARD ================= */}
                     <div
                       className="
-              absolute left-0 top-[18px] z-[10]
-              h-[380px] w-[240px]
+              absolute left-0 bottom-0 z-[10]
+              h-[410px] w-[240px]
               overflow-hidden rounded-t-[20.5px] rounded-b-none
               bg-[linear-gradient(180deg,#754FF6_0%,#221845_100%)]
               shadow-2xl
-              sm:h-[410px] sm:w-[270px]
+              sm:h-[445px] sm:w-[270px] min-[1000px]:h-[455px]
             "
                     >
                       <div className="px-5 pt-6">
@@ -2867,14 +2858,14 @@ export default function BrandsClient({
                     {/* ================= LEADERBOARD CARD ================= */}
                     <div
                       className="
-              absolute left-[160px] top-[28px] z-[20]
-              h-[380px] w-[240px]
+              absolute left-[160px] bottom-0 z-[20]
+              h-[390px] w-[240px]
               overflow-hidden rounded-t-[20.5px] rounded-b-none
               bg-[linear-gradient(180deg,#F6BE4F_0%,#453418_100%)]
               shadow-2xl
-              sm:left-[190px] sm:h-[410px] sm:w-[270px]
+              sm:left-[190px] sm:h-[425px] sm:w-[270px] min-[1000px]:h-[435px]
             "
-                      style={{ transform: "rotate(2.5deg)" }}
+                      style={{ transform: "rotate(2.5deg)", transformOrigin: "bottom left" }}
                     >
                       <div className="px-5 pt-6">
                         <h3 className="text-[21px] font-bold text-white">
@@ -2950,14 +2941,14 @@ export default function BrandsClient({
                     {/* ================= MILESTONE CARD ================= */}
                     <div
                       className="
-              absolute left-[310px] top-[42px] z-[30]
+              absolute left-[310px] bottom-0 z-[30]
               h-[380px] w-[240px]
               overflow-hidden rounded-t-[20.5px] rounded-b-none
               bg-[linear-gradient(180deg,#F64FDA_0%,#221845_100%)]
               shadow-2xl
-              sm:left-[360px] sm:h-[410px] sm:w-[270px]
+              sm:left-[360px] sm:h-[415px] sm:w-[270px] min-[1000px]:h-[425px]
             "
-                      style={{ transform: "rotate(4deg)" }}
+                      style={{ transform: "rotate(4deg)", transformOrigin: "bottom left" }}
                     >
                       <div className="px-5 pt-6">
                         <h3 className="text-[21px] font-bold text-white">
@@ -3048,14 +3039,14 @@ export default function BrandsClient({
                     {/* ================= DUAL REWARDS CARD ================= */}
                     <div
                       className="
-              absolute left-[460px] top-[58px] z-[40]
-              h-[360px] w-[250px]
+              absolute left-[460px] bottom-0 z-[40]
+              h-[370px] w-[250px]
               overflow-hidden rounded-t-[20.5px] rounded-b-none
               bg-[linear-gradient(180deg,#4FBEF6_0%,#221845_100%)]
               shadow-2xl
-              sm:left-[540px] sm:top-[64px] sm:h-[380px] sm:w-[300px]
+              sm:left-[540px] sm:h-[400px] sm:w-[300px] min-[1000px]:h-[410px]
             "
-                      style={{ transform: "rotate(5.5deg)" }}
+                      style={{ transform: "rotate(5.5deg)", transformOrigin: "bottom left" }}
                     >
                       <div className="px-5 pt-6">
                         <h3 className="text-[21px] font-bold text-white">
@@ -3156,88 +3147,99 @@ export default function BrandsClient({
 
         <section
           className={cn(
-            "px-4 py-12 sm:px-6 sm:py-16 md:min-h-screen lg:px-20 transition-colors duration-300",
+            "px-4 py-12 sm:px-6 sm:py-20 md:py-24 transition-colors duration-300 flex items-center justify-center min-h-[500px] sm:min-h-[600px]",
             isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
           )}
         >
-          <div className="mx-auto flex max-w-[1240px] items-center md:min-h-[700px]">
-            <div className="grid w-full grid-cols-1 items-center gap-10 lg:grid-cols-[1fr_436px] lg:gap-16">
-              {/* Left Content */}
-              <div className="max-w-[650px]">
-                <h2 className="text-[28px] font-semibold leading-[1.1] tracking-[-1.2px] sm:text-[42px] sm:tracking-[-1.8px] lg:text-[52px]">
-                  Real campaigns. Proven
-                  <br />
-                  performance.
-                </h2>
-
-                <p
-                  className={cn(
-                    "mt-5 max-w-[640px] text-[16px] font-medium italic leading-[1.7] tracking-[-0.3px] sm:mt-8 sm:text-[20px] sm:leading-[1.8] md:text-[22px]",
-                    isLight ? "text-[#757575]" : "text-[#c9c9c9]",
-                  )}
-                >
-                  “GOC helped us move from paying for reach to understanding the
-                  actual performance behind every piece of content. The
-                  visibility made campaign decisions much easier.”
-                </p>
-
-                <div className="mt-7">
-                  <p className="text-[15px] font-normal text-[#757575]">
-                    Ranveer Allahbadia
-                  </p>
-                  <p className="mt-1 text-[15px] font-normal text-[#757575]">
-                    Founder, BeerBiceps
-                  </p>
-                </div>
-
-                {/* Stats */}
-                <div
-                  className={cn(
-                    "mt-12 flex w-full max-w-[545px] overflow-hidden rounded-[16px] px-8 py-4",
-                    isLight
-                      ? "bg-[#ECECEC] shadow-[0px_1px_0px_0px_#FFFFFF54] border border-black/[0.06]"
-                      : "bg-[#252525]",
-                  )}
-                >
-                  <div className="flex-1">
-                    <p className="text-[32px] font-medium leading-none text-[#7F39EC]">
-                      3+
-                    </p>
-                    <p className="mt-2 text-[14px] text-[#858585]">
-                      Campaigns Launched
-                    </p>
-                  </div>
-
-                  <div className="flex-1">
-                    <p className="text-[32px] font-medium leading-none text-[#7F39EC]">
-                      2.5M+
-                    </p>
-                    <p className="mt-2 text-[14px] text-[#858585]">
-                      Views generated
-                    </p>
-                  </div>
-
-                  <div className="flex-1">
-                    <p className="text-[32px] font-medium leading-none text-[#7F39EC]">
-                      16%
-                    </p>
-                    <p className="mt-2 text-[14px] text-[#858585]">
-                      Engagement Rate
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Video / Image */}
-              <div className="relative mx-auto h-[420px] w-full max-w-[436px] overflow-hidden rounded-[28px] sm:h-[560px] sm:rounded-[40px] md:h-[660px] md:rounded-[48px]">
+          <div className="mx-auto w-full max-w-[960px]">
+            {/* Centered Testimonial Card */}
+            <div
+              className={cn(
+                "relative mx-auto flex flex-col items-center text-center rounded-[24px] sm:rounded-[36px] p-6 sm:p-12 md:p-16 transition-all duration-300",
+                isLight
+                  ? "bg-[#ECECEC] border border-black/10 shadow-[0_10px_30px_rgba(0,0,0,0.05)]"
+                  : "bg-[#161616] border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)]",
+              )}
+            >
+              {/* Profile Image */}
+              <div className="relative h-16 w-16 sm:h-20 sm:w-20 overflow-hidden rounded-2xl border border-white/10 shadow-md">
                 <Image
-                  src="/images/ee0bbe0b8188b7baabb964e4fc87a704b2fbcdf8.png"
-                  alt="Campaign testimonial"
+                  src="/images/ranveer_testimonial.png"
+                  alt="Ranveer Allahbadia"
                   fill
                   priority
-                  className="object-cover"
-                  sizes="(max-width: 1024px) 100vw, 436px"
+                  className="object-cover object-top"
+                  sizes="(max-width: 640px) 64px, 80px"
                 />
+              </div>
+
+              {/* Author Details */}
+              <div className="mt-3.5 sm:mt-4">
+                <h3
+                  className={cn(
+                    "text-[15px] sm:text-[17px] font-medium tracking-tight",
+                    isLight ? "text-black/80" : "text-[#a1a1a1]",
+                  )}
+                >
+                  Ranveer Allahbadia
+                </h3>
+                <p
+                  className={cn(
+                    "mt-0.5 text-[12px] sm:text-[14px] font-normal",
+                    isLight ? "text-black/50" : "text-[#666666]",
+                  )}
+                >
+                  Founder, BeerBiceps
+                </p>
+              </div>
+
+              {/* Quote */}
+              <p
+                className={cn(
+                  "mt-5 sm:mt-8 max-w-[760px] px-1 sm:px-0 text-[16px] sm:text-[22px] md:text-[24px] font-medium italic leading-[1.6] tracking-[-0.3px]",
+                  isLight ? "text-black/80" : "text-[#dedede]",
+                )}
+              >
+                “GOC helped us move from paying for reach to understanding the
+                actual performance behind every piece of content. The
+                visibility made campaign decisions much easier.”
+              </p>
+
+              {/* Stats Box */}
+              <div
+                className={cn(
+                  "mt-6 sm:mt-12 grid grid-cols-3 w-full max-w-[560px] items-center text-center rounded-[16px] sm:rounded-[20px] px-3 py-3.5 sm:px-10 sm:py-5 gap-1 sm:gap-4 transition-colors",
+                  isLight
+                    ? "bg-[#DEDEDE] border border-black/5 shadow-[inset_0px_1px_0px_0px_#FFFFFF54]"
+                    : "bg-[#222222] border border-white/5 shadow-inner",
+                )}
+              >
+                <div className="flex flex-col items-center justify-center">
+                  <p className="text-[20px] sm:text-[34px] font-bold leading-none text-[#A855F7]">
+                    3+
+                  </p>
+                  <p className="mt-1.5 sm:mt-2 text-[10px] sm:text-[13px] text-[#858585] leading-tight">
+                    Campaigns Launched
+                  </p>
+                </div>
+
+                <div className="flex flex-col items-center justify-center">
+                  <p className="text-[20px] sm:text-[34px] font-bold leading-none text-[#A855F7]">
+                    2.5M+
+                  </p>
+                  <p className="mt-1.5 sm:mt-2 text-[10px] sm:text-[13px] text-[#858585] leading-tight">
+                    Views generated
+                  </p>
+                </div>
+
+                <div className="flex flex-col items-center justify-center">
+                  <p className="text-[20px] sm:text-[34px] font-bold leading-none text-[#A855F7]">
+                    16%
+                  </p>
+                  <p className="mt-1.5 sm:mt-2 text-[10px] sm:text-[13px] text-[#858585] leading-tight">
+                    Engagement Rate
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -3266,7 +3268,7 @@ export default function BrandsClient({
           <div className="relative z-20 mx-auto max-w-3xl text-center">
           <h2
   className={cn(
-    "font-['Inter'] font-bold tracking-[-3%] text-center sm:text-4xl md:text-5xl md:text-[52px]",
+    "font-['Inter'] font-bold tracking-[-3%] text-center text-3xl sm:text-4xl md:text-5xl lg:text-[52px]",
     isLight ? "text-black" : "text-[#EFEFEF]",
   )}
 >

@@ -446,7 +446,7 @@ export function Nav({
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
-                        className="group relative bg-slate-900/50 border border-violet-400/20 hover:border-violet-400/40 hover:bg-violet-600/10 backdrop-blur-sm transition-all duration-300 rounded-xl h-auto p-2"
+                        className="group relative bg-[#121217]/90 border border-white/15  hover:bg-white/5 backdrop-blur-md transition-all duration-300 rounded-xl h-auto p-2"
                       >
                         <div className="flex items-center space-x-3">
                           {avatarSrc ? (
@@ -456,57 +456,57 @@ export function Nav({
                                 alt="Profile"
                                 width={32}
                                 height={32}
-                                className="rounded-lg border border-violet-400/20"
+                                className="rounded-lg border border-white/10"
                               />
-                              <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-slate-900"></div>
+                              <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-black"></div>
                             </div>
                           ) : (
-                            <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center text-white text-sm font-bold border border-violet-400/30">
+                            <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-[#4C238D] to-[#7F39EC] flex items-center justify-center text-white text-sm font-bold border border-purple-400/30">
                               {avatarFallback}
-                              <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-slate-900"></div>
+                              <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-black"></div>
                             </div>
                           )}
                           <div className="hidden sm:block text-left">
                             <div className="text-sm font-medium text-white">
                               {displayName}
                             </div>
-                            <div className="text-xs text-slate-400 max-w-[120px] truncate">
+                            <div className="text-xs text-zinc-400 max-w-[120px] truncate">
                               {displayEmail}
                             </div>
                           </div>
-                          <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-white transition-colors" />
+                          <ChevronDown className="h-4 w-4 text-zinc-400 group-hover:text-white transition-colors" />
                         </div>
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
-                      className="w-64 bg-slate-900/95 border border-violet-400/20 backdrop-blur-md shadow-2xl shadow-violet-500/20"
+                      className="w-64 bg-[#141419]/95 border border-white/15 backdrop-blur-xl shadow-2xl shadow-black/80 rounded-2xl p-1.5 text-white"
                       align="end"
                     >
                       <DropdownMenuLabel className="font-normal p-0">
                         <Link
                           href="/dashboard/profile"
-                          className="flex flex-col space-y-2 p-3 hover:bg-violet-600/10 rounded-lg transition-colors cursor-pointer"
+                          className="flex flex-col space-y-2 p-3 hover:bg-white/5 rounded-xl transition-colors cursor-pointer"
                         >
                           <div className="flex items-center space-x-2">
-                            <Star className="h-4 w-4 text-slate-400" />
+                            <Star className="h-4 w-4 text-zinc-400" />
                             <p className="text-sm font-medium text-white">
                               {displayName}
                             </p>
                           </div>
-                          <p className="text-xs text-slate-400">
+                          <p className="text-xs text-zinc-400">
                             {displayEmail}
                           </p>
                           {userType === "advertiser" && (
-                            <Badge className="bg-gradient-to-r from-slate-600 to-slate-700 text-white text-xs w-fit border border-slate-500/30">
+                            <Badge className="bg-white/10 text-white text-xs w-fit border border-white/15">
                               {getPlanName(subscriptionPlan)}
                             </Badge>
                           )}
                         </Link>
                       </DropdownMenuLabel>
-                      <DropdownMenuSeparator className="bg-violet-400/20" />
+                      <DropdownMenuSeparator className="bg-white/10" />
                       <DropdownMenuItem
                         asChild
-                        className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
+                        className="text-zinc-300 hover:text-white hover:bg-white/10 focus:bg-white/10 focus:text-white rounded-lg cursor-pointer transition-colors"
                       >
                         <button
                           type="button"
@@ -529,7 +529,7 @@ export function Nav({
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         asChild
-                        className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
+                        className="text-zinc-300 hover:text-white hover:bg-white/10 focus:bg-white/10 focus:text-white rounded-lg cursor-pointer transition-colors"
                       >
                         <button
                           type="button"
@@ -552,7 +552,7 @@ export function Nav({
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         asChild
-                        className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
+                        className="text-zinc-300 hover:text-white hover:bg-white/10 focus:bg-white/10 focus:text-white rounded-lg cursor-pointer transition-colors"
                       >
                         <button
                           type="button"
@@ -575,7 +575,7 @@ export function Nav({
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         asChild
-                        className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
+                        className="text-zinc-300 hover:text-white hover:bg-white/10 focus:bg-white/10 focus:text-white rounded-lg cursor-pointer transition-colors"
                       >
                         <button
                           type="button"
@@ -599,10 +599,10 @@ export function Nav({
                       {userType === "advertiser" &&
                         subscriptionPlan !== PRODUCT_IDS.CHAMPION && (
                           <>
-                            <DropdownMenuSeparator className="bg-violet-400/20" />
+                            <DropdownMenuSeparator className="bg-white/10" />
                             <DropdownMenuItem
                               asChild
-                              className="text-violet-300 hover:text-violet-200 hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-violet-200 cursor-pointer"
+                              className="text-purple-300 hover:text-purple-200 hover:bg-purple-600/20 focus:bg-purple-600/20 focus:text-purple-200 rounded-lg cursor-pointer transition-colors"
                             >
                               <Link
                                 href="/dashboard/billing?tab=subscription"
@@ -614,9 +614,9 @@ export function Nav({
                             </DropdownMenuItem>
                           </>
                         )}
-                      <DropdownMenuSeparator className="bg-violet-400/20" />
+                      <DropdownMenuSeparator className="bg-white/10" />
                       <DropdownMenuItem
-                        className="text-red-300 hover:text-red-200 hover:bg-red-600/10 focus:bg-red-600/10 focus:text-red-200 cursor-pointer"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 focus:bg-red-500/10 focus:text-red-300 rounded-lg cursor-pointer transition-colors"
                         onClick={handleSignOut}
                       >
                         <LogOut className="mr-2 h-4 w-4" />

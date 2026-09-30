@@ -30,12 +30,12 @@ export default function ShareArticle({ articleUrl, title }: ShareArticleProps) {
   }, [articleUrl, title]);
 
   return (
-    <div className="mt-10 border-t border-slate-800 pt-6 flex flex-wrap items-center justify-between gap-4">
-      <span className="text-sm text-slate-400">Share this article</span>
+    <div className="mt-8 border-t border-white/10 pt-6 flex flex-wrap items-center justify-between gap-4">
+      <span className="text-sm text-[#8E8E8E]">Share this article</span>
       <button
         type="button"
         onClick={handleShare}
-        className="flex items-center gap-2 bg-[#6C43D0] hover:bg-[#6C43D0] text-white px-3 h-9 rounded-full text-xs font-medium transition-all duration-200 hover:scale-105"
+        className="flex items-center gap-2 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] border border-white/20 hover:bg-white/10 text-white px-4 h-9 rounded-full text-xs font-medium transition-all duration-300"
       >
         <Share2 className="h-4 w-4" />
         <span className="hidden sm:inline">Share</span>

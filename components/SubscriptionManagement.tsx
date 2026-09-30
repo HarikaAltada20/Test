@@ -18,6 +18,7 @@ import {
   ExternalLink,
   CreditCard,
   Check,
+  CheckCircle2,
   AlertTriangle,
   Loader2,
   TrendingUp,
@@ -30,6 +31,8 @@ import {
   CalendarDays,
   DollarSign,
   X,
+  Gem,
+  ArrowRight,
 } from "lucide-react";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { subscriptionPlans } from "@/constants/subscriptionPlans";
@@ -39,6 +42,7 @@ import type {
 } from "@/lib/subscription-types";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageLoadingSpinner } from "./loading/LoadingSpinner";
+import { cn } from "@/lib/utils";
 
 interface ScheduledChange {
   id: string;
@@ -75,6 +79,59 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
     isCanceled: boolean;
     cancelAtPeriodEnd: boolean;
   } | null>(null);
+
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">(
+    "monthly"
+  );
+
+  const getDiscountedPrice = (price: number) => {
+    return Math.round(price * 12 * 0.8);
+  };
+
+  const getFormattedFeaturesList = (plan: SubscriptionPlan) => {
+    const name = plan.name.toUpperCase();
+    const minBudgetFormatted = formatCurrencyFromCents(plan.features.minContestBudget);
+
+    const list: string[] = [
+      `Min. budget ${minBudgetFormatted}`,
+      `Up to ${plan.features.maxWinnersPerContest} winners`,
+      `${plan.features.commissionPercentage}% commission`,
+    ];
+
+    if (name === "EXPLORER") {
+      list.push("Leaderboard-based contests only");
+      list.push("CPM contests available in paid plans");
+      list.push("Advanced");
+    } else if (name === "STARTER") {
+      list.push("Leaderboard & CPM-based contests");
+      list.push("Both contest types available");
+      list.push("Advanced");
+    } else if (name === "BUILDER") {
+      list.push("Leaderboard & CPM-based contests");
+      list.push("Both contest types available");
+      list.push("Prioritized customer support");
+    } else if (name === "CHAMPION") {
+      list.push("Leaderboard & CPM-based contests");
+      list.push("Both contest types available");
+      list.push("Premium 24/7 dedicated support");
+    } else {
+      if (plan.features.contestTypes?.includes("cpm")) {
+        list.push("Leaderboard & CPM-based contests");
+        list.push("Both contest types available");
+      } else {
+        list.push("Leaderboard-based contests only");
+      }
+      if (plan.features.support === "priority") {
+        list.push("Prioritized customer support");
+      } else if (plan.features.support === "premium") {
+        list.push("Premium 24/7 dedicated support");
+      } else {
+        list.push("Advanced");
+      }
+    }
+
+    return list;
+  };
 
   // Only run once on mount
   useEffect(() => {
@@ -482,15 +539,15 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
   const getPlanIcon = (planName: string) => {
     switch (planName) {
       case "EXPLORER":
-        return <Gift className="h-6 w-6" />;
+        return <Trophy className="h-5 w-5" />;
       case "STARTER":
-        return <Star className="h-6 w-6" />;
+        return <Zap className="h-5 w-5" />;
       case "BUILDER":
-        return <Zap className="h-6 w-6" />;
+        return <Star className="h-5 w-5" />;
       case "CHAMPION":
-        return <Crown className="h-6 w-6" />;
+        return <Crown className="h-5 w-5" />;
       default:
-        return <Trophy className="h-6 w-6" />;
+        return <Trophy className="h-5 w-5" />;
     }
   };
 
@@ -509,12 +566,17 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
     }
   };
 
-  const getPlanFeatures = (plan: SubscriptionPlan) => {
-    const features = [];
+  type FeatureItem = string | { title: string; sub?: string };
+
+  const getPlanFeatures = (plan: SubscriptionPlan | null | undefined): FeatureItem[] => {
+    if (!plan || !plan.features) return [];
+    const features: FeatureItem[] = [];
     features.push(`${plan.features.maxActiveContests} active contests`);
     features.push(`${plan.features.commissionPercentage}% commission`);
     features.push(`Up to ${plan.features.maxWinnersPerContest} winners`);
-    features.push(`${plan.features.analytics} analytics`);
+    if (plan.features.analytics) {
+      features.push(`${plan.features.analytics} analytics`);
+    }
     return features;
   };
 
@@ -576,7 +638,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
         // If all scheduled changes are canceled or no scheduled changes, show "Canceling" since subscription will end
         return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Canceling</Badge>;
       }
-      return <Badge className="border bg-[#4A00BE] rounded-lg px-4 py-1.5 text-md text-white hover:bg-[#4A00BE]">Active</Badge>;
+      return <Badge className="border border-[#434343] bg-[#353535] rounded-full px-4 py-1.5 text-md text-white">Active</Badge>;
     }
     return (
       <Badge className="bg-red-100 text-red-800 hover:bg-red-100">{subscription.status}</Badge>
@@ -652,7 +714,8 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
     <div className="space-y-8">
       {/* Current Subscription Status */}
       {currentSubscription && currentPlan && (
-        <div className="max-w-7xl bg-gradient-to-b rounded-lg from-purple-900/10 to-purple-900/3 border-2 border-gray-700 hover:border-2 cursor-pointer text-white mx-auto">
+        <div className="relative overflow-hidden max-w-[1320px] rounded-lg border border-white/15 bg-[#121212] shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40] text-white mx-auto">
+          {/* <div className="pointer-events-none absolute -right-32 -top-32 h-80 w-80 rounded-full bg-[#D9D9D9]/25 blur-[120px]" /> */}
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2 mb-4 text-2xl">
               <div className="border rounded-3xl p-2">
@@ -690,11 +753,8 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                     // variant="outline"
                     onClick={handleCustomerPortal}
                     disabled={isProcessing}
-                    className="rounded-3xl relative text-white font-bold px-4 py-2 text-md overflow-hidden flex items-center justify-center gap-2"
-                    style={{
-                      background:
-                        "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-                    }}
+                    className="rounded-3xl relative border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] font-bold px-4 py-2 text-md overflow-hidden flex items-center justify-center gap-2"
+                   
                   >
                      <div className="scan-line"></div>
                     {isProcessing ? (
@@ -872,7 +932,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                                             />
                                           </div>
                                           <span className="text-md text-white ">
-                                            {feature}
+                                            {typeof feature === "string" ? feature : feature.title}
                                           </span>
                                         </div>
                                       )
@@ -928,7 +988,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                                           />
                                         </div>
                                         <span className="text-md text-white ">
-                                          {feature}
+                                          {typeof feature === "string" ? feature : feature.title}
                                         </span>
                                       </div>
                                     )
@@ -1039,7 +1099,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                     > */}
                       <Check className="h-6 w-6 text-white" strokeWidth={3} />
                     {/* </div> */}
-                    <span className="text-lg text-gray-300">{feature}</span>
+                    <span className="text-lg text-gray-300">{typeof feature === "string" ? feature : feature.title}</span>
                   </div>
                 ))}
               </div>
@@ -1156,196 +1216,190 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
 
       {/* Available Plans */}
       <div className="space-y-6">
-        {/* <h2 className="text-2xl font-bold mb-2">Available Plans</h2>
-          <p className="text-gray-600">
-            {!currentPlan && !currentSubscription
-              ? "Welcome! Start with our free plan or choose a paid plan that fits your needs"
-              : "Choose the plan that best fits your needs"}
-          </p> */}
-        <div className="max-w-[1200px] pt-16 mx-auto text-center">
-          <h2 className="text-3xl md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform">
-            Available{" "}
-            <span
-              style={{
-                background:
-                  "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-
-                display: "inline",
-              }}
-            >
-              Plans
-            </span>
+        <div className="max-w-[1200px] pt-12 mx-auto text-center">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white mb-3 tracking-tight">
+            Choose your Game Plan
           </h2>
-          <p className="text-lg md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg">
-            {!currentPlan && !currentSubscription
-              ? "Welcome! Start with our free plan or choose a paid plan that fits your needs"
-              : "Choose the plan that best fits your needs"}
+          <p className="text-gray-400 text-sm md:text-base max-w-2xl mx-auto mb-8 leading-relaxed">
+            Set your campaign, your brief, and your budget. Game of Creators puts it in front of a creator network, and pays out on verified performance
           </p>
+
+          {/* Monthly / Yearly Toggle */}
+          <div className="flex justify-center mb-10">
+            <div className="inline-flex items-center p-1 bg-[#141416] border border-neutral-800 rounded-full">
+              <button
+                onClick={() => setBillingCycle("monthly")}
+                className={`px-5 py-2 rounded-full text-xs font-bold tracking-wider transition-all ${
+                  billingCycle === "monthly"
+                    ? "bg-neutral-800 text-white shadow-sm"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                MONTHLY
+              </button>
+              <button
+                onClick={() => setBillingCycle("yearly")}
+                className={`px-5 py-2 rounded-full text-xs font-bold tracking-wider transition-all flex items-center gap-1.5 ${
+                  billingCycle === "yearly"
+                    ? "bg-neutral-800 text-white shadow-sm"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                <span>YEARLY</span>
+                <span className="text-[10px] font-semibold text-[#22c55e] border border-[#22c55e]/30 bg-[#22c55e]/10 px-2 py-0.5 rounded-full lowercase first-letter:uppercase">
+                  Save 20% now
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
+
         {/* New User Info */}
         {!currentPlan && !currentSubscription && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Info className="h-5 w-5 text-blue-600" />
-              <span className="font-semibold text-blue-900">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 max-w-4xl mx-auto mb-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Info className="h-5 w-5 text-purple-400" />
+              <span className="font-semibold text-white">
                 Getting Started
               </span>
             </div>
-            <p className="text-blue-800 text-sm">
+            <p className="text-gray-300 text-sm">
               New to our platform? Start with the{" "}
-              <strong>Explorer Plan (Free)</strong> to test our features, or
-              choose a paid plan to unlock more contests and better commission
-              rates.
+              <strong>Explorer Plan ($0.00/month)</strong> to test our features, or
+              choose a paid plan to unlock more contests and lower commission rates.
             </p>
           </div>
         )}
 
-        <div className="max-w-[1300px] pb-20 mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 justify-items-center">
+        <div className="max-w-[1440px] w-full mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16 justify-items-center items-stretch">
           {subscriptionPlans.map((plan) => {
             const isCurrentPlan = currentPlan?.id === plan.id;
             const isProcessingThisPlan = processingPlanId === plan.id;
+            const isMostPopular = plan.name.toUpperCase() === "BUILDER";
+            const isFree = plan.price === 0;
+            const formattedFeatures = getFormattedFeaturesList(plan);
 
             return (
               <div
                 key={plan.id}
-                className={`relative flex flex-col rounded-xl w-full max-w-sm mx-auto p-6 hover:shadow-lg hover:scale-105 transition
-                                     ${
-                                       isCurrentPlan
-                                         ? "border-2 border-purple-500 shadow-xl"
-                                         : "border border-gray-700 shadow-sm"
-                                     } bg-gradient-to-b from-purple-900/10 to-purple-900/3`}
+                className={`w-full max-w-[317px] p-[26px_16px] rounded-[24px] flex flex-col justify-between items-center gap-8 transition-all duration-300 ${
+                  isMostPopular
+                    ? "bg-[linear-gradient(180deg,#353535_0%,#000000_100%)] outline-[2px] outline-[#914BFC] outline-solid shadow-[0_0_30px_rgba(145,75,252,0.4)]"
+                    : "bg-[linear-gradient(180deg,#353535_0%,#000000_100%)] border border-[#434343]"
+                }`}
+                style={isMostPopular ? { outline: "2px #914BFC solid" } : undefined}
               >
-                {isCurrentPlan && (
-                  // <div className="absolute -top-3 right-4">
-                  //     <Badge className="bg-green-600 text-white">Current Plan</Badge>
-                  // </div>
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                    <Badge className="bg-purple-600 text-white">
-                      Current Plan
-                    </Badge>
+                {/* Top Header Section */}
+                <div className="w-[288px] max-w-full flex flex-col items-center gap-[17px]">
+                  {/* Plan Pill Badge */}
+                  <div className="px-4 py-2.5 bg-[linear-gradient(90deg,#212121_0%,#131313_100%)] shadow-[inset_0px_-4px_8px_rgba(255,255,255,0.08)] rounded-[103px] border border-black/60 flex items-center justify-center gap-2">
+                    <span className="text-white text-xs font-semibold font-sans leading-[16.8px]">
+                      {plan.displayName || `${plan.name} Plan`}
+                    </span>
+                  </div>
+
+                  {/* Price & Description Container */}
+                  <div className="w-full flex flex-col items-center gap-3">
+                    <div className="flex items-baseline justify-center gap-1">
+                      <span className="text-white text-[30px] font-semibold leading-[42px]">
+                        {formatCurrencyFromCents(
+                          billingCycle === "monthly"
+                            ? plan.price
+                            : getDiscountedPrice(plan.price)
+                        )}
+                      </span>
+                      <span className="text-white/60 text-base font-medium pb-1">
+                        /month
+                      </span>
+                    </div>
+                    <p className="w-[267px] max-w-full text-center text-white/60 text-sm font-normal leading-[19.6px]">
+                      {plan.features.description}
+                    </p>
+                  </div>
+                </div>
+
+                {getTrialDisplayText(plan) && (
+                  <div className="text-center">
+                    <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-medium inline-block">
+                      {getTrialDisplayText(plan)}
+                    </span>
                   </div>
                 )}
 
-                <div className="text-center mt-6 space-y-3">
-                  <div
-                    className={`mx-auto p-3 rounded-xl bg-gradient-to-r ${getPlanColor(
-                      plan.name
-                    )} text-white w-fit`}
-                  >
-                    {getPlanIcon(plan.name)}
-                  </div>
-                  <CardTitle className="text-xl">
-                    {plan.displayName || plan.name}
-                  </CardTitle>
-                  <div className="text-3xl font-bold">
-                    {formatCurrencyFromCents(plan.price)}
-                    <span className="text-sm font-normal text-gray-400">
-                      {plan.price > 0 ? "/month" : ""}
+                {/* Divider Line */}
+                <div className="w-full h-px bg-white/10"></div>
+
+                {/* Features List Section */}
+                <div className="w-full flex flex-col items-start gap-6 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-[19px] h-[19px] flex items-center justify-center flex-shrink-0">
+                      <Gem className="w-[17px] h-[17px] text-white" />
+                    </div>
+                    <span className="text-white text-[18px] font-medium leading-[18px]">
+                      {plan.features.maxActiveContests} active contests
                     </span>
                   </div>
-                  {getTrialDisplayText(plan) && (
-                    <div className="mt-2 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                      {getTrialDisplayText(plan)}
-                    </div>
-                  )}
-                  <p className="text-md py-3 text-gray-400">
-                    {plan.features.description}
-                  </p>
-                </div>
 
-                <div className="flex-1 mt-4 flex flex-col">
-                  <div className="space-y-5 mb-6">
-                    {getPlanFeatures(plan).map((feature, index) => (
-                      <div key={index} className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-green-600" />
-                        <span className="text-md text-gray-400">{feature}</span>
+                  <div className="w-full flex flex-col items-start gap-3">
+                    {formattedFeatures.map((feat, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-left">
+                        {/* Glowing Check Icon Container */}
+                        <div className="w-5 h-5 rounded-full bg-[linear-gradient(180deg,rgba(52,229,0,0.15)_0%,rgba(204,228,8,0.15)_49%,rgba(251,228,2,0.15)_100%)] flex items-center justify-center flex-shrink-0">
+                          <div className="w-[14.3px] h-[14.3px] rounded-full bg-[#00FF6C] flex items-center justify-center">
+                            <Check className="w-2.5 h-2.5 text-black stroke-[3.5]" />
+                          </div>
+                        </div>
+                        <span className="text-white/70 text-sm font-normal leading-[19.6px]">
+                          {feat}
+                        </span>
                       </div>
                     ))}
                   </div>
+                </div>
 
-                  <div className="pt-3 mt-auto">
-                    {isCurrentPlan ? (
-                      <Button
-                        variant="outline"
-                        className="w-full w-full rounded-3xl mt-8 relative font-bold px-8 py-5 text-lg overflow-hidden text-black"
-                        disabled
-                      >
-                        Current Plan
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={() => handleUpgradeClick(plan)}
-                        disabled={isProcessing}
-                        className="w-full rounded-3xl mt-8 relative text-white text-white font-bold px-8 py-5 text-lg overflow-hidden"
-                        style={{
-                          background:
-                            "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-                        }}
-                        variant={
-                          !currentPlan &&
-                          !currentSubscription &&
-                          plan.price === 0
-                            ? "default"
-                            : "default"
-                        }
-                      >
-                        {isProcessingThisPlan ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            {/* New users without subscription */}
-                            {!currentPlan && !currentSubscription ? (
-                              plan.price === 0 ? (
-                                <>
-                                  <Check className="h-4 w-4 mr-2" />
-                                  Start Free
-                                </>
-                              ) : isEligibleForTrial(plan) ? (
-                                <>
-                                  <Gift className="h-4 w-4 mr-2" />
-                                  Start Free Trial
-                                </>
-                              ) : (
-                                <>
-                                  <CreditCard className="h-4 w-4 mr-2" />
-                                  Subscribe
-                                </>
-                              )
-                            ) : isOnFreePlan() && isEligibleForTrial(plan) ? (
-                              // Users on free plans (including Explorer) eligible for trials
-                              <>
-                                <Gift className="h-4 w-4 mr-2" />
-                                Start Free Trial
-                              </>
-                            ) : currentPlan &&
-                              plan.price > currentPlan.price ? (
-                              <>
-                                <TrendingUp className="h-4 w-4" />
-                                Upgrade
-                              </>
-                            ) : currentPlan &&
-                              plan.price < currentPlan.price ? (
-                              <>
-                                <ArrowDown className="h-4 w-4 mr-2" />
-                                Downgrade
-                              </>
+                {/* CTA Button */}
+                <div className="w-full p-[1px] bg-[linear-gradient(180deg,#434343_0%,#212121_100%)] rounded-[15px] overflow-hidden mt-auto">
+                  {isCurrentPlan ? (
+                    <Button
+                      disabled
+                      className="w-full py-[14px] px-4 bg-[linear-gradient(360deg,#000000_0%,#353535_100%)] rounded-[14px] text-white/50 text-base font-semibold border-0 cursor-not-allowed h-auto"
+                    >
+                      Current Plan
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => handleUpgradeClick(plan)}
+                      disabled={isProcessing}
+                      className="w-full py-[14px] px-4 bg-[linear-gradient(360deg,#000000_0%,#353535_100%)] hover:opacity-90 rounded-[14px] flex flex-row items-center justify-center gap-2 text-white text-base font-semibold border-0 shadow-none h-auto whitespace-nowrap"
+                    >
+                      {isProcessingThisPlan ? (
+                        <span className="flex flex-row items-center justify-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                          Processing...
+                        </span>
+                      ) : (
+                        <span className="flex flex-row items-center justify-center gap-2 whitespace-nowrap">
+                          {!currentPlan && !currentSubscription ? (
+                            isFree ? (
+                              <><span>Start Free</span> <ArrowRight className="w-4 h-4 shrink-0" /></>
+                            ) : isEligibleForTrial(plan) ? (
+                              <><span>Start Free Trial</span> <ArrowRight className="w-4 h-4 shrink-0" /></>
                             ) : (
-                              <>
-                                <Check className="h-4 w-4 mr-2" />
-                                Select Plan
-                              </>
-                            )}
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </div>
+                              <><span>Subscribe</span> <ArrowRight className="w-4 h-4 shrink-0" /></>
+                            )
+                          ) : isOnFreePlan() && isEligibleForTrial(plan) ? (
+                            <><span>Start Free Trial</span> <ArrowRight className="w-4 h-4 shrink-0" /></>
+                          ) : currentPlan && plan.price > currentPlan.price ? (
+                            <><span>Upgrade</span> <ArrowRight className="w-4 h-4 shrink-0" /></>
+                          ) : currentPlan && plan.price < currentPlan.price ? (
+                            <><span>Downgrade</span> <ArrowRight className="w-4 h-4 shrink-0" /></>
+                          ) : (
+                            <><span>Subscribe</span> <ArrowRight className="w-4 h-4 shrink-0" /></>
+                          )}
+                        </span>
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
             );

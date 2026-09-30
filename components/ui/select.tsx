@@ -142,13 +142,13 @@ const SelectItem = React.forwardRef<
     className={cn(
       "relative flex w-full cursor-default select-none items-center rounded-md py-2.5 pl-8 pr-3 text-md outline-none transition-all duration-200",
       // Default state
-      isDark ? "bg-[#07031D] text-white" : "bg-white text-black",
-      // Selected state
-      "data-[state=checked]:bg-purple-600 data-[state=checked]:text-white",
-      // Hover state
       isDark
-        ? "hover:bg-purple-500/30 hover:text-white"
-        : "hover:bg-purple-100 hover:text-purple-800",
+        ? "bg-transparent text-white data-[highlighted]:bg-purple-500/30 data-[highlighted]:text-white"
+        : "text-gray-900 data-[highlighted]:bg-purple-100 data-[highlighted]:text-purple-900",
+      // Selected state
+      "data-[state=checked]:bg-[#7F39EC] data-[state=checked]:text-white",
+      // Focus/Hover state
+      "focus:outline-none",
       // Disabled state
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       className
