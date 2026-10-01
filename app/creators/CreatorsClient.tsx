@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
+import { gsap } from "gsap";
 
 import {
   ArrowRight,
@@ -242,6 +243,7 @@ export default function CreatorsClient({
   );
   const [showAdvertiserModal, setShowAdvertiserModal] = useState(false);
   const [isCheckingStartEarning, setIsCheckingStartEarning] = useState(false);
+  const [isCheckingTurn, setIsCheckingTurn] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const [navigatingContestId, setNavigatingContestId] = useState<string | null>(
@@ -251,6 +253,16 @@ export default function CreatorsClient({
   const [isNavigatingViewMore, setIsNavigatingViewMore] = useState(false);
   const [easyStep, setEasyStep] = useState(0);
   const [easyStepProgress, setEasyStepProgress] = useState(0);
+  const stepImageRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!stepImageRef.current) return;
+    gsap.fromTo(
+      stepImageRef.current,
+      { opacity: 0, scale: 0.97 },
+      { opacity: 1, scale: 1, duration: 0.45, ease: "power2.out" }
+    );
+  }, [easyStep]);
 
   const handleNavigation = () => {
     setIsNavigating(true);
@@ -471,6 +483,7 @@ export default function CreatorsClient({
     setIsCheckingStartEarning(false);
     setIsSigningOut(false);
     setIsNavigating(false);
+    setIsCheckingTurn(false);
   }, [pathname]);
 
   // Smooth-scroll to hash targets (navbar anchors)
@@ -528,6 +541,37 @@ export default function CreatorsClient({
       );
       localStorage.setItem("signupRole", "creator");
       router.push("/auth/signup");
+    }
+  };
+
+  const handleMakeYourTurnClick = async () => {
+    setIsCheckingTurn(true);
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/auth/signin");
+      } else {
+        const { data: userData } = await supabase
+          .from("users")
+          .select("user_type")
+          .eq("id", user.id)
+          .single();
+
+        if (userData?.user_type === "advertiser") {
+          router.push("/dashboard/contests");
+        } else {
+          router.push("/dashboard/opportunities");
+        }
+      }
+    } catch (error) {
+      console.error("Failed to check user authentication status:", error);
+      router.push("/auth/signin");
+    } finally {
+      setIsCheckingTurn(false);
     }
   };
 
@@ -860,9 +904,9 @@ export default function CreatorsClient({
           className="relative overflow-hidden pt-8 pb-10 sm:pt-10 sm:pb-12 md:pt-16 md:pb-16"
         >
           <div className="relative z-10 mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-12">
-            <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-8">
+            <div className="grid items-center gap-8 min-[900px]:grid-cols-2 min-[900px]:gap-8">
               {/* Left: copy + CTAs */}
-              <div className="text-left">
+              <div className="text-center min-[900px]:text-left">
                 <h1
                   className={cn(
                     "mb-4 text-[2rem] font-semibold leading-[1.1] tracking-tight sm:mb-5 sm:text-5xl md:text-[3.35rem] lg:text-[4rem]",
@@ -881,7 +925,7 @@ export default function CreatorsClient({
 
                 <p
                   className={cn(
-                    "mb-6 max-w-xl text-base leading-relaxed sm:mb-8 sm:text-lg md:text-xl",
+                    "mx-auto mb-6 max-w-xl text-base leading-relaxed sm:mb-8 sm:text-lg md:text-xl min-[900px]:mx-0",
                     isLight ? "text-black/50" : "text-zinc-400",
                   )}
                   // style={{ animationDelay: "0.35s" }}
@@ -890,7 +934,7 @@ export default function CreatorsClient({
                   performs — not your follower count.
                 </p>
 
-                <div className="mb-6 flex flex-col items-stretch gap-3 sm:mb-8 sm:flex-row sm:items-center">
+                <div className="mb-6 flex flex-col items-stretch justify-center gap-3 sm:mb-8 sm:flex-row sm:items-center min-[900px]:justify-start">
                   <Button
                     type="button"
                     onClick={handleStartEarningClick}
@@ -922,7 +966,7 @@ export default function CreatorsClient({
                   </Button>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center gap-3 min-[900px]:justify-start">
                   <div className="flex -space-x-2.5">
                     {[
                       "/images/Ellipse 2355.avif",
@@ -959,8 +1003,8 @@ export default function CreatorsClient({
               </div>
 
               {/* Right: layered hero visual */}
-              <div className="relative flex justify-center lg:justify-end">
-                <div className="relative h-[380px] w-full max-w-[420px] overflow-hidden sm:h-[480px] sm:max-w-[560px] sm:overflow-visible lg:h-[560px]">
+              <div className="relative flex justify-center min-[900px]:justify-end">
+                <div className="relative h-[380px] w-full max-w-[420px] overflow-hidden sm:h-[480px] sm:max-w-[560px] sm:overflow-visible min-[900px]:h-[560px]">
                   {/* Dollar sign — behind girl, shifted left */}
                   <div className="pointer-events-none absolute left-[-8%] right-[10%] top-[-2%] bottom-[6%] z-0 select-none sm:left-[-18%] sm:right-[18%]">
                     <Image
@@ -1156,14 +1200,13 @@ export default function CreatorsClient({
         </section>
 
         {/* Contests Section */}
-        <section
+        {/* <section
           className={cn(
             "overflow-visible px-3 py-10 sm:px-4 sm:py-16 transition-colors duration-300",
             isLight ? "text-black" : "text-white",
           )}
         >
           <div className="mx-auto max-w-[1400px] space-y-10 overflow-visible sm:space-y-12">
-            {/* Most Popular Contests */}
             {finalMostPopularContests.length > 0 && (
               <div className="overflow-visible">
                 <div className="mb-4 flex flex-col items-start justify-between gap-3 px-2 sm:mb-6 sm:flex-row sm:items-center sm:gap-0 sm:px-8 md:px-16">
@@ -1180,7 +1223,6 @@ export default function CreatorsClient({
                 <div className="flex gap-3 sm:gap-4 overflow-x-auto min-[760px]:flex-wrap min-[760px]:overflow-x-visible py-4 px-2 sm:px-4 justify-start md:justify-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                   {finalMostPopularContests.map(renderContestCard)}
 
-                  {/* Total Budget Card */}
                   <div
                     onClick={handleViewMoreClick}
                     className={cn(
@@ -1188,13 +1230,11 @@ export default function CreatorsClient({
                       isNavigatingViewMore && "opacity-70 cursor-not-allowed",
                     )}
                   >
-                    {/* Loading overlay with spinner */}
                     {isNavigatingViewMore && (
                       <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10 rounded-2xl">
                         <ButtonLoadingSpinner />
                       </div>
                     )}
-                    {/* Icon Area (similar to image area) */}
                     <div className="w-full h-[140px] sm:h-[150px] md:h-[170px] lg:h-[190px] rounded-xl flex flex-col items-center justify-center gap-2">
                       <div className="relative flex items-center justify-center">
                         <Wallet className="h-10 w-10 sm:h-12 sm:w-12 md:h-14 md:w-14 text-green-500" />
@@ -1220,36 +1260,8 @@ export default function CreatorsClient({
                 </div>
               </div>
             )}
-
-            {/* Instagram Contests */}
-            {/* {instagramContests.length > 0 && (
-              <div className="overflow-visible">
-                <div className="flex items-center justify-start mb-6 px-2 sm:px-16">
-                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
-                    Instagram Campaigns
-                  </h2>
-                </div>
-                <div className="flex gap-3 sm:gap-4 overflow-x-auto min-[1000px]:flex-wrap min-[1000px]:overflow-x-visible py-4 px-2 sm:px-4 justify-start md:justify-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                  {instagramContests.map(renderContestCard)}
-                </div>
-              </div>
-            )} */}
-
-            {/* YouTube Contests */}
-            {/* {youtubeContests.length > 0 && (
-              <div className="overflow-visible">
-                <div className="flex items-center justify-between mb-6 px-2 sm:px-16">
-                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
-                    YouTube Campaigns
-                  </h2>
-                </div>
-                <div className="flex gap-3 sm:gap-4 overflow-x-auto min-[1000px]:flex-wrap min-[1000px]:overflow-x-visible py-4 px-2 sm:px-4 justify-start md:justify-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                  {youtubeContests.map(renderContestCard)}
-                </div>
-              </div>
-            )} */}
           </div>
-        </section>
+        </section> */}
 
         {/* As easy as you think */}
         <section
@@ -1263,7 +1275,7 @@ export default function CreatorsClient({
           <div className="mx-auto max-w-[1200px] px-4 md:px-8 xl:px-4">
             <h2
               className={cn(
-                "mb-8 sm:mb-10 sm:text-4xl md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
+                "mb-8 sm:mb-10 text-[28px] sm:text-[42px] md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
                 isAnimated ? "slide-up" : "hide-before-animate",
                 isLight ? "text-black" : "text-[#EFEFEF]",
               )}
@@ -1282,7 +1294,7 @@ export default function CreatorsClient({
                 )}
                 style={{ animationDelay: "0.3s" }}
               >
-                <div className="relative h-[320px] sm:h-[400px] md:h-[460px]">
+                <div ref={stepImageRef} className="relative h-[320px] sm:h-[400px] md:h-[460px]">
                   <div
                     key={easyStep}
                     className="absolute inset-0 flex flex-col gap-1 transition-opacity duration-300"
@@ -1491,7 +1503,7 @@ export default function CreatorsClient({
           <div className="container mx-auto max-w-[1150px]">
             <h2
               className={cn(
-                "mb-8 sm:mb-10 sm:text-4xl md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
+                "mb-8 sm:mb-10 text-[28px] sm:text-[42px] md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
                 isAnimated ? "slide-up" : "hide-before-animate",
                 isLight ? "text-black" : "text-[#EFEFEF]",
               )}
@@ -1809,13 +1821,16 @@ export default function CreatorsClient({
             {/* Button */}
             <button
               type="button"
+              onClick={handleMakeYourTurnClick}
+              disabled={isCheckingTurn}
               className={cn(
-                "group mt-6 flex items-center gap-3 rounded-[22px] border border-orange-400 px-5 py-3.5 text-[15px] font-semibold shadow-[0_0_25px_rgba(255,120,0,0.45)] transition-all duration-300 hover:scale-105 hover:shadow-[0_0_35px_rgba(255,120,0,0.65)] sm:mt-8 sm:px-6 sm:py-4 sm:text-[17px]",
+                "group mt-6 flex items-center gap-3 rounded-[22px] border border-orange-400 px-5 py-3.5 text-[15px] font-semibold shadow-[0_0_25px_rgba(255,120,0,0.45)] transition-all duration-300 hover:scale-105 hover:shadow-[0_0_35px_rgba(255,120,0,0.65)] sm:mt-8 sm:px-6 sm:py-4 sm:text-[17px] disabled:opacity-70",
                 isLight
                   ? "bg-[#FF6A1A] text-white"
                   : "bg-white text-orange-500",
               )}
             >
+              {isCheckingTurn ? <ButtonLoadingSpinner /> : null}
               <span>Make you turn</span>
 
               <ArrowRight

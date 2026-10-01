@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+import { gsap } from "gsap";
 import { Caveat } from "next/font/google";
 
 import {
@@ -86,6 +87,38 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
   const [cursorClicking, setCursorClicking] = useState(false);
   const [cursorPos, setCursorPos] = useState({ x: 40, y: 320 });
   const [showClickBurst, setShowClickBurst] = useState(false);
+  const cursorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!cursorRef.current) return;
+    if (!cursorVisible) {
+      gsap.to(cursorRef.current, { opacity: 0, duration: 0.25, ease: "power1.out" });
+      return;
+    }
+    gsap.to(cursorRef.current, {
+      left: cursorPos.x,
+      top: cursorPos.y,
+      opacity: 1,
+      scale: cursorClicking ? 0.88 : 1,
+      duration: 0.55,
+      ease: "power2.out",
+      overwrite: "auto",
+    });
+  }, [cursorPos, cursorVisible, cursorClicking]);
+
+  useEffect(() => {
+    if (!budgetRef.current) return;
+    const tween = gsap.to(budgetRef.current, {
+      y: -5,
+      duration: 2.2,
+      repeat: -1,
+      yoyo: true,
+      ease: "sine.inOut",
+    });
+    return () => {
+      tween.kill();
+    };
+  }, []);
 
   const getTargetPos = (target: FormCursorTarget) => {
     const root = rootRef.current;
@@ -275,10 +308,10 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       {/* FORM MOCKUP */}
       <div
         className={cn(
-          "absolute left-2 right-2 top-[248px] h-[440px] overflow-visible rounded-t-[20px] border sm:left-[24px] sm:right-[24px] sm:top-[266px] md:left-[44px] md:right-[44px]",
+          "absolute left-2 right-2 top-[248px] h-[440px] overflow-visible rounded-t-[20px] border sm:left-[24px] sm:right-[24px] sm:top-[266px] min-[800px]:left-[16px] min-[800px]:right-[16px] min-[800px]:top-[260px] lg:left-[24px] lg:right-[24px] xl:left-[44px] xl:right-[44px]",
           isLight
             ? "border-[#0000000D] bg-[#ECECEC] text-black shadow-[inset_0_0_4.43px_0_#0000001A]"
-            : "border-white/[0.10] bg-[#121212] text-white shadow-[0_-10px_40px_rgba(0,0,0,.15)]",
+            : "border-white/[0.10] bg-[#121212] text-white",
         )}
       >
         {/* Launch */}
@@ -579,7 +612,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
       {/* FLOATING BUDGET */}
       <div
-        ref={budgetRef}
+        // ref={budgetRef}
         className={cn(
           "absolute bottom-[8px] left-[10px] sm:left-[20px] z-10 w-[140px] sm:w-[176px] rounded-[12px] sm:rounded-[14px] border p-3",
           isLight
@@ -629,12 +662,9 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
       {/* Animated cursor arrow — clicks fields, drags thumbnail from 2nd card, then Launch */}
       <div
+        ref={cursorRef}
         aria-hidden
-        className={cn(
-          "pointer-events-none absolute z-50 transition-[left,top,opacity,transform] duration-700 ease-in-out",
-          cursorVisible ? "opacity-100" : "opacity-0",
-          cursorClicking && "scale-90",
-        )}
+        className="pointer-events-none absolute z-50 opacity-0"
         style={{
           left: cursorPos.x,
           top: cursorPos.y,
@@ -806,7 +836,7 @@ function RollingDigitChar({
   const numericValue = parseInt(char, 10);
 
   return (
-    <span className="relative inline-block h-[64px] sm:h-[76px] md:h-[92px] lg:h-[112px] overflow-hidden align-top select-none">
+    <span className="relative inline-block h-[48px] sm:h-[64px] min-[800px]:h-[72px] lg:h-[92px] xl:h-[112px] overflow-hidden align-top select-none">
       <span
         className="flex flex-col transition-transform duration-450 ease-[cubic-bezier(0.16,1,0.3,1)]"
         style={{
@@ -818,7 +848,7 @@ function RollingDigitChar({
           <span
             key={val}
             className={cn(
-              "flex h-[64px] sm:h-[76px] md:h-[92px] lg:h-[112px] shrink-0 items-center justify-center bg-clip-text text-transparent",
+              "flex h-[48px] sm:h-[64px] min-[800px]:h-[72px] lg:h-[92px] xl:h-[112px] shrink-0 items-center justify-center bg-clip-text text-transparent",
               textGradient,
             )}
           >
@@ -874,8 +904,8 @@ function HeroStatBlock({
   const currentStr = numbers[step] || numbers[0];
 
   return (
-    <div className="flex flex-col items-center text-center" ref={containerRef}>
-      <div className="flex items-center justify-center font-extrabold leading-none tracking-[-0.055em] text-[64px] sm:text-[76px] md:text-[92px] lg:text-[112px]">
+    <div className="flex flex-col items-center text-center shrink-0" ref={containerRef}>
+      <div className="flex items-center justify-center font-extrabold leading-none tracking-[-0.055em] text-[48px] sm:text-[64px] min-[800px]:text-[72px] lg:text-[92px] xl:text-[112px]">
         {currentStr.split("").map((ch, i) => (
           <RollingDigitChar
             key={`${i}-${currentStr.length}`}
@@ -888,7 +918,7 @@ function HeroStatBlock({
 
       <p
         className={cn(
-          "mt-5 text-[22px] font-semibold tracking-[-0.02em] sm:text-[25px] md:text-[29px]",
+          "mt-3 sm:mt-5 text-[18px] font-semibold tracking-[-0.02em] sm:text-[22px] min-[800px]:text-[24px] lg:text-[29px]",
           isLight ? "text-black/45" : "text-[#969696]",
         )}
       >
@@ -1160,12 +1190,12 @@ export default function HeroContent() {
 
         <div className="relative z-20 mx-auto max-w-[1200px] px-6 lg:px-8">
           {/* Trusted */}
-          <div className="flex justify-center pt-10 sm:pt-14">
-            <div className="flex items-center gap-2.5">
+          <div className="flex justify-center pt-6 sm:pt-10 md:pt-14">
+            <div className="flex items-center gap-1.5 sm:gap-2.5 max-w-full px-2">
               {/* Avatar 1 */}
               <div
                 className={cn(
-                  "relative z-10 h-10 w-10 overflow-hidden rounded-full border-2 bg-white",
+                  "relative z-10 h-7 w-7 sm:h-9 sm:w-9 md:h-10 md:w-10 shrink-0 overflow-hidden rounded-full border-2 bg-white",
                   isLight ? "border-white" : "border-[#030303]",
                 )}
               >
@@ -1174,14 +1204,14 @@ export default function HeroContent() {
                   alt=""
                   fill
                   className="object-cover"
-                  sizes="32px"
+                  sizes="(max-width: 640px) 28px, 40px"
                 />
               </div>
 
               {/* Avatar 2 */}
               <div
                 className={cn(
-                  "relative -ml-4 h-10 w-10 overflow-hidden rounded-full border-2 bg-yellow-300",
+                  "relative -ml-3 sm:-ml-4 md:-ml-5 h-7 w-7 sm:h-9 sm:w-9 md:h-10 md:w-10 shrink-0 overflow-hidden rounded-full border-2 bg-yellow-300",
                   isLight ? "border-white" : "border-[#030303]",
                 )}
               >
@@ -1190,13 +1220,13 @@ export default function HeroContent() {
                   alt=""
                   fill
                   className="object-cover"
-                  sizes="32px"
+                  sizes="(max-width: 640px) 28px, 40px"
                 />
               </div>
 
               <span
                 className={cn(
-                  "ml-1 text-[17px]",
+                  "ml-1 text-[13px] sm:text-[15px] md:text-[17px] font-medium leading-tight truncate sm:whitespace-nowrap",
                   isLight ? "text-black/55" : "text-[#C4C4C4]",
                 )}
               >
@@ -1206,28 +1236,36 @@ export default function HeroContent() {
           </div>
 
           {/* Heading */}
-          <div className="mx-auto mt-7 max-w-[1000px] text-center">
+          <div className="mx-auto mt-5 sm:mt-7 max-w-[1000px] text-center px-2">
             <h1
               className={cn(
-                "text-[42px] font-semibold leading-[1.05] tracking-[-0.05em] sm:text-[50px] md:text-[52px] font-['Inter'] font-bold leading-[110%] tracking-[-4%] text-center",
+                "text-[24px] xs:text-[28px] sm:text-[40px] md:text-[52px] lg:text-[56px] font-['Inter'] font-bold leading-[120%] sm:leading-[115%] tracking-[-3%] sm:tracking-[-4%] text-center",
                 isLight ? "text-black/75" : "text-white",
               )}
             >
               <span className={isLight ? "text-black/60" : "text-[#757575]"}>
                 Creators earn on{" "}
               </span>
-              <span className="inline-flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 sm:gap-2">
                 {/* Performance icon — opt out of text fill so the badge stays visible */}
                 <span
                   className="
                     inline-flex
-                    h-[60.64px]
-                    w-[63.11px]
+                    h-[34px]
+                    w-[36px]
+                    xs:h-[40px]
+                    xs:w-[42px]
+                    sm:h-[50px]
+                    sm:w-[52px]
+                    md:h-[60.64px]
+                    md:w-[63.11px]
                     shrink-0
                     rotate-[8.81deg]
                     items-center
                     justify-center
-                    rounded-[16.09px]
+                    rounded-[10px]
+                    sm:rounded-[14px]
+                    md:rounded-[16.09px]
                     bg-[linear-gradient(180deg,#FF8800_0%,#FFA53E_50%,#FFC27C_100%)]
                     shadow-[0px_3.71px_4.95px_0px_#FFFFFF40_inset,3.71px_-8.66px_4.95px_0px_#FFD2D20D_inset,6.19px_-11.14px_13.36px_0px_#FFF4F440_inset,13.61px_13.61px_49.5px_0px_#FFAD0038,3.71px_4.95px_29.7px_0px_#FFAD0026,1.24px_3.71px_8.17px_0px_#FFAD001A]
                     [background-clip:padding-box]
@@ -1239,14 +1277,14 @@ export default function HeroContent() {
                     alt=""
                     width={32}
                     height={32}
-                    className="h-[32px] w-[32px] object-contain"
+                    className="h-[18px] w-[18px] xs:h-[22px] xs:w-[22px] sm:h-[26px] sm:w-[26px] md:h-[32px] md:w-[32px] object-contain"
                   />
                 </span>
                 <span className={isLight ? "text-black" : "text-white"}>
                   performance
                 </span>
               </span>{" "}
-              <br />
+              <br className="hidden xs:inline" />
               <span className={isLight ? "text-black/60" : "text-[#757575]"}>
                 Brands grow on{" "}
               </span>
@@ -1258,7 +1296,7 @@ export default function HeroContent() {
             {/* Description */}
             <p
               className={cn(
-                "mx-auto mt-7 max-w-[600px] font-['Inter'] text-[17px] font-medium leading-[150%] tracking-[-0.51px] text-center",
+                "mx-auto mt-4 sm:mt-6 md:mt-7 max-w-[600px] font-['Inter'] text-[13px] xs:text-[14px] sm:text-[16px] md:text-[17px] font-medium leading-[150%] tracking-[-0.51px] text-center px-3 sm:px-2",
                 isLight ? "text-black/50" : "text-[#8E8E8E]",
               )}
             >
@@ -1270,11 +1308,11 @@ export default function HeroContent() {
               CTA BUTTONS
           ====================================================== */}
 
-            <div className="mt-6 flex flex-col justify-center gap-3 sm:mt-8 sm:flex-row">
+            <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:mt-8 sm:flex-row px-4">
               <Link
                 href="/brands"
                 className={cn(
-                  "group flex h-[51px] min-w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
+                  "group flex h-[51px] w-full max-w-[300px] sm:w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
                   isLight
                     ? "bg-[#7c3aed] text-white shadow-[0_12px_30px_rgba(124,58,237,0.28)] hover:bg-[#6d28d9]"
                     : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-white/30 hover:bg-white/[0.08]",
@@ -1295,7 +1333,7 @@ export default function HeroContent() {
               <Link
                 href="/creators"
                 className={cn(
-                  "group flex h-[51px] min-w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
+                  "group flex h-[51px] w-full max-w-[300px] sm:w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
                   isLight
                     ? "border border-black/10 bg-white text-black shadow-[0_8px_24px_rgba(15,15,30,0.06)] hover:bg-white hover:border-black/20"
                     : "bg-[#DEDEDE] text-[#26133d] shadow-[0_10px_35px_rgba(200,170,230,0.10)] hover:bg-white",
@@ -1320,279 +1358,543 @@ export default function HeroContent() {
       ========================================================= */}
         <section className="relative mx-auto w-full max-w-[1400px] px-4 pb-8 mt-6 sm:px-6 sm:pb-12 mt-14 sm:mt-18 lg:mt-24 lg:h-[550px] lg:px-0 lg:pb-0">
           {/* =====================================================
-            LEFT CAMPAIGN CARD
+            MOBILE / TABLET 3 STEPS SHOWCASE (lg:hidden)
         ===================================================== */}
-          <div
-            className={cn(
-              "absolute left-[2%] top-[35px] z-20 hidden w-[200px] rotate-[7deg] rounded-[23px] p-[15px] xl:left-[4%] xl:w-[220px] lg:block",
-              isLight
-                ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
-                : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
-            )}
-          >
-            {/* Card header */}
-            <div className="flex items-center gap-2">
+          <div className="relative z-20 flex flex-col items-center gap-10 md:grid md:grid-cols-3 md:gap-6 md:items-start lg:hidden">
+            {/* STEP 1 */}
+            <div className="flex flex-col items-center text-center">
               <div
                 className={cn(
-                  "flex h-[29px] w-[29px] items-center justify-center rounded-[8px]",
-                  isLight ? "bg-[#efe8f8]" : "bg-[#40344c]",
+                  "mb-3 text-[22px] sm:text-[24px] leading-tight rotate-[-3deg]",
+                  caveat.className,
+                  isLight ? "text-black/70" : "text-white/85",
                 )}
               >
-                <Users
-                  className={cn(
-                    "h-[15px] w-[15px]",
-                    isLight ? "text-[#7c3aed]" : "text-white/80",
-                  )}
-                />
+                <div>Brands launch campaigns</div>
+                <div className="mt-1 flex justify-center">
+                  <Image
+                    src="/images/Vector 945.png"
+                    alt=""
+                    width={40}
+                    height={60}
+                    className={cn(
+                      "h-[50px] w-auto object-contain",
+                      isLight && "invert",
+                    )}
+                  />
+                </div>
               </div>
-
-              <span
-                className={cn(
-                  "text-[13px]",
-                  isLight ? "text-black/55" : "text-white/75",
-                )}
-              >
-                Brand
-              </span>
-            </div>
-
-            {/* Title */}
-            <div
-              className={cn(
-                "mt-3 text-[15px] font-medium",
-                isLight ? "text-black" : "text-white",
-              )}
-            >
-              Podcasts Clip Challenge
-            </div>
-
-            {/* Tags */}
-            <div className="mt-3 flex flex-wrap gap-[7px]">
-              {["Clipping", "Paid","Podcast"].map((tag) => (
-                <span
-                  key={tag}
-                  className={cn(
-                    "rounded-full px-[9px] py-[5px] text-[12px]",
-                    isLight
-                      ? "bg-[#f3eaff] text-[#7c3aed]"
-                      : "bg-[#2B1F3B] text-[#BB00FF]",
-                  )}
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-
-            {/* Bottom */}
-            <div className="mt-3 flex items-end justify-between">
-              <img
-                src="/images/e9ecc19156964f29ca20b5f8080671042162b486.png"
-                alt="Creator"
-                className="h-[72px] w-[72px] rounded-md object-cover"
-              />
 
               <div
                 className={cn(
-                  "flex h-[35px] w-[35px] items-center justify-center rounded-full text-[18px]",
+                  "w-[220px] sm:w-[240px] rotate-[4deg] rounded-[23px] p-[15px] transition-transform hover:rotate-0",
                   isLight
-                    ? "bg-[#f3eaff] text-[#7c3aed]"
-                    : "bg-[#351149] text-[#c239f5]",
+                    ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
+                    : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
                 )}
               >
-                →
-              </div>
-            </div>
-          </div>
-
-          {/* =====================================================
-            LEFT TEXT
-        ===================================================== */}
-          <div
-            className={cn(
-              "absolute left-[6%] top-[260px] z-20 hidden rotate-[-4deg] text-[26px] xl:left-[9%] lg:block",
-              caveat.className,
-              isLight ? "text-black/70" : "text-white/85",
-            )}
-          >
-            <div className="relative ml-[70px] mt-0.5">
-              <Image
-                src="/images/Vector 945.png"
-                alt=""
-                width={46}
-                height={79}
-                className={cn(
-                  "h-[78px] w-auto object-contain",
-                  isLight && "invert",
-                )}
-              />
-            </div>
-            <div>Brands launch campaigns</div>
-          </div>
-
-          {/* =====================================================
-            CENTER TEXT
-        ===================================================== */}
-          <div
-            className={cn(
-              "relative z-20 mx-auto mb-8 text-center text-[20px] leading-[24px] sm:text-[26px] sm:leading-[28px] lg:absolute lg:left-1/2 lg:top-[0px] lg:mb-0 lg:-translate-x-1/2 lg:whitespace-nowrap lg:text-[24px] lg:leading-[28px]",
-              caveat.className,
-              isLight ? "text-black/70" : "text-white/85",
-            )}
-          >
-            Creator create content
-            <br />
-            that performs
-          </div>
-
-          {/* =====================================================
-            CENTRAL CREATOR CARD
-        ===================================================== */}
-          <div
-            className={cn(
-              "relative z-20 mx-auto h-[380px] w-[min(100%,280px)] overflow-hidden rounded-[24px] sm:h-[420px] sm:w-[300px] lg:absolute lg:left-1/2 lg:top-[75px] lg:mx-0 lg:h-[455px] lg:w-[335px] lg:-translate-x-1/2",
-              isLight
-                ? "border border-black/[0.06] bg-[#FFFFFF] shadow-[inset_0px_5px_4px_2px_#575757CC]"
-                : "border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)]",
-            )}
-          >
-            <Image
-              src="/images/39e512460e9052a19bf4ea8b3ca0c6cdd8086315.png"
-              alt="Creators"
-              fill
-              className="object-cover"
-              sizes="(max-width: 1024px) 300px, 335px"
-              priority
-            />
-            <span className="absolute bottom-3 left-3 z-10 text-[11px] text-white/70">
-              creator
-            </span>
-          </div>
-
-          {/* =====================================================
-            RIGHT ANALYTICS CARD
-        ===================================================== */}
-          <div
-            className={cn(
-              "absolute right-[2%] top-[130px] z-20 hidden w-[240px] rotate-[-15deg] rounded-[22px] p-4 xl:right-[4%] xl:w-[280px] lg:block",
-              isLight
-                ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_6.02px_0px_#FFFFFF40]"
-                : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
-            )}
-          >
-            {/* Tabs */}
-            <div
-              className={cn(
-                "flex flex-wrap items-center gap-1 text-[11px]",
-                isLight ? "text-black/35" : "text-white/35",
-              )}
-            >
-              <span
-                className={cn(
-                  "rounded-[9px] px-3 py-[9px]",
-                  isLight
-                    ? "bg-black/[0.06] text-black/80"
-                    : "bg-white/[0.08] text-white/80",
-                )}
-              >
-                Overview
-              </span>
-
-              <span className="px-2">Submissions</span>
-
-              <span className="px-2">Analytics</span>
-            </div>
-
-            {/* Stats */}
-            <div className="mt-7 flex items-end justify-between gap-3">
-              <div>
-                <div className="flex items-baseline gap-1.5">
-                  <span
+                {/* Card header */}
+                <div className="flex items-center gap-2">
+                  <div
                     className={cn(
-                      "text-[25px] font-medium tracking-[-1px]",
-                      isLight ? "text-black" : "text-white",
+                      "flex h-[29px] w-[29px] items-center justify-center rounded-[8px]",
+                      isLight ? "bg-[#efe8f8]" : "bg-[#40344c]",
                     )}
                   >
-                    46.2M
-                  </span>
+                    <Users
+                      className={cn(
+                        "h-[15px] w-[15px]",
+                        isLight ? "text-[#7c3aed]" : "text-white/80",
+                      )}
+                    />
+                  </div>
+
                   <span
                     className={cn(
-                      "text-[10px]",
-                      isLight ? "text-black/45" : "text-white/50",
+                      "text-[13px]",
+                      isLight ? "text-black/55" : "text-white/75",
                     )}
                   >
-                    Views
+                    Brand
                   </span>
                 </div>
 
+                {/* Title */}
                 <div
                   className={cn(
-                    "mt-3 max-w-[120px] text-[12px] leading-[15px]",
-                    isLight ? "text-black/40" : "text-white/35",
+                    "mt-3 text-left text-[14px] sm:text-[15px] font-medium",
+                    isLight ? "text-black" : "text-white",
                   )}
                 >
-                  Your top 10% creators are getting the most views
+                  Podcasts Clip Challenge
+                </div>
+
+                {/* Tags */}
+                <div className="mt-3 flex flex-wrap gap-[7px]">
+                  {["Clipping", "Paid", "Podcast"].map((tag) => (
+                    <span
+                      key={tag}
+                      className={cn(
+                        "rounded-full px-[9px] py-[5px] text-[11px] sm:text-[12px]",
+                        isLight
+                          ? "bg-[#f3eaff] text-[#7c3aed]"
+                          : "bg-[#2B1F3B] text-[#BB00FF]",
+                      )}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Bottom */}
+                <div className="mt-3 flex items-end justify-between">
+                  <img
+                    src="/images/e9ecc19156964f29ca20b5f8080671042162b486.png"
+                    alt="Creator"
+                    className="h-[64px] w-[64px] rounded-md object-cover sm:h-[72px] sm:w-[72px]"
+                  />
+
+                  <div
+                    className={cn(
+                      "flex h-[35px] w-[35px] items-center justify-center rounded-full text-[18px]",
+                      isLight
+                        ? "bg-[#f3eaff] text-[#7c3aed]"
+                        : "bg-[#351149] text-[#c239f5]",
+                    )}
+                  >
+                    →
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* STEP 2 */}
+            <div className="flex flex-col items-center text-center">
+              <div
+                className={cn(
+                  "mb-3 text-[22px] sm:text-[24px] leading-tight",
+                  caveat.className,
+                  isLight ? "text-black/70" : "text-white/85",
+                )}
+              >
+                Creator create content
+                <br />
+                that performs
+              </div>
+
+              <div
+                className={cn(
+                  "relative h-[360px] w-[260px] sm:h-[400px] sm:w-[280px] overflow-hidden rounded-[24px]",
+                  isLight
+                    ? "border border-black/[0.06] bg-[#FFFFFF] shadow-[inset_0px_5px_4px_2px_#575757CC]"
+                    : "border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)]",
+                )}
+              >
+                <Image
+                  src="/images/39e512460e9052a19bf4ea8b3ca0c6cdd8086315.png"
+                  alt="Creators"
+                  fill
+                  className="object-cover object-[center_30%]"
+                  sizes="280px"
+                  priority
+                />
+                <span className="absolute bottom-3 left-3 z-10 text-[11px] text-white/70">
+                  creator
+                </span>
+              </div>
+            </div>
+
+            {/* STEP 3 */}
+            <div className="flex flex-col items-center text-center">
+              <div
+                className={cn(
+                  "mb-3 text-[22px] sm:text-[24px] leading-tight rotate-[2deg]",
+                  caveat.className,
+                  isLight ? "text-black/70" : "text-white/85",
+                )}
+              >
+                Performance drives
+                <br />
+                real results
+                <div className="mt-1 flex justify-center">
+                  <Image
+                    src="/images/Vector 946.png"
+                    alt=""
+                    width={40}
+                    height={60}
+                    className={cn(
+                      "h-[50px] w-auto object-contain",
+                      isLight && "invert",
+                    )}
+                  />
                 </div>
               </div>
 
-              {/* Chart */}
-              <div className="flex items-end gap-[8px] pb-0.5">
-                {[
-                  { label: "April", height: "h-[42px]", active: false },
-                  { label: "May", height: "h-[28px]", active: false },
-                  { label: "June", height: "h-[36px]", active: false },
-                  { label: "July", height: "h-[54px]", active: true },
-                ].map((bar) => (
-                  <div
-                    key={bar.label}
-                    className="flex flex-col items-center gap-1.5"
+              <div
+                className={cn(
+                  "w-[240px] sm:w-[260px] rotate-[-4deg] rounded-[22px] p-4 transition-transform hover:rotate-0 text-left",
+                  isLight
+                    ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_6.02px_0px_#FFFFFF40]"
+                    : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
+                )}
+              >
+                {/* Tabs */}
+                <div
+                  className={cn(
+                    "flex flex-wrap items-center gap-1 text-[11px]",
+                    isLight ? "text-black/35" : "text-white/35",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "rounded-[9px] px-3 py-[7px]",
+                      isLight
+                        ? "bg-black/[0.06] text-black/80"
+                        : "bg-white/[0.08] text-white/80",
+                    )}
                   >
+                    Overview
+                  </span>
+                  <span className="px-1.5">Submissions</span>
+                  <span className="px-1.5">Analytics</span>
+                </div>
+
+                {/* Stats */}
+                <div className="mt-5 flex items-end justify-between gap-2">
+                  <div>
+                    <div className="flex items-baseline gap-1">
+                      <span
+                        className={cn(
+                          "text-[22px] sm:text-[25px] font-medium tracking-[-1px]",
+                          isLight ? "text-black" : "text-white",
+                        )}
+                      >
+                        46.2M
+                      </span>
+                      <span
+                        className={cn(
+                          "text-[10px]",
+                          isLight ? "text-black/45" : "text-white/50",
+                        )}
+                      >
+                        Views
+                      </span>
+                    </div>
+
                     <div
-                      className={`w-[14px] rounded-t-[4px] ${bar.height} ${
-                        bar.active
-                          ? "bg-[#3B82F6]"
-                          : isLight
-                            ? "bg-gradient-to-b from-[#d4d4d4] to-[#b8b8b8]"
-                            : "bg-gradient-to-b from-[#5a5a5a] to-[#2e2e2e]"
-                      }`}
-                    />
-                    <span
                       className={cn(
-                        "origin-top text-[10px]",
+                        "mt-2 max-w-[110px] text-[11px] leading-[14px]",
                         isLight ? "text-black/40" : "text-white/35",
                       )}
                     >
-                      {bar.label}
-                    </span>
+                      Your top 10% creators are getting the most views
+                    </div>
                   </div>
-                ))}
+
+                  {/* Chart */}
+                  <div className="flex items-end gap-[6px] pb-0.5">
+                    {[
+                      { label: "April", height: "h-[36px]", active: false },
+                      { label: "May", height: "h-[24px]", active: false },
+                      { label: "June", height: "h-[30px]", active: false },
+                      { label: "July", height: "h-[48px]", active: true },
+                    ].map((bar) => (
+                      <div
+                        key={bar.label}
+                        className="flex flex-col items-center gap-1"
+                      >
+                        <div
+                          className={`w-[12px] rounded-t-[3px] ${bar.height} ${
+                            bar.active
+                              ? "bg-[#3B82F6]"
+                              : isLight
+                                ? "bg-gradient-to-b from-[#d4d4d4] to-[#b8b8b8]"
+                                : "bg-gradient-to-b from-[#5a5a5a] to-[#2e2e2e]"
+                          }`}
+                        />
+                        <span
+                          className={cn(
+                            "origin-top text-[9px]",
+                            isLight ? "text-black/40" : "text-white/35",
+                          )}
+                        >
+                          {bar.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
           {/* =====================================================
-            RIGHT TEXT
+            DESKTOP 3 STEPS ORBIT SHOWCASE (hidden on small screens, visible lg+)
         ===================================================== */}
-          <div
-            className={cn(
-              "absolute right-[6%] top-[10px] z-20 hidden rotate-[3deg] text-center text-[26px] leading-[28px] xl:right-[10%] lg:block",
-              caveat.className,
-              isLight ? "text-black/70" : "text-white/85",
-            )}
-          >
-            Performance drives
-            <br />
-            real results
-            <div className="mt-0.5 flex justify-center">
-              <Image
-                src="/images/Vector 946.png"
-                alt=""
-                width={42}
-                height={81}
+          <div className="hidden lg:block relative h-[550px] w-full">
+            {/* LEFT CAMPAIGN CARD */}
+            <div
+              className={cn(
+                "absolute left-[2%] top-[35px] z-20 w-[200px] rotate-[7deg] rounded-[23px] p-[15px] xl:left-[4%] xl:w-[220px]",
+                isLight
+                  ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
+                  : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
+              )}
+            >
+              {/* Card header */}
+              <div className="flex items-center gap-2">
+                <div
+                  className={cn(
+                    "flex h-[29px] w-[29px] items-center justify-center rounded-[8px]",
+                    isLight ? "bg-[#efe8f8]" : "bg-[#40344c]",
+                  )}
+                >
+                  <Users
+                    className={cn(
+                      "h-[15px] w-[15px]",
+                      isLight ? "text-[#7c3aed]" : "text-white/80",
+                    )}
+                  />
+                </div>
+
+                <span
+                  className={cn(
+                    "text-[13px]",
+                    isLight ? "text-black/55" : "text-white/75",
+                  )}
+                >
+                  Brand
+                </span>
+              </div>
+
+              {/* Title */}
+              <div
                 className={cn(
-                  "h-[78px] w-auto object-contain",
-                  isLight && "invert",
+                  "mt-3 text-[15px] font-medium",
+                  isLight ? "text-black" : "text-white",
                 )}
+              >
+                Podcasts Clip Challenge
+              </div>
+
+              {/* Tags */}
+              <div className="mt-3 flex flex-wrap gap-[7px]">
+                {["Clipping", "Paid", "Podcast"].map((tag) => (
+                  <span
+                    key={tag}
+                    className={cn(
+                      "rounded-full px-[9px] py-[5px] text-[12px]",
+                      isLight
+                        ? "bg-[#f3eaff] text-[#7c3aed]"
+                        : "bg-[#2B1F3B] text-[#BB00FF]",
+                    )}
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+
+              {/* Bottom */}
+              <div className="mt-3 flex items-end justify-between">
+                <img
+                  src="/images/e9ecc19156964f29ca20b5f8080671042162b486.png"
+                  alt="Creator"
+                  className="h-[72px] w-[72px] rounded-md object-cover"
+                />
+
+                <div
+                  className={cn(
+                    "flex h-[35px] w-[35px] items-center justify-center rounded-full text-[18px]",
+                    isLight
+                      ? "bg-[#f3eaff] text-[#7c3aed]"
+                      : "bg-[#351149] text-[#c239f5]",
+                  )}
+                >
+                  →
+                </div>
+              </div>
+            </div>
+
+            {/* LEFT TEXT */}
+            <div
+              className={cn(
+                "absolute left-[6%] top-[260px] z-20 rotate-[-4deg] text-[26px] xl:left-[9%]",
+                caveat.className,
+                isLight ? "text-black/70" : "text-white/85",
+              )}
+            >
+              <div className="relative ml-[70px] mt-0.5">
+                <Image
+                  src="/images/Vector 945.png"
+                  alt=""
+                  width={46}
+                  height={79}
+                  className={cn(
+                    "h-[78px] w-auto object-contain",
+                    isLight && "invert",
+                  )}
+                />
+              </div>
+              <div>Brands launch campaigns</div>
+            </div>
+
+            {/* CENTER TEXT */}
+            <div
+              className={cn(
+                "absolute left-1/2 top-[0px] z-20 -translate-x-1/2 whitespace-nowrap text-[24px] leading-[28px]",
+                caveat.className,
+                isLight ? "text-black/70" : "text-white/85",
+              )}
+            >
+              Creator create content
+              <br />
+              that performs
+            </div>
+
+            {/* CENTRAL CREATOR CARD */}
+            <div
+              className={cn(
+                "absolute left-1/2 top-[75px] z-20 h-[455px] w-[335px] -translate-x-1/2 overflow-hidden rounded-[24px]",
+                isLight
+                  ? "border border-black/[0.06] bg-[#FFFFFF] shadow-[inset_0px_5px_4px_2px_#575757CC]"
+                  : "border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)]",
+              )}
+            >
+              <Image
+                src="/images/39e512460e9052a19bf4ea8b3ca0c6cdd8086315.png"
+                alt="Creators"
+                fill
+                className="object-cover object-[center_30%]"
+                sizes="335px"
+                priority
               />
+              <span className="absolute bottom-3 left-3 z-10 text-[11px] text-white/70">
+                creator
+              </span>
+            </div>
+
+            {/* RIGHT ANALYTICS CARD */}
+            <div
+              className={cn(
+                "absolute right-[2%] top-[130px] z-20 w-[240px] rotate-[-15deg] rounded-[22px] p-4 xl:right-[4%] xl:w-[280px]",
+                isLight
+                  ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_6.02px_0px_#FFFFFF40]"
+                  : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
+              )}
+            >
+              {/* Tabs */}
+              <div
+                className={cn(
+                  "flex flex-wrap items-center gap-1 text-[11px]",
+                  isLight ? "text-black/35" : "text-white/35",
+                )}
+              >
+                <span
+                  className={cn(
+                    "rounded-[9px] px-3 py-[9px]",
+                    isLight
+                      ? "bg-black/[0.06] text-black/80"
+                      : "bg-white/[0.08] text-white/80",
+                  )}
+                >
+                  Overview
+                </span>
+
+                <span className="px-2">Submissions</span>
+
+                <span className="px-2">Analytics</span>
+              </div>
+
+              {/* Stats */}
+              <div className="mt-7 flex items-end justify-between gap-3">
+                <div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span
+                      className={cn(
+                        "text-[25px] font-medium tracking-[-1px]",
+                        isLight ? "text-black" : "text-white",
+                      )}
+                    >
+                      46.2M
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[10px]",
+                        isLight ? "text-black/45" : "text-white/50",
+                      )}
+                    >
+                      Views
+                    </span>
+                  </div>
+
+                  <div
+                    className={cn(
+                      "mt-3 max-w-[120px] text-[12px] leading-[15px]",
+                      isLight ? "text-black/40" : "text-white/35",
+                    )}
+                  >
+                    Your top 10% creators are getting the most views
+                  </div>
+                </div>
+
+                {/* Chart */}
+                <div className="flex items-end gap-[8px] pb-0.5">
+                  {[
+                    { label: "April", height: "h-[42px]", active: false },
+                    { label: "May", height: "h-[28px]", active: false },
+                    { label: "June", height: "h-[36px]", active: false },
+                    { label: "July", height: "h-[54px]", active: true },
+                  ].map((bar) => (
+                    <div
+                      key={bar.label}
+                      className="flex flex-col items-center gap-1.5"
+                    >
+                      <div
+                        className={`w-[14px] rounded-t-[4px] ${bar.height} ${
+                          bar.active
+                            ? "bg-[#3B82F6]"
+                            : isLight
+                              ? "bg-gradient-to-b from-[#d4d4d4] to-[#b8b8b8]"
+                              : "bg-gradient-to-b from-[#5a5a5a] to-[#2e2e2e]"
+                        }`}
+                      />
+                      <span
+                        className={cn(
+                          "origin-top text-[10px]",
+                          isLight ? "text-black/40" : "text-white/35",
+                        )}
+                      >
+                        {bar.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* RIGHT TEXT */}
+            <div
+              className={cn(
+                "absolute right-[6%] top-[10px] z-20 rotate-[3deg] text-center text-[26px] leading-[28px] xl:right-[10%]",
+                caveat.className,
+                isLight ? "text-black/70" : "text-white/85",
+              )}
+            >
+              Performance drives
+              <br />
+              real results
+              <div className="mt-0.5 flex justify-center">
+                <Image
+                  src="/images/Vector 946.png"
+                  alt=""
+                  width={42}
+                  height={81}
+                  className={cn(
+                    "h-[78px] w-auto object-contain",
+                    isLight && "invert",
+                  )}
+                />
+              </div>
             </div>
           </div>
         </section>
@@ -1677,13 +1979,13 @@ export default function HeroContent() {
           {/* =====================================================
             CARDS
         ===================================================== */}
-          <div className="mt-10 grid grid-cols-1 gap-5 sm:mt-14 md:mt-[72px] lg:grid-cols-2">
+          <div className="mt-10 grid grid-cols-1 gap-5 sm:mt-14 md:mt-[72px] min-[800px]:grid-cols-2">
             {/* =================================================
               BRANDS CARD
           ================================================= */}
             <div
               className={cn(
-                "relative min-h-[510px] overflow-hidden rounded-[20px] px-5 pt-7 sm:min-h-[555px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[580px] md:min-h-0",
+                "relative min-h-[510px] overflow-hidden rounded-[20px] px-3.5 pt-6 sm:min-h-[555px] sm:rounded-[25px] sm:px-9 sm:pt-9 min-[800px]:h-[580px] min-[800px]:min-h-0 md:h-[580px]",
                 isLight
                   ? "border border-black/[0.04] bg-[#f5f5f7] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
                   : "border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] shadow-[inset_0_1px_0_rgba(255,255,255,.025)]",
@@ -1727,24 +2029,24 @@ export default function HeroContent() {
               {/* Title */}
               <h2
                 className={cn(
-                  "mt-5 max-w-[440px] text-[20px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]",
+                  "mt-5 max-w-[440px] text-[19px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]",
                   isLight ? "text-black" : "text-white",
                 )}
               >
-                Pay for actual performance, not
+                Pay for actual performance, not{" "}
                 <br className="hidden sm:block" /> followers
               </h2>
 
               {/* Description */}
               <p
                 className={cn(
-                  "mt-3 max-w-[500px] text-[14px] leading-[21px] sm:text-[16px] sm:leading-[23px]",
+                  "mt-3 max-w-[500px] text-[13.5px] leading-[20px] sm:text-[16px] sm:leading-[23px]",
                   isLight ? "text-black/50" : "text-white/45",
                 )}
               >
-                Set your budget and brief. Your campaign runs across a network
+                Set your budget and brief. Your campaign runs across a network{" "}
                 <br className="hidden xl:block" />
-                of 15,700+ creators, and you pay for verified content and
+                of 15,700+ creators, and you pay for verified content and{" "}
                 <br className="hidden xl:block" />
                 performance.
               </p>
@@ -1757,7 +2059,7 @@ export default function HeroContent() {
           ================================================= */}
             <div
               className={cn(
-                "relative min-h-[510px] overflow-hidden rounded-[20px] px-5 pt-7 sm:min-h-[555px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[580px] md:min-h-0",
+                "relative min-h-[510px] overflow-hidden rounded-[20px] px-3.5 pt-6 sm:min-h-[555px] sm:rounded-[25px] sm:px-9 sm:pt-9 min-[800px]:h-[580px] min-[800px]:min-h-0 md:h-[580px]",
                 isLight
                   ? "border border-black/[0.04] bg-[#f5f5f7] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
                   : "border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] shadow-[inset_0_1px_0_rgba(255,255,255,.025)]",
@@ -1786,7 +2088,6 @@ export default function HeroContent() {
                 />
               </div>
 
-
               {/* Badge */}
               <div
                 className={cn(
@@ -1802,22 +2103,22 @@ export default function HeroContent() {
               {/* Title */}
               <h2
                 className={cn(
-                  "mt-5 max-w-[450px] text-[20px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]",
+                  "mt-5 max-w-[450px] text-[19px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]",
                   isLight ? "text-black" : "text-white",
                 )}
               >
-                Get paid for performance, not
+                Get paid for performance, not{" "}
                 <br className="hidden sm:block" /> followers.
               </h2>
 
               {/* Description */}
               <p
                 className={cn(
-                  "mt-3 max-w-[510px] text-[14px] leading-[21px] sm:text-[16px] sm:leading-[23px]",
+                  "mt-3 max-w-[510px] text-[13.5px] leading-[20px] sm:text-[16px] sm:leading-[23px]",
                   isLight ? "text-black/50" : "text-white/45",
                 )}
               >
-                Pick brand campaigns you want. You get paid based on how well
+                Pick brand campaigns you want. You get paid based on how well{" "}
                 <br className="hidden xl:block" />
                 your posts do even if you have 0 followers
               </p>
@@ -1827,14 +2128,14 @@ export default function HeroContent() {
             ================================================= */}
               <div
                 className={cn(
-                  "absolute left-3 top-[222px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:left-[25px] sm:top-[256px] sm:w-[225px] sm:px-3 rotate-[-3.78deg]",
+                  "absolute left-1.5 top-[215px] z-30 flex w-[calc(50%-8px)] max-w-[225px] items-center justify-between rounded-[30px] border px-1.5 py-1.5 sm:left-[25px] sm:top-[275px] sm:w-[225px] sm:px-3 sm:py-2 min-[800px]:left-2 min-[800px]:top-[275px] min-[800px]:w-[calc(50%-10px)] min-[800px]:max-w-[172px] min-[800px]:px-1.5 min-[800px]:py-1.5 lg:left-[25px] lg:top-[275px] lg:w-[220px] lg:max-w-[230px] lg:px-3.5 rotate-[-3.78deg]",
                   isLight
                     ? "border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(20,16,40,0.12)]"
                     : "border-white/[0.08] bg-[#191919] shadow-[0_12px_35px_rgba(0,0,0,.45)]",
                 )}
               >
-                <div className="flex min-w-0 items-center gap-2">
-                  <div className="relative h-[31px] w-[31px] shrink-0 overflow-hidden rounded-full">
+                <div className="flex min-w-0 items-center gap-1 sm:gap-2 min-[800px]:gap-1 lg:gap-1.5 xl:gap-2">
+                  <div className="relative h-[25px] w-[25px] shrink-0 overflow-hidden rounded-full sm:h-[31px] sm:w-[31px] min-[800px]:h-[22px] min-[800px]:w-[22px] lg:h-[27px] lg:w-[27px] xl:h-[31px] xl:w-[31px]">
                     <Image
                       src="/images/Ellipse 2355 (1).avif"
                       alt=""
@@ -1847,7 +2148,7 @@ export default function HeroContent() {
                   <div className="min-w-0">
                     <div
                       className={cn(
-                        "truncate text-[10px] font-medium",
+                        "truncate text-[9px] font-medium sm:text-[10px] min-[800px]:text-[8px] lg:text-[9.5px] xl:text-[10px]",
                         isLight ? "text-black" : "text-white",
                       )}
                     >
@@ -1856,7 +2157,7 @@ export default function HeroContent() {
 
                     <div
                       className={cn(
-                        "text-[8px] leading-[10px]",
+                        "text-[7px] leading-[9px] sm:text-[8px] sm:leading-[10px] min-[800px]:text-[7px] min-[800px]:leading-[9px] lg:text-[10px] lg:leading-[9px] xl:text-[10px] xl:leading-[10px]",
                         isLight ? "text-black/40" : "text-[#8E8E93]",
                       )}
                     >
@@ -1867,7 +2168,7 @@ export default function HeroContent() {
                   </div>
                 </div>
 
-                <span className="shrink-0 text-[11px] font-medium text-[#43df3d]">
+                <span className="shrink-0 text-[9.5px] font-semibold text-[#43df3d] sm:text-[11px] sm:font-medium ml-0.5 min-[800px]:text-[8px] lg:text-[10px] xl:text-[11px]">
                   $44,090
                 </span>
               </div>
@@ -1877,14 +2178,14 @@ export default function HeroContent() {
             ================================================= */}
               <div
                 className={cn(
-                  "absolute right-3 top-[222px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:right-[25px] sm:top-[256px] sm:w-[220px] sm:px-3 rotate-[2.85deg]",
+                  "absolute right-1.5 top-[215px] z-30 flex w-[calc(50%-8px)] max-w-[220px] items-center justify-between rounded-[30px] border px-1.5 py-1.5 sm:right-[25px] sm:top-[275px] sm:w-[220px] sm:px-3 sm:py-2 min-[800px]:right-2 min-[800px]:top-[275px] min-[800px]:w-[calc(50%-10px)] min-[800px]:max-w-[172px] min-[800px]:px-1.5 min-[800px]:py-1.5 lg:right-[25px] lg:top-[275px] lg:w-[225px] lg:max-w-[230px] lg:px-3.5 rotate-[2.85deg]",
                   isLight
                     ? "border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(20,16,40,0.12)]"
                     : "border-white/[0.08] bg-[#191919] shadow-[0_12px_35px_rgba(0,0,0,.45)]",
                 )}
               >
-                <div className="flex min-w-0 items-center gap-2">
-                  <div className="relative h-[31px] w-[31px] shrink-0 overflow-hidden rounded-full">
+                <div className="flex min-w-0 items-center gap-1 sm:gap-2 min-[800px]:gap-1 lg:gap-1.5 xl:gap-2">
+                  <div className="relative h-[25px] w-[25px] shrink-0 overflow-hidden rounded-full sm:h-[31px] sm:w-[31px] min-[800px]:h-[22px] min-[800px]:w-[22px] lg:h-[27px] lg:w-[27px] xl:h-[31px] xl:w-[31px]">
                     <Image
                       src="/images/Ellipse 2355 (3).avif"
                       alt=""
@@ -1897,7 +2198,7 @@ export default function HeroContent() {
                   <div className="min-w-0">
                     <div
                       className={cn(
-                        "truncate text-[10px] font-medium",
+                        "truncate text-[9px] font-medium sm:text-[10px] min-[800px]:text-[8px] lg:text-[9.5px] xl:text-[10px]",
                         isLight ? "text-black" : "text-white",
                       )}
                     >
@@ -1906,18 +2207,16 @@ export default function HeroContent() {
 
                     <div
                       className={cn(
-                        "text-[8px] leading-[10px]",
+                        "text-[7px] leading-[9px] sm:text-[8px] sm:leading-[10px] min-[800px]:text-[7px] min-[800px]:leading-[7px] lg:text-[8px] lg:leading-[9px] xl:text-[10px] xl:leading-[10px]",
                         isLight ? "text-black/40" : "text-[#8E8E93]",
                       )}
                     >
-                      Your rank 1st in Leader board
-                      <br />
-                      Campaign
+                      Your rank 1st in Leader board Campaign
                     </div>
                   </div>
                 </div>
 
-                <span className="shrink-0 text-[11px] font-medium text-[#43df3d]">
+                <span className="shrink-0 text-[9.5px] font-semibold text-[#43df3d] sm:text-[11px] sm:font-medium ml-0.5 min-[800px]:text-[8px] lg:text-[10px] xl:text-[11px]">
                   $490
                 </span>
               </div>
@@ -2004,11 +2303,11 @@ export default function HeroContent() {
 
       <section
         className={cn(
-          "flex min-h-[50vh] items-center justify-center px-4 py-16 sm:min-h-[60vh] sm:px-6 sm:py-20 md:min-h-screen transition-colors duration-300",
+          "flex min-h-[40vh] items-center justify-center px-4 py-16 sm:min-h-[50vh] sm:px-6 sm:py-20 md:min-h-screen transition-colors duration-300 overflow-hidden",
           isLight ? "bg-transparent" : "bg-black",
         )}
       >
-        <div className="flex w-full max-w-5xl flex-col items-center justify-center gap-12 sm:gap-16 md:flex-row md:gap-40">
+        <div className="flex w-full max-w-6xl flex-col items-center justify-center gap-10 sm:gap-14 min-[800px]:flex-row min-[800px]:gap-10 lg:gap-24 xl:gap-36 px-4">
           <HeroStatBlock
             numbers={CREATORS_NETWORK_NUMBERS}
             label="Creators Network"

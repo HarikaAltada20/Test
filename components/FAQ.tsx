@@ -1,10 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { FaChevronDown } from "react-icons/fa";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
 import { useThemeMode } from "@/hooks/use-theme-mode";
 import { cn } from "@/lib/utils";
+import { gsap } from "gsap";
 
 const homeFaqs = [
   {
@@ -298,6 +299,77 @@ const brandFaqs = [
 //   },
 // ];
 
+function FaqItem({
+  faq,
+  isOpen,
+  useLightFaq,
+  onToggle,
+}: {
+  faq: { id: string; question: string; answer: string };
+  isOpen: boolean;
+  useLightFaq: boolean;
+  onToggle: () => void;
+}) {
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!contentRef.current) return;
+    if (isOpen) {
+      gsap.fromTo(
+        contentRef.current,
+        { height: 0, opacity: 0 },
+        { height: "auto", opacity: 1, duration: 0.35, ease: "power2.out" }
+      );
+    }
+  }, [isOpen]);
+
+  return (
+    <div
+      className={cn(
+        "overflow-hidden rounded-2xl border",
+        useLightFaq
+          ? "bg-[#ECECEC] border border-[#0000000D] text-black"
+          : "border-white/[0.08] bg-[#141414]",
+      )}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left sm:px-6 sm:py-5"
+        aria-expanded={isOpen}
+      >
+        <span
+          className={cn(
+            "text-base font-medium sm:text-lg",
+            useLightFaq ? "text-black" : "text-white",
+          )}
+        >
+          {faq.question}
+        </span>
+        <FaChevronDown
+          className={cn(
+            "shrink-0 transition-transform duration-300 ease-out",
+            useLightFaq ? "text-black/60" : "text-white/80",
+            isOpen ? "rotate-180" : "",
+          )}
+        />
+      </button>
+
+      {isOpen && (
+        <div ref={contentRef} className="overflow-hidden">
+          <div
+            className={cn(
+              "px-5 pb-5 text-sm leading-relaxed sm:px-6 sm:text-base",
+              useLightFaq ? "text-black/55" : "text-zinc-400",
+            )}
+            dangerouslySetInnerHTML={{ __html: faq.answer }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FAQ() {
   const pathname = usePathname();
   const { isLight } = useThemeMode();
@@ -334,59 +406,20 @@ export default function FAQ() {
             "text-3xl  sm:text-4xl font-['Inter'] font-bold md:text-[52px] leading-[110%] tracking-[-3%] text-center",
             useLightFaq ? "text-black" : "text-[#EFEFEF]",
           )}
-          // style={{ fontFamily: "Montserrat, sans-serif" }}
         >
           Get your answers now
         </h2>
 
         <div className="mt-10 space-y-3 text-left md:mt-12">
-          {faqs.map((faq, index) => {
-            const isOpen = openIndex === index;
-            return (
-              <div
-                key={faq.id}
-                className={cn(
-                  "overflow-hidden rounded-2xl border",
-                  useLightFaq
-                    ? "bg-[#ECECEC] border border-[#0000000D] text-black"
-                    : "border-white/[0.08] bg-[#141414]",
-                )}
-              >
-                <button
-                  type="button"
-                  onClick={() => toggleFAQ(index)}
-                  className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left sm:px-6 sm:py-5"
-                  aria-expanded={isOpen}
-                >
-                  <span
-                    className={cn(
-                      "text-base font-medium sm:text-lg",
-                      useLightFaq ? "text-black" : "text-white",
-                    )}
-                  >
-                    {faq.question}
-                  </span>
-                  <FaChevronDown
-                    className={cn(
-                      "shrink-0 transition-transform duration-200",
-                      useLightFaq ? "text-black/60" : "text-white/80",
-                      isOpen ? "rotate-180" : "",
-                    )}
-                  />
-                </button>
-
-                {isOpen ? (
-                  <div
-                    className={cn(
-                      "px-5 pb-5 text-sm leading-relaxed sm:px-6 sm:text-base",
-                      useLightFaq ? "text-black/55" : "text-zinc-400",
-                    )}
-                    dangerouslySetInnerHTML={{ __html: faq.answer }}
-                  />
-                ) : null}
-              </div>
-            );
-          })}
+          {faqs.map((faq, index) => (
+            <FaqItem
+              key={faq.id}
+              faq={faq}
+              isOpen={openIndex === index}
+              useLightFaq={useLightFaq}
+              onToggle={() => toggleFAQ(index)}
+            />
+          ))}
         </div>
 
         <p

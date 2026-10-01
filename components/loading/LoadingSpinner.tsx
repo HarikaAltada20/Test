@@ -2,16 +2,39 @@
 
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import lightLogo from "@/public/images/Group (2).avif";
 import darkLogo from "@/public/images/Group (3).avif";
+import landingLogo from "@/public/images/page_spinner_logo.png";
+import { cn } from "@/lib/utils";
 
 interface LoadingSpinnerProps {
   mode?: "light" | "dark";
+  variant?: "landing" | "dashboard";
+  className?: string;
 }
 
-const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ mode = "light" }) => {
+const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
+  mode = "light",
+  variant,
+  className,
+}) => {
+  const pathname = usePathname();
   const [theme, setTheme] = useState<"light" | "dark">(mode);
-  const logo = theme === "dark" ? darkLogo : lightLogo;
+
+  const isDashboard =
+    variant === "dashboard"
+      ? true
+      : variant === "landing"
+      ? false
+      : Boolean(pathname?.startsWith("/dashboard"));
+
+  const logo = isDashboard
+    ? theme === "dark"
+      ? darkLogo
+      : lightLogo
+    : landingLogo;
+
   // Read mode from data attribute
   useEffect(() => {
     const checkMode = () => {
@@ -40,20 +63,14 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ mode = "light" }) => {
 
     return () => observer.disconnect();
   }, []);
+
   return (
-    <div className="flex items-center justify-center">
+    <div className={cn("flex items-center justify-center", className)}>
       <div className="relative">
-        {/* Outermost Rotating Square Border - Clockwise - Blue */}
-        <div className="w-32 h-32 border-4 border-purple-200 rounded-2xl animate-spin"></div>
+        {/* Outermost Rotating Square Border - Clockwise */}
+        <div className="w-32 h-32 border-4 border-purple-200/40 rounded-2xl animate-spin"></div>
 
-        {/* Second Square Border - Counter-clockwise - Purple */}
-        {/* <div
-            className="absolute inset-2 w-28 h-28 border-2 border-purple-400 rounded-2xl animate-spin"
-            style={{ animationDirection: "reverse" }}
-          ></div> */}
-
-        {/* <div className="absolute inset-4 w-24 h-24 border-2 border-purple-300 rounded-xl animate-spin"></div> */}
-
+        {/* Counter-clockwise Border */}
         <div
           className="absolute inset-6 w-20 h-20 border-2 border-purple-600 rounded-xl animate-spin"
           style={{ animationDirection: "reverse" }}
@@ -65,9 +82,15 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ mode = "light" }) => {
             <Image
               src={logo}
               alt="Game Of Creators"
-              width={100}
-              height={100}
-              className="h-[50px] w-auto transition-all duration-300"
+              width={80}
+              height={80}
+              priority
+              className={cn(
+                "transition-all duration-300 object-contain",
+                isDashboard
+                  ? "h-[50px] w-auto"
+                  : "h-[38px] w-[38px] drop-shadow-[0_0_10px_rgba(255,106,26,0.6)]"
+              )}
             />
           </div>
         </div>
@@ -79,10 +102,14 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ mode = "light" }) => {
 export default LoadingSpinner;
 
 // Page-level loading component
-export function PageLoadingSpinner({ mode = "light" }: LoadingSpinnerProps) {
+export function PageLoadingSpinner({
+  mode = "light",
+  variant,
+  className,
+}: LoadingSpinnerProps) {
   return (
-    <div className="flex items-center justify-center min-h-[200px]">
-      <LoadingSpinner mode={mode} />
+    <div className={cn("flex items-center justify-center min-h-[200px]", className)}>
+      <LoadingSpinner mode={mode} variant={variant} />
     </div>
   );
 }

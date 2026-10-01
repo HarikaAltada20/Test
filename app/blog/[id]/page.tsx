@@ -9,7 +9,7 @@ import type { Metadata } from "next";
 export const revalidate = 0;
 
 interface BlogPageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 // Helper function to strip HTML tags
@@ -307,23 +307,18 @@ export default async function BlogDetailPage({ params }: BlogPageProps) {
           __html: JSON.stringify(breadcrumbStructuredData),
         }}
       />
-      <div className="min-h-screen bg-[#000825] text-white border-b border-[#A87313]">
-        {/* Subtle radial background glow to match hero theme */}
-        <div className="pointer-events-none fixed inset-0 -z-10">
-          <div className="absolute -top-40 left-1/2 h-60 w-60 sm:h-80 sm:w-80 -translate-x-1/2 rounded-full bg-purple-600/30 blur-3xl" />
-          <div className="absolute bottom-0 right-4 sm:right-10 h-48 w-48 sm:h-72 sm:w-72 rounded-full bg-orange-500/20 blur-3xl" />
-        </div>
+      <div className="min-h-screen bg-black text-white border-b border-white/10">
 
         <div className="w-full max-w-[1350px] mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-6 sm:py-8 md:py-10 lg:py-16">
           {/* Back arrow */}
           <Link
             href="/blog"
-            className="inline-flex items-center gap-2 text-slate-300 hover:text-white mb-4 sm:mb-6 lg:mb-10 transition-colors group"
+            className="inline-flex items-center gap-2 text-[#8E8E8E] hover:text-white mb-4 sm:mb-6 lg:mb-10 transition-colors group"
           >
-            <span className="inline-flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full border border-slate-700/60 bg-slate-900/60 group-hover:border-purple-500/70 group-hover:bg-purple-600/20 transition-colors">
+            <span className="inline-flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 group-hover:border-white/20 group-hover:bg-white/10 transition-colors">
               <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 group-hover:-translate-x-1 transition-transform" />
             </span>
-            <span className="text-[10px] sm:text-xs uppercase mt-1 tracking-[0.18em] text-slate-400 font-semibold whitespace-nowrap">
+            <span className="text-[10px] sm:text-xs uppercase mt-1 tracking-[0.18em] text-[#8E8E8E] font-semibold whitespace-nowrap">
               Back to Blogs
             </span>
           </Link>
@@ -331,29 +326,27 @@ export default async function BlogDetailPage({ params }: BlogPageProps) {
           {/* Header section with image */}
           <header className="mb-8 sm:mb-10 md:mb-12 grid gap-6 sm:gap-8 lg:grid-cols-[1fr_650px] items-center">
             <div className="space-y-4 sm:space-y-6 md:space-y-8 order-2 lg:order-1">
-              <p className="inline-flex items-center gap-2 rounded-full border border-purple-500/40 bg-purple-500/10 px-3 sm:px-4 py-1 text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.2em] text-purple-300">
-                <span className="h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.85)]" />
+              <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 sm:px-4 py-1 text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.2em] text-white">
+                <span className="h-1.5 w-1.5 rounded-full bg-white shadow-[0_0_12px_rgba(255,255,255,0.85)]" />
                 {post.category || "Blog"}
               </p>
               <h1
                 id="title"
-                className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight leading-[1.5] sm:leading-[1.6] md:leading-[1.55] lg:leading-[1.5] text-white scroll-mt-20 sm:scroll-mt-24 drop-shadow-[0_2px_20px_rgba(255,255,255,0.15)]"
+                className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight leading-[1.5] sm:leading-[1.6] md:leading-[1.55] lg:leading-[1.5] bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent scroll-mt-20 sm:scroll-mt-24"
               >
                 {post.title}
               </h1>
               {post.short_description && (
-                <p className="text-sm sm:text-base md:text-lg lg:text-xl text-slate-300/90 tracking-[0.03em] leading-relaxed">
+                <p className="text-sm sm:text-base md:text-lg lg:text-xl text-[#8E8E8E] tracking-[0.03em] leading-relaxed">
                   {post.short_description.replace(/<[^>]*>/g, "")}
                 </p>
               )}
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] sm:text-xs md:text-sm text-slate-400">
-                <span className="inline-flex items-center gap-1.5 sm:gap-2 rounded-full bg-slate-900/70 px-2.5 sm:px-3 py-1 border border-slate-700/60">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.7)]" />
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] sm:text-xs md:text-sm text-[#8E8E8E]">
+                <span className="inline-flex items-center gap-1.5 sm:gap-2 rounded-full bg-[#171717] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40] px-2.5 sm:px-3 py-1 border border-white/10 text-white">
                   {formatDate(post.published_at || post.created_at)}
                 </span>
                 {post.read_time_minutes ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-900/70 px-2.5 sm:px-3 py-1 border border-slate-700/60">
-                    <span className="h-1 w-1 rounded-full bg-slate-500" />
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#171717] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40] px-2.5 sm:px-3 py-1 border border-white/10 text-white">
                     {post.read_time_minutes} min
                   </span>
                 ) : null}
@@ -361,8 +354,7 @@ export default async function BlogDetailPage({ params }: BlogPageProps) {
             </div>
             {post.thumbnail && (
               <div className="relative w-full max-w-[650px] mx-auto lg:mx-0 order-1 lg:order-2">
-                <div className="pointer-events-none absolute -inset-0.5 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-purple-500/50 via-orange-400/40 to-amber-400/40 opacity-60 blur-xl" />
-                <div className="relative w-full h-[250px] sm:h-[300px] md:h-[450px] rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-br from-slate-900/90 via-slate-900/60 to-slate-900/40 shadow-[0_22px_80px_rgba(15,23,42,0.9)]">
+                <div className="relative w-full h-[250px] sm:h-[300px] md:h-[450px] rounded-xl sm:rounded-2xl overflow-hidden bg-[#171717] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40] border border-white/10">
                   <img
                     src={post.thumbnail}
                     alt={post.title}

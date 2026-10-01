@@ -109,18 +109,24 @@ const config = {
   },
 };
 
-const desktopCardPositions = [
-  // Kabir
-  { left: "-75px", top: "33px" },
-  // Aarav
-  { left: "384px", top: "115px" },
-  // Riya
-  { left: "855px", top: "-9px" },
-  // Ananya
-  { left: "188px", top: "480px" },
-  // Dev
-  { left: "770px", top: "395px" },
-] as const;
+type CardPosition = {
+  left?: string;
+  right?: string;
+  top: string;
+};
+
+const desktopCardPositions: CardPosition[] = [
+  // Card 0 (Top Left)
+  { left: "0%", top: "15px" },
+  // Card 1 (Top Center - moved down)
+  { left: "36%", top: "235px" },
+  // Card 2 (Top Right)
+  { right: "0%", top: "0px" },
+  // Card 3 (Bottom Left)
+  { left: "4%", top: "495px" },
+  // Card 4 (Bottom Right)
+  { right: "4%", top: "475px" },
+];
 
 function Rivets({ isLight }: { isLight: boolean }) {
   const rivet = cn(
@@ -153,9 +159,9 @@ function TestimonialCardContent({
     <>
       <Rivets isLight={isLight} />
 
-      <div className="flex flex-col gap-8">
-        <div className="flex items-center gap-4">
-          <div className="relative size-12 shrink-0 overflow-hidden rounded-lg">
+      <div className="flex flex-col gap-6 sm:gap-8">
+        <div className="flex items-center gap-3.5 sm:gap-4">
+          <div className="relative size-10 sm:size-12 shrink-0 overflow-hidden rounded-lg">
             <Image
               src={testimonial.image}
               alt={testimonial.name}
@@ -166,10 +172,10 @@ function TestimonialCardContent({
             />
           </div>
 
-          <div className="flex flex-col items-start gap-[5px]">
+          <div className="flex flex-col items-start gap-[4px]">
             <h3
               className={cn(
-                "text-lg font-medium font-['Inter'] leading-5",
+                "text-base sm:text-lg font-medium font-['Inter'] leading-5",
                 isLight ? "text-black" : "text-white",
               )}
             >
@@ -177,7 +183,7 @@ function TestimonialCardContent({
             </h3>
             <p
               className={cn(
-                "text-base font-normal font-['Inter'] leading-4",
+                "text-sm sm:text-base font-normal font-['Inter'] leading-4",
                 isLight ? "text-black/50" : "text-zinc-400",
               )}
             >
@@ -188,7 +194,7 @@ function TestimonialCardContent({
 
         <p
           className={cn(
-            "text-lg font-medium font-['Inter'] leading-7",
+            "text-base sm:text-lg font-medium font-['Inter'] leading-6 sm:leading-7",
             isLight ? "text-black/80" : "text-white",
           )}
         >
@@ -211,7 +217,7 @@ function TestimonialCard({
   return (
     <article
       className={cn(
-        "relative w-80 rounded-3xl p-9 inline-flex flex-col overflow-hidden",
+        "relative w-full max-w-[340px] rounded-3xl p-7 sm:p-9 inline-flex flex-col overflow-hidden",
         isLight
           ? "border-[#0000000D] border bg-[#ECECEC]"
           : "bg-neutral-900 shadow-[8px_8px_50px_0px_rgba(0,0,0,1.00),4px_12px_4px_0px_rgba(0,0,0,0.20),inset_0px_0px_4px_0px_rgba(255,255,255,0.25)]",
@@ -231,7 +237,7 @@ function DraggableTestimonialCard({
 }: {
   testimonial: Testimonial;
   isLight: boolean;
-  position: { left: string; top: string };
+  position: CardPosition;
   constraintsRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const [zIndex, setZIndex] = useState(1);
@@ -256,12 +262,13 @@ function DraggableTestimonialCard({
       }}
       style={{
         left: position.left,
+        right: position.right,
         top: position.top,
         zIndex,
         position: "absolute",
       }}
       className={cn(
-        "w-80 cursor-grab touch-none select-none rounded-3xl p-9 active:cursor-grabbing inline-flex flex-col overflow-hidden",
+        "w-[280px] sm:w-[310px] lg:w-80 cursor-grab touch-none select-none rounded-3xl p-6 sm:p-7 lg:p-9 active:cursor-grabbing inline-flex flex-col overflow-hidden",
         isLight
           ? "border-[#0000000D] border bg-[#ECECEC]"
           : "bg-neutral-900 shadow-[8px_8px_50px_0px_rgba(0,0,0,1.00),4px_12px_4px_0px_rgba(0,0,0,0.20),inset_0px_0px_4px_0px_rgba(255,255,255,0.25)]",
@@ -371,7 +378,7 @@ export default function Testimonials() {
         {/* Desktop: staggered + draggable */}
         <div
           ref={boardRef}
-          className="relative mx-auto mt-14 hidden w-full h-[740px] max-w-[1100px] md:block"
+          className="relative mx-auto mt-14 hidden w-full h-[800px] max-w-[1100px] md:block"
         >
           {testimonials.map((testimonial, index) => (
             <DraggableTestimonialCard
