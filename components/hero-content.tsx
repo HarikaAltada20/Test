@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+import { gsap } from "gsap";
 import { Caveat } from "next/font/google";
 
 import {
@@ -86,6 +87,38 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
   const [cursorClicking, setCursorClicking] = useState(false);
   const [cursorPos, setCursorPos] = useState({ x: 40, y: 320 });
   const [showClickBurst, setShowClickBurst] = useState(false);
+  const cursorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!cursorRef.current) return;
+    if (!cursorVisible) {
+      gsap.to(cursorRef.current, { opacity: 0, duration: 0.25, ease: "power1.out" });
+      return;
+    }
+    gsap.to(cursorRef.current, {
+      left: cursorPos.x,
+      top: cursorPos.y,
+      opacity: 1,
+      scale: cursorClicking ? 0.88 : 1,
+      duration: 0.55,
+      ease: "power2.out",
+      overwrite: "auto",
+    });
+  }, [cursorPos, cursorVisible, cursorClicking]);
+
+  useEffect(() => {
+    if (!budgetRef.current) return;
+    const tween = gsap.to(budgetRef.current, {
+      y: -5,
+      duration: 2.2,
+      repeat: -1,
+      yoyo: true,
+      ease: "sine.inOut",
+    });
+    return () => {
+      tween.kill();
+    };
+  }, []);
 
   const getTargetPos = (target: FormCursorTarget) => {
     const root = rootRef.current;
@@ -275,10 +308,10 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       {/* FORM MOCKUP */}
       <div
         className={cn(
-          "absolute left-2 right-2 top-[248px] h-[440px] overflow-visible rounded-t-[20px] border sm:left-[24px] sm:right-[24px] sm:top-[266px] md:left-[44px] md:right-[44px]",
+          "absolute left-2 right-2 top-[248px] h-[440px] overflow-visible rounded-t-[20px] border sm:left-[24px] sm:right-[24px] sm:top-[266px] min-[800px]:left-[16px] min-[800px]:right-[16px] min-[800px]:top-[260px] lg:left-[24px] lg:right-[24px] xl:left-[44px] xl:right-[44px]",
           isLight
             ? "border-[#0000000D] bg-[#ECECEC] text-black shadow-[inset_0_0_4.43px_0_#0000001A]"
-            : "border-white/[0.10] bg-[#121212] text-white shadow-[0_-10px_40px_rgba(0,0,0,.15)]",
+            : "border-white/[0.10] bg-[#121212] text-white",
         )}
       >
         {/* Launch */}
@@ -579,7 +612,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
       {/* FLOATING BUDGET */}
       <div
-        ref={budgetRef}
+        // ref={budgetRef}
         className={cn(
           "absolute bottom-[8px] left-[10px] sm:left-[20px] z-10 w-[140px] sm:w-[176px] rounded-[12px] sm:rounded-[14px] border p-3",
           isLight
@@ -629,12 +662,9 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
       {/* Animated cursor arrow — clicks fields, drags thumbnail from 2nd card, then Launch */}
       <div
+        ref={cursorRef}
         aria-hidden
-        className={cn(
-          "pointer-events-none absolute z-50 transition-[left,top,opacity,transform] duration-700 ease-in-out",
-          cursorVisible ? "opacity-100" : "opacity-0",
-          cursorClicking && "scale-90",
-        )}
+        className="pointer-events-none absolute z-50 opacity-0"
         style={{
           left: cursorPos.x,
           top: cursorPos.y,
@@ -806,7 +836,7 @@ function RollingDigitChar({
   const numericValue = parseInt(char, 10);
 
   return (
-    <span className="relative inline-block h-[64px] sm:h-[76px] md:h-[92px] lg:h-[112px] overflow-hidden align-top select-none">
+    <span className="relative inline-block h-[48px] sm:h-[64px] min-[800px]:h-[72px] lg:h-[92px] xl:h-[112px] overflow-hidden align-top select-none">
       <span
         className="flex flex-col transition-transform duration-450 ease-[cubic-bezier(0.16,1,0.3,1)]"
         style={{
@@ -818,7 +848,7 @@ function RollingDigitChar({
           <span
             key={val}
             className={cn(
-              "flex h-[64px] sm:h-[76px] md:h-[92px] lg:h-[112px] shrink-0 items-center justify-center bg-clip-text text-transparent",
+              "flex h-[48px] sm:h-[64px] min-[800px]:h-[72px] lg:h-[92px] xl:h-[112px] shrink-0 items-center justify-center bg-clip-text text-transparent",
               textGradient,
             )}
           >
@@ -874,8 +904,8 @@ function HeroStatBlock({
   const currentStr = numbers[step] || numbers[0];
 
   return (
-    <div className="flex flex-col items-center text-center" ref={containerRef}>
-      <div className="flex items-center justify-center font-extrabold leading-none tracking-[-0.055em] text-[64px] sm:text-[76px] md:text-[92px] lg:text-[112px]">
+    <div className="flex flex-col items-center text-center shrink-0" ref={containerRef}>
+      <div className="flex items-center justify-center font-extrabold leading-none tracking-[-0.055em] text-[48px] sm:text-[64px] min-[800px]:text-[72px] lg:text-[92px] xl:text-[112px]">
         {currentStr.split("").map((ch, i) => (
           <RollingDigitChar
             key={`${i}-${currentStr.length}`}
@@ -888,7 +918,7 @@ function HeroStatBlock({
 
       <p
         className={cn(
-          "mt-5 text-[22px] font-semibold tracking-[-0.02em] sm:text-[25px] md:text-[29px]",
+          "mt-3 sm:mt-5 text-[18px] font-semibold tracking-[-0.02em] sm:text-[22px] min-[800px]:text-[24px] lg:text-[29px]",
           isLight ? "text-black/45" : "text-[#969696]",
         )}
       >
@@ -1950,7 +1980,7 @@ export default function HeroContent() {
           ================================================= */}
             <div
               className={cn(
-                "relative min-h-[510px] overflow-hidden rounded-[20px] px-5 pt-7 sm:min-h-[555px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[580px] md:min-h-0",
+                "relative min-h-[510px] overflow-hidden rounded-[20px] px-3.5 pt-6 sm:min-h-[555px] sm:rounded-[25px] sm:px-9 sm:pt-9 min-[800px]:h-[580px] min-[800px]:min-h-0 md:h-[580px]",
                 isLight
                   ? "border border-black/[0.04] bg-[#f5f5f7] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
                   : "border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] shadow-[inset_0_1px_0_rgba(255,255,255,.025)]",
@@ -1994,24 +2024,24 @@ export default function HeroContent() {
               {/* Title */}
               <h2
                 className={cn(
-                  "mt-5 max-w-[440px] text-[20px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]",
+                  "mt-5 max-w-[440px] text-[19px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]",
                   isLight ? "text-black" : "text-white",
                 )}
               >
-                Pay for actual performance, not
+                Pay for actual performance, not{" "}
                 <br className="hidden sm:block" /> followers
               </h2>
 
               {/* Description */}
               <p
                 className={cn(
-                  "mt-3 max-w-[500px] text-[14px] leading-[21px] sm:text-[16px] sm:leading-[23px]",
+                  "mt-3 max-w-[500px] text-[13.5px] leading-[20px] sm:text-[16px] sm:leading-[23px]",
                   isLight ? "text-black/50" : "text-white/45",
                 )}
               >
-                Set your budget and brief. Your campaign runs across a network
+                Set your budget and brief. Your campaign runs across a network{" "}
                 <br className="hidden xl:block" />
-                of 15,700+ creators, and you pay for verified content and
+                of 15,700+ creators, and you pay for verified content and{" "}
                 <br className="hidden xl:block" />
                 performance.
               </p>
@@ -2024,7 +2054,7 @@ export default function HeroContent() {
           ================================================= */}
             <div
               className={cn(
-                "relative min-h-[510px] overflow-hidden rounded-[20px] px-5 pt-7 sm:min-h-[555px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[580px] md:min-h-0",
+                "relative min-h-[510px] overflow-hidden rounded-[20px] px-3.5 pt-6 sm:min-h-[555px] sm:rounded-[25px] sm:px-9 sm:pt-9 min-[800px]:h-[580px] min-[800px]:min-h-0 md:h-[580px]",
                 isLight
                   ? "border border-black/[0.04] bg-[#f5f5f7] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
                   : "border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] shadow-[inset_0_1px_0_rgba(255,255,255,.025)]",
@@ -2053,7 +2083,6 @@ export default function HeroContent() {
                 />
               </div>
 
-
               {/* Badge */}
               <div
                 className={cn(
@@ -2069,22 +2098,22 @@ export default function HeroContent() {
               {/* Title */}
               <h2
                 className={cn(
-                  "mt-5 max-w-[450px] text-[20px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]",
+                  "mt-5 max-w-[450px] text-[19px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]",
                   isLight ? "text-black" : "text-white",
                 )}
               >
-                Get paid for performance, not
+                Get paid for performance, not{" "}
                 <br className="hidden sm:block" /> followers.
               </h2>
 
               {/* Description */}
               <p
                 className={cn(
-                  "mt-3 max-w-[510px] text-[14px] leading-[21px] sm:text-[16px] sm:leading-[23px]",
+                  "mt-3 max-w-[510px] text-[13.5px] leading-[20px] sm:text-[16px] sm:leading-[23px]",
                   isLight ? "text-black/50" : "text-white/45",
                 )}
               >
-                Pick brand campaigns you want. You get paid based on how well
+                Pick brand campaigns you want. You get paid based on how well{" "}
                 <br className="hidden xl:block" />
                 your posts do even if you have 0 followers
               </p>
@@ -2094,14 +2123,14 @@ export default function HeroContent() {
             ================================================= */}
               <div
                 className={cn(
-                  "absolute left-3 top-[222px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:left-[25px] sm:top-[256px] sm:w-[225px] sm:px-3 rotate-[-3.78deg]",
+                  "absolute left-1.5 top-[215px] z-30 flex w-[calc(50%-8px)] max-w-[225px] items-center justify-between rounded-[30px] border px-1.5 py-1.5 sm:left-[25px] sm:top-[275px] sm:w-[225px] sm:px-3 sm:py-2 min-[800px]:left-2 min-[800px]:top-[275px] min-[800px]:w-[calc(50%-10px)] min-[800px]:max-w-[172px] min-[800px]:px-1.5 min-[800px]:py-1.5 lg:left-[25px] lg:top-[275px] lg:w-[220px] lg:max-w-[230px] lg:px-3.5 rotate-[-3.78deg]",
                   isLight
                     ? "border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(20,16,40,0.12)]"
                     : "border-white/[0.08] bg-[#191919] shadow-[0_12px_35px_rgba(0,0,0,.45)]",
                 )}
               >
-                <div className="flex min-w-0 items-center gap-2">
-                  <div className="relative h-[31px] w-[31px] shrink-0 overflow-hidden rounded-full">
+                <div className="flex min-w-0 items-center gap-1 sm:gap-2 min-[800px]:gap-1 lg:gap-1.5 xl:gap-2">
+                  <div className="relative h-[25px] w-[25px] shrink-0 overflow-hidden rounded-full sm:h-[31px] sm:w-[31px] min-[800px]:h-[22px] min-[800px]:w-[22px] lg:h-[27px] lg:w-[27px] xl:h-[31px] xl:w-[31px]">
                     <Image
                       src="/images/Ellipse 2355 (1).avif"
                       alt=""
@@ -2114,7 +2143,7 @@ export default function HeroContent() {
                   <div className="min-w-0">
                     <div
                       className={cn(
-                        "truncate text-[10px] font-medium",
+                        "truncate text-[9px] font-medium sm:text-[10px] min-[800px]:text-[8px] lg:text-[9.5px] xl:text-[10px]",
                         isLight ? "text-black" : "text-white",
                       )}
                     >
@@ -2123,7 +2152,7 @@ export default function HeroContent() {
 
                     <div
                       className={cn(
-                        "text-[8px] leading-[10px]",
+                        "text-[7px] leading-[9px] sm:text-[8px] sm:leading-[10px] min-[800px]:text-[7px] min-[800px]:leading-[9px] lg:text-[10px] lg:leading-[9px] xl:text-[10px] xl:leading-[10px]",
                         isLight ? "text-black/40" : "text-[#8E8E93]",
                       )}
                     >
@@ -2134,7 +2163,7 @@ export default function HeroContent() {
                   </div>
                 </div>
 
-                <span className="shrink-0 text-[11px] font-medium text-[#43df3d]">
+                <span className="shrink-0 text-[9.5px] font-semibold text-[#43df3d] sm:text-[11px] sm:font-medium ml-0.5 min-[800px]:text-[8px] lg:text-[10px] xl:text-[11px]">
                   $44,090
                 </span>
               </div>
@@ -2144,14 +2173,14 @@ export default function HeroContent() {
             ================================================= */}
               <div
                 className={cn(
-                  "absolute right-3 top-[222px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:right-[25px] sm:top-[256px] sm:w-[220px] sm:px-3 rotate-[2.85deg]",
+                  "absolute right-1.5 top-[215px] z-30 flex w-[calc(50%-8px)] max-w-[220px] items-center justify-between rounded-[30px] border px-1.5 py-1.5 sm:right-[25px] sm:top-[275px] sm:w-[220px] sm:px-3 sm:py-2 min-[800px]:right-2 min-[800px]:top-[275px] min-[800px]:w-[calc(50%-10px)] min-[800px]:max-w-[172px] min-[800px]:px-1.5 min-[800px]:py-1.5 lg:right-[25px] lg:top-[275px] lg:w-[225px] lg:max-w-[230px] lg:px-3.5 rotate-[2.85deg]",
                   isLight
                     ? "border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(20,16,40,0.12)]"
                     : "border-white/[0.08] bg-[#191919] shadow-[0_12px_35px_rgba(0,0,0,.45)]",
                 )}
               >
-                <div className="flex min-w-0 items-center gap-2">
-                  <div className="relative h-[31px] w-[31px] shrink-0 overflow-hidden rounded-full">
+                <div className="flex min-w-0 items-center gap-1 sm:gap-2 min-[800px]:gap-1 lg:gap-1.5 xl:gap-2">
+                  <div className="relative h-[25px] w-[25px] shrink-0 overflow-hidden rounded-full sm:h-[31px] sm:w-[31px] min-[800px]:h-[22px] min-[800px]:w-[22px] lg:h-[27px] lg:w-[27px] xl:h-[31px] xl:w-[31px]">
                     <Image
                       src="/images/Ellipse 2355 (3).avif"
                       alt=""
@@ -2164,7 +2193,7 @@ export default function HeroContent() {
                   <div className="min-w-0">
                     <div
                       className={cn(
-                        "truncate text-[10px] font-medium",
+                        "truncate text-[9px] font-medium sm:text-[10px] min-[800px]:text-[8px] lg:text-[9.5px] xl:text-[10px]",
                         isLight ? "text-black" : "text-white",
                       )}
                     >
@@ -2173,18 +2202,16 @@ export default function HeroContent() {
 
                     <div
                       className={cn(
-                        "text-[8px] leading-[10px]",
+                        "text-[7px] leading-[9px] sm:text-[8px] sm:leading-[10px] min-[800px]:text-[7px] min-[800px]:leading-[7px] lg:text-[8px] lg:leading-[9px] xl:text-[10px] xl:leading-[10px]",
                         isLight ? "text-black/40" : "text-[#8E8E93]",
                       )}
                     >
-                      Your rank 1st in Leader board
-                      <br />
-                      Campaign
+                      Your rank 1st in Leader board Campaign
                     </div>
                   </div>
                 </div>
 
-                <span className="shrink-0 text-[11px] font-medium text-[#43df3d]">
+                <span className="shrink-0 text-[9.5px] font-semibold text-[#43df3d] sm:text-[11px] sm:font-medium ml-0.5 min-[800px]:text-[8px] lg:text-[10px] xl:text-[11px]">
                   $490
                 </span>
               </div>
@@ -2271,11 +2298,11 @@ export default function HeroContent() {
 
       <section
         className={cn(
-          "flex min-h-[50vh] items-center justify-center px-4 py-16 sm:min-h-[60vh] sm:px-6 sm:py-20 md:min-h-screen transition-colors duration-300",
+          "flex min-h-[40vh] items-center justify-center px-4 py-16 sm:min-h-[50vh] sm:px-6 sm:py-20 md:min-h-screen transition-colors duration-300 overflow-hidden",
           isLight ? "bg-transparent" : "bg-black",
         )}
       >
-        <div className="flex w-full max-w-5xl flex-col items-center justify-center gap-12 sm:gap-16 md:flex-row md:gap-40">
+        <div className="flex w-full max-w-6xl flex-col items-center justify-center gap-10 sm:gap-14 min-[800px]:flex-row min-[800px]:gap-10 lg:gap-24 xl:gap-36 px-4">
           <HeroStatBlock
             numbers={CREATORS_NETWORK_NUMBERS}
             label="Creators Network"

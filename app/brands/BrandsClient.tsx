@@ -2,6 +2,7 @@
 import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { gsap } from "gsap";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import {
@@ -245,7 +246,14 @@ const connectionPath = ({ x, y, arc }: Person) => {
   return `M ${x} ${y} Q ${controlX} ${controlY} ${campaignCenter.x} ${campaignCenter.y}`;
 };
 
-const profiles = [
+interface ProfileItem {
+  name: string;
+  status: string;
+  image: string;
+  type: "good" | "bad";
+}
+
+const profiles: ProfileItem[] = [
   {
     name: "@anand",
     status: "Bot detected",
@@ -364,6 +372,16 @@ export default function BrandsClient({
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapInView, setMapInView] = useState(false);
   const [mapStage, setMapStage] = useState(0);
+  const mapStageCardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!mapStageCardRef.current) return;
+    gsap.fromTo(
+      mapStageCardRef.current,
+      { opacity: 0, y: 12, scale: 0.98 },
+      { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power2.out" }
+    );
+  }, [mapStage]);
 
   const oldWayRef = useRef<HTMLDivElement>(null);
   const [oldWayStep, setOldWayStep] = useState(0);
@@ -1773,22 +1791,22 @@ export default function BrandsClient({
     TABS
 ========================== */}
 
-                <div className="absolute inset-x-2 top-[260px] z-20 sm:left-3 sm:right-3 sm:top-[300px]">
+                <div className="absolute left-3 right-3 top-[255px] z-20 flex justify-center sm:left-4 sm:right-4 min-[1150px]:left-7 min-[1150px]:right-auto min-[1150px]:justify-start sm:top-[295px]">
                   <div
                     className={cn(
-                      "flex items-center justify-between rounded-full p-0.5 sm:p-1 backdrop-blur-lg gap-0.5 sm:gap-1",
+                      "flex w-full max-w-[440px] items-center justify-between min-[1150px]:w-max min-[1150px]:max-w-none rounded-full p-0.5 sm:p-1 min-[1150px]:p-1.5 backdrop-blur-lg gap-0.5 min-[1150px]:gap-2",
                       isLight
                         ? "border border-black/[0.06] bg-white shadow-[0_10px_30px_rgba(20,16,40,0.12)]"
                         : "border border-white/10 bg-[#2a2a2a]/90",
                     )}
                   >
-                    <button className="rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] px-1.5 py-0.5 min-[400px]:px-2 min-[400px]:py-1 text-[8.5px] min-[400px]:text-[9.5px] sm:text-xs text-white shadow-[0_4px_18px_rgba(124,58,237,0.55)] shrink-0 font-medium">
+                    <button className="flex-1 min-[1150px]:flex-initial rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] px-1.5 py-1 min-[360px]:px-2 min-[360px]:py-1 min-[1150px]:px-4 min-[1150px]:py-1.5 text-[9.5px] min-[360px]:text-[10.5px] min-[1150px]:text-sm text-white shadow-[0_4px_18px_rgba(124,58,237,0.55)] shrink-0 font-medium text-center whitespace-nowrap">
                       CPM
                     </button>
 
                     <button
                       className={cn(
-                        "flex-1 text-[8.5px] min-[400px]:text-[9.5px] sm:text-xs text-center whitespace-nowrap px-0.5 font-medium",
+                        "flex-1 min-[1150px]:flex-initial text-[9.5px] min-[360px]:text-[10.5px] min-[1150px]:text-[12px] text-center whitespace-nowrap px-1 py-1 min-[360px]:px-1.5 min-[360px]:py-1 min-[1150px]:px-1.2 min-[1150px]:py-1.5 font-medium shrink-0",
                         isLight ? "text-black/55" : "text-gray-400",
                       )}
                     >
@@ -1797,7 +1815,7 @@ export default function BrandsClient({
 
                     <button
                       className={cn(
-                        "flex-1 text-[8.5px] min-[400px]:text-[9.5px] sm:text-xs text-center whitespace-nowrap px-0.5 font-medium",
+                        "flex-1 min-[1150px]:flex-initial text-[9.5px] min-[360px]:text-[10.5px] min-[1150px]:text-[12px] text-center whitespace-nowrap px-1 py-1 min-[360px]:px-1.5 min-[360px]:py-1 min-[1150px]:px-1.2 min-[1150px]:py-1.5 font-medium shrink-0",
                         isLight ? "text-black/55" : "text-gray-400",
                       )}
                     >
@@ -1806,7 +1824,7 @@ export default function BrandsClient({
 
                     <button
                       className={cn(
-                        "flex-1 text-[8.5px] min-[400px]:text-[9.5px] sm:text-xs text-center whitespace-nowrap px-0.5 font-medium",
+                        "flex-1 min-[1150px]:flex-initial text-[9.5px] min-[360px]:text-[10.5px] min-[1150px]:text-[12px] text-center whitespace-nowrap px-1 py-1 min-[360px]:px-1.5 min-[360px]:py-1 min-[1150px]:px-1.2 min-[1150px]:py-1.5 font-medium shrink-0",
                         isLight ? "text-black/55" : "text-gray-400",
                       )}
                     >
@@ -2399,74 +2417,125 @@ export default function BrandsClient({
 
                 {/* Background profiles — infinite vertical scroll behind scanner */}
                 <div className="absolute inset-x-0 top-6 z-[1] h-[230px] overflow-hidden sm:top-8 sm:h-[250px]">
-                  <div className="animate-engagement-profiles-scroll absolute left-1/2 top-0 flex w-[230px] flex-col gap-2.5 will-change-transform">
-                    {[...profiles, ...profiles].map((profile, index) => (
-                      <div
-                        key={`${profile.name}-${profile.status}-${index}`}
-                        className={cn(
-                          "relative flex h-[42px] shrink-0 items-center gap-2 rounded-[12px] px-2",
-                          isLight
-                            ? "border-[0.69px] border-[#0000000D] bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
-                            : "border border-white/[0.07] bg-[#151515]/90 shadow-[0_5px_20px_rgba(0,0,0,0.3)]",
-                        )}
-                      >
+                  {/* Top Layer: Profiles before scanner beam (mix of bot detected and verified views text with red X badge) */}
+                  <div
+                    className="absolute inset-0 pointer-events-none z-[1]"
+                    style={{ clipPath: "polygon(0 0, 100% 0, 100% 48%, 0 48%)" }}
+                  >
+                    <div className="animate-engagement-profiles-scroll absolute left-1/2 top-0 flex w-[230px] flex-col gap-2.5 will-change-transform">
+                      {[...profiles, ...profiles, ...profiles].map((profile: ProfileItem, index: number) => {
+                        const isBad = profile.type === "bad";
+                        return (
+                          <div
+                            key={`top-${profile.name}-${index}`}
+                            className={cn(
+                              "relative flex h-[42px] shrink-0 items-center gap-2 rounded-[12px] px-2",
+                              isLight
+                                ? "border-[0.69px] border-[#0000000D] bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
+                                : "border border-white/[0.07] bg-[#151515]/90 shadow-[0_5px_20px_rgba(0,0,0,0.3)]",
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "h-[30px] w-[30px] shrink-0 overflow-hidden rounded-full",
+                                isLight ? "bg-[#C8C8C8]" : "bg-[#292929]",
+                              )}
+                            >
+                              <img
+                                src={profile.image}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+
+                            <div className="min-w-0 flex-1 leading-none">
+                              <div
+                                className={cn(
+                                  "truncate text-[11px] font-medium",
+                                  isLight ? "text-black/70" : "text-white/65",
+                                )}
+                              >
+                                {profile.name}
+                              </div>
+                              <div
+                                className={cn(
+                                  "mt-1 truncate text-[9px]",
+                                  isLight ? "text-black/40" : "text-white/35",
+                                )}
+                              >
+                                {isBad ? profile.status : "Verified Views"}
+                              </div>
+                            </div>
+
+                            <div className="flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-full bg-[#d92d25]">
+                              <svg
+                                viewBox="0 0 12 12"
+                                className="h-2 w-2"
+                                fill="none"
+                              >
+                                <path
+                                  d="M3.5 3.5L8.5 8.5M8.5 3.5L3.5 8.5"
+                                  stroke="white"
+                                  strokeWidth="1.5"
+                                  strokeLinecap="round"
+                                />
+                              </svg>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Bottom Layer: Green / Verified profiles after passing scanner beam */}
+                  <div
+                    className="absolute inset-0 pointer-events-none z-[2]"
+                    style={{ clipPath: "polygon(0 48%, 100% 48%, 100% 100%, 0 100%)" }}
+                  >
+                    <div className="animate-engagement-profiles-scroll absolute left-1/2 top-0 flex w-[230px] flex-col gap-2.5 will-change-transform">
+                      {[...profiles, ...profiles, ...profiles].map((profile: ProfileItem, index: number) => (
                         <div
+                          key={`bottom-${profile.name}-${index}`}
                           className={cn(
-                            "h-[30px] w-[30px] shrink-0 overflow-hidden rounded-full",
-                            isLight ? "bg-[#C8C8C8]" : "bg-[#292929]",
+                            "relative flex h-[42px] shrink-0 items-center gap-2 rounded-[12px] px-2",
+                            isLight
+                              ? "border-[0.69px] border-[#0000000D] bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
+                              : "border border-white/[0.07] bg-[#151515]/90 shadow-[0_5px_20px_rgba(0,0,0,0.3)]",
                           )}
                         >
-                          <img
-                            src={profile.image}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-
-                        <div className="min-w-0 flex-1 leading-none">
                           <div
                             className={cn(
-                              "truncate text-[11px] font-medium",
-                              isLight ? "text-black/70" : "text-white/65",
+                              "h-[30px] w-[30px] shrink-0 overflow-hidden rounded-full",
+                              isLight ? "bg-[#C8C8C8]" : "bg-[#292929]",
                             )}
                           >
-                            {profile.name}
+                            <img
+                              src={profile.image}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
                           </div>
-                          <div
-                            className={cn(
-                              "mt-1 truncate text-[9px]",
-                              isLight
-                                ? "text-black/40"
-                                : profile.type === "bad"
-                                  ? "text-white/20"
-                                  : "text-white/25",
-                            )}
-                          >
-                            {profile.status}
-                          </div>
-                        </div>
 
-                        <div
-                          className={`flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-full ${
-                            profile.type === "bad"
-                              ? "bg-[#d92d25]"
-                              : "bg-[#26a844]"
-                          }`}
-                        >
-                          {profile.type === "bad" ? (
-                            <svg
-                              viewBox="0 0 12 12"
-                              className="h-2 w-2"
-                              fill="none"
+                          <div className="min-w-0 flex-1 leading-none">
+                            <div
+                              className={cn(
+                                "truncate text-[11px] font-medium",
+                                isLight ? "text-black/70" : "text-white/65",
+                              )}
                             >
-                              <path
-                                d="M3.5 3.5L8.5 8.5M8.5 3.5L3.5 8.5"
-                                stroke="white"
-                                strokeWidth="1.5"
-                                strokeLinecap="round"
-                              />
-                            </svg>
-                          ) : (
+                              {profile.name}
+                            </div>
+                            <div
+                              className={cn(
+                                "mt-1 truncate text-[9px]",
+                                isLight ? "text-black/40" : "text-white/35",
+                              )}
+                            >
+                              Verified Views
+                            </div>
+                          </div>
+
+                          <div className="flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-full bg-[#26a844]">
                             <svg
                               viewBox="0 0 12 12"
                               className="h-2 w-2"
@@ -2480,16 +2549,16 @@ export default function BrandsClient({
                                 strokeLinejoin="round"
                               />
                             </svg>
-                          )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
 
                   {/* Bottom fade overlay */}
                   <div
                     className={cn(
-                      "pointer-events-none absolute bottom-0 inset-x-0 h-[45px] z-[2]",
+                      "pointer-events-none absolute bottom-0 inset-x-0 h-[45px] z-[3]",
                       isLight
                         ? "bg-gradient-to-t from-[#ECECEC] via-[#ECECEC]/90 to-transparent"
                         : "bg-gradient-to-t from-[#171717] via-[#171717]/90 to-transparent",
@@ -2498,7 +2567,7 @@ export default function BrandsClient({
                 </div>
 
                 {/* Pinched purple curve */}
-                <div className="pointer-events-none absolute inset-x-0 top-[15px] sm:top-[20px] md:top-[10px] z-[4] flex items-center justify-center">
+                <div className="pointer-events-none absolute inset-x-0 top-[5px] min-[520px]:top-[-22px] min-[700px]:top-[10px] md:top-[0px] z-[4] flex items-center justify-center">
                   <img
                     src="/images/Vector 958.png"
                     alt=""
@@ -3273,7 +3342,7 @@ export default function BrandsClient({
   )}
 >
   <span className="block">The results gets sharper</span>
-  <span className="mt-6 block">with every campaign.</span>
+  <span className="mt-3 block">with every campaign.</span>
 </h2>
 
             <p
@@ -3292,7 +3361,7 @@ export default function BrandsClient({
               onClick={handleLaunchCampaign}
               disabled={isLaunchingCampaign}
               className={cn(
-                "mt-6 inline-flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-70",
+                "mt-6 inline-flex items-center gap-3 rounded-xl px-4 py-3 text-[12px] md:text-[13px] font-medium transition disabled:cursor-not-allowed disabled:opacity-70",
                 isLight
                   ? "bg-black text-white hover:bg-black/90 shadow-[0_10px_30px_rgba(15,15,30,0.12)]"
                   : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_30px_rgba(0,0,0,0.4)] hover:bg-white/10",

@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { gsap } from "gsap";
 
 interface NumbersSectionProps {
   items: {
@@ -44,7 +45,6 @@ export default function NumbersSection({ items }: NumbersSectionProps) {
   return (
     <section className="py-16" ref={sectionRef}>
       <div className="container mx-auto max-w-6xl px-4">
-       
         <div className="flex justify-center items-center text-white text-center gap-6 sm:gap-8 overflow-hidden">
           {items.map((item, idx) => (
             <div key={idx} className="flex items-center gap-4 flex-shrink">
@@ -74,25 +74,33 @@ function NumberBlock({
   label: string;
   suffix?: string;
 }) {
+  const reelRef = useRef<HTMLDivElement>(null);
   const itemHeight = {
     base: 48,
-    sm: 72, 
+    sm: 72,
   };
+
+  useEffect(() => {
+    if (!reelRef.current) return;
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+    const height = isMobile ? itemHeight.base : itemHeight.sm;
+    const targetY = -Math.min(step, numbers.length - 1) * height;
+
+    gsap.to(reelRef.current, {
+      y: targetY,
+      duration: 0.65,
+      ease: "power3.out",
+      overwrite: "auto",
+    });
+  }, [step, numbers.length]);
 
   return (
     <div className="flex flex-col items-center px-2 sm:px-6 md:px-8 flex-shrink">
       <div className="flex items-center">
         <div className="overflow-hidden h-[48px] sm:h-[72px]">
           <div
-            className="flex flex-col transition-transform duration-300 ease-in-out"
-            style={{
-              transform: `translateY(-${
-                Math.min(step, numbers.length - 1) *
-                (typeof window !== "undefined" && window.innerWidth < 640
-                  ? itemHeight.base
-                  : itemHeight.sm)
-              }px)`,
-            }}
+            ref={reelRef}
+            className="flex flex-col"
           >
             {numbers.map((num, i) => (
               <div
@@ -105,11 +113,13 @@ function NumberBlock({
             ))}
           </div>
         </div>
-        <span className="text-orange-600 bg-clip-text text-transparent font-bold text-2xl sm:text-4xl md:text-6xl ml-1"
-              style={{
-                backgroundImage:
-                  "linear-gradient(179.07deg, #FDC155 31.08%, #FF652D 68.39%)",
-              }}>
+        <span
+          className="text-orange-600 bg-clip-text text-transparent font-bold text-2xl sm:text-4xl md:text-6xl ml-1"
+          style={{
+            backgroundImage:
+              "linear-gradient(179.07deg, #FDC155 31.08%, #FF652D 68.39%)",
+          }}
+        >
           +
         </span>
       </div>

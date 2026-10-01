@@ -132,27 +132,28 @@ const getFormattedFeaturesList = (plan: SubscriptionPlan) => {
   ];
 
   if (name === "EXPLORER") {
-    list.push("Leaderboard-based contests only");
-    list.push("CPM contests available in paid plans");
+    list.push("Leaderboard-based campaigns only");
+    list.push("CPM, Milestone & Dual Rewards campaigns in paid plans");
     list.push("Advanced");
   } else if (name === "STARTER") {
-    list.push("Leaderboard & CPM-based contests");
-    list.push("Both contest types available");
+    list.push("Leaderboard, CPM, Milestone & Dual Rewards campaigns");
+    list.push("All campaign types available");
     list.push("Advanced");
   } else if (name === "BUILDER") {
-    list.push("Leaderboard & CPM-based contests");
-    list.push("Both contest types available");
+    list.push("Leaderboard, CPM, Milestone & Dual Rewards campaigns");
+    list.push("All campaign types available");
     list.push("Prioritized customer support");
   } else if (name === "CHAMPION") {
-    list.push("Leaderboard & CPM-based contests");
-    list.push("Both contest types available");
+    list.push("Leaderboard, CPM, Milestone & Dual Rewards campaigns");
+    list.push("All campaign types available");
     list.push("Premium 24/7 dedicated support");
   } else {
-    if (plan.features.contestTypes?.includes("cpm")) {
-      list.push("Leaderboard & CPM-based contests");
-      list.push("Both contest types available");
+    if (plan.features.contestTypes?.includes("cpm") || (plan.features.contestTypes && plan.features.contestTypes.length > 1)) {
+      list.push("Leaderboard, CPM, Milestone & Dual Rewards campaigns");
+      list.push("All campaign types available");
     } else {
-      list.push("Leaderboard-based contests only");
+      list.push("Leaderboard-based campaigns only");
+      list.push("CPM, Milestone & Dual Rewards campaigns in paid plans");
     }
     if (plan.features.support === "priority") {
       list.push("Prioritized customer support");
@@ -771,20 +772,108 @@ export default function PricingClient() {
                   const isFree = plan.price === 0;
                   const formattedFeatures = getFormattedFeaturesList(plan);
 
+                  if (isMostPopular) {
+                    return (
+                      <div
+                        key={plan.id}
+                        className="w-full max-w-[317px] p-[2px] rounded-[26px] bg-[linear-gradient(180deg,#8B5CF6_0%,#8B5CF6_35%,rgba(139,92,246,0.5)_60%,transparent_85%)] transition-all duration-300 flex flex-col"
+                      >
+                        <div className="w-full h-full rounded-[24px] bg-violet-600 flex flex-col overflow-hidden">
+                          {/* Top Header Section */}
+                          <div className="w-full pt-3 pb-5 bg-violet-600 rounded-t-[24px] flex items-center justify-center shadow-[inset_2px_2px_5px_0px_rgba(255,255,255,0.50)]">
+                            <span className="text-white text-base font-semibold font-['Inter'] leading-6">
+                              MOST POPULAR
+                            </span>
+                          </div>
+
+                          {/* Dark Card Body */}
+                          <div className="w-full p-[26px_16px] rounded-t-[22px] rounded-b-[24px] -mt-3 bg-[linear-gradient(180deg,#353535_0%,#000000_100%)] flex flex-col justify-between items-center gap-8 flex-1 relative z-10">
+                            {/* Top Header Section */}
+                            <div className="w-[288px] max-w-full flex flex-col items-center gap-[17px]">
+                              {/* Plan Pill Badge */}
+                              <div className="px-4 py-2.5 rounded-[103px] bg-[linear-gradient(90deg,#212121_0%,#131313_100%)] border-[0.6px] border-solid shadow-[inset_0_-4px_8px_0_#FFFFFF14] flex items-center justify-center gap-2">
+                                <span className="text-white text-[12px] font-semibold font-sans leading-[16.8px]">
+                                  {plan.displayName || `${plan.name} Plan`}
+                                </span>
+                              </div>
+
+                              {/* Price & Description Container */}
+                              <div className="w-full flex flex-col items-center gap-3">
+                                <div className="flex items-baseline justify-center gap-1">
+                                  <span className="text-white text-[30px] font-semibold leading-[42px]">
+                                    {formatCurrencyFromCents(
+                                      billingCycle === "monthly"
+                                        ? plan.price
+                                        : getDiscountedPrice(plan.price)
+                                    )}
+                                  </span>
+                                  <span className="text-white/60 text-base font-medium pb-1">
+                                    /month
+                                  </span>
+                                </div>
+                                <p className="w-[267px] max-w-full text-center text-white/60 text-sm font-normal leading-[19.6px]">
+                                  {plan.features.description}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Divider Line */}
+                            <div className="w-full h-px bg-white/10"></div>
+
+                            {/* Features List Section */}
+                            <div className="w-full flex flex-col items-start gap-6 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-[19px] h-[19px] flex items-center justify-center flex-shrink-0">
+                                  <Gem className="w-[17px] h-[17px] text-white" />
+                                </div>
+                                <span className="text-white text-[18px] font-medium leading-[18px]">
+                                  {plan.features.maxActiveContests} active contests
+                                </span>
+                              </div>
+
+                              <div className="w-full flex flex-col items-start gap-3">
+                                {formattedFeatures.map((feat, idx) => (
+                                  <div key={idx} className="flex items-center gap-2 text-left">
+                                    <div className="w-5 h-5 rounded-full bg-[linear-gradient(180deg,rgba(52,229,0,0.15)_0%,rgba(204,228,8,0.15)_49%,rgba(251,228,2,0.15)_100%)] flex items-center justify-center flex-shrink-0">
+                                      <div className="w-[14.3px] h-[14.3px] rounded-full bg-[#00FF6C] flex items-center justify-center">
+                                        <Check className="w-2.5 h-2.5 text-black stroke-[3.5]" />
+                                      </div>
+                                    </div>
+                                    <span className="text-white/70 text-sm font-normal leading-[19.6px]">
+                                      {feat}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* CTA Button */}
+                            <div className="w-full p-[1px] bg-[linear-gradient(180deg,#434343_0%,#212121_100%)] rounded-[15px] overflow-hidden mt-auto">
+                              <Button
+                                className="w-full py-[14px] px-4 bg-[linear-gradient(360deg,#000000_0%,#353535_100%)] hover:opacity-90 rounded-[14px] flex flex-row items-center justify-center gap-2 text-white text-base font-semibold border-0 shadow-none h-auto whitespace-nowrap"
+                                asChild
+                              >
+                                <Link href={`/signup?plan=${String(plan.id)}`} className="inline-flex flex-row items-center justify-center gap-2 w-full whitespace-nowrap text-white">
+                                  <span>{isFree ? "Start Free" : "Subscribe"}</span>
+                                  <ArrowRight className="w-4 h-4 shrink-0" />
+                                </Link>
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div
                       key={plan.id}
-                      className={`w-full max-w-[317px] p-[26px_16px] rounded-[24px] flex flex-col justify-between items-center gap-8 transition-all duration-300 ${
-                        isMostPopular
-                          ? "bg-[linear-gradient(180deg,#353535_0%,#000000_100%)] outline-[2px] outline-[#914BFC] outline-solid shadow-[0_0_30px_rgba(145,75,252,0.4)]"
-                          : "bg-[linear-gradient(180deg,#353535_0%,#000000_100%)] border border-[#434343]"
-                      }`}
-                      style={isMostPopular ? { outline: "2px #914BFC solid" } : undefined}
+                      className="w-full max-w-[317px] mt-[50px] p-[26px_16px] rounded-[24px] bg-[linear-gradient(180deg,#353535_0%,#000000_100%)] border border-[#434343] flex flex-col justify-between items-center gap-8 transition-all duration-300"
                     >
                       {/* Top Header Section */}
                       <div className="w-[288px] max-w-full flex flex-col items-center gap-[17px]">
                         {/* Plan Pill Badge */}
-                        <div className="px-4 py-2.5 rounded-[103px]  bg-[linear-gradient(90deg,#212121_0%,#131313_100%)] border-[0.6px] border-solid shadow-[inset_0_-4px_8px_0_#FFFFFF14] flex items-center justify-center gap-2">
+                        <div className="px-4 py-2.5 rounded-[103px] bg-[linear-gradient(90deg,#212121_0%,#131313_100%)] border-[0.6px] border-solid shadow-[inset_0_-4px_8px_0_#FFFFFF14] flex items-center justify-center gap-2">
                           <span className="text-white text-[12px] font-semibold font-sans leading-[16.8px]">
                             {plan.displayName || `${plan.name} Plan`}
                           </span>
@@ -827,7 +916,6 @@ export default function PricingClient() {
                         <div className="w-full flex flex-col items-start gap-3">
                           {formattedFeatures.map((feat, idx) => (
                             <div key={idx} className="flex items-center gap-2 text-left">
-                              {/* Glowing Check Icon Container */}
                               <div className="w-5 h-5 rounded-full bg-[linear-gradient(180deg,rgba(52,229,0,0.15)_0%,rgba(204,228,8,0.15)_49%,rgba(251,228,2,0.15)_100%)] flex items-center justify-center flex-shrink-0">
                                 <div className="w-[14.3px] h-[14.3px] rounded-full bg-[#00FF6C] flex items-center justify-center">
                                   <Check className="w-2.5 h-2.5 text-black stroke-[3.5]" />
@@ -929,44 +1017,51 @@ export default function PricingClient() {
         </div>
       </div> */}
 
-      <section ref={section2Ref}>
-        <div className="bg-black text-white py-16 px-6">
-          <div className="max-w-[1200px] mx-auto text-center">
+      <section ref={section2Ref} className="bg-black py-[100px] px-4 sm:px-8 lg:px-[120px] flex flex-col justify-center items-center gap-7 ">
+        <div className="w-full max-w-[1200px] flex flex-col justify-center items-center gap-[56px]">
+          {/* Header */}
+          <div className="flex flex-col justify-start items-center gap-4 text-center">
             <h2
-              className={`text-4xl md:text-5xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent transition-all duration-700 mb-4 ease-out transform ${
+              className={`text-3xl sm:text-4xl md:text-[45px] font-bold text-white leading-[1.1] transition-all duration-700 ${
                 section2Visible ? "slide-up" : "opacity-0"
               }`}
             >
-              What's Included in Every Plan
+              What’s Included in every plan
             </h2>
             <p
-              className={`${
+              className={`max-w-[654px] text-center text-[#8E8E8E] text-base md:text-[20px] font-medium leading-[30px] transition-all duration-700 ${
                 section2Visible ? "slide-left" : "opacity-0"
-              } text-lg md:text-xl text-[#8E8E8E] max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg`}
+              }`}
             >
               Essential Elements for Your Influencer Marketing Strategy
             </p>
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-12 mb-14">
-              {plans.map((value, index) => (
-                <div
-                  key={index}
-                  className="flex items-start gap-4 rounded-xl p-9 border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.05)_0%,rgba(0,0,0,0.8)_100%)] hover:border-white/20 cursor-pointer transition-all duration-300"
-                >
-                  <div
-                    className="rounded-full p-5 flex items-center justify-center border border-white/20 bg-white/10"
-                  >
-                    <Check className="h-6 w-6 text-white" strokeWidth={3} />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="text-2xl font-bold">{value.title}</h3>
-                    <p className="text-[#8E8E8E] text-xl mt-5">
-                      {value.description}
-                    </p>
+          {/* 2-Column Cards Grid */}
+          <div className="w-full max-w-[1100px] grid grid-cols-1 md:grid-cols-2 gap-4">
+            {plans.map((value, index) => (
+              <div
+                key={index}
+                className="w-full p-[24px_28px] bg-[#171717] shadow-[inset_0px_0px_4px_rgba(255,255,255,0.25)] rounded-[16px] flex flex-col justify-start items-start gap-4 text-left transition-all duration-300 hover:border-white/20 border border-transparent"
+              >
+                {/* Icon Container */}
+                <div className="w-[36px] h-[36px] relative bg-[#535353] shadow-[0px_0.5px_1px_#636363] overflow-hidden rounded-[42px] flex items-center justify-center shrink-0">
+                  <div className="w-5 h-5 relative flex items-center justify-center">
+                    <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
                   </div>
                 </div>
-              ))}
-            </div>
+
+                {/* Text Content */}
+                <div className="w-full flex flex-col justify-start items-start gap-[2px]">
+                  <h3 className="text-white text-[20px] font-semibold leading-[30px]">
+                    {value.title}
+                  </h3>
+                  <p className="text-[#757575] text-[15px] font-medium leading-[22.5px]">
+                    {value.description}
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>

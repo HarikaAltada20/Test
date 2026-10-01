@@ -99,27 +99,28 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
     ];
 
     if (name === "EXPLORER") {
-      list.push("Leaderboard-based contests only");
-      list.push("CPM contests available in paid plans");
+      list.push("Leaderboard-based campaigns only");
+      list.push("CPM, Milestone & Dual Rewards campaigns in paid plans");
       list.push("Advanced");
     } else if (name === "STARTER") {
-      list.push("Leaderboard & CPM-based contests");
-      list.push("Both contest types available");
+      list.push("Leaderboard, CPM, Milestone & Dual Rewards campaigns");
+      list.push("All campaign types available");
       list.push("Advanced");
     } else if (name === "BUILDER") {
-      list.push("Leaderboard & CPM-based contests");
-      list.push("Both contest types available");
+      list.push("Leaderboard, CPM, Milestone & Dual Rewards campaigns");
+      list.push("All campaign types available");
       list.push("Prioritized customer support");
     } else if (name === "CHAMPION") {
-      list.push("Leaderboard & CPM-based contests");
-      list.push("Both contest types available");
+      list.push("Leaderboard, CPM, Milestone & Dual Rewards campaigns");
+      list.push("All campaign types available");
       list.push("Premium 24/7 dedicated support");
     } else {
-      if (plan.features.contestTypes?.includes("cpm")) {
-        list.push("Leaderboard & CPM-based contests");
-        list.push("Both contest types available");
+      if (plan.features.contestTypes?.includes("cpm") || (plan.features.contestTypes && plan.features.contestTypes.length > 1)) {
+        list.push("Leaderboard, CPM, Milestone & Dual Rewards campaigns");
+        list.push("All campaign types available");
       } else {
-        list.push("Leaderboard-based contests only");
+        list.push("Leaderboard-based campaigns only");
+        list.push("CPM, Milestone & Dual Rewards campaigns in paid plans");
       }
       if (plan.features.support === "priority") {
         list.push("Prioritized customer support");
@@ -714,7 +715,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
     <div className="space-y-8">
       {/* Current Subscription Status */}
       {currentSubscription && currentPlan && (
-        <div className="relative overflow-hidden max-w-[1320px] rounded-lg border border-white/15 bg-[#121212] shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40] text-white mx-auto">
+        <div className="relative overflow-hidden max-w-[1120px] rounded-lg border border-white/15 bg-[#121212] shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40] text-white mx-auto">
           {/* <div className="pointer-events-none absolute -right-32 -top-32 h-80 w-80 rounded-full bg-[#D9D9D9]/25 blur-[120px]" /> */}
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2 mb-4 text-2xl">
@@ -1218,40 +1219,11 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
       <div className="space-y-6">
         <div className="max-w-[1200px] pt-12 mx-auto text-center">
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white mb-3 tracking-tight">
-            Choose your Game Plan
+            Available <span className="bg-gradient-to-r from-purple-400 to-purple-600 bg-clip-text text-transparent">Plans</span>
           </h2>
           <p className="text-gray-400 text-sm md:text-base max-w-2xl mx-auto mb-8 leading-relaxed">
-            Set your campaign, your brief, and your budget. Game of Creators puts it in front of a creator network, and pays out on verified performance
+            Choose the plan that best fits your needs
           </p>
-
-          {/* Monthly / Yearly Toggle */}
-          <div className="flex justify-center mb-10">
-            <div className="inline-flex items-center p-1 bg-[#141416] border border-neutral-800 rounded-full">
-              <button
-                onClick={() => setBillingCycle("monthly")}
-                className={`px-5 py-2 rounded-full text-xs font-bold tracking-wider transition-all ${
-                  billingCycle === "monthly"
-                    ? "bg-neutral-800 text-white shadow-sm"
-                    : "text-gray-400 hover:text-white"
-                }`}
-              >
-                MONTHLY
-              </button>
-              <button
-                onClick={() => setBillingCycle("yearly")}
-                className={`px-5 py-2 rounded-full text-xs font-bold tracking-wider transition-all flex items-center gap-1.5 ${
-                  billingCycle === "yearly"
-                    ? "bg-neutral-800 text-white shadow-sm"
-                    : "text-gray-400 hover:text-white"
-                }`}
-              >
-                <span>YEARLY</span>
-                <span className="text-[10px] font-semibold text-[#22c55e] border border-[#22c55e]/30 bg-[#22c55e]/10 px-2 py-0.5 rounded-full lowercase first-letter:uppercase">
-                  Save 20% now
-                </span>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* New User Info */}
@@ -1271,23 +1243,115 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
           </div>
         )}
 
-        <div className="max-w-[1440px] w-full mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16 justify-items-center items-stretch">
+        <div className="max-w-[1320px] w-full mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16 justify-items-center items-stretch">
           {subscriptionPlans.map((plan) => {
             const isCurrentPlan = currentPlan?.id === plan.id;
             const isProcessingThisPlan = processingPlanId === plan.id;
-            const isMostPopular = plan.name.toUpperCase() === "BUILDER";
             const isFree = plan.price === 0;
             const formattedFeatures = getFormattedFeaturesList(plan);
+
+            if (isCurrentPlan) {
+              return (
+                <div
+                  key={plan.id}
+                  className="w-full max-w-[317px] p-[2px] rounded-[26px] bg-[linear-gradient(180deg,#8B5CF6_0%,#8B5CF6_35%,rgba(139,92,246,0.5)_60%,transparent_85%)] transition-all duration-300 flex flex-col"
+                >
+                  <div className="w-full h-full rounded-[24px] bg-violet-600 flex flex-col overflow-hidden">
+                    {/* Top Header Section */}
+                    <div className="w-full pt-3 pb-5 bg-violet-600 rounded-t-[24px] flex items-center justify-center shadow-[inset_2px_2px_5px_0px_rgba(255,255,255,0.50)]">
+                      <span className="text-white text-base font-semibold font-['Inter'] leading-6">
+                        Current Plan
+                      </span>
+                    </div>
+
+                    {/* Dark Card Body */}
+                    <div className="w-full p-[26px_16px] rounded-t-[22px] rounded-b-[24px] -mt-3 bg-[linear-gradient(180deg,#353535_0%,#000000_100%)] flex flex-col justify-between items-center gap-8 flex-1 relative z-10">
+                      {/* Top Header Section */}
+                      <div className="w-[288px] max-w-full flex flex-col items-center gap-[17px]">
+                        {/* Plan Pill Badge */}
+                        <div className="px-4 py-2.5 bg-[linear-gradient(90deg,#212121_0%,#131313_100%)] shadow-[inset_0px_-4px_8px_rgba(255,255,255,0.08)] rounded-[103px] border border-black/60 flex items-center justify-center gap-2">
+                          <span className="text-white text-xs font-semibold font-sans leading-[16.8px]">
+                            {plan.displayName || `${plan.name} Plan`}
+                          </span>
+                        </div>
+
+                        {/* Price & Description Container */}
+                        <div className="w-full flex flex-col items-center gap-3">
+                          <div className="flex items-baseline justify-center gap-1">
+                            <span className="text-white text-[30px] font-semibold leading-[42px]">
+                              {formatCurrencyFromCents(
+                                billingCycle === "monthly"
+                                  ? plan.price
+                                  : getDiscountedPrice(plan.price)
+                              )}
+                            </span>
+                            <span className="text-white/60 text-base font-medium pb-1">
+                              /month
+                            </span>
+                          </div>
+                          <p className="w-[267px] max-w-full text-center text-white/60 text-sm font-normal leading-[19.6px]">
+                            {plan.features.description}
+                          </p>
+                        </div>
+                      </div>
+
+                      {getTrialDisplayText(plan) && (
+                        <div className="text-center">
+                          <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-medium inline-block">
+                            {getTrialDisplayText(plan)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Divider Line */}
+                      <div className="w-full h-px bg-white/10"></div>
+
+                      {/* Features List Section */}
+                      <div className="w-full flex flex-col items-start gap-6 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-[19px] h-[19px] flex items-center justify-center flex-shrink-0">
+                            <Gem className="w-[17px] h-[17px] text-white" />
+                          </div>
+                          <span className="text-white text-[18px] font-medium leading-[18px]">
+                            {plan.features.maxActiveContests} active contests
+                          </span>
+                        </div>
+
+                        <div className="w-full flex flex-col items-start gap-3">
+                          {formattedFeatures.map((feat, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-left">
+                              <div className="w-5 h-5 rounded-full bg-[linear-gradient(180deg,rgba(52,229,0,0.15)_0%,rgba(204,228,8,0.15)_49%,rgba(251,228,2,0.15)_100%)] flex items-center justify-center flex-shrink-0">
+                                <div className="w-[14.3px] h-[14.3px] rounded-full bg-[#00FF6C] flex items-center justify-center">
+                                  <Check className="w-2.5 h-2.5 text-black stroke-[3.5]" />
+                                </div>
+                              </div>
+                              <span className="text-white/70 text-sm font-normal leading-[19.6px]">
+                                {feat}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* CTA Button */}
+                      <div className="w-full p-[1px] bg-[linear-gradient(180deg,#434343_0%,#212121_100%)] rounded-[15px] overflow-hidden mt-auto">
+                        <Button
+                          disabled
+                          className="w-full py-[14px] px-4 bg-[linear-gradient(360deg,#000000_0%,#353535_100%)] rounded-[14px] text-white/50 text-base font-semibold border-0 cursor-not-allowed h-auto"
+                        >
+                          Current Plan
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
 
             return (
               <div
                 key={plan.id}
-                className={`w-full max-w-[317px] p-[26px_16px] rounded-[24px] flex flex-col justify-between items-center gap-8 transition-all duration-300 ${
-                  isMostPopular
-                    ? "bg-[linear-gradient(180deg,#353535_0%,#000000_100%)] outline-[2px] outline-[#914BFC] outline-solid shadow-[0_0_30px_rgba(145,75,252,0.4)]"
-                    : "bg-[linear-gradient(180deg,#353535_0%,#000000_100%)] border border-[#434343]"
-                }`}
-                style={isMostPopular ? { outline: "2px #914BFC solid" } : undefined}
+                className="w-full max-w-[317px] mt-[50px] p-[26px_16px] rounded-[24px] bg-[linear-gradient(180deg,#353535_0%,#000000_100%)] border border-[#434343] flex flex-col justify-between items-center gap-8 transition-all duration-300"
               >
                 {/* Top Header Section */}
                 <div className="w-[288px] max-w-full flex flex-col items-center gap-[17px]">
@@ -1343,7 +1407,6 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                   <div className="w-full flex flex-col items-start gap-3">
                     {formattedFeatures.map((feat, idx) => (
                       <div key={idx} className="flex items-center gap-2 text-left">
-                        {/* Glowing Check Icon Container */}
                         <div className="w-5 h-5 rounded-full bg-[linear-gradient(180deg,rgba(52,229,0,0.15)_0%,rgba(204,228,8,0.15)_49%,rgba(251,228,2,0.15)_100%)] flex items-center justify-center flex-shrink-0">
                           <div className="w-[14.3px] h-[14.3px] rounded-full bg-[#00FF6C] flex items-center justify-center">
                             <Check className="w-2.5 h-2.5 text-black stroke-[3.5]" />
