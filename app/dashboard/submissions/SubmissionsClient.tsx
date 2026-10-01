@@ -513,9 +513,8 @@ export default function SubmissionsClient({
       submission.platform,
       contest?.platform,
     );
-    const milestones = Array.isArray(milestoneContest?.milestones)
-      ? milestoneContest.milestones
-      : [];
+    const rawMilestones = milestoneContest?.milestones;
+    const milestones = Array.isArray(rawMilestones) ? rawMilestones : [];
     if (milestones.length === 0) return null;
 
     const submissionViews = getMilestoneEligibleViewsFromRow(submission);
