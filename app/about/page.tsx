@@ -101,49 +101,24 @@ export default function AboutPage() {
       <div className="relative z-20">
      
 
-        <section className="py-16" ref={storyRef}>
-          <div className="flex justify-center items-center py-12 px-4">
-            <div className="relative rounded-2xl p-6 md:p-12 flex flex-col md:flex-row items-center gap-8 bg-[linear-gradient(135deg,rgba(255,255,255,0.05)_0%,rgba(0,0,0,0.8)_100%)] max-w-7xl w-full border border-white/10">
+        <section className="py-20 px-4 sm:px-8 lg:px-28 bg-black flex flex-col items-center justify-center text-center" ref={storyRef}>
+          <div className="flex flex-col items-center justify-center gap-4 max-w-[806px] mx-auto">
+            {/* Pill Badge */}
+            <div className="inline-flex items-center justify-center px-3.5 py-1 bg-[#353535] rounded-[16px] border border-[#434343]">
+              <span className="text-[#C4C4C4] text-[15px] font-normal leading-[21px]">
+                About us
+              </span>
+            </div>
 
-              {/* Text Section */}
-              <div className="flex-1 relative z-10">
-                <h2
-                  className={`text-4xl sm:text-5xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent mb-6 ${visible ? "slide-up" : ""}`}
-                  style={{ animationDelay: "0.5s" }}
-                >
-                  Our Story
-                </h2>
-                <p
-                  className={`text-base md:text-xl leading-relaxed text-[#8E8E8E] mt-4 ${
-                    visible ? "slide-left" : ""
-                  }`}
-                  style={{ animationDelay: "1s" }}
-                >
-                  Launched in{" "}
-                  <span className="font-semibold text-white">
-                    2024, Game Of Creators
-                  </span>{" "}
-                  addresses a key challenge: brands often struggle to produce
-                  engaging content, while creators seek meaningful
-                  collaborations. Our platform serves as a campaign marketplace,
-                  enabling brands to host content creation contests and allowing
-                  creators to showcase their talents for prizes and recognition.
-                </p>
-              </div>
-
-              {/* Image Section */}
-              <div
-                className={`flex-1 h-[350px] flex justify-center relative z-10 ${
-                  visible ? "slide-right" : ""
-                }`}
-                style={{ animationDelay: "1.5s" }}
-              >
-                <Image
-                  src={phoneIllustration}
-                  alt="Phone Illustration"
-                  className="max-w-[350px] w-full"
-                />
-              </div>
+            {/* Title & Description */}
+            <div className="flex flex-col items-center gap-4 mt-4">
+              <h1 className="text-3xl sm:text-4xl md:text-[52px] font-bold bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent leading-[110%] tracking-tight">
+                Our Story
+              </h1>
+              <p className="text-[#8E8E8E] text-base sm:text-lg md:text-[20px] font-medium leading-[150%] md:leading-[30px] text-center">
+                Launched in{" "}
+                <span className="text-white font-medium">2024</span>, Game Of Creators addresses a key challenge: brands often struggle to produce engaging content, while creators seek meaningful collaborations. Our platform serves as a campaign marketplace, enabling brands to host content creation contests and allowing creators to showcase their talents for prizes and recognition.
+              </p>
             </div>
           </div>
         </section>
