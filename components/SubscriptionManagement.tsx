@@ -628,8 +628,8 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
             <Badge
               className={
                 change.type === "upgrade"
-                  ? "border bg-[#4A00BE] rounded-lg px-4 py-1.5 text-md text-white hover:bg-[#4A00BE]"
-                  : "border bg-[#4A00BE] rounded-lg px-4 py-1.5 text-md text-white hover:bg-[#4A00BE]"
+                  ? "border bg-[#4A00BE] rounded-lg px-5 py-2 text-base text-white hover:bg-[#4A00BE]"
+                  : "border bg-[#4A00BE] rounded-lg px-5 py-2 text-base text-white hover:bg-[#4A00BE]"
               }
             >
               {change.type === "upgrade" ? "Upgrading" : "Downgrading"}
@@ -637,12 +637,12 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
           );
         }
         // If all scheduled changes are canceled or no scheduled changes, show "Canceling" since subscription will end
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Canceling</Badge>;
+        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100 px-5 py-2 text-base font-semibold">Canceling</Badge>;
       }
-      return <Badge className="border border-[#434343] bg-[#353535] rounded-full px-4 py-1.5 text-md text-white">Active</Badge>;
+      return <Badge className="border border-white bg-white rounded-full px-5 py-2 text-base font-semibold text-black hover:bg-white">Active</Badge>;
     }
     return (
-      <Badge className="bg-red-100 text-red-800 hover:bg-red-100">{subscription.status}</Badge>
+      <Badge className="bg-red-100 text-red-800 hover:bg-red-100 px-5 py-2 text-base font-semibold">{subscription.status}</Badge>
     );
   };
   if (isLoading) {
@@ -712,56 +712,50 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-12">
       {/* Current Subscription Status */}
       {currentSubscription && currentPlan && (
-        <div className="relative overflow-hidden max-w-[1120px] rounded-lg border border-white/15 bg-[#121212] shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40] text-white mx-auto">
-          {/* <div className="pointer-events-none absolute -right-32 -top-32 h-80 w-80 rounded-full bg-[#D9D9D9]/25 blur-[120px]" /> */}
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-2 mb-4 text-2xl">
-              <div className="border rounded-3xl p-2">
-                <Shield className="h-6 w-6 text-white" />
-              </div>
-              Current Subscription
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Plan Details */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
-              <div className="flex items-center gap-4">
-                <div
-                  className={`p-4 rounded-xl bg-gradient-to-r ${getPlanColor(
-                    currentPlan.name
-                  )} text-white shadow-lg`}
-                >
-                  {getPlanIcon(currentPlan.name)}
+        <div className="flex flex-col items-center justify-center gap-10 py-10 px-4 sm:px-8 bg-black">
+          {/* Header Section */}
+          <div className="flex flex-col items-center text-center gap-4 max-w-[760px] mx-auto">
+            <h1 className="text-[32px] sm:text-[42px] md:text-[52px] font-bold text-white leading-[110%] tracking-tight">
+              Manage Subscription
+            </h1>
+            <p className="text-[15px] sm:text-[18px] md:text-[20px] font-medium text-[#8E8E8E] leading-[150%]">
+              Set your campaign, your brief, and your budget. Game of Creators puts it in front of a creator network, and pays out on verified performance
+            </p>
+          </div>
+
+          {/* Subscription Card */}
+          <div className="relative mx-auto w-full max-w-[1020px] overflow-hidden rounded-[36px] border border-[#3A3636] bg-[linear-gradient(360deg,#000000_0%,#353535_100%)] p-7 sm:p-10 md:p-12 text-white shadow-2xl">
+            {/* Top Section: Current Subscription + Action Buttons */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-8 border-b border-[#353535]">
+              <div className="flex flex-col gap-3.5 items-start">
+                <div className="text-[18px] sm:text-[20px] font-semibold text-[#8E8E8E] leading-[26px]">
+                  Current Subscription
                 </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white">
+                <div className="inline-flex items-center justify-center rounded-[103px] border border-black bg-gradient-to-r from-[#212121] to-[#131313] px-5 py-3 shadow-[inset_0px_-4px_8px_rgba(255,255,255,0.08)]">
+                  <span className="text-sm font-semibold text-white leading-[18px]">
                     {currentPlan.displayName || currentPlan.name}
-                  </h3>
-                  <p className="text-white font-medium">
-                    {formatCurrencyFromCents(currentPlan.price)}
-                    {currentPlan.price > 0 ? "/month" : ""}
-                  </p>
+                  </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                {getStatusBadge(currentSubscription)}
+              <div className="flex items-center gap-4 shrink-0 flex-wrap">
+                <div>
+                  {getStatusBadge(currentSubscription)}
+                </div>
+
                 {currentPlan.price > 0 && (
                   <button
-                    // variant="outline"
                     onClick={handleCustomerPortal}
                     disabled={isProcessing}
-                    className="rounded-3xl relative border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] font-bold px-4 py-2 text-md overflow-hidden flex items-center justify-center gap-2"
-                   
+                    className="inline-flex items-center justify-center rounded-[14px] border border-white/20 bg-[#1E1E1E] px-6 py-3 text-base font-semibold text-white transition hover:bg-[#2A2A2A] cursor-pointer"
                   >
-                     <div className="scan-line"></div>
                     {isProcessing ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                     ) : (
-                      <ExternalLink className="h-4 w-4" />
+                      <ExternalLink className="mr-2 h-5 w-5" />
                     )}
                     Manage Billing
                   </button>
@@ -769,41 +763,42 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
               </div>
             </div>
 
-            {/* Billing Period Information */}
+            {/* Billing Period Section */}
             {billingDetails && (
-              <div className="bg-gradient-to-b rounded-lg from-purple-900/10 to-purple-900/3 border-2 border-gray-700 p-6 space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className="border rounded-3xl p-2">
-                    <CalendarDays className="h-5 w-5 text-white " />
-                  </div>
-                  <span className="font-semibold text-white text-lg">
-                    Billing Period
-                  </span>
+              <div className="mt-8 flex flex-col gap-6">
+                <div className="text-[18px] font-medium text-[#8E8E8E] leading-[22px]">
+                  Billing Period
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-[#B16FF43D] rounded-lg p-4 shadow-sm border-2 border-[#7F39EC]">
-                    <p className="text-sm text-white mb-1">Current Period</p>
-                    <p className="font-semibold text-white">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                  <div className="flex flex-col justify-start items-start gap-2 rounded-[16px] border border-[#353535] bg-[#191919] p-4 sm:p-5">
+                    <span className="text-xs sm:text-sm font-medium text-[#8E8E8E] leading-[18px]">
+                      Current Period
+                    </span>
+                    <span className="text-sm sm:text-base font-semibold text-white leading-[22px]">
                       {formatDateRange(
                         billingDetails.currentPeriodStart,
                         billingDetails.currentPeriodEnd
                       )}
-                    </p>
+                    </span>
                   </div>
-                  <div className="bg-[#B16FF43D] rounded-lg p-4 shadow-sm border-2 border-[#7F39EC]">
-                    <p className="text-sm text-white mb-1">Next Billing Date</p>
-                    <p className="font-semibold text-white">
+
+                  <div className="flex flex-col justify-start items-start gap-2 rounded-[16px] border border-[#353535] bg-[#191919] p-4 sm:p-5">
+                    <span className="text-xs sm:text-sm font-medium text-[#8E8E8E] leading-[18px]">
+                      Next Billing Date
+                    </span>
+                    <span className="text-sm sm:text-base font-semibold text-white leading-[22px]">
                       {formatDate(billingDetails.nextBillingDate)}
-                    </p>
+                    </span>
                   </div>
-                  <div className="bg-[#B16FF43D] rounded-lg p-4 shadow-sm border-2 border-[#7F39EC]">
-                    <p className="text-sm text-white mb-1">
-                      Days Until Next Billing
-                    </p>
-                    <p className="font-semibold text-white">
-                      {billingDetails.daysUntilNextBilling} days
-                    </p>
+
+                  <div className="flex flex-col justify-start items-start gap-2 rounded-[16px] border border-[#353535] bg-[#191919] p-4 sm:p-5">
+                    <span className="text-xs sm:text-sm font-medium text-[#8E8E8E] leading-[18px]">
+                      Days until next billing
+                    </span>
+                    <span className="text-sm sm:text-base font-semibold text-white leading-[22px]">
+                      {billingDetails.daysUntilNextBilling} Days
+                    </span>
                   </div>
                 </div>
 
@@ -814,7 +809,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                     (change) => change.status !== "canceled"
                   ) ? (
                     // Show plan change information when there are active scheduled changes
-                    <Alert className="border-[#7F39EC] text-white bg-[#D9C0FF26]">
+                    <Alert className="border-[#7F39EC] text-white bg-[#D9C0FF26] mt-4">
                       <Info
                         className="h-4 w-4 text-white !text-white"
                         stroke="currentColor"
@@ -835,7 +830,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                     </Alert>
                   ) : (
                     // Show cancellation warning when canceled but no active scheduled changes
-                    <Alert className="border border-red-600/40 bg-red-900/30 text-red-100">
+                    <Alert className="border border-red-600/40 bg-red-900/30 text-red-100 mt-4">
                       <AlertTriangle className="h-4 w-4 text-red-300" />
                       <AlertDescription className="text-red-100">
                         <strong>Subscription Ending:</strong> Your subscription
@@ -847,6 +842,9 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                   ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
 
             {/* Scheduled Changes - Only show if there are actual changes */}
             {scheduledChanges.length > 0 &&
@@ -1083,29 +1081,6 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                 </div>
               )}
 
-            {/* Plan Features */}
-            <div className="pl-2 space-y-5">
-              <h4 className="font-medium text-lg text-white">
-                Current Plan Features
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {getPlanFeatures(currentPlan).map((feature, index) => (
-                  <div key={index} className="flex p-2 rounded-full border border-gray-600 justify-center items-center gap-3">
-                    {/* <div
-                      className="rounded-full p-3 flex items-center justify-center"
-                      style={{
-                        backgroundImage:
-                          "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
-                      }}
-                    > */}
-                      <Check className="h-6 w-6 text-white" strokeWidth={3} />
-                    {/* </div> */}
-                    <span className="text-lg text-gray-300">{typeof feature === "string" ? feature : feature.title}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* Next Billing Cycle Info - Only show when plan actually continues (not canceled) */}
             {billingDetails?.cancelAtPeriodEnd &&
               scheduledChanges.length > 0 &&
@@ -1211,17 +1186,14 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                   </div>
                 </div>
               )}
-          </CardContent>
-        </div>
-      )}
 
       {/* Available Plans */}
       <div className="space-y-6">
         <div className="max-w-[1200px] pt-12 mx-auto text-center">
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white mb-3 tracking-tight">
-            Available <span className="bg-gradient-to-r from-purple-400 to-purple-600 bg-clip-text text-transparent">Plans</span>
+          <h2 className="text-3xl sm:text-4xl md:text-[45px] font-bold text-white leading-[1.1] transition-all duration-700 mb-3 tracking-tight">
+            Available Plans
           </h2>
-          <p className="text-gray-400 text-sm md:text-base max-w-2xl mx-auto mb-8 leading-relaxed">
+          <p className="text-center text-[#8E8E8E] text-base md:text-[20px] font-medium leading-[30px] max-w-2xl mx-auto mb-8 leading-relaxed">
             Choose the plan that best fits your needs
           </p>
         </div>

@@ -99,50 +99,7 @@ export default function AboutPage() {
   return (
     <div className="min-h-screen bg-black text-white pt-[10px] overflow-hidden">
       <div className="relative z-20">
-        <section className="pt-20 pb-16 md:pt-28 md:pb-24 relative overflow-hidden">
-
-          <div className="container mx-auto px-4 text-center relative z-10">
-            {/* Premium Badge */}
-            <div className="inline-flex items-center gap-2 sm:gap-3 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-4 sm:py-2 md:px-6 md:py-3 lg:px-8 lg:py-3.5 mb-6 sm:mb-8 flex-wrap justify-center">
-              <Crown className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5 text-white flex-shrink-0" />
-              <span className="text-sm sm:text-base md:text-lg lg:text-xl font-semibold bg-white bg-clip-text text-transparent text-center">
-                #1 Gamified Creator Marketing Platform
-              </span>
-            </div>
-
-            {/* Enhanced Social Icons */}
-            <div className="flex justify-center mb-8">
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-orange-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
-                <div className="relative">
-                  <Image
-                    src={socialMediaIcon}
-                    alt="Social Media Icons"
-                    width={150}
-                    height={40}
-                    className="relative z-10"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Massive Title */}
-            <h1
-              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent mb-6 text-center slide-up"
-              style={{ animationDelay: "1s", fontFamily: "Montserrat, sans-serif" }}
-            >
-              About Game Of Creators
-            </h1>
-
-            {/* Strategic Subtitle */}
-            <p
-              className="text-lg md:text-2xl text-[#8E8E8E] max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
-              style={{ animationDelay: "2s" }}
-            >
-              Game Of Creators connects brands with creators through campaigns, allowing brands to generate genuine content while creators earn and grow.
-            </p>
-          </div>
-        </section>
+     
 
         <section className="py-16" ref={storyRef}>
           <div className="flex justify-center items-center py-12 px-4">

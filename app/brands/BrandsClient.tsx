@@ -2390,11 +2390,12 @@ export default function BrandsClient({
             {/* Heading */}
             <h2
               className={cn(
-                "relative mb-10 text-center text-3xl font-bold tracking-tight sm:mb-16 sm:text-4xl md:text-5xl lg:text-[52px]",
+                "relative mb-10 text-center text-3xl font-bold tracking-tight leading-[1.25] sm:leading-[1.3] sm:mb-16 sm:text-4xl md:text-5xl lg:text-[52px]",
                 isLight ? "text-black" : "text-white",
               )}
             >
-              Everything that you need
+              <span className="block mb-1 sm:mb-2.5">Everything that you need</span>
+              <span>to promote brand</span>
             </h2>
 
             {/* TOP TWO CARDS */}
@@ -2432,7 +2433,7 @@ export default function BrandsClient({
                               "relative flex h-[42px] shrink-0 items-center gap-2 rounded-[12px] px-2",
                               isLight
                                 ? "border-[0.69px] border-[#0000000D] bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
-                                : "border border-white/[0.07] bg-[#151515]/90 shadow-[0_5px_20px_rgba(0,0,0,0.3)]",
+                                : "border bg-[#16161A] border-[0.69px] border-[#FFFFFF14] shadow-[0px_11px_21.99px_0px_#0000005C]",
                             )}
                           >
                             <div

@@ -45,6 +45,7 @@ import { useRouter } from "next/navigation";
 import socialPair from "@/public/images/social_pair.avif";
 import startdemo from "@/public/images/startdemo.avif";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import CtcBanner from "@/components/CtcBanner";
 // import FAQ from "@/components/FAQ";
 // Define PlanFeatures and SubscriptionPlan types (ensure consistency)
 type PlanFeatures = {
@@ -624,81 +625,14 @@ export default function PricingClient() {
   return (
     <div className="min-h-screen bg-black text-white pt-[10px] overflow-hidden">
       {/* Hero Section */}
-      <section className="pt-20 pb-16 md:pt-28 md:pb-24 relative overflow-hidden">
-        <div className="container mx-auto px-4 text-center relative z-10">
-          {/* Premium Badge */}
-          <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-4 sm:py-2 md:px-6 md:py-3 mb-6 sm:mb-8 flex-wrap justify-center max-w-full">
-            <Crown className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5 text-white flex-shrink-0" />
-            <span className="text-xs sm:text-sm md:text-base lg:text-lg font-semibold bg-white bg-clip-text text-transparent text-center leading-tight">
-              #1 Gamified Creator Marketing Platform
-            </span>
-          </div>
-
-          {/* Enhanced Social Icons */}
-          <div className="flex justify-center mb-8">
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-orange-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <div className="relative">
-                <Image
-                  src={socialPair}
-                  alt="Social Media Icons"
-                  width={150}
-                  height={40}
-                  className="relative z-10"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Massive Title */}
-          <h1
-            className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent mb-6 text-center slide-up"
-            style={{ animationDelay: "1s", fontFamily: "Montserrat, sans-serif" }}
-          >
-            Game Of Creators Pricing
-          </h1>
-
-          {/* Strategic Subtitle */}
-          <p
-            className="text-lg md:text-2xl text-[#8E8E8E] max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
-            style={{ animationDelay: "2s" }}
-          >
-            The World's First Platform to Democratise Brand Deals
-          </p>
-        </div>
-      </section>
+     
 
       {/* All Pricing Plans */}
       <div id="pricing" className="scroll-mt-20 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
         {/* Show subscription management for authenticated advertisers */}
         {user && userType === "advertiser" ? (
           <div className="mx-auto">
-            <div className="text-center pt-16 mb-12">
-              {/* <h2 className="text-2xl md:text-4xl font-bold tracking-tight mb-3">
-                Manage Your Subscription
-              </h2>
-              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-                Upgrade, downgrade, or manage your current subscription plan
-              </p> */}
-
-              <h2
-                className="text-3xl md:text-5xl text-white slide-up font-semibold transition-all duration-700 mb-4 ease-out transform"
-                style={{ animationDelay: "1s" }}
-              >
-                Manage Your{" "}
-                <span
-                
-                >
-                  Subscription
-                </span>
-              </h2>
-              <p
-                className="text-lg slide-left md:text-xl text-slate-400 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg"
-                style={{ animationDelay: "1.5s" }}
-              >
-                Upgrade, downgrade, or manage your current subscription plan
-              </p>
-            </div>
+            
             <SubscriptionManagement />
           </div>
         ) : (
@@ -1017,7 +951,7 @@ export default function PricingClient() {
         </div>
       </div> */}
 
-      <section ref={section2Ref} className="bg-black py-[100px] px-4 sm:px-8 lg:px-[120px] flex flex-col justify-center items-center gap-7 ">
+      <section ref={section2Ref} className="bg-black py-[80px] mt-16 px-4 sm:px-8 lg:px-[120px] flex flex-col justify-center items-center gap-7 ">
         <div className="w-full max-w-[1200px] flex flex-col justify-center items-center gap-[56px]">
           {/* Header */}
           <div className="flex flex-col justify-start items-center gap-4 text-center">
@@ -1066,58 +1000,42 @@ export default function PricingClient() {
         </div>
       </section>
 
-      <section className="py-16" ref={storyRef}>
-        <div className="bg-black flex justify-center items-center py-12 px-4">
-          <div className="relative rounded-2xl p-6 md:p-12 flex flex-col md:flex-row items-center gap-8 shadow-lg max-w-7xl w-full border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.05)_0%,rgba(0,0,0,0.8)_100%)]">
-            {/* Text Section */}
-            <div className="flex-1 relative z-10">
-              <h2
-                className={`text-4xl md:text-5xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent ${visible ? "slide-up" : ""}`}
-                style={{ animationDelay: "0.5s" }}
-              >
+      <section className="py-16 px-4 sm:px-8 lg:px-24 bg-black flex justify-center items-center">
+        <div className="relative w-full max-w-[1200px] min-h-[471px] py-16 px-6 sm:px-12 flex flex-col justify-center items-center overflow-hidden rounded-[28px] border border-[#3A3636] bg-[linear-gradient(360deg,#000000_0%,#353535_100%)] shadow-[inset_0px_0px_4px_rgba(255,255,255,0.25)]">
+          {/* Background Decorative Shapes */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            {/* <div className="w-[990px] h-[441px] absolute left-[27px] top-[335px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
+            <div className="w-[990px] h-[441px] absolute left-[267px] top-[-202px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" /> */}
+            {/* <div className="w-[990px] h-[441px] absolute left-[27px] top-[354px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
+            <div className="w-[990px] h-[441px] absolute left-[267px] top-[-183px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
+            <div className="w-[990px] h-[441px] absolute left-[27px] top-[308px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
+            <div className="w-[990px] h-[441px] absolute left-[267px] top-[-230px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
+            <div className="w-[990px] h-[441px] absolute left-[27px] top-[288px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
+            <div className="w-[990px] h-[441px] absolute left-[267px] top-[-250px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" /> */}
+          </div>
+
+          {/* Main Content Box */}
+          <div className="relative z-10 max-w-[654px] mx-auto flex flex-col items-center text-center gap-9">
+            <div className="flex flex-col items-center gap-4">
+              <h2 className="text-[28px] sm:text-[36px] md:text-[40px] font-medium text-white leading-[130%] tracking-tight">
                 Not sure which plan is right for you?
               </h2>
-              <p
-                className={`text-base md:text-xl leading-relaxed text-[#8E8E8E] mt-4 ${
-                  visible ? "slide-left" : ""
-                }`}
-                style={{ animationDelay: "1s" }}
-              >
+              <p className="text-[15px] sm:text-[17px] font-medium text-[#8E8E8E] leading-[150%]">
                 Book a demo with{" "}
-                <span className="font-semibold text-white">Vishesh,</span>{" "}
-                Founder of Game Of Creators
+                <span className="text-[#F1F1F1] font-semibold">Vishesh</span>
+                , Founder of Game Of Creators. Join hundreds of successful businesses. Get answers and start launching impactful campaigns with a free consultation.
               </p>
-              <p
-                className={`text-base md:text-xl leading-relaxed text-[#8E8E8E] mt-4 ${
-                  visible ? "slide-left" : ""
-                }`}
-                style={{ animationDelay: "1.5s" }}
-              >
-                Join hundreds of businesses driving success with Game Of
-                Creators! Book your free consultation today to get all your
-                questions answered and start launching impactful campaigns.
-              </p>
-
-              <a
-                href="https://calendly.com/guptavishesh2/30min"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 justify-center rounded-[20px] mt-8 relative border border-white/20 text-white font-bold px-8 py-3 text-lg overflow-hidden bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] hover:bg-white/10 transition-all duration-300"
-              >
-                <div className="scan-line opacity-50 pointer-events-none"></div>
-                Book a Demo
-                <ArrowRight className="h-5 w-5" />
-              </a>
             </div>
 
-            {/* Image Section */}
-            <div className="flex-1 h-[350px] flex justify-center relative z-10">
-              <Image
-                src={startdemo}
-                alt="Phone Illustration"
-                className="max-w-[350px] w-full"
-              />
-            </div>
+            <a
+              href="https://calendly.com/guptavishesh2/30min"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2.5 px-9 py-3 bg-[#DEDEDE] text-[#353535] hover:bg-white rounded-[14px] font-semibold text-base leading-[20px] transition-all duration-200 cursor-pointer shadow-md group"
+            >
+              <span>Book Call Now</span>
+              <ArrowRight className="w-4 h-4 text-[#353535] transition-transform group-hover:translate-x-0.5" />
+            </a>
           </div>
         </div>
       </section>
@@ -1170,7 +1088,8 @@ export default function PricingClient() {
                 </div>
             </div> */}
 
-      {/* <FAQ /> */}
+      {/* CTA Banner Section */}
+      <CtcBanner />
     </div>
   );
 }
