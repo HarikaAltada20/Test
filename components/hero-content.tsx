@@ -1190,12 +1190,12 @@ export default function HeroContent() {
 
         <div className="relative z-20 mx-auto max-w-[1200px] px-6 lg:px-8">
           {/* Trusted */}
-          <div className="flex justify-center pt-10 sm:pt-14">
-            <div className="flex items-center gap-2.5">
+          <div className="flex justify-center pt-6 sm:pt-10 md:pt-14">
+            <div className="flex items-center gap-1.5 sm:gap-2.5 max-w-full px-2">
               {/* Avatar 1 */}
               <div
                 className={cn(
-                  "relative z-10 h-10 w-10 overflow-hidden rounded-full border-2 bg-white",
+                  "relative z-10 h-7 w-7 sm:h-9 sm:w-9 md:h-10 md:w-10 shrink-0 overflow-hidden rounded-full border-2 bg-white",
                   isLight ? "border-white" : "border-[#030303]",
                 )}
               >
@@ -1204,14 +1204,14 @@ export default function HeroContent() {
                   alt=""
                   fill
                   className="object-cover"
-                  sizes="32px"
+                  sizes="(max-width: 640px) 28px, 40px"
                 />
               </div>
 
               {/* Avatar 2 */}
               <div
                 className={cn(
-                  "relative -ml-4 h-10 w-10 overflow-hidden rounded-full border-2 bg-yellow-300",
+                  "relative -ml-3 sm:-ml-4 md:-ml-5 h-7 w-7 sm:h-9 sm:w-9 md:h-10 md:w-10 shrink-0 overflow-hidden rounded-full border-2 bg-yellow-300",
                   isLight ? "border-white" : "border-[#030303]",
                 )}
               >
@@ -1220,13 +1220,13 @@ export default function HeroContent() {
                   alt=""
                   fill
                   className="object-cover"
-                  sizes="32px"
+                  sizes="(max-width: 640px) 28px, 40px"
                 />
               </div>
 
               <span
                 className={cn(
-                  "ml-1 text-[17px]",
+                  "ml-1 text-[13px] sm:text-[15px] md:text-[17px] font-medium leading-tight truncate sm:whitespace-nowrap",
                   isLight ? "text-black/55" : "text-[#C4C4C4]",
                 )}
               >
@@ -1236,31 +1236,36 @@ export default function HeroContent() {
           </div>
 
           {/* Heading */}
-          <div className="mx-auto mt-7 max-w-[1000px] text-center px-2">
+          <div className="mx-auto mt-5 sm:mt-7 max-w-[1000px] text-center px-2">
             <h1
               className={cn(
-                "text-[30px] sm:text-[44px] md:text-[52px] font-['Inter'] font-bold leading-[115%] tracking-[-4%] text-center",
+                "text-[24px] xs:text-[28px] sm:text-[40px] md:text-[52px] lg:text-[56px] font-['Inter'] font-bold leading-[120%] sm:leading-[115%] tracking-[-3%] sm:tracking-[-4%] text-center",
                 isLight ? "text-black/75" : "text-white",
               )}
             >
               <span className={isLight ? "text-black/60" : "text-[#757575]"}>
                 Creators earn on{" "}
               </span>
-              <span className="inline-flex items-center gap-1.5 sm:gap-2">
+              <span className="inline-flex items-center gap-1 sm:gap-2">
                 {/* Performance icon — opt out of text fill so the badge stays visible */}
                 <span
                   className="
                     inline-flex
-                    h-[44px]
-                    w-[46px]
-                    sm:h-[60.64px]
-                    sm:w-[63.11px]
+                    h-[34px]
+                    w-[36px]
+                    xs:h-[40px]
+                    xs:w-[42px]
+                    sm:h-[50px]
+                    sm:w-[52px]
+                    md:h-[60.64px]
+                    md:w-[63.11px]
                     shrink-0
                     rotate-[8.81deg]
                     items-center
                     justify-center
-                    rounded-[12px]
-                    sm:rounded-[16.09px]
+                    rounded-[10px]
+                    sm:rounded-[14px]
+                    md:rounded-[16.09px]
                     bg-[linear-gradient(180deg,#FF8800_0%,#FFA53E_50%,#FFC27C_100%)]
                     shadow-[0px_3.71px_4.95px_0px_#FFFFFF40_inset,3.71px_-8.66px_4.95px_0px_#FFD2D20D_inset,6.19px_-11.14px_13.36px_0px_#FFF4F440_inset,13.61px_13.61px_49.5px_0px_#FFAD0038,3.71px_4.95px_29.7px_0px_#FFAD0026,1.24px_3.71px_8.17px_0px_#FFAD001A]
                     [background-clip:padding-box]
@@ -1272,14 +1277,14 @@ export default function HeroContent() {
                     alt=""
                     width={32}
                     height={32}
-                    className="h-[24px] w-[24px] sm:h-[32px] sm:w-[32px] object-contain"
+                    className="h-[18px] w-[18px] xs:h-[22px] xs:w-[22px] sm:h-[26px] sm:w-[26px] md:h-[32px] md:w-[32px] object-contain"
                   />
                 </span>
                 <span className={isLight ? "text-black" : "text-white"}>
                   performance
                 </span>
               </span>{" "}
-              <br />
+              <br className="hidden xs:inline" />
               <span className={isLight ? "text-black/60" : "text-[#757575]"}>
                 Brands grow on{" "}
               </span>
@@ -1291,7 +1296,7 @@ export default function HeroContent() {
             {/* Description */}
             <p
               className={cn(
-                "mx-auto mt-5 sm:mt-7 max-w-[600px] font-['Inter'] text-[15px] sm:text-[17px] font-medium leading-[150%] tracking-[-0.51px] text-center px-2",
+                "mx-auto mt-4 sm:mt-6 md:mt-7 max-w-[600px] font-['Inter'] text-[13px] xs:text-[14px] sm:text-[16px] md:text-[17px] font-medium leading-[150%] tracking-[-0.51px] text-center px-3 sm:px-2",
                 isLight ? "text-black/50" : "text-[#8E8E8E]",
               )}
             >
@@ -1489,7 +1494,7 @@ export default function HeroContent() {
                   src="/images/39e512460e9052a19bf4ea8b3ca0c6cdd8086315.png"
                   alt="Creators"
                   fill
-                  className="object-cover"
+                  className="object-cover object-[center_30%]"
                   sizes="280px"
                   priority
                 />
@@ -1759,7 +1764,7 @@ export default function HeroContent() {
                 src="/images/39e512460e9052a19bf4ea8b3ca0c6cdd8086315.png"
                 alt="Creators"
                 fill
-                className="object-cover"
+                className="object-cover object-[center_30%]"
                 sizes="335px"
                 priority
               />
