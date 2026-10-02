@@ -202,7 +202,7 @@ async function bustLeaderboardCache(contestId: string) {
 //   - 48 hours: SUBMISSION_WINDOW_VALUE = 48, SUBMISSION_WINDOW_UNIT = 'hour'
 //   - 1 week: SUBMISSION_WINDOW_VALUE = 1, SUBMISSION_WINDOW_UNIT = 'week'
 // Adjust the submission window value
-const SUBMISSION_WINDOW_VALUE: number = 2;
+const SUBMISSION_WINDOW_VALUE: number = 10;
 const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "day";
 
 // Auto-generate display text and handle singular/plural forms
@@ -1368,14 +1368,14 @@ export default function SubmitContentPage({
       // Fetch existing submissions for progress tracking
       const { data: existingSubmissions, error: existingSubsErr } =
         await fetchContestSubmissionsAllPages(
-        supabase,
-        contestId,
-        "*",
-        {
-          creatorId: user.id,
-          order: { column: "created_at", ascending: false },
-        },
-      );
+          supabase,
+          contestId,
+          "*",
+          {
+            creatorId: user.id,
+            order: { column: "created_at", ascending: false },
+          },
+        );
 
       if (existingSubsErr) {
         console.error(
@@ -2420,8 +2420,8 @@ export default function SubmitContentPage({
       if (!retryRes.ok || retryData.error) {
         throw new Error(
           insightsData.error?.message ||
-            retryData.error?.message ||
-            "Failed to fetch Instagram Reel insights.",
+          retryData.error?.message ||
+          "Failed to fetch Instagram Reel insights.",
         );
       }
       Object.assign(insightsData, retryData);
@@ -2540,8 +2540,7 @@ export default function SubmitContentPage({
         if (!insightsRes.ok || insightsData.error) {
           if (insightsData.error?.error_subcode === 2108006) {
             throw new Error(
-              `"${
-                reel.caption || "Instagram Reel"
+              `"${reel.caption || "Instagram Reel"
               }" was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel.`,
             );
           }
@@ -2564,7 +2563,7 @@ export default function SubmitContentPage({
           if (!insightsRes.ok || insightsData.error) {
             throw new Error(
               insightsData.error?.message ||
-                "Failed to fetch Instagram Reel insights.",
+              "Failed to fetch Instagram Reel insights.",
             );
           }
         }
@@ -2854,9 +2853,9 @@ export default function SubmitContentPage({
       const allTiktokVideos =
         contestPlatform === "tiktok"
           ? [
-              ...selectedTiktokVideosFromTabs,
-              ...selectedTiktokVideosFromLinks,
-            ]
+            ...selectedTiktokVideosFromTabs,
+            ...selectedTiktokVideosFromLinks,
+          ]
           : [];
 
       // Determine which handler to call
@@ -3380,28 +3379,28 @@ export default function SubmitContentPage({
                   isFetchingTiktokVideo ||
                   (contest?.multiple_submissions_enabled
                     ? (contestPlatform === "youtube" &&
-                        selectedVideosFromTabs.length === 0 &&
-                        selectedVideos.length === 0) ||
-                      (contestPlatform === "instagram" &&
-                        selectedReelsFromTabs.length === 0 &&
-                        selectedReels.length === 0) ||
-                      (contestPlatform === "tiktok" &&
-                        selectedTiktokVideosFromTabs.length === 0 &&
-                        selectedTiktokVideosFromLinks.length === 0)
+                      selectedVideosFromTabs.length === 0 &&
+                      selectedVideos.length === 0) ||
+                    (contestPlatform === "instagram" &&
+                      selectedReelsFromTabs.length === 0 &&
+                      selectedReels.length === 0) ||
+                    (contestPlatform === "tiktok" &&
+                      selectedTiktokVideosFromTabs.length === 0 &&
+                      selectedTiktokVideosFromLinks.length === 0)
                     : (contestPlatform === "youtube" &&
-                        !selectedVideo &&
-                        !videoPreview) ||
-                      (contestPlatform === "instagram" &&
-                        !selectedReel &&
-                        !instagramMediaPreview) ||
-                      (contestPlatform === "tiktok" &&
-                        !tiktokVideoPreview &&
-                        !selectedTiktokVideo))
+                      !selectedVideo &&
+                      !videoPreview) ||
+                    (contestPlatform === "instagram" &&
+                      !selectedReel &&
+                      !instagramMediaPreview) ||
+                    (contestPlatform === "tiktok" &&
+                      !tiktokVideoPreview &&
+                      !selectedTiktokVideo))
                 }
                 className={cn(
                   "w-full sm:w-auto",
                   isRequirementsBlocked &&
-                    "bg-[#4A00BE] text-white opacity-60 hover:bg-[#4A00BE]",
+                  "bg-[#4A00BE] text-white opacity-60 hover:bg-[#4A00BE]",
                 )}
               >
                 {isLoading ? (
@@ -6390,29 +6389,29 @@ export default function SubmitContentPage({
 
                       {/* Earnings Cap Warning */}
                       {earningsCapCents != null && earningsCapCents > 0 && (
-                          <Alert
+                        <Alert
+                          className={cn(
+                            isDark
+                              ? "border-[#C9A7FF] bg-[#C9A7FF26]"
+                              : "border-amber-200 bg-amber-50",
+                          )}
+                        >
+                          <AlertTriangle
                             className={cn(
-                              isDark
-                                ? "border-[#C9A7FF] bg-[#C9A7FF26]"
-                                : "border-amber-200 bg-amber-50",
+                              isDark ? "text-purple-400" : "text-amber-600",
+                            )}
+                          />
+                          <AlertDescription
+                            className={cn(
+                              isDark ? "text-white" : "text-amber-800",
                             )}
                           >
-                            <AlertTriangle
-                              className={cn(
-                                isDark ? "text-purple-400" : "text-amber-600",
-                              )}
-                            />
-                            <AlertDescription
-                              className={cn(
-                                isDark ? "text-white" : "text-amber-800",
-                              )}
-                            >
-                              <strong>Earnings Cap:</strong> You can earn up to $
-                              {(earningsCapCents / 100).toFixed(2)}{" "}
-                              total from this contest.
-                            </AlertDescription>
-                          </Alert>
-                        )}
+                            <strong>Earnings Cap:</strong> You can earn up to $
+                            {(earningsCapCents / 100).toFixed(2)}{" "}
+                            total from this contest.
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
