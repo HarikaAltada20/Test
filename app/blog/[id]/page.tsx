@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { TableOfContents } from "@/components/TableOfContents";
+import CtcBanner from "@/components/CtcBanner";
 import type { Metadata } from "next";
 
 // Always fetch fresh data so newly published blogs are visible immediately
@@ -307,86 +308,81 @@ export default async function BlogDetailPage({ params }: BlogPageProps) {
           __html: JSON.stringify(breadcrumbStructuredData),
         }}
       />
-      <div className="min-h-screen bg-black text-white border-b border-white/10">
+      <div className="min-h-screen bg-black text-white">
+        {/* Header Section */}
+        <section className="w-full px-6 sm:px-12 md:px-[54px] py-14 sm:py-16 md:py-[74px] bg-black overflow-hidden flex flex-col justify-center items-center gap-12 md:gap-[68px]">
+          <div className="w-full flex flex-col justify-center items-center gap-6 max-w-[800px]">
+            {/* Back Arrow Link */}
+            <Link
+              href="/blog"
+              className="inline-flex items-center gap-2 text-[#C4C4C4] hover:text-white transition-colors group cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4 text-[#C4C4C4] group-hover:text-white group-hover:-translate-x-1 transition-all" />
+              <span className="text-[15px] font-normal leading-[21px] font-['Inter']">
+                Back to blogs
+              </span>
+            </Link>
 
-        <div className="w-full max-w-[1350px] mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-6 sm:py-8 md:py-10 lg:py-16">
-          {/* Back arrow */}
-          <Link
-            href="/blog"
-            className="inline-flex items-center gap-2 text-[#8E8E8E] hover:text-white mb-4 sm:mb-6 lg:mb-10 transition-colors group"
-          >
-            <span className="inline-flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 group-hover:border-white/20 group-hover:bg-white/10 transition-colors">
-              <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 group-hover:-translate-x-1 transition-transform" />
-            </span>
-            <span className="text-[10px] sm:text-xs uppercase mt-1 tracking-[0.18em] text-[#8E8E8E] font-semibold whitespace-nowrap">
-              Back to Blogs
-            </span>
-          </Link>
-
-          {/* Header section with image */}
-          <header className="mb-8 sm:mb-10 md:mb-12 grid gap-6 sm:gap-8 lg:grid-cols-[1fr_650px] items-center">
-            <div className="space-y-4 sm:space-y-6 md:space-y-8 order-2 lg:order-1">
-              <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 sm:px-4 py-1 text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.2em] text-white">
-                <span className="h-1.5 w-1.5 rounded-full bg-white shadow-[0_0_12px_rgba(255,255,255,0.85)]" />
-                {post.category || "Blog"}
-              </p>
+            {/* Title & Description & Meta */}
+            <div className="flex flex-col justify-start items-center gap-4 text-center w-full">
               <h1
                 id="title"
-                className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight leading-[1.5] sm:leading-[1.6] md:leading-[1.55] lg:leading-[1.5] bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent scroll-mt-20 sm:scroll-mt-24"
+                className="w-full max-w-[720px] text-center text-white text-2xl sm:text-3xl md:text-[38px] font-bold leading-snug md:leading-[44.8px] font-['Inter'] scroll-mt-20"
               >
                 {post.title}
               </h1>
+
               {post.short_description && (
-                <p className="text-sm sm:text-base md:text-lg lg:text-xl text-[#8E8E8E] tracking-[0.03em] leading-relaxed">
-                  {post.short_description.replace(/<[^>]*>/g, "")}
+                <p className="w-full max-w-[654px] text-center text-[#8E8E8E] text-[15px] font-normal leading-[21px] font-['Inter']">
+                  {stripHtml(post.short_description)}
                 </p>
               )}
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] sm:text-xs md:text-sm text-[#8E8E8E]">
-                <span className="inline-flex items-center gap-1.5 sm:gap-2 rounded-full bg-[#171717] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40] px-2.5 sm:px-3 py-1 border border-white/10 text-white">
-                  {formatDate(post.published_at || post.created_at)}
-                </span>
-                {post.read_time_minutes ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#171717] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40] px-2.5 sm:px-3 py-1 border border-white/10 text-white">
-                    {post.read_time_minutes} min
-                  </span>
-                ) : null}
+
+              <div className="text-center text-[#8E8E8E] text-[15px] font-normal leading-[21px] font-['Inter']">
+                {formatDate(post.published_at || post.created_at)}
+                {post.read_time_minutes ? ` - ${post.read_time_minutes} min Read` : ""}
               </div>
             </div>
-            {post.thumbnail && (
-              <div className="relative w-full max-w-[650px] mx-auto lg:mx-0 order-1 lg:order-2">
-                <div className="relative w-full h-[250px] sm:h-[300px] md:h-[450px] rounded-xl sm:rounded-2xl overflow-hidden bg-[#171717] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40] border border-white/10">
-                  <img
-                    src={post.thumbnail}
-                    alt={post.title}
-                    className="h-full w-full object-cover"
-                  />
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-black/5 to-transparent" />
-                </div>
-              </div>
-            )}
-          </header>
+          </div>
+        </section>
 
-          <div className="grid gap-6 sm:gap-8 md:gap-10 lg:grid-cols-[260px_minmax(0,1fr)] pt-8 sm:pt-12 md:pt-16">
-            {/* Table of contents - Sticky */}
-            <aside className="hidden lg:block">
-              <div className="sticky top-24 xl:top-28 self-start">
+        {/* Article Body Section */}
+        <section className="w-full bg-black py-10 md:pb-[90px] px-4 sm:px-6 md:px-12 flex justify-center items-center">
+          <div className="w-full max-w-[1240px] mx-auto flex flex-col justify-center items-center">
+            {/* Table of Contents - Sidebar on Desktop (Commented out) */}
+            {/* {tocItems.length > 1 && (
+              <aside className="hidden lg:block w-[280px] shrink-0 sticky top-24">
                 <TableOfContents
                   items={tocItems}
                   articleUrl={articleUrl}
                   title={post.title}
                 />
-              </div>
-            </aside>
+              </aside>
+            )} */}
 
-            {/* Article content - Scrollable */}
-            <article className="border border-gray-700 rounded-lg p-4 sm:p-5 md:p-6 lg:p-8">
+            {/* Main Article Container Card */}
+            <article className="w-full max-w-[1040px] mx-auto bg-[#131313] rounded-[28px] sm:rounded-[41px] p-5 sm:p-[28px_28px_56px_28px] md:p-[32px_36px_68px_36px] overflow-hidden flex flex-col items-center gap-[44px]">
+              {/* Featured Image */}
+              {post.thumbnail && (
+                <div className="w-full max-w-[980px] h-auto max-h-[540px] rounded-[18px] sm:rounded-[23px] overflow-hidden bg-neutral-900 border border-white/5 shrink-0">
+                  <img
+                    src={post.thumbnail}
+                    alt={post.title}
+                    className="w-full h-full object-cover max-h-[540px]"
+                  />
+                </div>
+              )}
+
+              {/* Dynamic HTML Content */}
               <div
-                className="prose prose-sm sm:prose-base md:prose-lg max-w-none text-white [&_h1]:text-white [&_h1]:text-2xl sm:[&_h1]:text-3xl [&_h1]:font-bold [&_h1]:mt-6 sm:[&_h1]:mt-8 [&_h1]:mb-3 sm:[&_h1]:mb-4 [&_h1]:scroll-mt-20 sm:[&_h1]:scroll-mt-24 [&_h2]:text-white [&_h2]:text-xl sm:[&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:mt-5 sm:[&_h2]:mt-6 [&_h2]:mb-2 sm:[&_h2]:mb-3 [&_h2]:scroll-mt-20 sm:[&_h2]:scroll-mt-24 [&_h3]:text-white [&_h3]:text-lg sm:[&_h3]:text-xl [&_h3]:font-semibold [&_h3]:mt-4 [&_h3]:mb-2 [&_h3]:scroll-mt-20 sm:[&_h3]:scroll-mt-24 [&_p]:text-white [&_p]:text-sm sm:[&_p]:text-base [&_p]:mb-3 sm:[&_p]:mb-4 [&_p]:leading-relaxed [&_ul]:text-white [&_ul]:text-sm sm:[&_ul]:text-base [&_ul]:mb-3 sm:[&_ul]:mb-4 [&_ul]:pl-4 sm:[&_ul]:pl-6 [&_ol]:text-white [&_ol]:text-sm sm:[&_ol]:text-base [&_ol]:mb-3 sm:[&_ol]:mb-4 [&_ol]:pl-4 sm:[&_ol]:pl-6 [&_li]:text-white [&_li]:mb-1.5 sm:[&_li]:mb-2 [&_strong]:text-white [&_strong]:font-semibold [&_em]:text-white [&_blockquote]:text-white [&_blockquote]:text-sm sm:[&_blockquote]:text-base [&_blockquote]:border-l-4 [&_blockquote]:border-gray-400 [&_blockquote]:pl-3 sm:[&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:my-3 sm:[&_blockquote]:my-4 [&_code]:text-white [&_code]:bg-gray-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs sm:[&_code]:text-sm [&_img]:w-full [&_img]:h-auto [&_img]:max-h-[280px] sm:[&_img]:max-h-[360px] md:[&_img]:max-h-[420px] [&_img]:object-contain [&_img]:rounded-lg [&_img]:my-4 sm:[&_img]:my-6 [&_img]:mx-auto [&_img]:block [&_img]:border-none [&_img]:hover:border-transparent [&_img]:hover:opacity-100 [&_a]:text-purple-400 [&_a]:hover:text-purple-300 [&_a]:underline [&_table]:w-full [&_table]:my-4 [&_table]:border-collapse [&_th]:border [&_th]:border-gray-600 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_td]:border [&_td]:border-gray-600 [&_td]:px-2 [&_td]:py-1"
+                className="w-full max-w-[980px] px-1 sm:px-4 flex flex-col gap-6 text-[#C4C4C4] font-['Inter'] font-medium text-base sm:text-lg leading-[26px] sm:leading-[28px] [&_h1]:text-[#F1F1F1] [&_h1]:text-2xl sm:[&_h1]:text-3xl [&_h1]:font-semibold [&_h1]:leading-snug [&_h1]:mt-8 [&_h1]:mb-4 [&_h1]:font-['Inter'] [&_h1]:scroll-mt-24 [&_h2]:text-[#F1F1F1] [&_h2]:text-xl sm:[&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:leading-snug [&_h2]:mt-8 [&_h2]:mb-4 [&_h2]:font-['Inter'] [&_h2]:scroll-mt-24 [&_h3]:text-[#F1F1F1] [&_h3]:text-lg sm:[&_h3]:text-xl [&_h3]:font-semibold [&_h3]:mt-6 [&_h3]:mb-3 [&_h3]:font-['Inter'] [&_h3]:scroll-mt-24 [&_p]:text-[#C4C4C4] [&_p]:text-base sm:[&_p]:text-lg [&_p]:font-medium [&_p]:leading-[26px] sm:[&_p]:leading-[28px] [&_p]:mb-4 [&_p]:font-['Inter'] [&_ul]:text-[#C4C4C4] [&_ul]:text-base sm:[&_ul]:text-lg [&_ul]:font-medium [&_ul]:leading-[26px] sm:[&_ul]:leading-[28px] [&_ul]:mb-4 [&_ul]:pl-6 [&_ul]:list-disc [&_ol]:text-[#C4C4C4] [&_ol]:text-base sm:[&_ol]:text-lg [&_ol]:font-medium [&_ol]:leading-[26px] sm:[&_ol]:leading-[28px] [&_ol]:mb-4 [&_ol]:pl-6 [&_ol]:list-decimal [&_li]:mb-2 [&_strong]:text-[#F1F1F1] [&_strong]:font-semibold [&_a]:text-[#C4A3FF] [&_a]:underline [&_a]:hover:text-white [&_img]:w-full [&_img]:h-auto [&_img]:max-h-[500px] [&_img]:object-contain [&_img]:rounded-[16px] [&_img]:my-6 [&_img]:mx-auto [&_img]:block"
                 dangerouslySetInnerHTML={{ __html: contentWithAltText }}
               />
             </article>
           </div>
-        </div>
+        </section>
+
+        <CtcBanner />
       </div>
     </>
   );

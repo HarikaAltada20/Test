@@ -47,67 +47,83 @@ export function BlogPostsGrid({ posts }: BlogPostsGridProps) {
 
   return (
     <>
-      <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 md:gap-8 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {visiblePosts.map((post) => (
           <Link
             key={post.id}
             href={`/blog/${post.id}`}
-            className="group relative rounded-2xl border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.05)_0%,rgba(0,0,0,0.8)_100%)] overflow-hidden flex flex-col transition-all duration-500 hover:-translate-y-2 hover:border-white/20"
+            className="group relative w-full rounded-[20px] p-[15px] px-[14px] bg-[linear-gradient(360deg,black_0%,#353535_100%)] shadow-[inset_0_0_4px_rgba(255,255,255,0.25)] overflow-hidden flex flex-col justify-start items-center gap-5 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[inset_0_0_8px_rgba(255,255,255,0.35)]"
           >
-
-            {post.thumbnail && (
-              <div className="relative w-full h-72 bg-slate-900/10 overflow-hidden">
-                {/* light gradient only at bottom for text readability */}
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
+            {/* Thumbnail */}
+            <div className="relative w-full h-[221px] rounded-[12px] bg-neutral-900 overflow-hidden shrink-0">
+              {post.thumbnail ? (
                 <img
                   src={post.thumbnail}
                   alt={post.title}
-                  className="w-full h-full object-cover group-hover:scale-[1.06] transition-transform duration-700 ease-out"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                 />
-
-                {/* top-right status / read-time pill when image exists */}
-                <div className="absolute top-3 right-3 flex gap-2 text-[11px] font-medium">
-                  {post.read_time_minutes ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-black/80 border border-white/20 px-2.5 py-1 text-white shadow-lg backdrop-blur">
-                      <span className="h-1.5 w-1.5 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)]" />
-                      {post.read_time_minutes} min read
-                    </span>
-                  ) : null}
+              ) : (
+                <div className="w-full h-full bg-neutral-800 flex items-center justify-center text-neutral-500 text-sm">
+                  No Thumbnail
                 </div>
-              </div>
-            )}
-
-            <div className="relative p-7 flex flex-col gap-4 flex-1">
-              {/* Category badge above title */}
-              {post.category && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white w-fit">
-                  <span className="h-1.5 w-1.5 rounded-full bg-white shadow-[0_0_12px_rgba(255,255,255,0.5)]" />
-                  {post.category}
-                </span>
               )}
 
-              <h2 className="font-semibold text-lg lg:text-xl line-clamp-2 text-white group-hover:text-gray-300 transition-colors duration-300">
-                {post.title}
-              </h2>
-
-              {stripHtml(post.short_description).length > 0 && (
-                <p className="text-sm lg:text-[15px] text-[#8E8E8E] leading-relaxed line-clamp-3 transition-colors">
-                  {stripHtml(post.short_description)}
-                </p>
-              )}
-
-              <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-800/80 text-[11px] uppercase tracking-[0.16em]">
-                <span className="inline-flex items-center gap-2 text-slate-400/90">
-                  <span className="h-1 w-1 rounded-full bg-[#7F39EC] shadow-[0_0_10px_rgba(127,57,236,0.9)]" />
-                  <span>{formatDate(post.published_at)}</span>
-                </span>
-
-                <span className="inline-flex items-center gap-1 text-slate-400/90 group-hover:text-[#C4A3FF] transition-colors">
-                  <span className="text-[10px]">Read article</span>
-                  <span className="text-xs translate-y-px transition-transform duration-300 group-hover:translate-x-1">
-                    →
+              {/* Overlay badges for read time and category */}
+              <div className="absolute top-2.5 right-2.5 flex items-center gap-2">
+                {post.read_time_minutes ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-black/70 backdrop-blur-md px-2.5 py-0.5 text-[11px] font-medium text-white/90 border border-white/10">
+                    {post.read_time_minutes} min read
                   </span>
-                </span>
+                ) : null}
+              </div>
+
+              {post.category && (
+                <div className="absolute bottom-2.5 left-2.5">
+                  <span className="inline-flex items-center rounded-md bg-black/70 backdrop-blur-md px-2.5 py-1 text-[11px] font-medium text-white/90 border border-white/10">
+                    {post.category}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Content area */}
+            <div className="w-full flex-1 flex flex-col justify-between gap-5 px-1">
+              <div className="flex flex-col gap-[9px]">
+                <h2 className="text-[#F1F1F1] text-[17px] font-semibold leading-[25.5px] font-['Inter'] line-clamp-2 group-hover:text-white transition-colors">
+                  {post.title}
+                </h2>
+
+                {stripHtml(post.short_description).length > 0 && (
+                  <p className="text-[#8E8E8E] text-[15px] font-normal leading-[21px] font-['Inter'] line-clamp-3">
+                    {stripHtml(post.short_description)}
+                  </p>
+                )}
+              </div>
+
+              {/* Bottom Footer Row */}
+              <div className="w-full flex items-center justify-between pt-1">
+                <div className="inline-flex items-center gap-1 px-3 py-2 rounded-[7px] bg-transparent group-hover:bg-white/10 transition-colors">
+                  <span className="text-[#F1F1F1] text-[13px] font-medium leading-[18px] font-['Inter']">
+                    Read More
+                  </span>
+                  <svg
+                    className="w-3.5 h-3.5 text-[#F1F1F1] transition-transform duration-300 group-hover:translate-x-1"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </div>
+
+                <div className="text-[#757575] text-[12px] font-medium leading-[16px] font-['Inter']">
+                  {formatDate(post.published_at)}
+                </div>
               </div>
             </div>
           </Link>
@@ -115,18 +131,13 @@ export function BlogPostsGrid({ posts }: BlogPostsGridProps) {
       </div>
 
       {hasMore && (
-        <div className="flex justify-center mt-10">
+        <div className="flex justify-center mt-12">
           <button
             type="button"
             onClick={() => setVisibleCount((count) => count + 6)}
-            className="rounded-3xl relative text-white font-bold px-8 py-2 text-lg overflow-hidden flex items-center gap-2"
-            style={{
-              background:
-                "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-            }}
+            className="px-5 py-2.5 bg-white text-[#353535] text-[14px] font-semibold leading-[20px] font-['Inter'] rounded-[12px] outline outline-1 outline-[#131313] outline-offset-[-1px] hover:bg-neutral-100 transition-colors flex items-center justify-center gap-2"
           >
-            <div className="scan-line"></div>
-            View more
+            View More blogs
           </button>
         </div>
       )}

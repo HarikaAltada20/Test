@@ -85,7 +85,12 @@ export default function CtcBanner() {
   const [isNavigating, setIsNavigating] = useState(false);
 
   // Route flags
-  const isBrands = pathname === "/brands" || pathname === "/pricing" || pathname === "/about" || pathname === "/about-us";
+  const isBrands =
+    pathname === "/brands" ||
+    pathname === "/pricing" ||
+    pathname === "/about" ||
+    pathname === "/about-us" ||
+    pathname?.startsWith("/blog");
   const isCreators = pathname === "/creators";
   const isHome = pathname === "/";
 

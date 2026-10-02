@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Sparkles, Star, Heart, Palette, Trophy, Crown } from "lucide-react";
 import SocialPair from "@/public/images/social_pair.avif";
 import { BlogPostsGrid } from "@/app/blog/BlogPostsGrid";
+import CtcBanner from "@/components/CtcBanner";
 import type { Metadata } from "next";
 
 // Always fetch fresh data so newly published blogs show up immediately
@@ -125,48 +126,16 @@ export default async function BlogIndexPage() {
       />
       <div className="min-h-screen bg-black text-white pt-[10px] overflow-hidden">
         <div className="relative z-20">
-          <section className="pt-20 pb-12 md:pt-28 md:pb-16 relative overflow-hidden">
-
-            <div className="container mx-auto px-4 text-center relative z-10">
-              {/* Premium Badge */}
-              <div className="inline-grid grid-cols-[auto_1fr] items-center gap-2 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-6 sm:py-3 mb-8 max-w-[92vw] sm:max-w-none mx-auto">
-                <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white shrink-0" />
-                <span className="text-xs sm:text-lg font-semibold bg-white bg-clip-text text-transparent leading-tight whitespace-normal text-left">
-                  #1 Gamified Creator Marketing Platform
-                </span>
+          <section className="w-full px-6 sm:px-12 md:px-[54px] py-16 sm:py-20 md:py-[90px] bg-black overflow-hidden flex flex-col justify-center items-center gap-12 md:gap-[68px]">
+            <div className="w-full flex flex-col justify-center items-center gap-8">
+              <div className="flex flex-col justify-start items-center gap-4 max-w-full">
+                <h1 className="font-['Inter'] font-bold text-3xl sm:text-[4xl] md:text-[52px] leading-[110%] tracking-[-4%] text-center  text-white leading-[110%] tracking-tight text-center max-w-[596px]">
+                  Blogs
+                </h1>
+                <p className="font-['Inter'] font-medium text-base sm:text-lg md:text-[20px] leading-relaxed md:leading-[30px] text-center text-[#8E8E8E] max-w-[654px]">
+                  Creator marketing insights for brands and creators focused on performance-driven content.
+                </p>
               </div>
-
-              {/* Enhanced Social Icons */}
-              <div className="flex justify-center mb-8">
-                <div className="relative group">
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-orange-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
-                  <div className="relative">
-                    <Image
-                      src={SocialPair}
-                      alt="Social Media Icons"
-                      width={150}
-                      height={40}
-                      className="relative z-10"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Massive Gaming Title */}
-              <h1
-                className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent mb-6 text-center slide-up"
-                style={{ animationDelay: "1s", fontFamily: "Montserrat, sans-serif" }}
-              >
-                Our Blogs
-              </h1>
-
-              {/* Strategic Subtitle */}
-              <p
-                className="text-lg md:text-2xl text-[#8E8E8E] max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
-                style={{ animationDelay: "2s" }}
-              >
-                Creator marketing insights for brands and creators focused on performance-driven content.
-              </p>
             </div>
           </section>
 
@@ -215,6 +184,8 @@ export default async function BlogIndexPage() {
               )}
             </div>
           </section>
+
+          <CtcBanner />
         </div>
       </div>
     </>
