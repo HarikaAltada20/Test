@@ -20,35 +20,35 @@ const creatorTestimonials: Testimonial[] = [
   {
     name: "Kabir Singh",
     role: "Creator",
-    image: "/images/Ellipse 2355.avif",
+    image: "/images/testimonial_avatar_1.png",
     quote:
       "I've worked with brand campaigns before, but getting rewarded based on actual performance feels much more fair.",
   },
   {
     name: "Aarav Mehta",
     role: "Creator",
-    image: "/images/Ellipse 2355 (1).avif",
+    image: "/images/testimonial_avatar_2.png",
     quote:
       "I stopped chasing followers and started getting paid for the views I actually generate.",
   },
   {
     name: "Riya Sharma",
     role: "Content Creator",
-    image: "/images/Ellipse 2355 (3).avif",
+    image: "/images/testimonial_avatar_3.png",
     quote:
       "The campaigns are clear, the rewards are transparent, and I know exactly what I'm earning from my content.",
   },
   {
     name: "Ananya Kapoor",
     role: "Lifestyle Creator",
-    image: "/images/Ellipse 2355 (2).avif",
+    image: "/images/testimonial_avatar_5.png",
     quote:
       "GOC makes it easy to find campaigns that actually fit the kind of content I already create.",
   },
   {
     name: "Dev Patel",
     role: "Creator",
-    image: "/images/Ellipse 2355 (4).avif",
+    image: "/images/testimonial_avatar_4.png",
     quote:
       "My audience size isn't the only thing that matters anymore. Good content can actually earn on its performance.",
   },
@@ -58,35 +58,35 @@ const brandsTestimonials: Testimonial[] = [
   {
     name: "Sarah Johnson",
     role: "Marketing Director",
-    image: "/images/Ellipse 2355 (3).avif",
+    image: "/images/testimonial_avatar_3.png",
     quote:
       "We stopped guessing which creators would perform. Now we only pay for verified results, and the campaigns are clearer for everyone.",
   },
   {
     name: "Mike Chen",
     role: "Founder, Tech Startup",
-    image: "/images/Ellipse 2355 (1).avif",
+    image: "/images/testimonial_avatar_2.png",
     quote:
       "Game of Creators made it easy to launch performance campaigns and see exactly where our budget was going.",
   },
   {
     name: "Emma Rodriguez",
     role: "CMO",
-    image: "/images/Ellipse 2355 (2).avif",
+    image: "/images/testimonial_avatar_5.png",
     quote:
       "The visibility into creator performance changed how we plan campaigns. Authentic content, measurable outcomes.",
   },
   {
     name: "Lisa Chen",
     role: "Head of Digital",
-    image: "/images/Ellipse 2355 (7).avif",
+    image: "/images/testimonial_avatar_1.png",
     quote:
       "A platform that actually aligns brand goals with creator strengths — launching and tracking campaigns feels straightforward.",
   },
   {
     name: "James Carter",
     role: "Brand Manager",
-    image: "/images/Ellipse 2355 (4).avif",
+    image: "/images/testimonial_avatar_4.png",
     quote:
       "We moved from fixed creator fees to performance-based payouts. The results speak for themselves.",
   },
@@ -161,7 +161,7 @@ function TestimonialCardContent({
 
       <div className="flex flex-col gap-6 sm:gap-8">
         <div className="flex items-center gap-3.5 sm:gap-4">
-          <div className="relative size-10 sm:size-12 shrink-0 overflow-hidden rounded-lg">
+          <div className="relative size-10 sm:size-12 shrink-0 overflow-hidden rounded-none">
             <Image
               src={testimonial.image}
               alt={testimonial.name}

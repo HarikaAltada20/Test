@@ -53,6 +53,7 @@ type FormCursorTarget =
   | "budget"
   | "launch"
   | "campaignType"
+  | "campaignTypeMilestone"
   | "thumbnail"
   | "creatorCard";
 
@@ -67,12 +68,16 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
   const budgetRef = useRef<HTMLDivElement>(null);
   const launchRef = useRef<HTMLDivElement>(null);
   const campaignTypeRef = useRef<HTMLDivElement>(null);
+  const milestoneRef = useRef<HTMLDivElement>(null);
   const thumbnailRef = useRef<HTMLDivElement>(null);
 
   const [title, setTitle] = useState("");
   const [platformReady, setPlatformReady] = useState(false);
   const [typeReady, setTypeReady] = useState(false);
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+  const [hoveredCampaignType, setHoveredCampaignType] = useState<string | null>(
+    null,
+  );
   const [selectedCampaignType, setSelectedCampaignType] = useState<
     (typeof FORM_DEMO_CAMPAIGN_TYPES)[number] | null
   >(null);
@@ -137,9 +142,11 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
           ? budgetRef.current
           : target === "campaignType"
             ? campaignTypeRef.current
-            : target === "thumbnail"
-              ? thumbnailRef.current
-              : launchRef.current;
+            : target === "campaignTypeMilestone"
+              ? milestoneRef.current || campaignTypeRef.current
+              : target === "thumbnail"
+                ? thumbnailRef.current
+                : launchRef.current;
     if (!el) return null;
     const rootRect = root.getBoundingClientRect();
     const rect = el.getBoundingClientRect();
@@ -154,7 +161,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       setTitle(FORM_DEMO_TITLE);
       setPlatformReady(true);
       setTypeReady(true);
-      setSelectedCampaignType("Leaderboard");
+      setSelectedCampaignType("Milestone");
       setTypeDropdownOpen(false);
       setBudgetText("$2400");
       setShowThumb(true);
@@ -192,6 +199,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       setTypeReady(false);
       setTypeDropdownOpen(false);
       setSelectedCampaignType(null);
+      setHoveredCampaignType(null);
       setBudgetText("$0");
       setBudgetTyping(false);
       setShowThumb(false);
@@ -221,7 +229,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       if (cancelled) return;
       setPlatformReady(true);
 
-      // Cursor opens campaign type dropdown, then picks Leaderboard
+      // Cursor opens campaign type dropdown, moves down to Milestone, then selects Milestone
       await wait(350);
       if (cancelled) return;
       await moveCursorTo("campaignType");
@@ -230,14 +238,21 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       if (cancelled) return;
       setTypeDropdownOpen(true);
 
-      await wait(550);
+      await wait(350);
       if (cancelled) return;
-      setSelectedCampaignType("Leaderboard");
+      await moveCursorTo("campaignTypeMilestone");
+      if (cancelled) return;
+      setHoveredCampaignType("Milestone");
+      await clickCursor();
+      if (cancelled) return;
+
+      setSelectedCampaignType("Milestone");
       setTypeReady(true);
 
-      await wait(420);
+      await wait(400);
       if (cancelled) return;
       setTypeDropdownOpen(false);
+      setHoveredCampaignType(null);
 
       await wait(400);
       if (cancelled) return;
@@ -531,12 +546,14 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
                 >
                   {FORM_DEMO_CAMPAIGN_TYPES.map((type) => {
                     const isSelected = selectedCampaignType === type;
+                    const isHovered = hoveredCampaignType === type;
                     return (
                       <div
                         key={type}
+                        ref={type === "Milestone" ? milestoneRef : null}
                         className={cn(
                           "flex h-[32px] items-center px-3.5 text-[11px] transition-colors duration-200",
-                          isSelected
+                          isSelected || isHovered
                             ? isLight
                               ? "bg-[#7C3AED]/10 text-[#7C3AED]"
                               : "bg-white/10 text-white"
@@ -790,12 +807,12 @@ const brandImages: string[] = [
 //     icon: "/images/support-icon.png",
 //   },
 const CREATORS_NETWORK_NUMBERS = [
-  "1,000+",
-  "4,500+",
-  "8,200+",
-  "12,000+",
-  "14,800+",
-  "16,700+",
+  "2,000+",
+  "5,000+",
+  "9,000+",
+  "14,000+",
+  "18,000+",
+  "21,000+",
 ];
 const VIEWS_GENERATED_NUMBERS = [
   "10M+",
@@ -1910,11 +1927,11 @@ export default function HeroContent() {
         >
           <p
             className={cn(
-              "mb-6 px-4 text-center text-sm sm:mb-8 sm:text-base",
+              "mb-6 px-4 text-center text-[14px] sm:mb-8 sm:text-base",
               isLight ? "text-black/45" : "text-zinc-500",
             )}
           >
-            Work with Top Brands and Creators
+             Trusted by
           </p>
 
           <div className="relative mx-auto w-full max-w-[1100px] overflow-hidden">

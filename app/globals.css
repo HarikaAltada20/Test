@@ -562,7 +562,7 @@ body {
 }
 
 .animate-engagement-profiles-scroll {
-  animation: engagement-profiles-scroll 8s linear infinite;
+  animation: engagement-profiles-scroll 12s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

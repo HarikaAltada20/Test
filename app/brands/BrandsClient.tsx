@@ -2,6 +2,7 @@
 import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { gsap } from "gsap";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -385,6 +386,8 @@ export default function BrandsClient({
 
   const oldWayRef = useRef<HTMLDivElement>(null);
   const [oldWayStep, setOldWayStep] = useState(0);
+  const [comparisonTab, setComparisonTab] = useState<"old" | "goc">("old");
+  const [budgetAmount, setBudgetAmount] = useState<number>(4000);
   const lastStepTimeRef = useRef<number>(0);
 
   const revealImgRef = useRef<HTMLImageElement | null>(null);
@@ -911,11 +914,11 @@ export default function BrandsClient({
 >
           <p
             className={cn(
-              "mb-6 px-4 text-center text-sm sm:mb-8 sm:text-base",
+              "mb-6 px-4 text-center text-[14px] sm:mb-8 sm:text-base",
               isLight ? "text-black/45" : "text-zinc-500",
             )}
           >
-            Work with Top Brands and Creators
+           Trusted by
           </p>
           <div className="relative mx-auto w-full max-w-[1100px] overflow-hidden">
             {/* Logos scroll sideways only inside this clipped band */}
@@ -977,433 +980,410 @@ export default function BrandsClient({
             /> */}
           </div>
         </section>
-        {/* "The Old way of promoting your brand" Sticky Section */}
+        {/* Old way vs With GOC Comparison Section */}
         <section
           id="old-way"
           ref={oldWayRef}
           className={cn(
-            "relative h-[300vh] w-full transition-colors duration-300",
+            "relative w-full py-16 sm:py-20 md:py-24 px-4 sm:px-6 transition-colors duration-300 overflow-hidden",
             isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white"
           )}
         >
-          {/* STICKY VIEWPORT CONTAINER */}
-          <div
-            className={cn(
-              "sticky top-0 flex h-screen w-full items-center justify-center overflow-hidden transition-colors duration-300",
-              isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white"
-            )}
-          >
-            <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col justify-between px-4 py-2 sm:px-6 min-[760px]:py-6 lg:px-16">
-              {/* Heading */}
-              <div className="pt-1 text-center sm:pt-2 min-[760px]:pt-4 shrink-0">
-                <h2 className="mx-auto max-w-[720px] text-center text-3xl font-semibold leading-[1.1] tracking-[-1px] sm:text-4xl md:text-5xl lg:text-[52px] sm:tracking-[-1.5px] md:tracking-[-2.5px]">
-                  The Old way of promoting
-                  <br />
-                  your brand
-                </h2>
-              </div>
+          <div className="relative mx-auto max-w-[1280px] flex flex-col items-center gap-8 sm:gap-12">
+            {/* Toggle Pills */}
+            <div className="relative flex h-[49px] w-full max-w-[398px] items-center rounded-full bg-[#242424] p-1 shadow-lg border border-white/5">
+              <motion.div
+                className="absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-full bg-[#353535] shadow-[-0.73px_2.56px_4.39px_0.37px_rgba(0,0,0,0.40)]"
+                initial={false}
+                animate={{
+                  left: comparisonTab === "old" ? "4px" : "calc(50% + 0px)",
+                }}
+                transition={{ type: "spring", stiffness: 450, damping: 35 }}
+              />
+              <button
+                type="button"
+                onClick={() => setComparisonTab("old")}
+                className={cn(
+                  "relative z-10 flex flex-1 items-center justify-center rounded-full text-[15.36px] font-semibold transition-colors duration-200 py-2 select-none",
+                  comparisonTab === "old" ? "text-[#F1F1F1]" : "text-[#C4C4C4] hover:text-white"
+                )}
+              >
+                Old way
+              </button>
+              <button
+                type="button"
+                onClick={() => setComparisonTab("goc")}
+                className={cn(
+                  "relative z-10 flex flex-1 items-center justify-center rounded-full text-[15.36px] font-semibold transition-colors duration-200 py-2 select-none",
+                  comparisonTab === "goc" ? "text-[#F1F1F1]" : "text-[#C4C4C4] hover:text-white"
+                )}
+              >
+                With GOC
+              </button>
+            </div>
 
-              {/* CONTENT GRID */}
-              <div className="grid flex-1 items-center gap-3 min-[650px]:gap-5 min-[760px]:gap-6 grid-cols-1 min-[760px]:grid-cols-[220px_1fr] md:grid-cols-[280px_1fr] lg:grid-cols-[360px_1fr] my-auto w-full">
-                {/* LEFT TIMELINE */}
-                <div className="relative mx-auto w-full max-w-[280px] min-[650px]:max-w-[360px] min-[760px]:max-w-none min-[760px]:ml-0 md:ml-[20px] lg:ml-[120px]">
-                  {/* Grey line background */}
-                  <div
-                    className={cn(
-                      "absolute left-3.5 min-[650px]:left-4.5 min-[760px]:left-5 top-4 min-[760px]:top-5 h-[calc(100%-32px)] min-[650px]:h-[calc(100%-36px)] min-[760px]:h-[calc(100%-40px)] w-px -translate-x-1/2",
-                      isLight ? "bg-black/15" : "bg-white/15"
-                    )}
-                  />
+            {/* CARDS CONTAINER */}
+            <div className="flex w-full flex-col items-center justify-center gap-6 lg:flex-row lg:items-start lg:gap-8 px-0 sm:px-2">
+              {/* LEFT CARD: INVOICE / COMPARISON CARD */}
+              <div className="relative w-full max-w-[685px]">
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    key={comparisonTab}
+                    initial={{ y: -40, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: 40, opacity: 0 }}
+                    transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                    className="relative flex w-full flex-col justify-between overflow-hidden rounded-[20px] sm:rounded-[24px] bg-[#171717] p-3.5 xs:p-5 sm:p-6 md:p-8 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+                  >
+                    {/* Top Zig-Zag Edge */}
+                    <img
+                      src="/images/Group 39.png"
+                      alt="Zigzag top border"
+                      className="absolute -top-1.5 left-0 w-full h-3 sm:h-4 object-fill pointer-events-none select-none z-20"
+                    />
 
-                  {/* Purple progress line */}
-                  <div
-                    className="absolute left-3.5 min-[650px]:left-4.5 min-[760px]:left-5 top-4 min-[760px]:top-5 w-px -translate-x-1/2 bg-violet-500 transition-all duration-500"
-                    style={{
-                      height: `calc((100% - 40px) * ${Math.min(oldWayStep / (oldWaySteps.length - 1), 1)})`,
-                    }}
-                  />
+                    {/* Bottom Zig-Zag Edge */}
+                    <img
+                      src="/images/Group 39.png"
+                      alt="Zigzag bottom border"
+                      className="absolute -bottom-1.5 left-0 w-full h-3 sm:h-4 object-fill rotate-180 pointer-events-none select-none z-20"
+                    />
 
-                  <div className="relative flex flex-col gap-2 min-[650px]:gap-3.5 min-[760px]:gap-5 md:gap-7">
-                    {oldWaySteps.map((step, index) => {
-                      const active = index === oldWayStep;
-                      const passed = index < oldWayStep;
-                      return (
-                        <div
-                          key={step.id}
-                          onClick={() => handleOldWayStepClick(index)}
-                          className="flex min-h-[34px] min-[650px]:min-h-[44px] min-[760px]:min-h-[52px] md:min-h-[64px] items-center gap-2.5 min-[650px]:gap-3.5 min-[760px]:gap-4 cursor-pointer select-none group"
-                        >
-                          {/* Number Circle Badge */}
-                          <div
-                            className={cn(
-                              "relative z-10 flex h-7 w-7 min-[650px]:h-9 min-[650px]:w-9 min-[760px]:h-9 min-[760px]:w-9 md:h-10 md:w-10 shrink-0 items-center justify-center rounded-full text-[11px] min-[650px]:text-[13px] min-[760px]:text-[13px] font-bold transition-all duration-500",
-                              active
-                                ? isLight
-                                  ? "border-2 border-violet-600 bg-white text-violet-600 shadow-[0_0_0_5px_rgba(124,58,237,0.16),0_0_28px_rgba(124,58,237,0.35)] scale-105"
-                                  : "border-2 border-violet-500 bg-black text-white shadow-[0_0_0_5px_rgba(124,58,237,0.16),0_0_28px_rgba(124,58,237,0.55)] scale-105"
-                                : passed
-                                ? isLight
-                                  ? "border border-violet-500/70 bg-white text-violet-600"
-                                  : "border border-violet-500/70 bg-black text-white"
-                                : isLight
-                                ? "border border-black/20 bg-[#F1F1F1] text-black/35 group-hover:border-black/40 group-hover:text-black/60"
-                                : "border border-white/20 bg-black text-white/35 group-hover:border-white/40 group-hover:text-white/60"
-                            )}
-                          >
-                            {step.id}
-                          </div>
-
-                          {/* Step Title */}
-                          <span
-                            className={cn(
-                              "text-[13px] min-[650px]:text-[16px] min-[760px]:text-[17px] md:text-[20px] font-medium transition-all duration-500",
-                              active
-                                ? isLight
-                                  ? "translate-x-1 font-semibold text-black"
-                                  : "translate-x-1 font-semibold text-white"
-                                : isLight
-                                ? "text-black/35 group-hover:text-black/60"
-                                : "text-white/25 group-hover:text-white/50"
-                            )}
-                          >
-                            {step.title}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* RIGHT ANIMATION STAGE */}
-                <div className="relative flex h-[190px] min-[650px]:h-[270px] min-[760px]:h-[360px] md:h-[420px] lg:h-[480px] items-center justify-center min-[760px]:justify-end">
-                  <div className="relative h-full w-full max-w-[600px]">
-                    {/* STEP 0: PICK A CREATOR */}
-                    <div
+                    {/* Stamp overlay top right (Double Ellipse Stamp) */}
+                    <motion.div
+                      key={`stamp-${comparisonTab}`}
+                      initial={{ scale: 2.2, opacity: 0, rotate: -15 }}
+                      animate={{ scale: 1, opacity: 1, rotate: -7 }}
+                      transition={{ type: "spring", stiffness: 450, damping: 20, delay: 0.18 }}
                       className={cn(
-                        "absolute inset-0 flex items-center justify-center transition-all duration-700 transform",
-                        oldWayStep === 0
-                          ? "translate-x-0 scale-100 opacity-100 pointer-events-auto"
-                          : "-translate-x-10 scale-95 opacity-0 pointer-events-none"
+                        "absolute right-2 top-2 sm:right-6 sm:top-6 md:right-7 md:top-7 z-10 select-none pointer-events-none inline-flex flex-col items-center justify-center rounded-[50%/50%] border-[1.5px] sm:border-[2px] p-[2px] sm:p-[3px] text-center transition-colors duration-300 scale-75 xs:scale-90 sm:scale-100 origin-top-right",
+                        comparisonTab === "old"
+                          ? "border-[#B63E2B] text-[#B63E2B]"
+                          : "border-[#22C55E] text-[#22C55E]"
                       )}
                     >
                       <div
                         className={cn(
-                          "relative z-10 w-full max-w-[260px] min-[650px]:max-w-[340px] min-[760px]:max-w-[360px] md:max-w-[420px] rotate-0 min-[760px]:rotate-[-7deg] rounded-[16px] min-[650px]:rounded-[22px] min-[760px]:rounded-[25px] p-3 min-[650px]:p-4.5 min-[760px]:p-5 md:p-6",
-                          isLight
-                            ? "border-[0.69px] border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000000D]"
-                            : "border border-white/[0.13] bg-[#171717] shadow-[-10px_0_65px_-10px_rgba(255,255,255,0.28),-12px_0_32px_-12px_rgba(255,255,255,0.14),-18px_14px_55px_-22px_rgba(255,140,0,0.18)]",
+                          "inline-flex flex-col items-center justify-center rounded-[50%/50%] border-[1px] sm:border-[1.5px] px-2 py-0.5 xs:px-2.5 xs:py-1 sm:px-4.5 sm:py-2 text-center",
+                          comparisonTab === "old"
+                            ? "border-[#B63E2B]"
+                            : "border-[#22C55E]"
                         )}
                       >
-                        <div className="flex items-center justify-between">
-                          <span
-                            className={cn(
-                              "rounded-full px-2 py-0.5 min-[650px]:px-2.5 min-[650px]:py-1 text-[10px] min-[650px]:text-[11px] min-[760px]:text-[12px]",
-                              isLight
-                                ? "border border-[#0000000D] bg-white text-black/70"
-                                : "border border-white/[0.20] bg-white/[0.01] text-white/65",
-                            )}
-                          >
-                            Typical Creator Deal
-                          </span>
-                          <span
-                            className={cn(
-                              "rounded-full px-2 py-0.5 min-[650px]:px-2.5 min-[650px]:py-1 text-[10px] min-[650px]:text-[11px] min-[760px]:text-[12px]",
-                              isLight
-                                ? "border border-orange-500/25 bg-orange-500/15 text-orange-500"
-                                : "border border-orange-500/[0.35] bg-orange-500/[0.18] text-orange-400",
-                            )}
-                          >
-                            Fixed Pay
-                          </span>
+                        <div className="text-[8.5px] xs:text-[9px] sm:text-[11px] font-semibold tracking-[0.6px] xs:tracking-[0.8px] sm:tracking-[1px] whitespace-nowrap">
+                          {comparisonTab === "old" ? "ONE CREATOR" : "DISTRIBUTED"}
                         </div>
+                        <div className="text-[5px] xs:text-[5.5px] sm:text-[7px] font-medium tracking-[0.3px] xs:tracking-[0.4px] sm:tracking-[0.5px] mt-0.5 whitespace-nowrap">
+                          {comparisonTab === "old"
+                            ? "Fixed fee · No guarantee"
+                            : "Performance-priced · Bot-verified"}
+                        </div>
+                      </div>
+                    </motion.div>
 
-                        <div className="mt-2 min-[650px]:mt-4 min-[760px]:mt-5 flex items-center gap-2.5 min-[650px]:gap-3">
+                    <div>
+                      {/* Top Invoice Header */}
+                      <div className="flex items-center gap-2.5 sm:gap-3 pr-20 xs:pr-24 sm:pr-36">
+                        <div className="flex h-7 w-7 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg bg-[#794BFF]/20">
                           <img
-                            src="/images/b7df36a6062b7711918a958fcd444794e0abf80b.png"
-                            alt="Creator"
-                            className="h-[40px] w-[40px] min-[650px]:h-[56px] min-[650px]:w-[56px] min-[760px]:h-[64px] min-[760px]:w-[64px] md:h-[72px] md:w-[72px] rounded-md object-cover"
+                            src="/images/link-2.png"
+                            alt="Invoice Icon"
+                            className="h-3.5 w-3.5 sm:h-5 sm:w-5 object-contain select-none pointer-events-none"
                           />
-                          <div>
-                            <p
-                              className={cn(
-                                "text-[11px] min-[650px]:text-[13px] min-[760px]:text-[14px] md:text-[15px]",
-                                isLight ? "text-black/45" : "text-white/50",
-                              )}
-                            >
-                              @sarahcreates
-                            </p>
-                            <p
-                              className={cn(
-                                "text-[13px] min-[650px]:text-[16px] min-[760px]:text-[17px] md:text-[18px] font-medium",
-                                isLight ? "text-black" : "text-white/80",
-                              )}
-                            >
-                              500k followers
-                            </p>
-                            <p
-                              className={cn(
-                                "mt-0.5 text-[10px] min-[650px]:text-[12px] min-[760px]:text-[13px] md:text-[14px]",
-                                isLight ? "text-black/40" : "text-white/40",
-                              )}
-                            >
-                              Life · Tech
-                            </p>
-                          </div>
                         </div>
-
-                        <div className="mt-3 min-[650px]:mt-4.5 grid grid-cols-2 gap-2 min-[650px]:gap-3.5 min-[760px]:mt-6 min-[760px]:gap-4 md:gap-5">
-                          <div className="flex items-start gap-2 min-[650px]:gap-3">
-                            <Image
-                              src="/images/Frame (1).png"
-                              alt=""
-                              width={24}
-                              height={24}
-                              className={cn(
-                                "mt-0.5 h-3.5 w-3.5 min-[650px]:h-4.5 min-[650px]:w-4.5 min-[760px]:h-5 min-[760px]:w-5 md:h-6 md:w-6 shrink-0 object-contain",
-                                isLight ? "opacity-60 brightness-0" : "opacity-40",
-                              )}
-                            />
-                            <div>
-                              <p
-                                className={cn(
-                                  "text-[10px] min-[650px]:text-[12px] min-[760px]:text-[13px] md:text-[14px]",
-                                  isLight ? "text-black/40" : "text-white/40",
-                                )}
-                              >
-                                Content
-                              </p>
-                              <p
-                                className={cn(
-                                  "mt-0.5 text-[11px] min-[650px]:text-[13.5px] min-[760px]:text-[14px] md:text-[15px]",
-                                  isLight ? "text-black" : "text-white/80",
-                                )}
-                              >
-                                1 Instagram Reel
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-start gap-2 min-[650px]:gap-3">
-                            <CalendarDays
-                              size={18}
-                              strokeWidth={1.5}
-                              className={cn(
-                                "mt-0.5 h-3.5 w-3.5 min-[650px]:h-4.5 min-[650px]:w-4.5 min-[760px]:h-5 min-[760px]:w-5 md:h-6 md:w-6 shrink-0",
-                                isLight ? "text-black/40" : "text-white/40",
-                              )}
-                            />
-                            <div>
-                              <p
-                                className={cn(
-                                  "text-[10px] min-[650px]:text-[12px] min-[760px]:text-[13px] md:text-[14px]",
-                                  isLight ? "text-black/40" : "text-white/40",
-                                )}
-                              >
-                                Timeline
-                              </p>
-                              <p
-                                className={cn(
-                                  "mt-0.5 text-[11px] min-[650px]:text-[13.5px] min-[760px]:text-[14px] md:text-[15px]",
-                                  isLight ? "text-black" : "text-white/80",
-                                )}
-                              >
-                                1 week
-                              </p>
-                            </div>
-                          </div>
+                        <div>
+                          <h3 className="text-sm xs:text-base sm:text-lg md:text-xl font-medium text-[#F4F4F5]">Invoice</h3>
+                          <p className="text-[9.5px] xs:text-[10px] sm:text-[11.8px] font-medium text-[#5E5E64]">
+                            #INF-2047 · Issued 12 Mar 2026
+                          </p>
                         </div>
                       </div>
-                    </div>
 
-                    {/* STEP 1: PAY UPFRONT */}
-                    <div
-                      className={cn(
-                        "absolute inset-0 flex items-center justify-center transition-all duration-700 transform",
-                        oldWayStep === 1
-                          ? "translate-x-0 scale-100 opacity-100 pointer-events-auto"
-                          : "translate-x-10 scale-95 opacity-0 pointer-events-none"
-                      )}
-                    >
-                      <div className="relative flex items-center justify-center w-full min-h-[110px] min-[650px]:min-h-[140px] min-[760px]:min-h-[160px]">
-                        {/* Purple glow behind cards */}
-                        <div className="absolute inset-0 z-0">
-                          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[130px] min-[650px]:h-[180px] min-[760px]:h-[220px] w-[220px] min-[650px]:w-[320px] min-[760px]:w-[420px] rounded-full bg-violet-600/30 blur-[50px] min-[650px]:blur-[70px]" />
-                        </div>
-
-                        {/* Back card 2 (furthest - rotated left) */}
-                        <div
-                          className="
-                            absolute z-[1]
-                            w-[220px] min-[650px]:w-[300px] min-[760px]:w-[320px] md:w-[410.41px]
-                            h-[65px] min-[650px]:h-[88px] min-[760px]:h-[95px] md:h-[123.12px] 
-                            -rotate-[7.98deg]
-                            opacity-[0.64]
-                            rounded-[14px] min-[650px]:rounded-[20px] min-[760px]:rounded-[24px] md:rounded-[32.83px]
-                            bg-[#171717]
-                            border border-white/10
-                            shadow-[0px_3.52px_16.42px_0px_#6847E84D,0px_0px_4.69px_0px_#FFFFFF40_inset]
-                          "
-                          style={{ backdropFilter: "blur(8px)" }}
-                        />
-
-                        {/* Back card 1 (middle - rotated right) */}
-                        <div
-                          className="
-                            absolute z-[2]
-                            w-[220px] min-[650px]:w-[300px] min-[760px]:w-[320px] md:w-[410.41px]
-                            h-[65px] min-[650px]:h-[88px] min-[760px]:h-[95px] md:h-[123.12px]
-                            rotate-[15.92deg]
-                            opacity-60
-                            rounded-[14px] min-[650px]:rounded-[20px] min-[760px]:rounded-[24px] md:rounded-[32.83px]
-                            bg-[#171717]
-                            border border-white/10
-                            shadow-[0px_3.52px_16.42px_0px_#6847E84D,0px_0px_4.69px_0px_#FFFFFF40_inset]
-                          "
-                          style={{ backdropFilter: "blur(8px)" }}
-                        />
-
-                        {/* Main Payment Sent card */}
-                        <div
-                          className={cn(
-                            "relative z-[3] flex items-center opacity-100",
-                            "w-[220px] min-[650px]:w-[300px] min-[760px]:w-[320px] md:w-[410.41px]",
-                            "h-[65px] min-[650px]:h-[88px] min-[760px]:h-[95px] md:h-[123.12px]",
-                            "rotate-[2.5deg]",
-                            "rounded-[14px] min-[650px]:rounded-[20px] min-[760px]:rounded-[24px] md:rounded-[32.83px]",
-                            "pl-[14px] min-[650px]:pl-[24px] min-[760px]:pl-[30px] md:pl-[53.94px] pr-[12px] min-[650px]:pr-[20px] min-[760px]:pr-[24px] md:pr-[32.83px]",
-                            "gap-[8px] min-[650px]:gap-[14px] min-[760px]:gap-[16px] md:gap-[21.11px]",
-                            "shadow-[0px_3.52px_16.42px_0px_#6847E84D,0px_0px_4.69px_0px_#FFFFFF40_inset]",
-                            isLight
-                              ? "border border-black/10 bg-[#e8e8e8]"
-                              : "border border-white/15 bg-[#171717]"
-                          )}
-                        >
-                          {/* Purple checkmark circle */}
-                          <div className="flex h-[30px] w-[30px] min-[650px]:h-[42px] min-[650px]:w-[42px] min-[760px]:h-[46px] min-[760px]:w-[46px] md:h-[56px] md:w-[56px] shrink-0 items-center justify-center rounded-full bg-[#8b5cf6] shadow-[0_0_20px_rgba(139,92,246,0.5)]">
-                            <svg
-                              width="24"
-                              height="24"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="white"
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              className="h-3 w-3 min-[650px]:h-4.5 min-[650px]:w-4.5 min-[760px]:h-5 min-[760px]:w-5 md:h-6 md:w-6"
-                            >
-                              <path d="M20 6L9 17l-5-5" />
-                            </svg>
-                          </div>
-
-                          {/* Text */}
-                          <div>
-                            <p
-                              className={cn(
-                                "text-[13px] min-[650px]:text-[18px] min-[760px]:text-[19px] md:text-[24px] font-bold tracking-[-0.5px]",
-                                isLight ? "text-black" : "text-white"
-                              )}
-                            >
-                              Payment sent
-                            </p>
-                            <p
-                              className={cn(
-                                "mt-0.5 text-[10px] min-[650px]:text-[13px] min-[760px]:text-[14px] md:text-[16px]",
-                                isLight ? "text-black/50" : "text-white/50"
-                              )}
-                            >
-                              $4,000 paid upfront
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* STEP 2: CONTENT GOES LIVE */}
-                    <div
-                      className={cn(
-                        "absolute inset-0 flex items-center justify-center transition-all duration-700 transform",
-                        oldWayStep === 2
-                          ? "translate-x-0 scale-100 opacity-100 pointer-events-auto"
-                          : "translate-x-10 scale-95 opacity-0 pointer-events-none"
-                      )}
-                    >
-                      <div className="relative flex items-center justify-center w-full h-full">
-                        {/* Container for three overlapping phone images */}
-                        <div className="relative h-[180px] w-[230px] min-[650px]:h-[260px] min-[650px]:w-[330px] min-[760px]:h-[350px] min-[760px]:w-[380px] md:h-[460px] md:w-[500px]">
-
-                          {/* Left image (behind) */}
-                          <div
-                            className="absolute z-[4] h-[130px] w-[75px] min-[650px]:h-[200px] min-[650px]:w-[120px] min-[760px]:h-[280px] min-[760px]:w-[170px] md:h-[400px] md:w-[240px] overflow-hidden rounded-[8px] min-[650px]:rounded-[12px] min-[760px]:rounded-[14px] md:rounded-[16px] bg-black shadow-[0_15px_40px_rgba(0,0,0,0.4)]"
-                            style={{ left: "5%", top: "18px" }}
-                          >
-                            <img
-                              src="/images/b9b2d7bf77d74fb124111c0e7c4f1ca20d43a5fa.png"
-                              alt="Instagram Reel"
-                              className="h-full w-full object-contain opacity-50"
-                            />
-                          </div>
-
-                          {/* Center image (main, in front) */}
-                          <div
-                            className="absolute z-10 h-[160px] w-[95px] min-[650px]:h-[240px] min-[650px]:w-[145px] min-[760px]:h-[330px] min-[760px]:w-[200px] md:h-[480px] md:w-[280px] overflow-hidden rounded-[10px] min-[650px]:rounded-[14px] min-[760px]:rounded-[15px] md:rounded-[16px] bg-black shadow-[0_25px_70px_rgba(0,0,0,0.6)]"
-                            style={{ left: "50%", top: "6px", transform: "translateX(-50%)" }}
-                          >
-                            <img
-                              src="/images/b9b2d7bf77d74fb124111c0e7c4f1ca20d43a5fa.png"
-                              alt="Instagram Reel"
-                              className="h-full w-full object-contain"
-                            />
-                          </div>
-
-                          {/* Right image (behind) */}
-                          <div
-                            className="absolute z-[5] h-[130px] w-[75px] min-[650px]:h-[200px] min-[650px]:w-[120px] min-[760px]:h-[280px] min-[760px]:w-[170px] md:h-[400px] md:w-[240px] overflow-hidden rounded-[8px] min-[650px]:rounded-[12px] min-[760px]:rounded-[14px] md:rounded-[16px] bg-black shadow-[0_15px_40px_rgba(0,0,0,0.4)]"
-                            style={{ right: "5%", top: "18px" }}
-                          >
-                            <img
-                              src="/images/b9b2d7bf77d74fb124111c0e7c4f1ca20d43a5fa.png"
-                              alt="Instagram Reel"
-                              className="h-full w-full object-contain opacity-50"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* STEP 3: WAIT FOR RESULTS */}
-                    <div
-                      className={cn(
-                        "absolute inset-0 flex items-center justify-center transition-all duration-700 transform",
-                        oldWayStep === 3
-                          ? "translate-x-0 scale-100 opacity-100 pointer-events-auto"
-                          : "translate-x-10 scale-95 opacity-0 pointer-events-none"
-                      )}
-                    >
-                      <div className="flex flex-col items-center justify-center">
-                        <div className="relative h-[100px] w-[100px] min-[650px]:h-[140px] min-[650px]:w-[140px] min-[760px]:h-[150px] min-[760px]:w-[150px] md:h-[180px] md:w-[180px] flex items-center justify-center">
-                          {/* Background Track Circle */}
-                          <div
-                            className={cn(
-                              "absolute inset-0 rounded-full border-[8px] min-[650px]:border-[11px] min-[760px]:border-[12px] md:border-[13px]",
-                              isLight ? "border-black/10" : "border-white/15"
+                      {/* Billed by / Billed to */}
+                      <div className="my-3 sm:my-4 grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 gap-2.5 xs:gap-3 sm:gap-4">
+                        {/* Billed by */}
+                        <div>
+                          <p className="text-[10px] xs:text-[10.5px] sm:text-[11.8px] font-semibold text-[#929298] mb-1">Billed by</p>
+                          <div className="flex items-center gap-2 sm:gap-2.5">
+                            {comparisonTab === "old" ? (
+                              <>
+                                <div className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-full bg-[#F3C65A] text-[7px] sm:text-[7.6px] font-bold text-[#4D453E]">
+                                  SC
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-[11.5px] sm:text-[13.5px] font-normal text-[#F4F4F5] leading-tight truncate">@sarahcreates</p>
+                                  <p className="text-[8.5px] sm:text-[10.11px] font-medium text-[#929298] leading-tight mt-0.5 truncate">
+                                    500k followers · unverified
+                                  </p>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                {/* Overlapping small avatar circles */}
+                                <div className="flex items-center -space-x-1.5 shrink-0">
+                                  <div className="flex h-4 w-4 sm:h-5 sm:w-5 items-center justify-center rounded-full bg-[#F3C65A] text-[5.5px] sm:text-[6.5px] font-bold text-[#4D453E] border border-[#171717]">
+                                    MJ
+                                  </div>
+                                  <div className="flex h-4 w-4 sm:h-5 sm:w-5 items-center justify-center rounded-full bg-[#6EE7B7] text-[5.5px] sm:text-[6.5px] font-bold text-[#064E3B] border border-[#171717]">
+                                    AK
+                                  </div>
+                                  <div className="flex h-4 w-4 sm:h-5 sm:w-5 items-center justify-center rounded-full bg-[#F472B6] text-[5.5px] sm:text-[6.5px] font-bold text-[#831843] border border-[#171717]">
+                                    RL
+                                  </div>
+                                  <div className="flex h-4 w-4 sm:h-5 sm:w-5 items-center justify-center rounded-full bg-[#C5B4FF] text-[5.5px] sm:text-[6.5px] font-bold text-[#4D453E] border border-[#171717]">
+                                    TN
+                                  </div>
+                                  <span className="pl-1 sm:pl-2 text-[7.5px] sm:text-[9px] text-[#929298] font-medium">+144</span>
+                                </div>
+                                <div className="ml-0.5 xs:ml-1 min-w-0">
+                                  <p className="text-[11.5px] sm:text-[13.5px] font-bold text-[#F4F4F5] leading-tight truncate">148 creators</p>
+                                  <p className="text-[8.5px] sm:text-[10.11px] font-medium text-[#929298] leading-tight mt-0.5 truncate">
+                                    ranked by past performance
+                                  </p>
+                                </div>
+                              </>
                             )}
-                          />
-
-                          {/* Purple Moving Spinner */}
-                          <div className="absolute inset-0 animate-spin rounded-full border-[8px] min-[650px]:border-[11px] min-[760px]:border-[12px] md:border-[13px] border-transparent border-l-violet-500 border-t-violet-500 [animation-duration:1.8s]" />
+                          </div>
                         </div>
 
-                        <p
-                          className={cn(
-                            "mt-2 min-[650px]:mt-4 min-[760px]:mt-6 text-center font-serif text-[14px] min-[650px]:text-[19px] min-[760px]:text-[22px] md:text-[25px] italic tracking-wide",
-                            isLight ? "text-black/75" : "text-white/80"
-                          )}
-                        >
-                          Results are still loading
+                        {/* Billed to */}
+                        <div>
+                          <p className="text-[10px] xs:text-[10.5px] sm:text-[11.8px] font-semibold text-[#929298] mb-1">Billed to</p>
+                          <div className="flex items-center gap-2 sm:gap-2.5">
+                            <div className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-full bg-[#C5B4FF] text-[7px] sm:text-[7.6px] font-bold text-[#4D453E]">
+                              YB
+                            </div>
+                            <p className="text-[11.5px] sm:text-[14.32px] font-bold text-[#F4F4F5]">Your brand</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Divider */}
+                      <div className="h-[0.84px] w-full bg-[#303034] my-2.5 sm:my-3.5" />
+
+                      {/* 5 Feature rows */}
+                      <div className="flex flex-col gap-2.5 sm:gap-4 md:gap-5">
+                        {[
+                          {
+                            iconSrc: "/images/users.png",
+                            label: "Creator selection",
+                            oldVal: "1 creator, chosen by feel",
+                            gocVal: "148 creators, ranked by real data",
+                          },
+                          {
+                            iconSrc: "/images/credit-card.png",
+                            label: "Payment model",
+                            oldVal: "Flat fee regardless of views",
+                            gocVal: "Per 1,000 verified views (CPM)",
+                          },
+                          {
+                            iconSrc: "/images/clock-3.png",
+                            label: "Approval rights",
+                            oldVal: "None — content live unreviewed",
+                            gocVal: "You approve every post before it's live",
+                          },
+                          {
+                            iconSrc: "/images/square-play.png",
+                            label: "Content volume",
+                            oldVal: "1 reel, 1 chance",
+                            gocVal: "148 posts across TikTok, Reels, Shorts",
+                          },
+                          {
+                            iconSrc: "/images/chart-no-axes-combined (1).png",
+                            label: "Results tracking",
+                            oldVal: "Screenshot, self-reported",
+                            gocVal: "Platform API · bot-checked · live",
+                          },
+                        ].map((row, idx) => {
+                          return (
+                            <div key={idx} className="flex items-center justify-between gap-1.5 sm:gap-2 min-w-0">
+                              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                                <div className="flex h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 items-center justify-center">
+                                  <img
+                                    src={row.iconSrc}
+                                    alt={row.label}
+                                    className="h-3.5 w-3.5 sm:h-4 sm:w-4 object-contain opacity-80 select-none pointer-events-none"
+                                  />
+                                </div>
+                                <span className="text-[10px] xs:text-[11px] sm:text-[12.63px] font-semibold text-[#929298] whitespace-nowrap">
+                                  {row.label}
+                                </span>
+                              </div>
+                              <div className="hidden md:block h-[0.84px] flex-1 bg-[#303034] mx-2 min-w-[8px]" />
+                              <div
+                                className={cn(
+                                  "rounded-[11.79px] px-2 py-0.5 sm:px-2.5 sm:py-1 text-[8.5px] xs:text-[9.5px] sm:text-[10.11px] font-normal transition-colors duration-300 text-right leading-tight max-w-[58%] sm:max-w-none ml-auto",
+                                  comparisonTab === "old"
+                                    ? "bg-[#FFF3EE] text-[#EA5D4B]"
+                                    : "bg-[#E8F8F1] text-[#1EAA7D]"
+                                )}
+                              >
+                                {comparisonTab === "old" ? row.oldVal : row.gocVal}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Divider */}
+                      <div className="h-[0.84px] w-full bg-[#303034] my-3 sm:my-4" />
+                    </div>
+
+                    {/* Price & Footer */}
+                    <div className="flex flex-col items-center justify-center text-center py-1 sm:py-2 w-full">
+                      <p className="text-center text-[10px] xs:text-[10.5px] sm:text-[11.79px] font-semibold text-[#929298] leading-normal">
+                        {comparisonTab === "old"
+                          ? "Fixed fee, win or lose"
+                          : "Same budget, 148× the distribution"}
+                      </p>
+                      <p
+                        className={cn(
+                          "my-1 text-center text-2xl xs:text-3xl sm:text-4xl md:text-[52px] lg:text-[56px] font-bold leading-tight sm:leading-snug md:leading-normal transition-colors duration-300",
+                          comparisonTab === "old" ? "text-[#F4F4F5]" : "text-[#22C55E]"
+                        )}
+                      >
+                        ${budgetAmount.toLocaleString()}
+                      </p>
+                      <p
+                        className={cn(
+                          "text-center text-[10px] xs:text-[11px] sm:text-[12.63px] font-semibold transition-colors duration-300 leading-normal",
+                          comparisonTab === "old" ? "text-[#929298]" : "text-[#22C55E]"
+                        )}
+                      >
+                        {comparisonTab === "old"
+                          ? "You pay the same whether it gets 400 views or 4 million"
+                          : `= est. ${
+                              budgetAmount * 600 >= 1000000
+                                ? `${((budgetAmount * 600) / 1000000).toFixed(1)}M`
+                                : `${Math.round((budgetAmount * 600) / 1000)}K`
+                            } verified views`}
+                      </p>
+
+                      {/* Barcode & Footer line */}
+                      <div className="mt-3 sm:mt-4 flex w-full flex-col sm:flex-row items-center justify-between gap-1.5 sm:gap-0 pt-1">
+                        {/* Simulated barcode */}
+                        <div className="flex h-[16px] sm:h-[20px] items-center gap-[1.5px] sm:gap-[2.5px] opacity-70">
+                          {[3, 1, 5, 2, 4, 1, 6, 2, 3, 5, 1, 4, 2, 6, 1, 3, 2, 5, 1].map((w, i) => (
+                            <div key={i} className="h-full bg-[#929298]" style={{ width: `${w * 0.75}px` }} />
+                          ))}
+                        </div>
+
+                        <p className="text-[8.5px] xs:text-[9px] sm:text-[10.11px] font-medium text-[#5E5E64] text-center sm:text-right">
+                          {comparisonTab === "old"
+                            ? "No performance clause · No recourse"
+                            : "Only views that pass bot detection count toward your bill"}
                         </p>
                       </div>
                     </div>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+
+              {/* RIGHT CARD: CAMPAIGN BUDGET & RISK CARD (Compact Height + Interactive Slider) */}
+              <div className="relative flex h-auto w-full max-w-[685px] lg:w-[363px] lg:max-w-[363px] shrink-0 flex-col gap-4 rounded-[20px] sm:rounded-[23px] bg-[#171719] p-3.5 xs:p-5 sm:p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+                <div>
+                  {/* Top row: Gold coins graphic + Budget */}
+                  <div className="flex items-center justify-between mb-4">
+                    {/* Gold Coins Stack Image */}
+                    <img
+                      src="/images/Icon area.png"
+                      alt="Campaign Budget Coins"
+                      className="h-8 w-9 sm:h-10 sm:w-11 object-contain select-none pointer-events-none"
+                    />
+
+                    <div className="text-right">
+                      <p className="text-[10.5px] sm:text-[12px] font-medium text-[#8E8E8E] leading-4">Campaign budget</p>
+                      <p className="text-2xl sm:text-3xl md:text-[40px] font-bold text-[#F1F1F1] leading-tight sm:leading-[43px] mt-0.5">
+                        ${budgetAmount.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Interactive Budget Progress Bar Slider */}
+                  {(() => {
+                    const min = 1000;
+                    const max = 20000;
+                    const pct = Math.min(100, Math.max(0, ((budgetAmount - min) / (max - min)) * 100));
+                    return (
+                      <div className="my-4">
+                        <div className="relative h-[28px] sm:h-[32px] w-full rounded-[100px] bg-[#353535] p-1 overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-[16777240px] transition-all duration-150 shadow-[inset_0_1px_5px_rgba(255,255,255,0.25)]",
+                              comparisonTab === "old"
+                                ? "bg-gradient-to-r from-[#F45D48] to-[#942E20]"
+                                : "bg-[#8B5CF6]"
+                            )}
+                            style={{ width: `${Math.max(10, pct)}%` }}
+                          />
+                          <div
+                            className="absolute top-[3px] sm:top-[3.5px] h-[22px] w-[22px] sm:h-[25px] sm:w-[25px] rounded-full bg-[#F1F1F1] shadow-[0_1px_3px_rgba(0,0,0,0.20)] transition-all duration-150 pointer-events-none"
+                            style={{
+                              left: `calc(${pct}% - ${(pct / 100) * 20}px - 6px)`,
+                            }}
+                          />
+                          <input
+                            type="range"
+                            min={min}
+                            max={max}
+                            step={500}
+                            value={budgetAmount}
+                            onChange={(e) => setBudgetAmount(Number(e.target.value))}
+                            className="absolute inset-0 h-full w-full opacity-0 cursor-pointer z-20"
+                          />
+                        </div>
+                        {/* Scale values */}
+                        <div className="mt-2 flex items-center justify-between text-[8px] xs:text-[8.5px] sm:text-[9px] font-semibold text-[#8E8E8E]">
+                          <span>$1k</span>
+                          <span>$5k</span>
+                          <span>$10k</span>
+                          <span>$15k</span>
+                          <span>$20k</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Two Stat Boxes */}
+                  <div className="my-4 grid grid-cols-2 gap-2 sm:gap-2.5">
+                    <div className="flex flex-col justify-between rounded-[11px] bg-[#252525] p-2.5 sm:p-3">
+                      <p className="text-[10.5px] sm:text-[12px] font-medium text-[#8E8E8E] leading-4">
+                        {comparisonTab === "old" ? "Fixed fee at risk" : "Estimated CPM cost"}
+                      </p>
+                      <p
+                        className={cn(
+                          "mt-1 text-sm xs:text-base sm:text-lg font-bold leading-5 transition-colors duration-300",
+                          comparisonTab === "old" ? "text-[#FF4938]" : "text-[#8B5CF6]"
+                        )}
+                      >
+                        ${budgetAmount.toLocaleString()}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col justify-between rounded-[11px] bg-[#252525] p-2.5 sm:p-3">
+                      <p className="text-[10.5px] sm:text-[12px] font-medium text-[#8E8E8E] leading-4">
+                        {comparisonTab === "old" ? "Guaranteed views" : "Est. verified views"}
+                      </p>
+                      <p
+                        className={cn(
+                          "mt-1 text-sm xs:text-base sm:text-lg font-bold leading-5 transition-colors duration-300",
+                          comparisonTab === "old" ? "text-[#F1F1F1]" : "text-[#22C55E]"
+                        )}
+                      >
+                        {comparisonTab === "old"
+                          ? "0"
+                          : budgetAmount * 600 >= 1000000
+                          ? `${((budgetAmount * 600) / 1000000).toFixed(1)}M`
+                          : `${Math.round((budgetAmount * 600) / 1000)}K`}
+                      </p>
+                    </div>
                   </div>
                 </div>
+
+                {/* Footer Note */}
+                <p className="text-center text-[8.5px] sm:text-[9px] font-medium text-[#757575] mt-1">
+                  • Illustrative example
+                </p>
               </div>
             </div>
           </div>
@@ -1840,7 +1820,7 @@ export default function BrandsClient({
                 <div className="absolute bottom-10 left-7 right-7 z-20">
                   <h2
                     className={cn(
-                      "mb-3 text-xl font-semibold",
+                      "mb-3 text-2xl font-semibold",
                       isLight ? "text-black" : "text-[#d6d6d6]",
                     )}
                   >
@@ -2418,14 +2398,13 @@ export default function BrandsClient({
 
                 {/* Background profiles — infinite vertical scroll behind scanner */}
                 <div className="absolute inset-x-0 top-6 z-[1] h-[230px] overflow-hidden sm:top-8 sm:h-[250px]">
-                  {/* Top Layer: Profiles before scanner beam (mix of bot detected and verified views text with red X badge) */}
+                  {/* Top Layer: Profiles before scanner beam (gray badge with dash icon) */}
                   <div
                     className="absolute inset-0 pointer-events-none z-[1]"
                     style={{ clipPath: "polygon(0 0, 100% 0, 100% 48%, 0 48%)" }}
                   >
                     <div className="animate-engagement-profiles-scroll absolute left-1/2 top-0 flex w-[230px] flex-col gap-2.5 will-change-transform">
-                      {[...profiles, ...profiles, ...profiles].map((profile: ProfileItem, index: number) => {
-                        const isBad = profile.type === "bad";
+                      {[...profiles, ...profiles, ...profiles, ...profiles].map((profile: ProfileItem, index: number) => {
                         return (
                           <div
                             key={`top-${profile.name}-${index}`}
@@ -2464,19 +2443,19 @@ export default function BrandsClient({
                                   isLight ? "text-black/40" : "text-white/35",
                                 )}
                               >
-                                {isBad ? profile.status : "Verified Views"}
+                                Verified Views
                               </div>
                             </div>
 
-                            <div className="flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-full bg-[#d92d25]">
+                            <div className="flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-full bg-[#737373]">
                               <svg
                                 viewBox="0 0 12 12"
                                 className="h-2 w-2"
                                 fill="none"
                               >
                                 <path
-                                  d="M3.5 3.5L8.5 8.5M8.5 3.5L3.5 8.5"
-                                  stroke="white"
+                                  d="M3 6H9"
+                                  stroke="black"
                                   strokeWidth="1.5"
                                   strokeLinecap="round"
                                 />
@@ -2488,71 +2467,97 @@ export default function BrandsClient({
                     </div>
                   </div>
 
-                  {/* Bottom Layer: Green / Verified profiles after passing scanner beam */}
+                  {/* Bottom Layer: Profiles after passing scanner beam (green check for verified, red X for bot detected) */}
                   <div
                     className="absolute inset-0 pointer-events-none z-[2]"
                     style={{ clipPath: "polygon(0 48%, 100% 48%, 100% 100%, 0 100%)" }}
                   >
                     <div className="animate-engagement-profiles-scroll absolute left-1/2 top-0 flex w-[230px] flex-col gap-2.5 will-change-transform">
-                      {[...profiles, ...profiles, ...profiles].map((profile: ProfileItem, index: number) => (
-                        <div
-                          key={`bottom-${profile.name}-${index}`}
-                          className={cn(
-                            "relative flex h-[42px] shrink-0 items-center gap-2 rounded-[12px] px-2",
-                            isLight
-                              ? "border-[0.69px] border-[#0000000D] bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
-                              : "border border-white/[0.07] bg-[#151515]/90 shadow-[0_5px_20px_rgba(0,0,0,0.3)]",
-                          )}
-                        >
+                      {[...profiles, ...profiles, ...profiles, ...profiles].map((profile: ProfileItem, index: number) => {
+                        const isBad = profile.type === "bad";
+                        return (
                           <div
+                            key={`bottom-${profile.name}-${index}`}
                             className={cn(
-                              "h-[30px] w-[30px] shrink-0 overflow-hidden rounded-full",
-                              isLight ? "bg-[#C8C8C8]" : "bg-[#292929]",
+                              "relative flex h-[42px] shrink-0 items-center gap-2 rounded-[12px] px-2",
+                              isLight
+                                ? "border-[0.69px] border-[#0000000D] bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
+                                : "border border-white/[0.07] bg-[#151515]/90 shadow-[0_5px_20px_rgba(0,0,0,0.3)]",
                             )}
                           >
-                            <img
-                              src={profile.image}
-                              alt=""
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-
-                          <div className="min-w-0 flex-1 leading-none">
                             <div
                               className={cn(
-                                "truncate text-[11px] font-medium",
-                                isLight ? "text-black/70" : "text-white/65",
+                                "h-[30px] w-[30px] shrink-0 overflow-hidden rounded-full",
+                                isLight ? "bg-[#C8C8C8]" : "bg-[#292929]",
                               )}
                             >
-                              {profile.name}
-                            </div>
-                            <div
-                              className={cn(
-                                "mt-1 truncate text-[9px]",
-                                isLight ? "text-black/40" : "text-white/35",
-                              )}
-                            >
-                              Verified Views
-                            </div>
-                          </div>
-
-                          <div className="flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-full bg-[#26a844]">
-                            <svg
-                              viewBox="0 0 12 12"
-                              className="h-2 w-2"
-                              fill="none"
-                            >
-                              <path
-                                d="M2.5 6.2L4.8 8.3L9.5 3.7"
-                                stroke="white"
-                                strokeWidth="1.5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
+                              <img
+                                src={profile.image}
+                                alt=""
+                                className="h-full w-full object-cover"
                               />
-                            </svg>
+                            </div>
+
+                            <div className="min-w-0 flex-1 leading-none">
+                              <div
+                                className={cn(
+                                  "truncate text-[11px] font-medium",
+                                  isLight ? "text-black/70" : "text-white/65",
+                                )}
+                              >
+                                {profile.name}
+                              </div>
+                              <div
+                                className={cn(
+                                  "mt-1 truncate text-[9px]",
+                                  isBad
+                                    ? isLight
+                                      ? "text-red-600 font-medium"
+                                      : "text-white/35 font-medium"
+                                    : isLight
+                                      ? "text-black/40"
+                                      : "text-white/35",
+                                )}
+                              >
+                                {isBad ? profile.status : "Verified Views"}
+                              </div>
+                            </div>
+
+                            {isBad ? (
+                              <div className="flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-full bg-[#d92d25]">
+                                <svg
+                                  viewBox="0 0 12 12"
+                                  className="h-2 w-2"
+                                  fill="none"
+                                >
+                                  <path
+                                    d="M3.5 3.5L8.5 8.5M8.5 3.5L3.5 8.5"
+                                    stroke="white"
+                                    strokeWidth="1.5"
+                                    strokeLinecap="round"
+                                  />
+                                </svg>
+                              </div>
+                            ) : (
+                              <div className="flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-full bg-[#26a844]">
+                                <svg
+                                  viewBox="0 0 12 12"
+                                  className="h-2 w-2"
+                                  fill="none"
+                                >
+                                  <path
+                                    d="M2.5 6.2L4.8 8.3L9.5 3.7"
+                                    stroke="white"
+                                    strokeWidth="1.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 

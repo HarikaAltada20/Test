@@ -997,7 +997,7 @@ export default function CreatorsClient({
                       isLight ? "text-black/50" : "text-zinc-400",
                     )}
                   >
-                    16k+ creators have already Joined
+                    21k+ creators have already Joined
                   </p>
                 </div>
               </div>
@@ -1132,11 +1132,11 @@ export default function CreatorsClient({
         >
           <p
             className={cn(
-              "mb-6 px-4 text-center text-sm sm:mb-8 sm:text-base",
+              "mb-6 px-4 text-center text-[14px] sm:mb-8 sm:text-base",
               isLight ? "text-black/45" : "text-zinc-500",
             )}
           >
-            Work with Top Brands and Creators
+            Trusted by
           </p>
           <div className="relative mx-auto w-full max-w-[1100px] overflow-hidden">
             {/* Logos scroll sideways only inside this clipped band */}
@@ -1536,81 +1536,81 @@ export default function CreatorsClient({
                     ...
                   </svg> */}
 
-                  {/* Network Graphic Image */}
-                  <div className="pointer-events-none absolute inset-x-0 top-16 h-[140px] px-6 sm:px-8">
-                    <div className="relative h-full w-full">
-                      <Image
-                        src="/images/Group 29.png"
-                        alt="Creator Network"
-                        fill
-                        className="object-contain object-top"
-                        priority
-                      />
+                  {/* Network Graphic + Avatars Container */}
+                  <div className="relative z-10 mx-auto h-[175px] w-full max-w-[340px] sm:h-[190px] sm:max-w-[440px]">
+                    {/* Network Graphic Image */}
+                    <div className="pointer-events-none absolute inset-x-2 top-2 bottom-0 sm:inset-x-4">
+                      <div className="relative h-full w-full">
+                        <Image
+                          src="/images/Group 29.png"
+                          alt="Creator Network"
+                          fill
+                          className="object-contain object-top"
+                          priority
+                        />
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Creator Images */}
-                  <div className="relative z-10 flex h-[180px] items-start justify-center">
                     {/* Top Creator */}
-                    <div className="absolute left-1/2 top-0 -translate-x-1/2">
-                      <div className="h-14 w-14 overflow-hidden rounded-full bg-[#111] p-[2px]">
+                    <div className="absolute left-1/2 -top-[12px] -translate-x-1/2">
+                      <div className="h-14 w-14 overflow-hidden rounded-full bg-[#111] p-[2px] shadow-md ring-1 ring-white/10 sm:h-16 sm:w-16">
                         <Image
                           src="/images/Ellipse 2355.avif"
                           alt="Creator"
-                          width={48}
-                          height={48}
+                          width={64}
+                          height={64}
                           className="h-full w-full rounded-full object-cover"
                         />
                       </div>
                     </div>
 
                     {/* Left Creator */}
-                    <div className="absolute left-[22%] top-[90px]">
-                      <div className="h-13 w-13 overflow-hidden rounded-full  bg-[#222] p-[2px]">
+                    <div className="absolute left-[2%] top-[65px] sm:left-[8%] sm:top-[85px]">
+                      <div className="h-12 w-12 overflow-hidden rounded-full bg-[#222] p-[2px] shadow-md ring-1 ring-white/10 sm:h-14 sm:w-14">
                         <Image
                           src="/images/Ellipse 2355 (1).avif"
                           alt="Creator"
-                          width={40}
-                          height={40}
+                          width={56}
+                          height={56}
                           className="h-full w-full rounded-full object-cover"
                         />
                       </div>
                     </div>
 
                     {/* Right Creator */}
-                    <div className="absolute right-[22%] top-[90px]">
-                      <div className="h-13 w-13 overflow-hidden rounded-full  bg-[#222] p-[2px]">
+                    <div className="absolute right-[2%] top-[65px] sm:right-[8%] sm:top-[85px]">
+                      <div className="h-12 w-12 overflow-hidden rounded-full bg-[#222] p-[2px] shadow-md ring-1 ring-white/10 sm:h-14 sm:w-14">
                         <Image
                           src="/images/Ellipse 2355 (2).avif"
                           alt="Creator"
-                          width={40}
-                          height={40}
+                          width={56}
+                          height={56}
                           className="h-full w-full rounded-full object-cover"
                         />
                       </div>
                     </div>
 
                     {/* Bottom-left Creator */}
-                    <div className="absolute left-[35%] top-[130px]">
-                      <div className="h-13 w-13 overflow-hidden rounded-full  bg-[#222] p-[2px]">
+                    <div className="absolute left-[26%] top-[112px] sm:left-[29%] sm:top-[132px]">
+                      <div className="h-12 w-12 overflow-hidden rounded-full bg-[#222] p-[2px] shadow-md ring-1 ring-white/10 sm:h-14 sm:w-14">
                         <Image
                           src="/images/Ellipse 2355 (3).avif"
                           alt="Creator"
-                          width={40}
-                          height={40}
+                          width={56}
+                          height={56}
                           className="h-full w-full rounded-full object-cover"
                         />
                       </div>
                     </div>
 
                     {/* Bottom-right Creator */}
-                    <div className="absolute right-[35%] top-[130px]">
-                      <div className="h-13 w-13 overflow-hidden rounded-full  bg-[#222] p-[2px]">
+                    <div className="absolute right-[26%] top-[112px] sm:right-[29%] sm:top-[132px]">
+                      <div className="h-12 w-12 overflow-hidden rounded-full bg-[#222] p-[2px] shadow-md ring-1 ring-white/10 sm:h-14 sm:w-14">
                         <Image
                           src="/images/Ellipse 2355 (4).avif"
                           alt="Creator"
-                          width={40}
-                          height={40}
+                          width={56}
+                          height={56}
                           className="h-full w-full rounded-full object-cover"
                         />
                       </div>
@@ -1774,7 +1774,7 @@ export default function CreatorsClient({
                 isLight ? "text-black" : "text-white",
               )}
             >
-              {"16,700+".split("").map((ch, idx) => {
+              {"21,000+".split("").map((ch, idx) => {
                 const isDigit = /^[0-9]$/.test(ch);
                 if (!isDigit) {
                   return <span key={idx}>{ch}</span>;

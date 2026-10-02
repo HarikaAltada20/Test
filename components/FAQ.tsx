@@ -21,7 +21,7 @@ const homeFaqs = [
   {
     id: "faq-home-3",
     question: "What are the key features of Game of Creators?",
-    answer: `<strong>🎯 Organic Content at Scale:</strong> Generate high-quality, diverse content without manual sourcing<br><br><strong>💰 Only Pay for Top Performing Content:</strong> Pay for content that drives results<br><br><strong>🚀 Creator Outreach Hassle-Free:</strong> Creators come to you<br><br><strong>⚖️ Supply and Demand Platform:</strong> Creators compete, ensuring top ideas rise to the top<br><br><strong>📈 Scale Winners:</strong> Scale top-performing content into paid campaigns<br><br><strong>🌍 Democratized Brand Deals:</strong> Success is based on creativity and performance<br><br><strong>🎨 Creator Freedom of Choice:</strong> Creators choose which brands to work with`,
+    answer: `• <strong>Organic Content at Scale:</strong> Generate high-quality, diverse content without manual sourcing<br><br>• <strong>Only Pay for Top Performing Content:</strong> Pay for content that drives results<br><br>• <strong>Creator Outreach Hassle-Free:</strong> Creators come to you<br><br>• <strong>Supply and Demand Platform:</strong> Creators compete, ensuring top ideas rise to the top<br><br>• <strong>Scale Winners:</strong> Scale top-performing content into paid campaigns<br><br>• <strong>Democratized Brand Deals:</strong> Success is based on creativity and performance<br><br>• <strong>Creator Freedom of Choice:</strong> Creators choose which brands to work with`,
   },
   {
     id: "faq-home-4",
@@ -31,7 +31,7 @@ const homeFaqs = [
   {
     id: "faq-home-5",
     question: "What are the main benefits for participants?",
-    answer: `<strong>🎯 Full Control:</strong> Choose which brands to promote<br><br><strong>🔍 Full Transparency:</strong> Access to leaderboard rankings, views, and payment details<br><br><strong>🚀 Performance-Based:</strong> Your followers no longer limit your opportunities—performance and views are what matter`,
+    answer: `• <strong>Full Control:</strong> Choose which brands to promote<br><br>• <strong>Full Transparency:</strong> Access to leaderboard rankings, views, and payment details<br><br>• <strong>Performance-Based:</strong> Your followers no longer limit your opportunities—performance and views are what matter`,
   },
   {
     id: "faq-home-6",
@@ -42,7 +42,7 @@ const homeFaqs = [
   {
     id: "faq-home-7",
     question: "What are the prizes or rewards for the winners?",
-    answer: `<strong>🏆 Leaderboard-based campaigns:</strong> Prizes are distributed based on rankings.<br><br><strong>Example:</strong> $1000 prize pool with five winners:<br>• <strong>Rank 1:</strong> $500<br>• <strong>Rank 2:</strong> $250<br>• <strong>Rank 3:</strong> $150<br>• <strong>Rank 4:</strong> $75<br>• <strong>Rank 5:</strong> $25<br><br><strong>📊 CPM-based campaigns:</strong> Paid based on views, for example, $1 per 1000 views, with minimum and maximum view limits.<br><br><strong>🎯 Milestone-based campaigns:</strong> Creators earn fixed payouts when their content hits view milestones set by the brand (often first-come, first-served within tier limits).<br><br><strong>⚡ Dual rewards campaigns:</strong> A hybrid model where creators can earn from both CPM performance and milestone payouts in the same campaign.`,
+    answer: `• <strong>Leaderboard-based campaigns:</strong> Prizes are distributed based on rankings.<br><br><strong>Example:</strong> $1000 prize pool with five winners:<br>• <strong>Rank 1:</strong> $500<br>• <strong>Rank 2:</strong> $250<br>• <strong>Rank 3:</strong> $150<br>• <strong>Rank 4:</strong> $75<br>• <strong>Rank 5:</strong> $25<br><br>• <strong>CPM-based campaigns:</strong> Paid based on views, for example, $1 per 1000 views, with minimum and maximum view limits.<br><br>• <strong>Milestone-based campaigns:</strong> Creators earn fixed payouts when their content hits view milestones set by the brand (often first-come, first-served within tier limits).<br><br>• <strong>Dual rewards campaigns:</strong> A hybrid model where creators can earn from both CPM performance and milestone payouts in the same campaign.`,
   },
   {
     id: "faq-home-8",
