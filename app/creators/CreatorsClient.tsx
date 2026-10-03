@@ -55,6 +55,109 @@ import {
 import { cn } from "@/lib/utils";
 import { useThemeMode } from "@/hooks/use-theme-mode";
 
+function RollingDigitChar({
+  char,
+  delay = 0,
+}: {
+  char: string;
+  delay?: number;
+}) {
+  const isDigit = /^[0-9]$/.test(char);
+
+  if (!isDigit) {
+    return (
+      <span className="inline-flex items-center justify-center select-none px-[0.02em]">
+        {char}
+      </span>
+    );
+  }
+
+  const numericValue = parseInt(char, 10);
+
+  return (
+    <span className="relative inline-block h-[52px] sm:h-[100px] md:h-[120px] lg:h-[124px] overflow-hidden align-top select-none">
+      <span
+        className="flex flex-col transition-transform duration-450 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        style={{
+          transform: `translateY(-${numericValue * 10}%)`,
+          transitionDelay: `${delay}ms`,
+        }}
+      >
+        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((val) => (
+          <span
+            key={val}
+            className="flex h-[52px] sm:h-[100px] md:h-[120px] lg:h-[124px] shrink-0 items-center justify-center"
+          >
+            {val}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
+function CreatorsRollingNumber({ isLight }: { isLight: boolean }) {
+  const containerRef = useRef<HTMLHeadingElement>(null);
+  const [step, setStep] = useState(0);
+  const [animate, setAnimate] = useState(false);
+
+  const numbers = [
+    "2,000+",
+    "5,000+",
+    "9,000+",
+    "14,000+",
+    "18,000+",
+    "21,000+",
+  ];
+  const maxSteps = numbers.length - 1;
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setAnimate(true);
+        }
+      },
+      { threshold: 0.1 },
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (animate && step < maxSteps) {
+      const timeout = setTimeout(() => {
+        setStep((prev) => prev + 1);
+      }, 300);
+      return () => clearTimeout(timeout);
+    }
+  }, [animate, step, maxSteps]);
+
+  const currentStr = numbers[step] || numbers[0];
+
+  return (
+    <h1
+      ref={containerRef}
+      className={cn(
+        "flex items-center justify-center text-[52px] font-bold leading-none tracking-[-0.04em] sm:text-[100px] md:text-[120px] lg:text-[124px]",
+        isLight ? "text-black" : "text-white",
+      )}
+    >
+      {currentStr.split("").map((ch, i) => (
+        <RollingDigitChar
+          key={`${i}-${currentStr.length}`}
+          char={ch}
+          delay={i * 25}
+        />
+      ))}
+    </h1>
+  );
+}
+
 // const creatorTestimonials = [
 //   {
 //     stars: 5,
@@ -1768,45 +1871,8 @@ export default function CreatorsClient({
           {/* Content */}
           <div className="relative z-10 flex flex-col items-center px-2 text-center">
             {/* Number */}
-            <h1
-              className={cn(
-                "flex items-center justify-center text-[52px] font-bold leading-none tracking-[-0.04em] sm:text-[100px] md:text-[120px] lg:text-[124px]",
-                isLight ? "text-black" : "text-white",
-              )}
-            >
-              {"21,000+".split("").map((ch, idx) => {
-                const isDigit = /^[0-9]$/.test(ch);
-                if (!isDigit) {
-                  return <span key={idx}>{ch}</span>;
-                }
-                const val = parseInt(ch, 10);
-                const targetIdx = val === 0 ? 10 : val;
-                const digitItems = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
-                return (
-                  <span
-                    key={idx}
-                    className="relative inline-block h-[52px] sm:h-[100px] md:h-[120px] lg:h-[124px] overflow-hidden align-top select-none"
-                  >
-                    <span
-                      className="flex flex-col transition-transform duration-1000 ease-[cubic-bezier(0.12,0.8,0.2,1)]"
-                      style={{
-                        transform: `translateY(-${(targetIdx * 100) / digitItems.length}%)`,
-                        transitionDelay: `${idx * 75}ms`,
-                      }}
-                    >
-                      {digitItems.map((d, dIdx) => (
-                        <span
-                          key={dIdx}
-                          className="flex h-[52px] sm:h-[100px] md:h-[120px] lg:h-[124px] shrink-0 items-center justify-center"
-                        >
-                          {d}
-                        </span>
-                      ))}
-                    </span>
-                  </span>
-                );
-              })}
-            </h1>
+            <CreatorsRollingNumber isLight={isLight} />
+
 
             {/* Subtitle */}
             <p

@@ -2219,7 +2219,7 @@ export default function HeroContent() {
                         isLight ? "text-black" : "text-white",
                       )}
                     >
-                      Hey Riya!
+                      Hey Aditya!
                     </div>
 
                     <div
