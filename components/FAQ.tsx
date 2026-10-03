@@ -378,8 +378,10 @@ export default function FAQ() {
   const isCreators = pathname.includes("creators");
   const useLightFaq = isLight && (isHome || isBrands || isCreators);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   const faqs = isBrands ? brandFaqs : isHome ? homeFaqs : creatorFaqs;
+  const visibleFaqs = showAll ? faqs : faqs.slice(0, 5);
 
   const toggleFAQ = (index: number) => {
     setOpenIndex(openIndex === index ? null : index);
@@ -411,7 +413,7 @@ export default function FAQ() {
         </h2>
 
         <div className="mt-10 space-y-3 text-left md:mt-12">
-          {faqs.map((faq, index) => (
+          {visibleFaqs.map((faq, index) => (
             <FaqItem
               key={faq.id}
               faq={faq}
@@ -421,6 +423,29 @@ export default function FAQ() {
             />
           ))}
         </div>
+
+        {faqs.length > 5 && (
+          <div className="mt-8 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowAll((prev) => !prev)}
+              className={cn(
+                "group inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-[15px] font-semibold transition sm:w-auto",
+                useLightFaq
+                  ? "bg-black text-white hover:bg-black/90"
+                  : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white hover:bg-white/10"
+              )}
+            >
+              <span>{showAll ? "View Less" : "View More"}</span>
+              <FaChevronDown
+                className={cn(
+                  "h-3.5 w-3.5 transition-transform duration-300",
+                  showAll && "rotate-180"
+                )}
+              />
+            </button>
+          </div>
+        )}
 
         <p
           className={cn(

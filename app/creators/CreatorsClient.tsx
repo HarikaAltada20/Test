@@ -1043,7 +1043,7 @@ export default function CreatorsClient({
                     onClick={handleStartEarningClick}
                     disabled={isCheckingStartEarning}
                     className={cn(
-                      "inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-base font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
+                      "inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-[15px] font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
                       isLight
                         ? "bg-[#FF6A1A] text-white hover:bg-[#ff7a33] shadow-lg shadow-orange-500/25"
                         : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white hover:border-white/35 hover:bg-[#242424]",
@@ -1058,7 +1058,7 @@ export default function CreatorsClient({
                     onClick={handleViewMoreClick}
                     disabled={isNavigatingViewMore}
                     className={cn(
-                      "inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-base font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
+                      "inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-[15px] font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
                       isLight
                         ? "border border-black/15 bg-white text-black hover:bg-[#f7f7f7]"
                         : "bg-[#DEDEDE] text-black hover:bg-white",
@@ -1107,14 +1107,14 @@ export default function CreatorsClient({
 
               {/* Right: layered hero visual */}
               <div className="relative flex justify-center min-[900px]:justify-end">
-                <div className="relative h-[380px] w-full max-w-[420px] overflow-hidden sm:h-[480px] sm:max-w-[560px] sm:overflow-visible min-[900px]:h-[560px]">
+                <div className="relative h-[430px] w-full max-w-[420px] sm:h-[480px] sm:max-w-[560px] sm:overflow-visible min-[900px]:h-[560px]">
                   {/* Dollar sign — behind girl, shifted left */}
-                  <div className="pointer-events-none absolute left-[-8%] right-[10%] top-[-2%] bottom-[6%] z-0 select-none sm:left-[-18%] sm:right-[18%]">
+                  <div className="pointer-events-none absolute left-[-14%] right-[-4%] top-[-8%] bottom-[4%] z-0 select-none sm:left-[-18%] sm:right-[18%] sm:top-[-2%] sm:bottom-[6%]">
                     <Image
                       src="/images/attach-money.png"
                       alt=""
                       fill
-                      className="object-contain object-center opacity-90"
+                      className="object-contain object-center opacity-90 scale-[0.88] sm:scale-[0.80]"
                       sizes="(max-width: 1024px) 70vw, 440px"
                       priority
                     />
@@ -1123,19 +1123,19 @@ export default function CreatorsClient({
                   {/* Last Month Earnings — behind girl (tucked under right shoulder) */}
                   <div
                     className={cn(
-                      "pointer-events-none absolute top-[28%] right-[4%] z-[5] rounded-2xl border px-3 py-2 backdrop-blur-md sm:top-[38%] sm:right-[10%] sm:px-4 sm:py-3 rotate-[6deg]",
+                      "pointer-events-none absolute top-[10%] right-[1%] z-[15] rounded-xl border px-3 py-2 backdrop-blur-md sm:top-[34%] sm:right-[2%] sm:z-[5] sm:rounded-2xl sm:px-5 sm:py-4 rotate-[5deg] sm:rotate-[6deg] scale-95 sm:scale-105",
                       isLight
                         ? "border-black/[0.06] bg-[#ECECEC] shadow-[inset_0px_0px_5.26px_0px_#CDCDCD40]"
                         : "border-white/10 bg-[#1E1E1E] shadow-[inset_0_0_5.26px_0_#FFFFFF40]",
                     )}
                   >
-                    <div className="mb-0.5 flex items-center gap-2">
-                      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-600 text-[9px] font-bold text-black shadow-sm sm:h-[18px] sm:w-[18px] sm:text-[10px]">
+                    <div className="mb-0.5 flex items-center gap-1.5 sm:mb-1 sm:gap-2">
+                      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-600 text-[9px] font-bold text-black shadow-sm sm:h-[20px] sm:w-[20px] sm:text-[11px]">
                         $
                       </span>
                       <span
                         className={cn(
-                          "whitespace-nowrap text-[11px] sm:text-xs",
+                          "whitespace-nowrap text-[11px] sm:text-sm font-medium",
                           isLight ? "text-[#353535]" : "text-zinc-300",
                         )}
                       >
@@ -1144,7 +1144,7 @@ export default function CreatorsClient({
                     </div>
                     <p
                       className={cn(
-                        "pl-0.5 text-xl font-semibold tracking-tight sm:text-2xl",
+                        "pl-0.5 text-xl font-bold tracking-tight sm:text-3xl",
                         isLight ? "text-black" : "text-white",
                       )}
                     >
@@ -1154,7 +1154,7 @@ export default function CreatorsClient({
 
                   {/* Girl — in front of dollar + earnings card */}
                   <div className="pointer-events-none absolute inset-0 z-10 flex items-end justify-center">
-                    <div className="relative -mb-[4%] h-[88%] w-[98%] sm:w-[86%]">
+                    <div className="relative -mb-[4%] h-[88%] w-[98%] sm:w-[86%] translate-x-1 -translate-y-2 sm:translate-x-9 sm:-translate-y-9">
                       <Image
                         src="/images/88ea43859c754cb864b7440ecca779c37d8d6e5d.png"
                         alt="Creator checking earnings on Game of Creators"
@@ -1163,54 +1163,47 @@ export default function CreatorsClient({
                         className="origin-bottom scale-[1.12] object-contain object-bottom"
                         sizes="(max-width: 1024px) 90vw, 480px"
                       />
+                      {/* Bottom fade — seamlessly moves with girl image */}
+                      <div
+                        aria-hidden
+                        className={cn(
+                          "pointer-events-none absolute inset-x-0 -bottom-2 z-[15] h-[20%]",
+                          isLight
+                            ? "bg-gradient-to-t from-[#F1F1F1] via-[#F1F1F1]/80 to-transparent"
+                            : "bg-gradient-to-t from-black via-black/80 to-transparent"
+                        )}
+                      />
                     </div>
-                  </div>
-
-                  {/* Bottom blur → black fade (over image, under notification) */}
-                  <div
-                    aria-hidden
-                    className="pointer-events-none absolute inset-x-0 bottom-0 top-[94%] z-[15] h-[22%] sm:h-[14%]"
-                  >
-                    <div
-                      className="absolute inset-0"
-                      style={{
-                        WebkitMaskImage:
-                          "linear-gradient(to top, black 0%, black 45%, transparent 100%)",
-                        maskImage:
-                          "linear-gradient(to top, black 0%, black 45%, transparent 100%)",
-                      }}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
                   </div>
 
                   {/* $600 credited notification — in front of girl */}
                   <div
-                    className="pointer-events-none   bg-[#FFFFFFCC]
+                    className="pointer-events-none bg-[#FFFFFFCC]
   border-[0.64px]
   border-[#FFFFFF40]
   backdrop-blur-[19.0909px]
-  shadow-[0px_10.18px_20.36px_-2.55px_#00000026] absolute left-[2%] top-[68%] z-20 w-[min(94%,260px)] rounded-2xl px-3 py-2.5 text-black sm:left-[18%] sm:top-[65%] sm:w-[300px] sm:px-3.5 sm:py-3"
+  shadow-[0px_10.18px_20.36px_-2.55px_#00000026] absolute left-[3%] top-[68%] z-20 w-[min(94%,290px)] rounded-2xl px-3.5 py-2.5 text-black sm:left-[14%] sm:top-[63%] sm:w-[340px] sm:px-5 sm:py-4"
                   >
-                    <div className="flex items-start gap-2.5">
-                      <div className="relative mt-0.5 flex h-[38px] w-[38px] shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-white">
+                    <div className="flex items-start gap-3">
+                      <div className="relative mt-0.5 flex h-[44px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-white shadow-sm">
                         <Image
                           src="/images/Group.png"
                           alt=""
-                          width={18}
-                          height={18}
-                          className="h-[18px] w-[18px] scale-[1.55] object-contain"
-                          sizes="18px"
+                          width={22}
+                          height={22}
+                          className="h-[22px] w-[22px] scale-[1.55] object-contain"
+                          sizes="22px"
                         />
                       </div>
                       <div className="min-w-0 flex-1 pt-0.5">
                         <div className="flex items-start justify-between gap-2">
-                          <p className="text-[13px] leading-snug text-zinc-900 sm:text-sm">
+                          <p className="text-[14px] leading-snug text-zinc-900 sm:text-[15px]">
                             <span className="font-semibold">GOC</span>{" "}
                             <span className="font-semibold">
                               $600 credited!
                             </span>
                           </p>
-                          <span className="shrink-0 pt-0.5 text-[10px] text-zinc-500 sm:text-[11px]">
+                          <span className="shrink-0 pt-0.5 text-[11px] text-zinc-500 sm:text-xs">
                             now
                           </span>
                         </div>
@@ -1890,7 +1883,7 @@ export default function CreatorsClient({
               onClick={handleMakeYourTurnClick}
               disabled={isCheckingTurn}
               className={cn(
-                "group mt-6 flex items-center gap-3 rounded-[22px] border border-orange-400 px-5 py-3.5 text-[15px] font-semibold shadow-[0_0_25px_rgba(255,120,0,0.45)] transition-all duration-300 hover:scale-105 hover:shadow-[0_0_35px_rgba(255,120,0,0.65)] sm:mt-8 sm:px-6 sm:py-4 sm:text-[17px] disabled:opacity-70",
+                "group mt-6 flex items-center gap-3 rounded-[22px] border border-orange-400 px-5 py-3.5 text-[15px] font-semibold shadow-[0_0_25px_rgba(255,120,0,0.45)] transition-all duration-300 hover:scale-105 hover:shadow-[0_0_35px_rgba(255,120,0,0.65)] sm:mt-8 sm:px-6 sm:py-4 disabled:opacity-70",
                 isLight
                   ? "bg-[#FF6A1A] text-white"
                   : "bg-white text-orange-500",

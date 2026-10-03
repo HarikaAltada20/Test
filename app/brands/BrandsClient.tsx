@@ -648,7 +648,7 @@ export default function BrandsClient({
             <div className="relative z-10">
               <h1
                 className={cn(
-                  "mx-auto max-w-[700px]  font-['Inter'] font-bold text-[32px] md:text-[48px] leading-[110%] tracking-[-4%] text-center",
+                  "mx-auto max-w-[700px] font-['Inter'] font-bold text-3xl sm:text-4xl md:text-[52px] leading-tight sm:leading-tight md:leading-[58px] tracking-[-2%] text-center py-1",
                   isLight ? "text-black" : "bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,#FFFFFF_0%,#999999_100%)] bg-clip-text text-transparent",
                 )}
               >
@@ -674,7 +674,7 @@ export default function BrandsClient({
                   onClick={handleLaunchCampaign}
                   disabled={isLaunchingCampaign}
                   className={cn(
-                    "group inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto",
+                    "group inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-[15px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto",
                     isLight
                       ? "bg-black text-white hover:bg-black/90"
                       : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] hover:bg-white/10",
@@ -697,7 +697,7 @@ export default function BrandsClient({
                     })
                   }
                   className={cn(
-                    "group flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold transition sm:w-auto",
+                    "group flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-[15px] font-semibold transition sm:w-auto",
                     isLight
                       ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
                       : "bg-[#DEDEDE] text-black hover:bg-white/90",
@@ -728,7 +728,7 @@ export default function BrandsClient({
               {/* Main dashboard card */}
               <div
                 className={cn(
-                  "relative min-h-[320px] overflow-hidden rounded-[18px] sm:min-h-[450px] sm:rounded-[22px]",
+                  "relative min-h-[380px] overflow-hidden rounded-[18px] sm:min-h-[500px] md:min-h-[540px] sm:rounded-[22px]",
                   isLight
                     ? "border border-black/[0.06] bg-white"
                     : "border border-white/[0.04] bg-[#151515]",
@@ -765,29 +765,29 @@ export default function BrandsClient({
                     alt=""
                     fill
                     className={cn(
-                      "object-cover object-left-top sm:object-[20%_0%]",
+                      "object-cover object-right-top sm:object-[45%_0%]",
                       isLight
-                        ? "opacity-70 sm:opacity-85"
-                        : "opacity-40 sm:opacity-50",
+                        ? "opacity-85 sm:opacity-95"
+                        : "opacity-60 sm:opacity-75",
                     )}
                     sizes="(max-width: 1100px) 100vw, 1100px"
                     priority
                   />
-                  {/* Soft fade so left copy stays readable */}
+                  {/* Soft fade so left copy stays 100% clean and readable */}
                   <div
                     className={cn(
-                      "absolute inset-0 bg-gradient-to-r to-transparent",
+                      "absolute inset-0 bg-gradient-to-r",
                       isLight
-                        ? "from-white via-white sm:via-white/90"
-                        : "from-[#151515] via-[#151515]/85 sm:via-[#151515]/70",
+                        ? "from-white via-white via-50% to-transparent"
+                        : "from-[#151515] via-[#151515] via-50% to-transparent",
                     )}
                   />
                   <div
                     className={cn(
                       "absolute inset-0 bg-gradient-to-t via-transparent",
                       isLight
-                        ? "from-white to-white/50"
-                        : "from-[#151515] to-[#151515]/40",
+                        ? "from-white to-white/20"
+                        : "from-[#151515] to-[#151515]/20",
                     )}
                   />
                 </div>
@@ -801,7 +801,7 @@ export default function BrandsClient({
                       : "/images/2398b700eadec2cb27b247febe9b4b7935fa92d0.png"
                   }
                   alt="Reveal effect"
-                  className="pointer-events-none absolute inset-0 z-[5] h-full w-full object-cover object-left-top sm:object-[20%_0%]"
+                  className="pointer-events-none absolute inset-0 z-[5] h-full w-full object-cover object-right-top sm:object-[45%_0%]"
                   style={
                     {
                       mixBlendMode: "lighten",
@@ -822,7 +822,7 @@ export default function BrandsClient({
                 <div className="absolute bottom-[-160px] right-[-100px] z-[1] h-[400px] w-[650px] rounded-full bg-[#8869ff]/55 blur-[100px]" />
 
                 {/* Content */}
-                <div className="relative z-10 flex min-h-[280px] flex-col justify-center px-5 py-10 sm:min-h-[390px] sm:px-8 sm:py-12 md:px-10">
+                <div className="relative z-10 flex min-h-[340px] flex-col justify-center px-6 py-12 sm:min-h-[440px] md:min-h-[480px] sm:px-12 sm:py-16 md:px-14">
                   <h2
                     className={cn(
                       "max-w-[510px] text-[22px] font-bold leading-[1.15] tracking-[-0.8px] sm:text-[28px] sm:tracking-[-1px] md:text-[31px]",
@@ -844,7 +844,7 @@ export default function BrandsClient({
                     driving results.
                   </p>
 
-                  <button
+                  {/* <button
                     type="button"
                     onClick={handleLaunchCampaign}
                     disabled={isLaunchingCampaign}
@@ -858,7 +858,7 @@ export default function BrandsClient({
                     {isLaunchingCampaign ? <ButtonLoadingSpinner /> : null}
                     <span>Launch a Campaign</span>
                     <ArrowRight size={14} />
-                  </button>
+                  </button> */}
                 </div>
               </div>
 
@@ -1023,264 +1023,9 @@ export default function BrandsClient({
             </div>
 
             {/* CARDS CONTAINER */}
-            <div className="flex w-full flex-col items-center justify-center gap-6 lg:flex-row lg:items-start lg:gap-8 px-0 sm:px-2">
-              {/* LEFT CARD: INVOICE / COMPARISON CARD */}
-              <div className="relative w-full max-w-[685px]">
-                <AnimatePresence mode="wait" initial={false}>
-                  <motion.div
-                    key={comparisonTab}
-                    initial={{ y: -40, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: 40, opacity: 0 }}
-                    transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                    className="relative flex w-full flex-col justify-between overflow-hidden rounded-[20px] sm:rounded-[24px] bg-[#171717] p-3.5 xs:p-5 sm:p-6 md:p-8 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
-                  >
-                    {/* Top Zig-Zag Edge */}
-                    <img
-                      src="/images/Group 39.png"
-                      alt="Zigzag top border"
-                      className="absolute -top-1.5 left-0 w-full h-3 sm:h-4 object-fill pointer-events-none select-none z-20"
-                    />
-
-                    {/* Bottom Zig-Zag Edge */}
-                    <img
-                      src="/images/Group 39.png"
-                      alt="Zigzag bottom border"
-                      className="absolute -bottom-1.5 left-0 w-full h-3 sm:h-4 object-fill rotate-180 pointer-events-none select-none z-20"
-                    />
-
-                    {/* Stamp overlay top right (Double Ellipse Stamp) */}
-                    <motion.div
-                      key={`stamp-${comparisonTab}`}
-                      initial={{ scale: 2.2, opacity: 0, rotate: -15 }}
-                      animate={{ scale: 1, opacity: 1, rotate: -7 }}
-                      transition={{ type: "spring", stiffness: 450, damping: 20, delay: 0.18 }}
-                      className={cn(
-                        "absolute right-2 top-2 sm:right-6 sm:top-6 md:right-7 md:top-7 z-10 select-none pointer-events-none inline-flex flex-col items-center justify-center rounded-[50%/50%] border-[1.5px] sm:border-[2px] p-[2px] sm:p-[3px] text-center transition-colors duration-300 scale-75 xs:scale-90 sm:scale-100 origin-top-right",
-                        comparisonTab === "old"
-                          ? "border-[#B63E2B] text-[#B63E2B]"
-                          : "border-[#22C55E] text-[#22C55E]"
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          "inline-flex flex-col items-center justify-center rounded-[50%/50%] border-[1px] sm:border-[1.5px] px-2 py-0.5 xs:px-2.5 xs:py-1 sm:px-4.5 sm:py-2 text-center",
-                          comparisonTab === "old"
-                            ? "border-[#B63E2B]"
-                            : "border-[#22C55E]"
-                        )}
-                      >
-                        <div className="text-[8.5px] xs:text-[9px] sm:text-[11px] font-semibold tracking-[0.6px] xs:tracking-[0.8px] sm:tracking-[1px] whitespace-nowrap">
-                          {comparisonTab === "old" ? "ONE CREATOR" : "DISTRIBUTED"}
-                        </div>
-                        <div className="text-[5px] xs:text-[5.5px] sm:text-[7px] font-medium tracking-[0.3px] xs:tracking-[0.4px] sm:tracking-[0.5px] mt-0.5 whitespace-nowrap">
-                          {comparisonTab === "old"
-                            ? "Fixed fee · No guarantee"
-                            : "Performance-priced · Bot-verified"}
-                        </div>
-                      </div>
-                    </motion.div>
-
-                    <div>
-                      {/* Top Invoice Header */}
-                      <div className="flex items-center gap-2.5 sm:gap-3 pr-20 xs:pr-24 sm:pr-36">
-                        <div className="flex h-7 w-7 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg bg-[#794BFF]/20">
-                          <img
-                            src="/images/link-2.png"
-                            alt="Invoice Icon"
-                            className="h-3.5 w-3.5 sm:h-5 sm:w-5 object-contain select-none pointer-events-none"
-                          />
-                        </div>
-                        <div>
-                          <h3 className="text-sm xs:text-base sm:text-lg md:text-xl font-medium text-[#F4F4F5]">Invoice</h3>
-                          <p className="text-[9.5px] xs:text-[10px] sm:text-[11.8px] font-medium text-[#5E5E64]">
-                            #INF-2047 · Issued 12 Mar 2026
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Billed by / Billed to */}
-                      <div className="my-3 sm:my-4 grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 gap-2.5 xs:gap-3 sm:gap-4">
-                        {/* Billed by */}
-                        <div>
-                          <p className="text-[10px] xs:text-[10.5px] sm:text-[11.8px] font-semibold text-[#929298] mb-1">Billed by</p>
-                          <div className="flex items-center gap-2 sm:gap-2.5">
-                            {comparisonTab === "old" ? (
-                              <>
-                                <div className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-full bg-[#F3C65A] text-[7px] sm:text-[7.6px] font-bold text-[#4D453E]">
-                                  SC
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="text-[11.5px] sm:text-[13.5px] font-normal text-[#F4F4F5] leading-tight truncate">@sarahcreates</p>
-                                  <p className="text-[8.5px] sm:text-[10.11px] font-medium text-[#929298] leading-tight mt-0.5 truncate">
-                                    500k followers · unverified
-                                  </p>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                {/* Overlapping small avatar circles */}
-                                <div className="flex items-center -space-x-1.5 shrink-0">
-                                  <div className="flex h-4 w-4 sm:h-5 sm:w-5 items-center justify-center rounded-full bg-[#F3C65A] text-[5.5px] sm:text-[6.5px] font-bold text-[#4D453E] border border-[#171717]">
-                                    MJ
-                                  </div>
-                                  <div className="flex h-4 w-4 sm:h-5 sm:w-5 items-center justify-center rounded-full bg-[#6EE7B7] text-[5.5px] sm:text-[6.5px] font-bold text-[#064E3B] border border-[#171717]">
-                                    AK
-                                  </div>
-                                  <div className="flex h-4 w-4 sm:h-5 sm:w-5 items-center justify-center rounded-full bg-[#F472B6] text-[5.5px] sm:text-[6.5px] font-bold text-[#831843] border border-[#171717]">
-                                    RL
-                                  </div>
-                                  <div className="flex h-4 w-4 sm:h-5 sm:w-5 items-center justify-center rounded-full bg-[#C5B4FF] text-[5.5px] sm:text-[6.5px] font-bold text-[#4D453E] border border-[#171717]">
-                                    TN
-                                  </div>
-                                  <span className="pl-1 sm:pl-2 text-[7.5px] sm:text-[9px] text-[#929298] font-medium">+144</span>
-                                </div>
-                                <div className="ml-0.5 xs:ml-1 min-w-0">
-                                  <p className="text-[11.5px] sm:text-[13.5px] font-bold text-[#F4F4F5] leading-tight truncate">148 creators</p>
-                                  <p className="text-[8.5px] sm:text-[10.11px] font-medium text-[#929298] leading-tight mt-0.5 truncate">
-                                    ranked by past performance
-                                  </p>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Billed to */}
-                        <div>
-                          <p className="text-[10px] xs:text-[10.5px] sm:text-[11.8px] font-semibold text-[#929298] mb-1">Billed to</p>
-                          <div className="flex items-center gap-2 sm:gap-2.5">
-                            <div className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-full bg-[#C5B4FF] text-[7px] sm:text-[7.6px] font-bold text-[#4D453E]">
-                              YB
-                            </div>
-                            <p className="text-[11.5px] sm:text-[14.32px] font-bold text-[#F4F4F5]">Your brand</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Divider */}
-                      <div className="h-[0.84px] w-full bg-[#303034] my-2.5 sm:my-3.5" />
-
-                      {/* 5 Feature rows */}
-                      <div className="flex flex-col gap-2.5 sm:gap-4 md:gap-5">
-                        {[
-                          {
-                            iconSrc: "/images/users.png",
-                            label: "Creator selection",
-                            oldVal: "1 creator, chosen by feel",
-                            gocVal: "148 creators, ranked by real data",
-                          },
-                          {
-                            iconSrc: "/images/credit-card.png",
-                            label: "Payment model",
-                            oldVal: "Flat fee regardless of views",
-                            gocVal: "Per 1,000 verified views (CPM)",
-                          },
-                          {
-                            iconSrc: "/images/clock-3.png",
-                            label: "Approval rights",
-                            oldVal: "None — content live unreviewed",
-                            gocVal: "You approve every post before it's live",
-                          },
-                          {
-                            iconSrc: "/images/square-play.png",
-                            label: "Content volume",
-                            oldVal: "1 reel, 1 chance",
-                            gocVal: "148 posts across TikTok, Reels, Shorts",
-                          },
-                          {
-                            iconSrc: "/images/chart-no-axes-combined (1).png",
-                            label: "Results tracking",
-                            oldVal: "Screenshot, self-reported",
-                            gocVal: "Platform API · bot-checked · live",
-                          },
-                        ].map((row, idx) => {
-                          return (
-                            <div key={idx} className="flex items-center justify-between gap-1.5 sm:gap-2 min-w-0">
-                              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                                <div className="flex h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 items-center justify-center">
-                                  <img
-                                    src={row.iconSrc}
-                                    alt={row.label}
-                                    className="h-3.5 w-3.5 sm:h-4 sm:w-4 object-contain opacity-80 select-none pointer-events-none"
-                                  />
-                                </div>
-                                <span className="text-[10px] xs:text-[11px] sm:text-[12.63px] font-semibold text-[#929298] whitespace-nowrap">
-                                  {row.label}
-                                </span>
-                              </div>
-                              <div className="hidden md:block h-[0.84px] flex-1 bg-[#303034] mx-2 min-w-[8px]" />
-                              <div
-                                className={cn(
-                                  "rounded-[11.79px] px-2 py-0.5 sm:px-2.5 sm:py-1 text-[8.5px] xs:text-[9.5px] sm:text-[10.11px] font-normal transition-colors duration-300 text-right leading-tight max-w-[58%] sm:max-w-none ml-auto",
-                                  comparisonTab === "old"
-                                    ? "bg-[#FFF3EE] text-[#EA5D4B]"
-                                    : "bg-[#E8F8F1] text-[#1EAA7D]"
-                                )}
-                              >
-                                {comparisonTab === "old" ? row.oldVal : row.gocVal}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Divider */}
-                      <div className="h-[0.84px] w-full bg-[#303034] my-3 sm:my-4" />
-                    </div>
-
-                    {/* Price & Footer */}
-                    <div className="flex flex-col items-center justify-center text-center py-1 sm:py-2 w-full">
-                      <p className="text-center text-[10px] xs:text-[10.5px] sm:text-[11.79px] font-semibold text-[#929298] leading-normal">
-                        {comparisonTab === "old"
-                          ? "Fixed fee, win or lose"
-                          : "Same budget, 148× the distribution"}
-                      </p>
-                      <p
-                        className={cn(
-                          "my-1 text-center text-2xl xs:text-3xl sm:text-4xl md:text-[52px] lg:text-[56px] font-bold leading-tight sm:leading-snug md:leading-normal transition-colors duration-300",
-                          comparisonTab === "old" ? "text-[#F4F4F5]" : "text-[#22C55E]"
-                        )}
-                      >
-                        ${budgetAmount.toLocaleString()}
-                      </p>
-                      <p
-                        className={cn(
-                          "text-center text-[10px] xs:text-[11px] sm:text-[12.63px] font-semibold transition-colors duration-300 leading-normal",
-                          comparisonTab === "old" ? "text-[#929298]" : "text-[#22C55E]"
-                        )}
-                      >
-                        {comparisonTab === "old"
-                          ? "You pay the same whether it gets 400 views or 4 million"
-                          : `= est. ${
-                              budgetAmount * 600 >= 1000000
-                                ? `${((budgetAmount * 600) / 1000000).toFixed(1)}M`
-                                : `${Math.round((budgetAmount * 600) / 1000)}K`
-                            } verified views`}
-                      </p>
-
-                      {/* Barcode & Footer line */}
-                      <div className="mt-3 sm:mt-4 flex w-full flex-col sm:flex-row items-center justify-between gap-1.5 sm:gap-0 pt-1">
-                        {/* Simulated barcode */}
-                        <div className="flex h-[16px] sm:h-[20px] items-center gap-[1.5px] sm:gap-[2.5px] opacity-70">
-                          {[3, 1, 5, 2, 4, 1, 6, 2, 3, 5, 1, 4, 2, 6, 1, 3, 2, 5, 1].map((w, i) => (
-                            <div key={i} className="h-full bg-[#929298]" style={{ width: `${w * 0.75}px` }} />
-                          ))}
-                        </div>
-
-                        <p className="text-[8.5px] xs:text-[9px] sm:text-[10.11px] font-medium text-[#5E5E64] text-center sm:text-right">
-                          {comparisonTab === "old"
-                            ? "No performance clause · No recourse"
-                            : "Only views that pass bot detection count toward your bill"}
-                        </p>
-                      </div>
-                    </div>
-                  </motion.div>
-                </AnimatePresence>
-              </div>
-
-              {/* RIGHT CARD: CAMPAIGN BUDGET & RISK CARD (Compact Height + Interactive Slider) */}
-              <div className="relative flex h-auto w-full max-w-[685px] lg:w-[363px] lg:max-w-[363px] shrink-0 flex-col gap-4 rounded-[20px] sm:rounded-[23px] bg-[#171719] p-3.5 xs:p-5 sm:p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+            <div className="flex w-full flex-col items-center justify-center px-0 sm:px-2">
+              {/* CAMPAIGN BUDGET & RISK CARD (Compact Height + Interactive Slider) */}
+              <div className="relative flex h-auto w-full max-w-[460px] shrink-0 flex-col gap-4 rounded-[20px] sm:rounded-[23px] bg-[#171719] p-4 xs:p-5 sm:p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
                 <div>
                   {/* Top row: Gold coins graphic + Budget */}
                   <div className="flex items-center justify-between mb-4">

@@ -31,7 +31,7 @@ import {
   Wallet,
   ChevronDown,
 } from "lucide-react";
-import { SiYoutube } from "react-icons/si";
+import { SiYoutube, SiInstagram, SiTiktok } from "react-icons/si";
 import { useSwipeable } from "react-swipeable";
 import Testimonials from "./Testimonials";
 import FAQ from "./FAQ";
@@ -40,7 +40,7 @@ import { useThemeMode } from "@/hooks/use-theme-mode";
 
 const FORM_DEMO_TITLE = "Podcasts Clipping Challenge (Dual Rewards)";
 const FORM_DEMO_THUMB = "/images/9ec348288ce12767ffa9907081b7c37124c89470.png";
-const FORM_DEMO_CURSOR = "/images/Frame (5).png";
+const FORM_DEMO_CURSOR = "/images/custom-arrow.png";
 const FORM_DEMO_CAMPAIGN_TYPES = [
   "Leaderboard",
   "CPM",
@@ -52,6 +52,8 @@ type FormCursorTarget =
   | "title"
   | "budget"
   | "launch"
+  | "platform"
+  | "platformYoutube"
   | "campaignType"
   | "campaignTypeMilestone"
   | "thumbnail"
@@ -65,13 +67,23 @@ const caveat = Caveat({
 function BrandFormMockup({ isLight }: { isLight: boolean }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLDivElement>(null);
+  const briefRef = useRef<HTMLDivElement>(null);
+  const continueRef = useRef<HTMLDivElement>(null);
   const budgetRef = useRef<HTMLDivElement>(null);
   const launchRef = useRef<HTMLDivElement>(null);
+  const platformRef = useRef<HTMLDivElement>(null);
+  const platformYoutubeRef = useRef<HTMLDivElement>(null);
   const campaignTypeRef = useRef<HTMLDivElement>(null);
   const milestoneRef = useRef<HTMLDivElement>(null);
   const thumbnailRef = useRef<HTMLDivElement>(null);
 
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [title, setTitle] = useState("");
+  const [briefLine1, setBriefLine1] = useState("");
+  const [briefLine2, setBriefLine2] = useState("");
+  const [selectedPlatform, setSelectedPlatform] = useState<"YouTube" | "Instagram" | "TikTok" | null>(null);
+  const [platformDropdownOpen, setPlatformDropdownOpen] = useState(false);
+  const [hoveredPlatform, setHoveredPlatform] = useState<string | null>(null);
   const [platformReady, setPlatformReady] = useState(false);
   const [typeReady, setTypeReady] = useState(false);
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
@@ -123,9 +135,9 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
     return () => {
       tween.kill();
     };
-  }, []);
+  }, [step]);
 
-  const getTargetPos = (target: FormCursorTarget) => {
+  const getTargetPos = (target: FormCursorTarget | "brief" | "continue") => {
     const root = rootRef.current;
     if (!root) return null;
     if (target === "creatorCard") {
@@ -138,15 +150,23 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
     const el =
       target === "title"
         ? titleRef.current
-        : target === "budget"
-          ? budgetRef.current
-          : target === "campaignType"
-            ? campaignTypeRef.current
-            : target === "campaignTypeMilestone"
-              ? milestoneRef.current || campaignTypeRef.current
-              : target === "thumbnail"
-                ? thumbnailRef.current
-                : launchRef.current;
+        : target === "brief"
+          ? briefRef.current
+          : target === "continue"
+            ? continueRef.current
+            : target === "budget"
+              ? budgetRef.current
+              : target === "platform"
+                ? platformRef.current
+                : target === "platformYoutube"
+                  ? platformYoutubeRef.current || platformRef.current
+                  : target === "campaignType"
+                    ? campaignTypeRef.current
+                    : target === "campaignTypeMilestone"
+                      ? milestoneRef.current || campaignTypeRef.current
+                      : target === "thumbnail"
+                        ? thumbnailRef.current
+                        : launchRef.current;
     if (!el) return null;
     const rootRect = root.getBoundingClientRect();
     const rect = el.getBoundingClientRect();
@@ -158,7 +178,11 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setStep(1);
       setTitle(FORM_DEMO_TITLE);
+      setBriefLine1("Turn standout podcast moments into engaging short-form clips.");
+      setBriefLine2("Reward creators as their videos reach campaign milestones.");
+      setSelectedPlatform("YouTube");
       setPlatformReady(true);
       setTypeReady(true);
       setSelectedCampaignType("Milestone");
@@ -176,7 +200,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
     let cancelled = false;
 
-    const moveCursorTo = async (target: FormCursorTarget) => {
+    const moveCursorTo = async (target: FormCursorTarget | "brief" | "continue") => {
       const pos = getTargetPos(target);
       if (!pos) return;
       setCursorVisible(true);
@@ -194,7 +218,14 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
     };
 
     const run = async () => {
+      // STEP 1: Details
+      setStep(1);
       setTitle("");
+      setBriefLine1("");
+      setBriefLine2("");
+      setSelectedPlatform(null);
+      setPlatformDropdownOpen(false);
+      setHoveredPlatform(null);
       setPlatformReady(false);
       setTypeReady(false);
       setTypeDropdownOpen(false);
@@ -213,25 +244,111 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       await wait(450);
       if (cancelled) return;
 
-      // Cursor clicks title field, then typing starts
+      // 1. Cursor types title
       await moveCursorTo("title");
       if (cancelled) return;
       await clickCursor();
       if (cancelled) return;
 
-      for (let i = 1; i <= FORM_DEMO_TITLE.length; i++) {
+      const fullTitle = "Podcast Clipping Challenge (Milestone)";
+      for (let i = 1; i <= fullTitle.length; i++) {
         if (cancelled) return;
-        setTitle(FORM_DEMO_TITLE.slice(0, i));
+        setTitle(fullTitle.slice(0, i));
         await wait(36);
       }
 
+      await wait(300);
+      if (cancelled) return;
+
+      // 2. Cursor types brief lines
+      await moveCursorTo("brief");
+      if (cancelled) return;
+      await clickCursor();
+      if (cancelled) return;
+
+      const line1Str = "Turn standout podcast moments into engaging short-form clips.";
+      for (let i = 1; i <= line1Str.length; i++) {
+        if (cancelled) return;
+        setBriefLine1(line1Str.slice(0, i));
+        await wait(28);
+      }
+
+      await wait(200);
+      if (cancelled) return;
+
+      const line2Str = "Reward creators as their videos reach campaign milestones.";
+      for (let i = 1; i <= line2Str.length; i++) {
+        if (cancelled) return;
+        setBriefLine2(line2Str.slice(0, i));
+        await wait(28);
+      }
+
+      await wait(400);
+      if (cancelled) return;
+
+      // 3. Cursor clicks Continue on Step 1 -> move to Step 2 (Budget)
+      await moveCursorTo("continue");
+      if (cancelled) return;
+      await clickCursor();
+      if (cancelled) return;
+
+      // STEP 2: Budget
+      setStep(2);
+      await wait(400);
+      if (cancelled) return;
+
+      // 4. Cursor types Budget in Step 2
+      await moveCursorTo("budget");
+      if (cancelled) return;
+      await clickCursor();
+      if (cancelled) return;
+
+      setBudgetTyping(true);
+      setBudgetText("$");
+      await wait(200);
+      for (const ch of "2400") {
+        if (cancelled) return;
+        setBudgetText((prev) => prev + ch);
+        await wait(180);
+      }
+      await wait(260);
+      setBudgetTyping(false);
+
+      await wait(600);
+      if (cancelled) return;
+
+      // STEP 3: Settings & Launch
+      setStep(3);
+      await wait(400);
+      if (cancelled) return;
+
+      // 5. Cursor selects Platform -> YouTube
+      await moveCursorTo("platform");
+      if (cancelled) return;
+      await clickCursor();
+      if (cancelled) return;
+      setPlatformDropdownOpen(true);
+
       await wait(350);
       if (cancelled) return;
+      await moveCursorTo("platformYoutube");
+      if (cancelled) return;
+      setHoveredPlatform("YouTube");
+      await clickCursor();
+      if (cancelled) return;
+
+      setSelectedPlatform("YouTube");
       setPlatformReady(true);
 
-      // Cursor opens campaign type dropdown, moves down to Milestone, then selects Milestone
       await wait(350);
       if (cancelled) return;
+      setPlatformDropdownOpen(false);
+      setHoveredPlatform(null);
+
+      await wait(350);
+      if (cancelled) return;
+
+      // 6. Cursor selects Campaign type -> Milestone
       await moveCursorTo("campaignType");
       if (cancelled) return;
       await clickCursor();
@@ -249,35 +366,15 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       setSelectedCampaignType("Milestone");
       setTypeReady(true);
 
-      await wait(400);
+      await wait(350);
       if (cancelled) return;
       setTypeDropdownOpen(false);
       setHoveredCampaignType(null);
 
-      await wait(400);
-      if (cancelled) return;
-
-      // Cursor clicks budget, then types digit-by-digit
-      await moveCursorTo("budget");
-      if (cancelled) return;
-      await clickCursor();
-      if (cancelled) return;
-
-      setBudgetTyping(true);
-      setBudgetText("$");
-      await wait(200);
-      for (const ch of "2400") {
-        if (cancelled) return;
-        setBudgetText((prev) => prev + ch);
-        await wait(180);
-      }
-      await wait(260);
-      setBudgetTyping(false);
-
       await wait(350);
       if (cancelled) return;
 
-      // Cursor moves across to the 2nd Creator Card on the right, grabs it and drags to thumbnail box
+      // 7. Cursor drags Creator Card to Thumbnail upload box
       await moveCursorTo("creatorCard");
       if (cancelled) return;
       await clickCursor();
@@ -294,7 +391,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       await wait(450);
       if (cancelled) return;
 
-      // Cursor clicks Launch → rocket slides right inside the colored button
+      // 8. Cursor clicks Launch
       await moveCursorTo("launch");
       if (cancelled) return;
       await clickCursor();
@@ -320,17 +417,148 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
   return (
     <div ref={rootRef} className="pointer-events-none absolute inset-0 z-30">
-      {/* FORM MOCKUP */}
-      <div
-        className={cn(
-          "absolute left-2 right-2 top-[248px] h-[440px] overflow-visible rounded-t-[20px] border sm:left-[24px] sm:right-[24px] sm:top-[266px] min-[800px]:left-[16px] min-[800px]:right-[16px] min-[800px]:top-[260px] lg:left-[24px] lg:right-[24px] xl:left-[44px] xl:right-[44px]",
-          isLight
-            ? "border-[#0000000D] bg-[#ECECEC] text-black shadow-[inset_0_0_4.43px_0_#0000001A]"
-            : "border-white/[0.10] bg-[#121212] text-white",
-        )}
-      >
-        {/* Launch */}
-        <div ref={launchRef} className="absolute right-0 top-3 z-20 sm:top-4">
+      {/* FORM MOCKUP - SHOWN IN STEP 1 & STEP 3 */}
+      {step === 1 || step === 3 ? (
+        <div
+          className={cn(
+            "absolute left-2 right-2 top-[248px] h-[440px] overflow-visible rounded-[14px] border p-[17px] sm:left-[24px] sm:right-[24px] sm:top-[266px] min-[800px]:left-[16px] min-[800px]:right-[16px] min-[800px]:top-[260px] lg:left-[24px] lg:right-[24px] xl:left-[44px] xl:right-[44px]",
+            isLight
+              ? "border-[#E0E0E0] bg-[#F5F5F5] text-black shadow-lg"
+              : "border-[#353535] bg-[#131313] text-white",
+          )}
+        >
+          {step === 1 ? (
+            /* STEP 1: DETAILS FORM */
+            <div className="flex flex-col gap-3.5 animate-form-dropdown-in">
+              {/* Header row */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "text-[14px] font-medium",
+                      isLight ? "text-black" : "text-white",
+                    )}
+                  >
+                    Details
+                  </span>
+                </div>
+                <div
+                  ref={continueRef}
+                  className={cn(
+                    "flex items-center justify-center rounded-full px-3 py-1 text-[12px] font-medium transition-all duration-300",
+                    isLight
+                      ? "bg-[#353535] text-white"
+                      : "bg-[#F1F1F1] text-[#353535]",
+                  )}
+                >
+                  <span>Continue</span>
+                </div>
+              </div>
+
+              {/* Campaign title input */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1 text-[12px] font-medium text-[#C4C4C4]">
+                    <span>Campaign title</span>
+                    <span className="text-[#EF4444]">*</span>
+                  </div>
+                  <span className="text-[9px] text-[#9E9AA6] ">
+                    {title.length}/100
+                  </span>
+                </div>
+                <div
+                  ref={titleRef}
+                  className={cn(
+                    "relative flex h-[34px] items-center rounded-[5.72px] border px-3 text-[10px] transition-colors duration-300",
+                    isLight
+                      ? "border-[#E5E5E5] bg-white text-black/85"
+                      : "border-[#353535] bg-[#222222] text-white/85",
+                  )}
+                >
+                  {title ? (
+                    <span className="inline-flex items-center truncate">
+                      <span>{title}</span>
+                      {title.length < 38 ? (
+                        <span className="ml-0.5 inline-block h-3.5 w-[1.5px] shrink-0 animate-form-caret bg-white" />
+                      ) : null}
+                    </span>
+                  ) : (
+                    <span className="text-[#8E8E8E]">
+                      e.g. Create a Viral shorts/video for our New App
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Brief input */}
+              <div className="flex flex-col gap-1.5">
+                <div className="text-[12px] font-medium text-[#C4C4C4]">
+                  Brief
+                </div>
+                <div
+                  ref={briefRef}
+                  className={cn(
+                    "flex flex-col gap-2 rounded-[5.72px] border p-3 transition-colors duration-300",
+                    isLight
+                      ? "border-[#E5E5E5] bg-white"
+                      : "border-[#353535] bg-[#222222]",
+                  )}
+                >
+                  {/* Toolbar icons */}
+                  <div className="flex items-center gap-2.5 text-[#757575] text-[11px]">
+                    <span className="font-bold">B</span>
+                    <span className="italic font-serif">I</span>
+                    <span className="underline">U</span>
+                    <span>≡</span>
+                    <span>🔗</span>
+                    <span>“</span>
+                  </div>
+
+                  {/* Editor textarea */}
+                  <div
+                    className={cn(
+                      "relative h-[115px] overflow-hidden rounded-[4px] p-2.5 text-[10px] leading-[15px]",
+                      isLight
+                        ? "bg-[#F9F9F9] text-black/80"
+                        : "bg-[#2C2C2C] text-white/90",
+                    )}
+                  >
+                    {!briefLine1 ? (
+                      <span className="text-[#8E8E8E]">
+                        Write a Brief that creators will follow
+                      </span>
+                    ) : (
+                      <div className="flex flex-col gap-1 text-white/90">
+                        <div className="inline-flex items-center">
+                          <span>{briefLine1}</span>
+                          {!briefLine2 && briefLine1.length > 0 ? (
+                            <span className="ml-0.5 inline-block h-3 w-[1.5px] shrink-0 animate-form-caret bg-white" />
+                          ) : null}
+                        </div>
+                        {briefLine2 ? (
+                          <div className="inline-flex items-center">
+                            <span>{briefLine2}</span>
+                            {briefLine2.length < 55 ? (
+                              <span className="ml-0.5 inline-block h-3 w-[1.5px] shrink-0 animate-form-caret bg-white" />
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* STEP 3: CAMPAIGN SETTINGS & LAUNCH FORM */
+            <div className="flex flex-col gap-3.5 animate-form-dropdown-in">
+              {/* Launch header */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[14px] font-medium text-white">
+                  <span>Details</span>
+                </div>
+
+                  <div ref={launchRef} className="absolute right-0">
           <div className="relative">
             {!isLight ? (
               <div
@@ -381,301 +609,180 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
             </div>
           </div>
         </div>
+              </div>
 
-        {/* Form header */}
-        <div className="flex items-center justify-between px-5 pt-5">
-          <div className="flex items-center gap-2.5">
-            <span
-              className={cn(
-                "flex h-6 w-6 items-center justify-center rounded-full text-[11px]",
-                isLight
-                  ? "bg-[#7C3AED]/15 text-[#7C3AED]"
-                  : "bg-[#292929] text-white",
-              )}
-            >
-              1
-            </span>
-            <span
-              className={cn(
-                "text-[16px] font-medium",
-                isLight ? "text-black" : "text-white",
-              )}
-            >
-              Details
-            </span>
-          </div>
+              {/* Platform + Campaign Type */}
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="relative" ref={platformRef}>
+                  <label className="text-[12px] font-medium text-[#C4C4C4] flex items-center gap-1">
+                    <span>Platform</span>
+                    <span className="text-[#EF4444]">*</span>
+                  </label>
+                  <div
+                    className={cn(
+                      "mt-1.5 flex h-[34px] items-center justify-between rounded-md border px-3 text-[11px] cursor-pointer",
+                      isLight ? "bg-white border-[#E5E5E5]" : "bg-[#222222] border-[#353535] text-white",
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      {selectedPlatform === "YouTube" ? (
+                        <SiYoutube className="h-4 w-4 text-[#737373]" />
+                      ) : selectedPlatform === "Instagram" ? (
+                        <SiInstagram className="h-4 w-4 text-[#737373]" />
+                      ) : selectedPlatform === "TikTok" ? (
+                        <SiTiktok className="h-4 w-4 text-[#737373]" />
+                      ) : null}
+                      <span className={cn(selectedPlatform ? "text-white" : "text-white/45")}>
+                        {selectedPlatform ?? "Select platform"}
+                      </span>
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5 text-white/45" />
+                  </div>
+
+                  {platformDropdownOpen ? (
+                    <div
+                      className={cn(
+                        "absolute left-0 right-0 top-[calc(100%+4px)] z-50 rounded-md border py-1 shadow-lg",
+                        isLight ? "bg-white border-[#E5E5E5]" : "bg-[#292929] border-white/10",
+                      )}
+                    >
+                      {[
+                        { name: "YouTube", icon: <SiYoutube className="h-4 w-4 text-[#737373]" /> },
+                        { name: "Instagram", icon: <SiInstagram className="h-4 w-4 text-[#737373]" /> },
+                        { name: "TikTok", icon: <SiTiktok className="h-4 w-4 text-[#737373]" /> },
+                      ].map((p) => (
+                        <div
+                          key={p.name}
+                          ref={p.name === "YouTube" ? platformYoutubeRef : null}
+                          className={cn(
+                            "flex h-[30px] items-center gap-2 px-3 text-[11px] cursor-pointer",
+                            hoveredPlatform === p.name
+                              ? "bg-white/10 text-white"
+                              : "text-white/70",
+                          )}
+                        >
+                          {p.icon}
+                          {p.name}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="relative" ref={campaignTypeRef}>
+                  <label className="text-[12px] font-medium text-[#C4C4C4] block">
+                    Campaign type
+                  </label>
+                  <div
+                    className={cn(
+                      "mt-1.5 flex h-[34px] items-center justify-between rounded-md border px-3 text-[11px]",
+                      isLight ? "bg-white border-[#E5E5E5]" : "bg-[#222222] border-[#353535] text-white",
+                    )}
+                  >
+                    <span>{selectedCampaignType ?? "Select campaign type"}</span>
+                    <ChevronDown className="h-3.5 w-3.5 text-white/45" />
+                  </div>
+
+                  {typeDropdownOpen ? (
+                    <div
+                      className={cn(
+                        "absolute left-0 right-0 top-[calc(100%+4px)] z-40 rounded-md border py-1 shadow-lg",
+                        isLight ? "bg-white border-[#E5E5E5]" : "bg-[#292929] border-white/10",
+                      )}
+                    >
+                      {FORM_DEMO_CAMPAIGN_TYPES.map((type) => (
+                        <div
+                          key={type}
+                          ref={type === "Milestone" ? milestoneRef : null}
+                          className={cn(
+                            "flex h-[30px] items-center px-3 text-[11px]",
+                            hoveredCampaignType === type
+                              ? "bg-white/10 text-white"
+                              : "text-white/70",
+                          )}
+                        >
+                          {type}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Thumbnail Box */}
+              <div
+                ref={thumbnailRef}
+                className={cn(
+                  "relative flex h-[170px] items-center justify-center rounded-md border border-dashed",
+                  isLight ? "bg-white border-[#E5E5E5]" : "bg-[#222222] border-[#353535]",
+                )}
+              >
+                {showThumb ? (
+                  <div className="absolute inset-0 animate-form-thumb-in">
+                    <Image src={FORM_DEMO_THUMB} alt="" fill className="object-cover" sizes="320px" />
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center text-center">
+                    <Upload className="h-5 w-5 text-white/30" />
+                    <div className="mt-1 text-[11px] text-white/45">
+                      Drag, drop or <span className="underline">browse</span> thumbnail
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
+      ) : null}
 
-        <div className="mt-5 h-[calc(100%-54px)] overflow-hidden px-5">
-          {/* Campaign title */}
+      {/* FLOATING BUDGET CARD - SHOWN IN STEP 2 ONLY */}
+      {step === 2 ? (
+        <div
+          ref={budgetRef}
+          className={cn(
+            "absolute top-[360px] left-[200px] -translate-x-1/2 z-40 w-[160px] sm:w-[190px] rounded-[12px] sm:rounded-[14px] border p-3.5 animate-form-dropdown-in shadow-2xl ",
+            isLight
+              ? "border-[#0000000D] bg-[#ECECEC] text-black shadow-[0_10px_28px_rgba(20,16,40,0.08)]"
+              : "border-white/[0.12] bg-[#1b1b1b] text-white shadow-[0_15px_35px_rgba(0,0,0,.45)]",
+          )}
+        >
           <div className="flex items-center justify-between">
-            <label
-              className={cn(
-                "text-[11px]",
-                isLight ? "text-black/70" : "text-white/75",
-              )}
-            >
-              Campaign title
-              <span className="text-red-400"> *</span>
-            </label>
-            <span
-              className={cn(
-                "text-[10px]",
-                isLight ? "text-black/35" : "text-white/35",
-              )}
-            >
-              {title.length}/100
-            </span>
+            <div className="flex items-center gap-1.5 sm:gap-2 text-[12px] sm:text-[14px] font-medium">
+              <Image
+                src="/images/Clip%20path%20group%20(2).png"
+                alt="Budget icon"
+                width={20}
+                height={20}
+                className="h-[16px] w-[16px] shrink-0 object-contain sm:h-[18px] sm:w-[18px]"
+              />
+              Budget
+            </div>
           </div>
 
           <div
-            ref={titleRef}
             className={cn(
-              "mt-1.5 flex h-[34px] items-center rounded-md border px-3.5 text-[10.5px] transition-colors duration-300",
+              "mt-2.5 flex h-[32px] sm:h-[38px] items-center rounded-md border px-2.5 sm:px-3.5 text-[12px] sm:text-[14px] tabular-nums transition-all duration-200",
               isLight
-                ? "border-[#0000000D] bg-white"
-                : "border-white/[0.06] bg-[#292929]",
-              title
-                ? isLight
-                  ? "text-black/80"
-                  : "text-white/85"
-                : isLight
-                  ? "text-black/40"
-                  : "text-white/25",
+                ? budgetTyping
+                  ? "border-[#7C3AED]/45 bg-white text-black shadow-[0_0_0_2px_rgba(124,58,237,0.12)]"
+                  : "border-[#0000000D] bg-white text-black/70"
+                : budgetTyping
+                  ? "border-white/35 bg-[#292929] text-white shadow-[0_0_0_2px_rgba(255,255,255,0.06)]"
+                  : "border-white/[0.07] bg-[#292929] text-white/80",
             )}
           >
-            <span className="truncate">
-              {title || "e.g., Create a Viral shorts/video for our New App"}
-            </span>
-            {title.length > 0 && title.length < FORM_DEMO_TITLE.length ? (
+            <span>{budgetText}</span>
+            {budgetTyping ? (
               <span
                 className={cn(
-                  "ml-0.5 inline-block h-3.5 w-px animate-form-caret",
-                  isLight ? "bg-[#7C3AED]" : "bg-white/70",
+                  "ml-0.5 inline-block h-4 w-[1.5px] animate-form-caret",
+                  isLight ? "bg-[#7C3AED]" : "bg-white",
                 )}
               />
             ) : null}
           </div>
-
-          {/* Platform + Campaign type */}
-          <div className="mt-4 grid grid-cols-2 gap-3.5">
-            <div>
-              <label
-                className={cn(
-                  "text-[11px]",
-                  isLight ? "text-black/70" : "text-white/75",
-                )}
-              >
-                Platform
-                <span className="text-red-400"> *</span>
-              </label>
-              <div
-                className={cn(
-                  "mt-1.5 flex h-[34px] items-center justify-between rounded-md border px-3.5 text-[11px] transition-all duration-300",
-                  isLight
-                    ? "border-[#0000000D] bg-white"
-                    : "border-white/[0.06] bg-[#292929]",
-                  platformReady
-                    ? isLight
-                      ? "text-black/80"
-                      : "text-white/85"
-                    : isLight
-                      ? "text-black/40"
-                      : "text-white/25",
-                )}
-              >
-                {platformReady ? (
-                  <span className="flex items-center gap-1.5">
-                    <SiYoutube className="h-4 w-4 text-[#737373]" />
-                    YouTube
-                  </span>
-                ) : (
-                  <span>Select platform</span>
-                )}
-                <span>⌄</span>
-              </div>
-            </div>
-
-            <div className="relative" ref={campaignTypeRef}>
-              <label
-                className={cn(
-                  "text-[11px]",
-                  isLight ? "text-black/70" : "text-white/75",
-                )}
-              >
-                Campaign type
-              </label>
-              <div
-                className={cn(
-                  "mt-1.5 flex h-[34px] items-center justify-between rounded-md border px-3.5 text-[11px] transition-all duration-300",
-                  isLight
-                    ? "border-[#0000000D] bg-white"
-                    : "border-white/[0.06] bg-[#292929]",
-                  typeDropdownOpen &&
-                    (isLight
-                      ? "border-[#7C3AED]/35 ring-1 ring-[#7C3AED]/20"
-                      : "border-white/20 ring-1 ring-white/10"),
-                  typeReady || selectedCampaignType
-                    ? isLight
-                      ? "text-black/80"
-                      : "text-white/85"
-                    : isLight
-                      ? "text-black/40"
-                      : "text-white/25",
-                )}
-              >
-                <span>{selectedCampaignType ?? "Select campaign type"}</span>
-                <ChevronDown
-                  className={cn(
-                    "h-3.5 w-3.5 shrink-0 transition-transform duration-300 ease-out",
-                    typeDropdownOpen && "rotate-180",
-                    isLight ? "text-black/45" : "text-white/45",
-                  )}
-                  strokeWidth={2.2}
-                />
-              </div>
-
-              {typeDropdownOpen ? (
-                <div
-                  className={cn(
-                    "absolute left-0 right-0 top-[calc(100%+4px)] z-40 origin-top overflow-hidden rounded-md border py-1 shadow-[0_12px_28px_rgba(0,0,0,0.18)] animate-form-dropdown-in",
-                    isLight
-                      ? "border-[#0000000D] bg-white"
-                      : "border-white/[0.08] bg-[#292929]",
-                  )}
-                >
-                  {FORM_DEMO_CAMPAIGN_TYPES.map((type) => {
-                    const isSelected = selectedCampaignType === type;
-                    const isHovered = hoveredCampaignType === type;
-                    return (
-                      <div
-                        key={type}
-                        ref={type === "Milestone" ? milestoneRef : null}
-                        className={cn(
-                          "flex h-[32px] items-center px-3.5 text-[11px] transition-colors duration-200",
-                          isSelected || isHovered
-                            ? isLight
-                              ? "bg-[#7C3AED]/10 text-[#7C3AED]"
-                              : "bg-white/10 text-white"
-                            : isLight
-                              ? "text-black/70"
-                              : "text-white/70",
-                        )}
-                      >
-                        {type}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Upload / thumbnail */}
-          <div
-            ref={thumbnailRef}
-            className={cn(
-              "relative mt-5 flex h-[132px] items-center justify-center overflow-hidden rounded-md border border-dashed transition-all duration-500",
-              isLight
-                ? "border-[#0000001A] bg-white"
-                : "border-white/[0.08] bg-[#242424]",
-            )}
-          >
-            {showThumb ? (
-              <div className="absolute inset-0 animate-form-thumb-in">
-                <Image
-                  src={FORM_DEMO_THUMB}
-                  alt=""
-                  fill
-                  className="object-cover"
-                  sizes="320px"
-                />
-              </div>
-            ) : (
-              <div className="flex flex-col items-center text-center">
-                <Upload
-                  className={cn(
-                    "h-6 w-6",
-                    isLight ? "text-black/35" : "text-white/30",
-                  )}
-                />
-                <div
-                  className={cn(
-                    "mt-1.5 text-[11px]",
-                    isLight ? "text-black/50" : "text-white/45",
-                  )}
-                >
-                  Drag, drop or{" "}
-                  <span
-                    className={cn("underline", isLight ? "text-[#7C3AED]" : "")}
-                  >
-                    browse
-                  </span>{" "}
-                  thumbnail
-                </div>
-                <div
-                  className={cn(
-                    "mt-1 text-[9px]",
-                    isLight ? "text-black/35" : "text-white/25",
-                  )}
-                >
-                  Max file size: 5MB
-                </div>
-              </div>
-            )}
-          </div>
         </div>
-      </div>
-
-      {/* FLOATING BUDGET */}
-      <div
-        // ref={budgetRef}
-        className={cn(
-          "absolute bottom-[8px] left-[10px] sm:left-[20px] z-10 w-[140px] sm:w-[176px] rounded-[12px] sm:rounded-[14px] border p-3",
-          isLight
-            ? "border-[#0000000D] bg-[#ECECEC] shadow-[0_10px_28px_rgba(20,16,40,0.08)]"
-            : "border-white/[0.12] bg-[#1b1b1b] shadow-[0_15px_35px_rgba(0,0,0,.45)]",
-        )}
-      >
-        <div
-          className={cn(
-            "flex items-center gap-1.5 sm:gap-2 text-[12px] sm:text-[14px] font-medium",
-            isLight ? "text-black" : "text-white",
-          )}
-        >
-          <Image
-            src="/images/Clip%20path%20group%20(2).png"
-            alt="Budget icon"
-            width={20}
-            height={20}
-            className="h-[16px] w-[16px] shrink-0 object-contain sm:h-[18px] sm:w-[18px]"
-          />
-          Budget
-        </div>
-
-        <div
-          className={cn(
-            "mt-2.5 flex h-[32px] sm:h-[38px] items-center rounded-md border px-2.5 sm:px-3.5 text-[12px] sm:text-[14px] tabular-nums transition-all duration-200",
-            isLight
-              ? budgetTyping
-                ? "border-[#7C3AED]/45 bg-white text-black shadow-[0_0_0_2px_rgba(124,58,237,0.12)]"
-                : "border-[#0000000D] bg-white text-black/70"
-              : budgetTyping
-                ? "border-white/35 bg-[#292929] text-white shadow-[0_0_0_2px_rgba(255,255,255,0.06)]"
-                : "border-white/[0.07] bg-[#292929] text-white/80",
-          )}
-        >
-          <span>{budgetText}</span>
-          {budgetTyping ? (
-            <span
-              className={cn(
-                "ml-0.5 inline-block h-4 w-[1.5px] animate-form-caret",
-                isLight ? "bg-[#7C3AED]" : "bg-white",
-              )}
-            />
-          ) : null}
-        </div>
-      </div>
+      ) : null}
 
       {/* Animated cursor arrow — clicks fields, drags thumbnail from 2nd card, then Launch */}
       <div
@@ -706,9 +813,9 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
         <Image
           src={FORM_DEMO_CURSOR}
           alt=""
-          width={28}
-          height={28}
-          className="relative h-[28px] w-[28px] object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.65)]"
+          width={18}
+          height={18}
+          className="relative h-[18px] w-[18px] object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.65)]"
           priority
         />
       </div>
@@ -1329,7 +1436,7 @@ export default function HeroContent() {
               <Link
                 href="/brands"
                 className={cn(
-                  "group flex h-[51px] w-full max-w-[300px] sm:w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
+                  "group flex h-[51px] w-full max-w-[300px] sm:w-[238px] items-center justify-center rounded-xl text-[15px] font-semibold transition",
                   isLight
                     ? "bg-[#7c3aed] text-white shadow-[0_12px_30px_rgba(124,58,237,0.28)] hover:bg-[#6d28d9]"
                     : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-white/30 hover:bg-white/[0.08]",
@@ -1350,7 +1457,7 @@ export default function HeroContent() {
               <Link
                 href="/creators"
                 className={cn(
-                  "group flex h-[51px] w-full max-w-[300px] sm:w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
+                  "group flex h-[51px] w-full max-w-[300px] sm:w-[238px] items-center justify-center rounded-xl text-[15px] font-semibold transition",
                   isLight
                     ? "border border-black/10 bg-white text-black shadow-[0_8px_24px_rgba(15,15,30,0.06)] hover:bg-white hover:border-black/20"
                     : "bg-[#DEDEDE] text-[#26133d] shadow-[0_10px_35px_rgba(200,170,230,0.10)] hover:bg-white",

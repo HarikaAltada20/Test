@@ -216,10 +216,10 @@ export default function CtcBanner() {
           <div className="relative z-10 flex flex-col items-center px-4 w-full">
             <div
               className={cn(
-                "mt-4 sm:mt-6 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm",
+                "relative z-20 mt-4 sm:mt-6 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm shadow-md",
                 isLight
-                  ? "border-black/[0.06] bg-white text-black/55 shadow-sm"
-                  : "border-[#434343] bg-[#353535] text-zinc-200",
+                  ? "border-black/[0.08] bg-white text-black/70 shadow-sm"
+                  : "border-[#434343] bg-[#242424] text-zinc-200 shadow-black/40",
               )}
             >
               <ShieldCheck
@@ -272,7 +272,7 @@ export default function CtcBanner() {
                   }}
                   disabled={isNavigating}
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                    "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-[15px] font-medium transition-colors disabled:opacity-70",
                     isLight
                       ? "bg-black text-white hover:bg-black/90"
                       : "border border-white/25 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white hover:bg-white/10",
@@ -289,7 +289,7 @@ export default function CtcBanner() {
                   }}
                   disabled={isNavigating}
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                    "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-[15px] font-medium transition-colors disabled:opacity-70",
                     isLight
                       ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
                       : "bg-[#F0E6F6] text-black hover:bg-zinc-100",
@@ -307,10 +307,10 @@ export default function CtcBanner() {
           <div className="relative z-10 flex flex-col items-center px-4 w-full">
             <div
               className={cn(
-                "mt-4 sm:mt-6 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm",
+                "relative z-20 mt-4 sm:mt-6 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm shadow-md",
                 isLight
-                  ? "border-black/[0.06] bg-white text-black/55 shadow-sm"
-                  : "border-[#434343] bg-[#353535] text-zinc-200",
+                  ? "border-black/[0.08] bg-white text-black/70 shadow-sm"
+                  : "border-[#434343] bg-[#242424] text-zinc-200 shadow-black/40",
               )}
             >
               <ShieldCheck
@@ -368,7 +368,7 @@ export default function CtcBanner() {
                     onClick={handleMainCtaClick}
                     disabled={isNavigating || isCheckingAccount}
                     className={cn(
-                      "inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                      "inline-flex items-center gap-2 rounded-xl px-6 py-3 text-[15px] font-medium transition-colors disabled:opacity-70",
                       isLight
                         ? "bg-black text-white hover:bg-black/90"
                         : "border border-white/25 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)]  text-white hover:bg-white/10",
@@ -388,7 +388,7 @@ export default function CtcBanner() {
                     }}
                     disabled={isNavigating || isCheckingAccount}
                    className={cn(
-                      "inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                      "inline-flex items-center gap-2 rounded-xl px-6 py-3 text-[15px] font-medium transition-colors disabled:opacity-70",
                       isLight
                         ? "bg-black text-white hover:bg-black/90"
                         : "border border-white/25 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)]  text-white hover:bg-white/10",
@@ -405,7 +405,7 @@ export default function CtcBanner() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-sm sm:text-base font-medium transition-colors",
+                    "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-[15px] font-medium transition-colors",
                     isLight
                       ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
                       : "bg-[#F0E6F6] text-black",
@@ -457,7 +457,7 @@ export default function CtcBanner() {
           <DialogFooter className="mt-2 flex-col gap-2 sm:flex-row sm:justify-center">
             <Button
               variant="outline"
-              className="inline-flex w-full items-center justify-center gap-2 border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5 sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 border-slate-600 bg-transparent text-[15px] text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5 sm:w-auto"
               onClick={handleContinueAsAdvertiser}
               disabled={isSigningOut}
             >
@@ -465,7 +465,7 @@ export default function CtcBanner() {
               <span>Continue as Brand</span>
             </Button>
             <Button
-              className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-[#DD7209] to-[#FF652D] text-base text-md text-white hover:from-[#DD7209]/90 hover:to-[#FF652D]/90 px-6 py-5 sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-[#DD7209] to-[#FF652D] text-[15px] text-white hover:from-[#DD7209]/90 hover:to-[#FF652D]/90 px-6 py-5 sm:w-auto"
               onClick={handleSignOutAndContinueCreator}
               disabled={isSigningOut}
             >
