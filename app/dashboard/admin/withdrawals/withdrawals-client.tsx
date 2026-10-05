@@ -471,8 +471,9 @@ export default function WithdrawalsClient({
     upi: "UPI",
     bank_transfer: "Bank transfer",
     phantom: "Phantom",
+    skydo: "Skydo",
   };
-  const DEFAULT_METHOD_TYPES = ["crypto", "upi", "bank_transfer"];
+  const DEFAULT_METHOD_TYPES = ["crypto", "upi", "bank_transfer", "skydo"];
 
   const setPayoutMethodPaused = async (methodType: string, isPaused: boolean) => {
     setUpdatingPayoutMethod(methodType);
@@ -997,6 +998,7 @@ export default function WithdrawalsClient({
     const d: any = r.payout_method_details_snapshot || {};
     if (type === "upi")
       return `UPI: ${d?.upi_id || ""} (${d?.account_holder_name || ""})`;
+    if (type === "skydo") return `Skydo: ${d?.email || ""}`;
     if (type === "crypto") {
       const network = d?.network || "";
       const currency = d?.currency || "";
@@ -1047,6 +1049,9 @@ export default function WithdrawalsClient({
     if (type === "crypto" || type === "phantom") {
       if (d?.wallet_address)
         return [{ label: "Wallet", value: String(d.wallet_address) }];
+    }
+    if (type === "skydo" && d?.email) {
+      return [{ label: "Skydo email", value: String(d.email) }];
     }
     if (type === "bank_transfer") {
       const parts: { label: string; value: string }[] = [];
@@ -1545,6 +1550,17 @@ export default function WithdrawalsClient({
                                   <div>
                                     <strong>Account Holder:</strong>{" "}
                                     {d?.account_holder_name || "N/A"}
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            if (type === "skydo") {
+                              return (
+                                <div className="space-y-1">
+                                  <div>
+                                    <strong>Skydo Email:</strong>{" "}
+                                    {d?.email || "N/A"}
                                   </div>
                                 </div>
                               );
@@ -2699,6 +2715,24 @@ export default function WithdrawalsClient({
                                       </span>{" "}
                                       <span className="font-medium">
                                         {d?.account_holder_name || "N/A"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            if (type === "skydo") {
+                              return (
+                                <div className="space-y-2">
+                                  <div className="font-medium">Skydo Payout</div>
+                                  <div className="space-y-1 text-xs">
+                                    <div>
+                                      <span className="text-muted-foreground">
+                                        Email:
+                                      </span>{" "}
+                                      <span className="font-medium break-all">
+                                        {d?.email || "N/A"}
                                       </span>
                                     </div>
                                   </div>

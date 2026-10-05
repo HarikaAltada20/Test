@@ -47,6 +47,7 @@ import {
   Gift,
   Users,
   PlusCircle,
+  Settings2,
   Trash2,
   Edit3,
   CreditCard,
@@ -59,7 +60,23 @@ import {
   X,
   CheckCircle,
   AlertCircle,
+  Mail,
 } from "lucide-react";
+import { SkydoStatusBadge } from "@/components/payouts/SkydoStatusBadge";
+import {
+  PayoutMethodDialog,
+  type PayoutSaveResult,
+} from "@/components/payouts/payout-method-dialog/PayoutMethodDialog";
+import {
+  WithdrawBalanceDialog,
+  type WithdrawRequest,
+  type WithdrawSubmitResult,
+} from "@/components/payouts/withdraw-dialog/WithdrawBalanceDialog";
+import { canRemoveSkydo, getSkydoStatus, isSkydoUsable } from "@/lib/skydo-payout";
+import {
+  getSupabaseErrorMessage,
+  type PayoutMethodDraft,
+} from "@/lib/payout-method-validation";
 import { User } from "@supabase/supabase-js";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/utils/supabase/client"; // Client Supabase
@@ -150,53 +167,14 @@ export default function EarningsClientPage({
   >(initialWithdrawalRequests);
 
   const [isLoading, setIsLoading] = useState(false); // For client-side actions
-  const [isSubmittingWithdrawal, setIsSubmittingWithdrawal] = useState(false); // Specific loading for withdrawal submission
   const [isCancellingWithdrawal, setIsCancellingWithdrawal] = useState<
     string | null
   >(null); // Stores ID of withdrawal being cancelled
 
   // Modal States (same as before)
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
+  const [payoutDialogView, setPayoutDialogView] = useState<"list" | "add">("list");
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
-  const [currentPayoutMethod, setCurrentPayoutMethod] =
-    useState<PayoutMethod | null>(null);
-  const [selectedPayoutType, setSelectedPayoutType] =
-    useState<PayoutMethodType>("crypto");
-
-  const [cryptoAddress, setCryptoAddress] = useState("");
-  const [bankAccountHolder, setBankAccountHolder] = useState("");
-  const [bankAccountNumber, setBankAccountNumber] = useState("");
-  const [bankBranchName, setBankBranchName] = useState("");
-  const [bankCountry, setBankCountry] = useState("IN");
-  const [bankSortCode, setBankSortCode] = useState("");
-  const [bankName, setBankName] = useState("");
-  const [bankRoutingNumber, setBankRoutingNumber] = useState("");
-  const [bankIfscCode, setBankIfscCode] = useState("");
-  const [upiId, setUpiId] = useState("");
-
-  const [withdrawAmountDollars, setWithdrawAmountDollars] = useState<number>(0); // Amount in dollars for input
-  const [selectedWithdrawMethodId, setSelectedWithdrawMethodId] = useState<
-    string | null
-  >(null);
-  const [withdrawalUserNotes, setWithdrawalUserNotes] = useState<string>(""); // New state for user notes
-
-  const [activeTabModal, setActiveTabModal] = useState<"cash" | "coins">(
-    "cash"
-  ); // State for current tab
-  const [withdrawAmountCoins, setWithdrawAmountCoins] = useState<number>(0); // Example for coin withdrawal amount
-
-  const [cryptoNetwork, setCryptoNetwork] = useState<string>("BNB_SMART_CHAIN"); // Added for crypto network
-  const [cryptoCurrency, setCryptoCurrency] = useState<string>("BNB"); // Added for crypto currency
-  const [payoutFriendlyName, setPayoutFriendlyName] = useState<string>(""); // Added for friendly name
-  const [payoutCountry, setPayoutCountry] = useState<"IN" | "OTHER">("IN");
-
-  // Wallet validation states
-  const [isValidatingWallet, setIsValidatingWallet] = useState<boolean>(false);
-  const [walletValidationStatus, setWalletValidationStatus] = useState<
-    "idle" | "validating" | "valid" | "invalid"
-  >("idle");
-  const [walletValidationError, setWalletValidationError] =
-    useState<string>("");
 
   // Coupon/code redemption
   const [redeemCode, setRedeemCode] = useState<string>("");
@@ -208,6 +186,7 @@ export default function EarningsClientPage({
     "crypto",
     "upi",
     "bank_transfer",
+    "skydo",
   ]);
 
   const getInitialMode = (): "light" | "dark" => {
@@ -310,6 +289,8 @@ export default function EarningsClientPage({
         return `Phantom: ...${
           method.details?.wallet_address?.slice(-4) || "XXXX"
         } (${method.friendly_name || "Phantom Wallet"})`;
+      case "skydo":
+        return `Skydo: ${method.details?.email || "N/A"}`;
       default:
         const exhaustiveCheck: never = method.method_type;
         return "Unknown Method Type";
@@ -359,12 +340,12 @@ export default function EarningsClientPage({
       .then((data) => {
         if (cancelled) return;
         setPausedPayoutMethodTypes(data.pausedMethodTypes || []);
-        setEnabledPayoutMethodTypes(data.enabledMethodTypes || ["crypto", "upi", "bank_transfer"]);
+        setEnabledPayoutMethodTypes(data.enabledMethodTypes || ["crypto", "upi", "bank_transfer", "skydo"]);
       })
       .catch(() => {
         if (!cancelled) {
           setPausedPayoutMethodTypes([]);
-          setEnabledPayoutMethodTypes(["crypto", "upi", "bank_transfer"]);
+          setEnabledPayoutMethodTypes(["crypto", "upi", "bank_transfer", "skydo"]);
         }
       });
     return () => { cancelled = true; };
@@ -375,501 +356,204 @@ export default function EarningsClientPage({
     upi: "UPI",
     bank_transfer: "Bank transfer",
     phantom: "Phantom",
+    skydo: "Skydo",
   };
-  const availablePayoutMethodsForWithdraw = payoutMethods.filter((m) =>
-    enabledPayoutMethodTypes.includes(m.method_type)
+  const availablePayoutMethodsForWithdraw = payoutMethods.filter(
+    (m) => enabledPayoutMethodTypes.includes(m.method_type) && isSkydoUsable(m)
   );
+  const existingSkydoMethod =
+    payoutMethods.find((m) => m.method_type === "skydo") ?? null;
+  const hasUnverifiedSkydo =
+    !!existingSkydoMethod && !isSkydoUsable(existingSkydoMethod);
+  const withdrawableBalanceCents = profile?.withdrawable_balance ?? 0;
 
-  // Wallet format validation functions
-  const validateWalletAddress = async () => {
-    if (!cryptoAddress.trim()) {
-      setWalletValidationStatus("idle");
-      return;
-    }
-
-    setIsValidatingWallet(true);
-    setWalletValidationStatus("validating");
-    setWalletValidationError("");
-
-    try {
-      let isValid = false;
-
-      if (cryptoNetwork === "BNB_SMART_CHAIN") {
-        // BNB Smart Chain (BEP20) validation: 0x + 40 hex characters
-        isValid = /^0x[a-fA-F0-9]{40}$/.test(cryptoAddress.trim());
-        if (!isValid) {
-          setWalletValidationError(
-            "Invalid BNB Smart Chain (BEP20) address format. Must start with 0x and be 42 characters total."
-          );
-        }
-      } else if (cryptoNetwork === "SOLANA") {
-        // Solana validation: 32-44 base58 characters
-        isValid = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(cryptoAddress.trim());
-        if (!isValid) {
-          setWalletValidationError(
-            "Invalid Solana wallet address format. Must be 32-44 base58 characters."
-          );
-        }
-      }
-
-      if (isValid) {
-        setWalletValidationStatus("valid");
-        toast.success("Wallet address format is correct!");
-      } else {
-        setWalletValidationStatus("invalid");
-        toast.error("Invalid wallet address format");
-      }
-    } catch (error: any) {
-      setWalletValidationStatus("invalid");
-      setWalletValidationError(
-        error.message || "Failed to validate wallet address"
-      );
-      toast.error("Wallet validation failed");
-    } finally {
-      setIsValidatingWallet(false);
-    }
+  const openPayoutDialog = (view: "list" | "add") => {
+    setPayoutDialogView(view);
+    setIsPayoutModalOpen(true);
   };
 
-  const isAlphabeticName = (name: string): boolean => {
-    const cleanedName = name.trim();
-    if (!cleanedName) return false;
-    return /^[A-Za-z][A-Za-z\s'.-]*$/.test(cleanedName);
-  };
-
-  const isValidUpiId = (value: string): boolean => {
-    const trimmedValue = value.trim();
-    if (!trimmedValue) return false;
-    return /^[A-Za-z0-9][A-Za-z0-9.\-_]{1,}@[A-Za-z][A-Za-z0-9]{2,}$/.test(
-      trimmedValue
-    );
-  };
-
-  const handleSavePayoutMethod = async () => {
+  const savePayoutMethod = async (
+    draft: PayoutMethodDraft
+  ): Promise<PayoutSaveResult> => {
     if (!authUser) {
       toast.error("Authentication error.");
-      return;
+      return { ok: false, message: "Authentication error. Please sign in again." };
     }
-    if (!payoutFriendlyName.trim()) {
-      toast.error("Please provide a friendly name for this payout method.");
-      return;
-    }
-    if (/^\d+$/.test(payoutFriendlyName.trim())) {
-      toast.error("Invalid friendly name.");
-      return;
-    }
-
-    let details: PayoutMethodDetails;
-
-    if (selectedPayoutType === "crypto") {
-      if (!cryptoAddress.trim() || !cryptoNetwork.trim()) {
-        toast.error("Crypto wallet address and network are required.");
-        return;
-      }
-      if (walletValidationStatus !== "valid") {
-        toast.error("Please validate your wallet address first.");
-        return;
-      }
-      details = {
-        wallet_address: cryptoAddress.trim(),
-        network: cryptoNetwork.trim(),
-        currency: cryptoCurrency.trim(),
-      };
-    } else if (selectedPayoutType === "upi") {
-      if (!bankAccountHolder.trim() || !upiId.trim()) {
-        toast.error("Account holder name and UPI ID are required.");
-        return;
-      }
-      if (!isAlphabeticName(bankAccountHolder)) {
-        toast.error("Invalid account holder name.");
-        return;
-      }
-      if (!isValidUpiId(upiId)) {
-        toast.error("Please enter a valid UPI ID (e.g., name@bank).");
-        return;
-      }
-      details = {
-        account_holder_name: bankAccountHolder.trim(),
-        upi_id: upiId.trim(),
-      };
-    } else if (selectedPayoutType === "bank_transfer") {
-      if (
-        !bankAccountHolder.trim() ||
-        !bankAccountNumber.trim() ||
-        !bankIfscCode.trim()
-      ) {
-        toast.error(
-          "Account holder name, account number, and IFSC code are required for bank transfer."
-        );
-        return;
-      }
-      const bankDetails: any = {
-        account_holder_name: bankAccountHolder.trim(),
-        account_number: bankAccountNumber.trim(),
-        ifsc_code: bankIfscCode.trim(),
-        country: bankCountry.trim(),
-      };
-      if (bankRoutingNumber.trim())
-        bankDetails.swift_bic_code = bankRoutingNumber.trim();
-      if (bankName.trim()) bankDetails.bank_name = bankName.trim();
-      if (bankBranchName.trim())
-        bankDetails.branch_name = bankBranchName.trim();
-      details = bankDetails;
-    } else {
-      toast.error("Invalid payout method type selected.");
-      return;
-    }
-
+    const methodToSave = { user_id: authUser.id, ...draft };
     setIsLoading(true);
-    const methodToSave = {
-      user_id: authUser.id,
-      method_type: selectedPayoutType,
-      details: details,
-      friendly_name: payoutFriendlyName.trim(),
-      ...(currentPayoutMethod ? { id: currentPayoutMethod.id } : {}),
-    };
-
-    console.log(
-      "Attempting to save payout method:",
-      JSON.stringify(methodToSave, null, 2)
-    ); // Log the object being sent
-
     try {
       const { data, error } = await supabase
         .from("payout_methods")
         .upsert(methodToSave)
         .select()
-        .single(); // Assuming upserting one record and expecting one back
-
+        .single();
       if (error) throw error;
+      if (!data) throw new Error("No data returned after saving payout method.");
 
-      if (data) {
-        setPayoutMethods((prevMethods) => {
-          const index = prevMethods.findIndex((m) => m.id === data.id);
-          if (index !== -1) {
-            const newMethods = [...prevMethods];
-            newMethods[index] = data as PayoutMethod;
-            return newMethods;
-          } else {
-            return [...prevMethods, data as PayoutMethod];
-          }
-        });
-        toast.success(
-          `Payout method ${
-            currentPayoutMethod ? "updated" : "added"
-          } successfully!`
-        );
-        setIsPayoutModalOpen(false);
-        resetPayoutForm();
-      } else {
-        throw new Error("No data returned after saving payout method.");
-      }
-    } catch (error: any) {
-      console.error(
-        "---------------- ERROR SAVING PAYOUT METHOD ----------------"
-      );
-      console.error("Timestamp:", new Date().toISOString());
-      console.error("Method to save:", JSON.stringify(methodToSave, null, 2));
-      console.error("Raw error object:", error);
-      if (error) {
-        console.error("Error message:", error.message);
-        console.error("Error code:", error.code);
-        console.error("Error details:", error.details);
-        console.error("Error stack:", error.stack);
-        try {
-          console.error(
-            "Stringified error:",
-            JSON.stringify(error, Object.getOwnPropertyNames(error), 2)
-          );
-        } catch (e) {
-          console.error(
-            "Could not stringify error with getOwnPropertyNames:",
-            e
-          );
-          try {
-            console.error(
-              "Stringified error (basic):",
-              JSON.stringify(error, null, 2)
-            );
-          } catch (e2) {
-            console.error("Could not stringify error at all:", e2);
-          }
+      setPayoutMethods((prevMethods) => {
+        const index = prevMethods.findIndex((m) => m.id === data.id);
+        if (index !== -1) {
+          const newMethods = [...prevMethods];
+          newMethods[index] = data as PayoutMethod;
+          return newMethods;
         }
-      }
-
-      let errorMessage =
-        "An unknown error occurred. Check the console for details.";
-      if (
-        error &&
-        typeof error.message === "string" &&
-        error.message.trim() !== ""
-      ) {
-        errorMessage = error.message;
-      } else if (typeof error === "string" && error.trim() !== "") {
-        errorMessage = error;
-      } else if (
-        error &&
-        error.details &&
-        typeof error.details === "string" &&
-        error.details.trim() !== ""
-      ) {
-        errorMessage = error.details;
-      } else if (
-        error &&
-        error.code &&
-        typeof error.code === "string" &&
-        error.code.trim() !== ""
-      ) {
-        errorMessage = `Error code: ${error.code}`;
-      }
-
-      toast.error(`Failed to save payout method: ${errorMessage}`);
-      console.error(
-        "---------------- END ERROR SAVING PAYOUT METHOD ----------------"
+        return [...prevMethods, data as PayoutMethod];
+      });
+      toast.success(
+        draft.method_type === "skydo"
+          ? "Skydo payout method added. Watch for an email from Skydo Payouts within 24 hours."
+          : `Payout method ${draft.id ? "updated" : "added"} successfully!`
       );
+      return { ok: true };
+    } catch (error) {
+      console.error("Error saving payout method:", error, methodToSave);
+      const message = getSupabaseErrorMessage(error);
+      toast.error(`Failed to save payout method: ${message}`);
+      return { ok: false, message };
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
-  const resetPayoutForm = () => {
-    setCurrentPayoutMethod(null);
-    setSelectedPayoutType("crypto");
-    setCryptoAddress("");
-    setCryptoNetwork("BNB_SMART_CHAIN");
-    setCryptoCurrency("BNB");
-    setWalletValidationStatus("idle");
-    setWalletValidationError("");
-    setUpiId("");
-    setBankAccountHolder("");
-    setBankAccountNumber("");
-    setBankIfscCode("");
-    setBankRoutingNumber("");
-    setBankName("");
-    setBankBranchName("");
-    setBankCountry("IN");
-    setPayoutFriendlyName("");
-  };
-
-  const handleEditPayoutMethod = (method: PayoutMethod) => {
-    setCurrentPayoutMethod(method);
-    setSelectedPayoutType(method.method_type);
-    if (
-      method.method_type === "upi" ||
-      method.method_type === "bank_transfer"
-    ) {
-      setPayoutCountry("IN");
-    } else {
-      setPayoutCountry("OTHER");
+  const deletePayoutMethod = async (method: PayoutMethod): Promise<boolean> => {
+    const isSkydo = method.method_type === "skydo";
+    if (isSkydo && !canRemoveSkydo(method)) {
+      toast.error("Your Skydo email can't be removed after Skydo has emailed you.");
+      return false;
     }
-    setPayoutFriendlyName(method.friendly_name || "");
-
-    if (method.method_type === "crypto" && method.details) {
-      setCryptoAddress(method.details.wallet_address || "");
-      setCryptoNetwork(method.details.network || "BNB_SMART_CHAIN");
-      setCryptoCurrency(method.details.currency || "BNB");
-    } else if (method.method_type === "upi" && method.details) {
-      setUpiId(method.details.upi_id || "");
-      setBankAccountHolder(method.details.account_holder_name || "");
-    } else if (method.method_type === "bank_transfer" && method.details) {
-      setBankAccountHolder(method.details.account_holder_name || "");
-      setBankAccountNumber(method.details.account_number || "");
-      setBankIfscCode(method.details.ifsc_code || "");
-      setBankRoutingNumber(method.details.swift_bic_code || "");
-      setBankName(method.details.bank_name || "");
-      setBankBranchName(method.details.branch_name || "");
-      setBankCountry(method.details.country || "IN");
-    }
-    setIsPayoutModalOpen(true);
-  };
-
-  const handleDeletePayoutMethod = async (methodId: string) => {
-    if (!confirm("Are you sure you want to delete this payout method?")) return;
     setIsLoading(true);
     const { error } = await supabase
       .from("payout_methods")
       .delete()
-      .eq("id", methodId); // Updated table name
+      .eq("id", method.id);
     setIsLoading(false);
     if (error) {
       console.error("Error deleting payout method:", error);
-      alert(`Failed to delete method: ${error.message}`);
-    } else {
-      setPayoutMethods(payoutMethods.filter((p) => p.id !== methodId));
-      alert("Payout method deleted.");
+      toast.error(`Failed to delete method: ${error.message}`);
+      return false;
     }
+    setPayoutMethods((prev) => prev.filter((p) => p.id !== method.id));
+    toast.success(
+      isSkydo
+        ? "Skydo email removed. You can add a different one now."
+        : "Payout method deleted."
+    );
+    return true;
   };
 
-  const handleSetDefaultPayoutMethod = async (methodId: string) => {
-    if (!authUser) return;
+  const setDefaultPayoutMethod = async (method: PayoutMethod): Promise<boolean> => {
+    if (!authUser) return false;
     setIsLoading(true);
     // Set all others to false for this user
     const { error: unsetError } = await supabase
-      .from("payout_methods") // Updated table name
+      .from("payout_methods")
       .update({ is_default: false })
       .eq("user_id", authUser.id);
 
     if (unsetError) {
       console.error("Error unsetting other defaults:", unsetError);
-      // Decide if you want to proceed or show error and stop
     }
 
     const { data, error } = await supabase
-      .from("payout_methods") // Updated table name
+      .from("payout_methods")
       .update({ is_default: true })
-      .eq("id", methodId)
-      .eq("user_id", authUser.id) // Ensure user owns this method
+      .eq("id", method.id)
+      .eq("user_id", authUser.id)
       .select()
       .single();
     setIsLoading(false);
 
     if (error) {
       console.error("Error setting default payout method:", error);
-      alert(`Failed to set default method: ${error.message}`);
-    } else if (data) {
-      setPayoutMethods(
-        payoutMethods.map((p) => ({ ...p, is_default: p.id === data.id }))
-      );
-      alert("Default payout method updated.");
+      toast.error(`Failed to set default method: ${error.message}`);
+      return false;
     }
+    if (data) {
+      setPayoutMethods((prev) => prev.map((p) => ({ ...p, is_default: p.id === data.id })));
+      toast.success("Default payout method updated.");
+    }
+    return true;
   };
 
-  const handleWithdraw = async () => {
-    if (!authUser || !selectedWithdrawMethodId) {
-      toast.error("Please select a payout method.");
-      return;
-    }
-    if (!profile || !userData) {
-      toast.error("User profile or data not loaded.");
-      return;
-    }
-
-    const minWithdrawalDollars = MIN_WITHDRAWAL_AMOUNT / 100;
-    let amountToWithdraw = 0;
-    let currencyForRpc = "USD";
-    let amountTypeForRpc: "cash" | "coins" = activeTabModal;
-    let redeemedItemDescForRpc: any | null = null; // For p_redeemed_item_description
-
-    if (activeTabModal === "cash") {
-      if (withdrawAmountDollars <= 0) {
-        toast.error("Please enter a valid withdrawal amount.");
-        return;
-      }
-      if (withdrawAmountDollars < minWithdrawalDollars) {
-        toast.error(
-          `Minimum cash withdrawal amount is ${formatCurrencyFromCents(
-            MIN_WITHDRAWAL_AMOUNT
-          )}.`
-        );
-        return;
-      }
-      amountToWithdraw = Math.round(withdrawAmountDollars * 100); // This is the 'amount' for cash (in cents)
-      if (amountToWithdraw > (profile.withdrawable_balance || 0)) {
-        toast.error("Insufficient cash balance.");
-        return;
-      }
-    } else {
-      // activeTab === 'coins'
-      if (withdrawAmountCoins <= 0) {
-        toast.error("Please enter a valid coin amount to redeem.");
-        return;
-      }
-      amountToWithdraw = withdrawAmountCoins; // This is the 'amount' for coins (quantity)
-      currencyForRpc = "COIN";
-      // For now, as coin redemption isn't fully active via shop, set a placeholder or null
-      // In future, this would come from the selected item in the shop flow
-      redeemedItemDescForRpc = { placeholder: "Item to be redeemed" }; // Or null
-      if (amountToWithdraw > (userData.coins || 0)) {
-        toast.error("Insufficient coin balance.");
-        return;
-      }
+  const submitWithdrawal = async ({
+    amountCents,
+    payoutMethodId,
+    notes,
+  }: WithdrawRequest): Promise<WithdrawSubmitResult> => {
+    if (!authUser || !profile || !userData) {
+      return { ok: false, message: "User profile or data not loaded." };
     }
 
     const rpcArgs = {
       p_user_id: authUser.id,
-      p_payout_method_id: selectedWithdrawMethodId,
-      p_amount: amountToWithdraw,
-      p_currency: currencyForRpc,
-      p_amount_type: amountTypeForRpc,
-      p_user_notes: withdrawalUserNotes,
-      p_redeemed_item_description: redeemedItemDescForRpc,
+      p_payout_method_id: payoutMethodId,
+      p_amount: amountCents,
+      p_currency: "USD",
+      p_amount_type: "cash" as const,
+      p_user_notes: notes,
+      p_redeemed_item_description: null,
     };
 
     console.log(
       "Calling create_withdrawal_request with args:",
       JSON.stringify(rpcArgs, null, 2)
-    ); // Log arguments
+    );
 
-    setIsSubmittingWithdrawal(true);
     const { data: rpcResponse, error: rpcError } = await supabase.rpc(
       "create_withdrawal_request",
       rpcArgs
     );
-    setIsSubmittingWithdrawal(false);
 
     if (rpcError) {
       console.error("Error creating withdrawal request via RPC:", rpcError);
-      const formattedError = formatErrorWithCurrency(
-        rpcError.message || "Unknown error"
-      );
-      toast.error(`Withdrawal request failed: ${formattedError}`);
-    } else if (
-      rpcResponse &&
-      Array.isArray(rpcResponse) &&
-      rpcResponse.length > 0
-    ) {
-      const createdRequest = rpcResponse[0] as WithdrawalRequest;
-      toast.success(
-        `Withdrawal request for ${
-          activeTabModal === "cash"
-            ? formatCurrencyFromCents(createdRequest.amount)
-            : formatCoins(createdRequest.amount) + " coins"
-        } submitted successfully!`
-      );
-      setWithdrawalRequests((prev) => [
-        {
-          ...createdRequest,
-          payout_method_summary: getPayoutMethodSummaryById(
-            createdRequest.payout_method_id === undefined
-              ? null
-              : createdRequest.payout_method_id
-          ),
-        },
-        ...prev,
-      ]);
-      if (activeTabModal === "cash") {
-        setProfile((prev) =>
-          prev
-            ? {
-                ...prev,
-                withdrawable_balance:
-                  (prev.withdrawable_balance || 0) - createdRequest.amount,
-              }
-            : null
-        );
-      } else {
-        setUserData((prev) =>
-          prev
-            ? { ...prev, coins: (prev.coins || 0) - createdRequest.amount }
-            : null
-        );
-      }
-      setIsWithdrawModalOpen(false);
-      setWithdrawAmountDollars(0);
-      setWithdrawAmountCoins(0);
-      setSelectedWithdrawMethodId(null);
-      setWithdrawalUserNotes("");
-
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent(WITHDRAWAL_REVIEW_TRIGGER_EVENT));
-      }
-    } else {
+      return {
+        ok: false,
+        message: formatErrorWithCurrency(rpcError.message || "Unknown error"),
+      };
+    }
+    if (!rpcResponse || !Array.isArray(rpcResponse) || rpcResponse.length === 0) {
       console.error(
         "Withdrawal request RPC returned unexpected data:",
         rpcResponse
       );
-      toast.error(
-        "Withdrawal request submitted, but couldn't confirm details. Please check your requests."
-      );
+      return {
+        ok: false,
+        message:
+          "Withdrawal request submitted, but couldn't confirm details. Please check your requests.",
+      };
     }
+
+    const createdRequest = rpcResponse[0] as WithdrawalRequest;
+    toast.success(
+      `Withdrawal request for ${formatCurrencyFromCents(
+        createdRequest.amount
+      )} submitted successfully!`
+    );
+    setWithdrawalRequests((prev) => [
+      {
+        ...createdRequest,
+        payout_method_summary: getPayoutMethodSummaryById(
+          createdRequest.payout_method_id === undefined
+            ? null
+            : createdRequest.payout_method_id
+        ),
+      },
+      ...prev,
+    ]);
+    setProfile((prev) =>
+      prev
+        ? {
+            ...prev,
+            withdrawable_balance:
+              (prev.withdrawable_balance || 0) - createdRequest.amount,
+          }
+        : null
+    );
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(WITHDRAWAL_REVIEW_TRIGGER_EVENT));
+    }
+    return { ok: true };
   };
 
   const handleCancelWithdrawal = async (
@@ -955,6 +639,7 @@ export default function EarningsClientPage({
     if (type === "upi") return <Sparkles className="mr-2 h-5 w-5" />;
     if (type === "phantom")
       return <Wallet className="mr-2 h-5 w-5 text-purple-600" />;
+    if (type === "skydo") return <Mail className="mr-2 h-5 w-5" />;
     return <CreditCard className="mr-2 h-5 w-5" />;
   };
 
@@ -1297,34 +982,34 @@ export default function EarningsClientPage({
             </p>
           </div>
 
-          <div className="flex flex-col md:flex-row gap-4 mb-8">
+          <div className="flex flex-col md:flex-row gap-3 mb-8">
             {(() => {
               const balance = profile?.withdrawable_balance || 0;
               const canOpenWithdraw =
                 !!profile && balance >= MIN_WITHDRAWAL_AMOUNT && !isLoading;
               const hasPayoutMethods = payoutMethods.length > 0;
+              const primaryClass = "flex-1 gap-2 text-base font-semibold";
               if (canOpenWithdraw && hasPayoutMethods) {
                 return (
                   <Button
+                    size="lg"
                     onClick={() => setIsWithdrawModalOpen(true)}
-                    className="flex-1"
+                    className={primaryClass}
                   >
-                    <ArrowDownToLine className="h-4 w-4 mr-2" /> Withdraw
-                    Balance
+                    <ArrowDownToLine className="h-5 w-5" aria-hidden />
+                    Withdraw Balance
                   </Button>
                 );
               }
               if (canOpenWithdraw && !hasPayoutMethods) {
                 return (
                   <Button
-                    onClick={() => {
-                      resetPayoutForm();
-                      setIsPayoutModalOpen(true);
-                    }}
-                    className="flex-1"
+                    size="lg"
+                    onClick={() => openPayoutDialog("add")}
+                    className={primaryClass}
                   >
-                    <PlusCircle className="h-4 w-4 mr-2" /> Add Payout Method to
-                    Withdraw
+                    <PlusCircle className="h-5 w-5" aria-hidden />
+                    Add Payout Method to Withdraw
                   </Button>
                 );
               }
@@ -1338,26 +1023,27 @@ export default function EarningsClientPage({
                     )}`
                   : "Withdraw Balance";
               return (
-                <Button
-                  size="lg"
-                  className="bg-[#6C43D0] py-3 flex-1 text-md text-white"
-                  disabled
-                >
-                  <ArrowDownToLine className="h-4 w-4 mr-2" /> {reason}
+                <Button size="lg" className={primaryClass} disabled>
+                  <ArrowDownToLine className="h-5 w-5" aria-hidden />
+                  {reason}
                 </Button>
               );
             })()}
 
             <Button
               size="lg"
-              onClick={() => {
-                resetPayoutForm();
-                setIsPayoutModalOpen(true);
-              }}
-              className="bg-[#6C43D0] flex-1 py-3 text-md text-white"
+              variant="outline"
+              onClick={() => openPayoutDialog("list")}
+              className={cn(
+                "flex-1 gap-2 border-2 text-base font-semibold",
+                isDark
+                  ? "border-[#7F39EC] bg-transparent text-white hover:bg-[#7F39EC]/20"
+                  : "border-[#7F39EC] bg-white text-[#4A00BE] hover:bg-[#7F39EC]/10"
+              )}
               disabled={isLoading}
             >
-              <PlusCircle className="h-4 w-4 mr-2" /> Manage Payout Methods
+              <Settings2 className="h-5 w-5" aria-hidden />
+              Manage Payout Methods
             </Button>
           </div>
           {payoutMethods.length === 0 &&
@@ -1959,918 +1645,35 @@ export default function EarningsClientPage({
       </TabContent>
 
       {/* Payout Methods Modal (Dialog) */}
-      <Dialog
+      <PayoutMethodDialog
         open={isPayoutModalOpen}
-        onOpenChange={(isOpen) => {
-          if (isLoading && isOpen) return;
-          setIsPayoutModalOpen(isOpen);
-          if (!isOpen) resetPayoutForm();
-        }}
-        isdark={isDark}
-      >
-        <DialogContent
-          hideCloseButton
-          className="sm:max-w-[625px] max-h-[90vh] overflow-y-auto"
-        >
-          <DialogHeader className="text-left">
-            <div className="flex items-start justify-between gap-4 w-full">
-              <div className="space-y-1">
-                <DialogTitle
-                  className={cn(isDark ? "text-white" : "text-gray-800")}
-                >
-                  {currentPayoutMethod?.id
-                    ? "Edit Payout Method"
-                    : "Add New Payout Method"}
-                </DialogTitle>
-                <DialogDescription
-                  className={cn(isDark ? "text-white" : "text-gray-800")}
-                >
-                  Manage your payout methods. Your default method will be
-                  pre-selected for withdrawals.
-                </DialogDescription>
-              </div>
-              <DialogClose
-                className={cn(
-                  "shrink-0 rounded-full transition-colors",
-                  isDark ? "text-white" : "text-gray-600 hover:bg-gray-100"
-                )}
-              >
-                <X className="h-4 w-4" />
-                <span className="sr-only">Close</span>
-              </DialogClose>
-            </div>
-          </DialogHeader>
-          <div className="py-4 space-y-4 text-gray-700">
-            {/* Country selector controls which payout methods show */}
-            <div className={cn(isDark ? "text-white" : "text-gray-800")}>
-              <Label htmlFor="payoutCountry">Country</Label>
-              <Select
-                value={payoutCountry}
-                onValueChange={(val) => {
-                  const v = val as "IN" | "OTHER";
-                  setPayoutCountry(v);
-                  setSelectedPayoutType(v === "IN" ? "upi" : "crypto");
-                }}
-                disabled={isLoading}
-              >
-                <SelectTrigger
-                  id="payoutCountry"
-                  className={cn(
-                    "border",
-                    isDark ? "border-gray-600" : "border-gray-300"
-                  )}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent isDark={isDark}>
-                  <SelectItem isDark={isDark} value="IN">
-                    India
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="OTHER">
-                    Other
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {/* Tabs for payout types */}
-            <Tabs
-              value={selectedPayoutType}
-              onValueChange={(value) =>
-                setSelectedPayoutType(value as PayoutMethodType)
-              }
-              className="w-full"
-            >
-              {payoutCountry === "IN" ? (
-                <TabsList className="grid w-full grid-cols-3 gap-2">
-                  <TabsTrigger
-                    value="upi"
-                    className={cn(
-                      "border",
-                      isDark
-                        ? "border-gray-400 text-gray-300"
-                        : "border-gray-500 text-gray-800"
-                    )}
-                  >
-                    UPI
-                  </TabsTrigger>
-                  <TabsTrigger
-                    className={cn(
-                      "border",
-                      isDark
-                        ? "border-gray-400 text-gray-300"
-                        : "border-gray-500 text-gray-800"
-                    )}
-                    value="bank_transfer"
-                  >
-                    Bank Transfer
-                  </TabsTrigger>
-                  <TabsTrigger
-                    className={cn(
-                      "border",
-                      isDark
-                        ? "border-gray-400 text-gray-300"
-                        : "border-gray-500 text-gray-800"
-                    )}
-                    value="crypto"
-                  >
-                    Crypto
-                  </TabsTrigger>
-                </TabsList>
-              ) : (
-                <TabsList className="grid w-full grid-cols-1">
-                  <TabsTrigger
-                    value="crypto"
-                    className={cn(
-                      "border",
-                      isDark
-                        ? "border-gray-400 text-gray-300"
-                        : "border-gray-500 text-gray-800"
-                    )}
-                  >
-                    Crypto
-                  </TabsTrigger>
-                </TabsList>
-              )}
-              {/* Content for each payout type */}
-              <TabsContent value="crypto" className="space-y-2">
-                <div
-                  className={cn(
-                    "space-y-1",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}
-                >
-                  <Label htmlFor="payoutFriendlyNameCrypto">
-                    Friendly Name
-                  </Label>
-                  <Input
-                    id="payoutFriendlyNameCrypto"
-                    value={payoutFriendlyName}
-                    className={cn(
-                      isDark
-                        ? "bg-[#06021D] border border-gray-600 text-white"
-                        : "bg-white text-black"
-                    )}
-                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                    placeholder="e.g., My Binance USDT"
-                    disabled={isLoading}
-                  />
-                </div>
-                <div
-                  className={cn(
-                    "space-y-1",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}
-                >
-                  <Label htmlFor="cryptoNetwork">Network</Label>
-                  <Select
-                    value={cryptoNetwork}
-                    onValueChange={(val) => {
-                      setCryptoNetwork(val);
-                      // Reset currency when network changes
-                      if (val === "BNB_SMART_CHAIN") {
-                        setCryptoCurrency("BNB");
-                      } else if (val === "SOLANA") {
-                        setCryptoCurrency("SOL");
-                      }
-                    }}
-                    disabled={isLoading}
-                  >
-                    <SelectTrigger
-                      className={cn(
-                        isDark ? "border-gray-600" : "border-slate-300"
-                      )}
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent isDark={isDark}>
-                      <SelectItem value="BNB_SMART_CHAIN" isDark={isDark}>
-                        BNB Smart Chain (BEP20)
-                      </SelectItem>
-                      <SelectItem isDark={isDark} value="SOLANA">
-                        Solana
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div
-                  className={cn(
-                    "space-y-1",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}
-                >
-                  <Label htmlFor="cryptoCurrency">Cryptocurrency</Label>
-                  <Select
-                    value={cryptoCurrency}
-                    onValueChange={(val) => setCryptoCurrency(val)}
-                    disabled={isLoading}
-                  >
-                    <SelectTrigger
-                      className={cn(
-                        isDark ? "border-gray-600" : "border-slate-300"
-                      )}
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent isDark={isDark}>
-                      {cryptoNetwork === "BNB_SMART_CHAIN" ? (
-                        <>
-                          <SelectItem isDark={isDark} value="BNB">
-                            BNB
-                          </SelectItem>
-                          <SelectItem isDark={isDark} value="USDT">
-                            USDT (BEP20)
-                          </SelectItem>
-                        </>
-                      ) : (
-                        <>
-                          <SelectItem isDark={isDark} value="SOL">
-                            SOL
-                          </SelectItem>
-                          <SelectItem isDark={isDark} value="USDT">
-                            USDT
-                          </SelectItem>
-                          <SelectItem isDark={isDark} value="USDC">
-                            USDC
-                          </SelectItem>
-                        </>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="rounded-md border p-2 text-xs border-red-500/40 bg-red-500/10 text-red-500">
-                  {cryptoNetwork === "BNB_SMART_CHAIN" ? (
-                    <>
-                      We only support BNB Smart Chain (BEP20). Do not enter
-                      ERC20/other chain addresses. Wrong address = funds lost.
-                    </>
-                  ) : (
-                    <>
-                      We only support Solana network. Do not enter other chain
-                      addresses. Wrong address = funds lost.
-                    </>
-                  )}
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Crypto payouts are optional digital rewards. By choosing this
-                  method, you accept responsibility for declaring and paying
-                  taxes as per your country's laws.
-                </p>
-                <p
-                  className={cn(
-                    "text-[10px] text-amber-600 bg-amber-50 p-2 rounded border border-amber-200",
-                    isDark
-                      ? "border-amber-200 bg-amber-500/10 text-amber-300"
-                      : "border-amber-200 bg-amber-50 text-amber-600"
-                  )}
-                >
-                  <strong>Note:</strong> We only validate the format of your
-                  wallet address. Please double-check that you've entered the
-                  correct address for your selected network, as sending to the
-                  wrong address will result in permanent loss of funds.
-                </p>
-                <div
-                  className={cn(
-                    "space-y-2",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}
-                >
-                  <Label
-                    htmlFor="cryptoAddress"
-                    className={cn(
-                      "flex items-center gap-2",
-                      isDark ? "text-white" : "text-gray-800"
-                    )}
-                  >
-                    Your Wallet Address
-                    {walletValidationStatus === "valid" && (
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                    )}
-                    {walletValidationStatus === "invalid" && (
-                      <AlertCircle className="h-4 w-4 text-red-600" />
-                    )}
-                  </Label>
-                  <div className="flex gap-2 items-center">
-                    <Input
-                      id="cryptoAddress"
-                      value={cryptoAddress}
-                      onChange={(e) => {
-                        setCryptoAddress(e.target.value);
-                        // Reset validation status when address changes
-                        if (walletValidationStatus !== "idle") {
-                          setWalletValidationStatus("idle");
-                          setWalletValidationError("");
-                        }
-                      }}
-                      placeholder={`Enter your ${cryptoCurrency} wallet address`}
-                      disabled={isLoading}
-                      className={cn(
-                        "flex-1",
-                        isDark
-                          ? "bg-[#06021D] border border-gray-600 text-white"
-                          : "bg-white text-black"
-                      )}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={validateWalletAddress}
-                      disabled={
-                        !cryptoAddress.trim() || isValidatingWallet || isLoading
-                      }
-                      className={cn(
-                        "text-md text-white",
-                        isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
-                      )}
-                    >
-                      {isValidatingWallet ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        "Validate"
-                      )}
-                    </Button>
-                  </div>
-
-                  {walletValidationStatus === "validating" && (
-                    <p className="text-sm text-blue-600">
-                      Validating wallet address...
-                    </p>
-                  )}
-
-                  {walletValidationStatus === "invalid" && (
-                    <p className="text-sm text-red-600">
-                      {walletValidationError}
-                    </p>
-                  )}
-
-                  {walletValidationStatus === "valid" && (
-                    <p className="text-sm text-green-600">
-                      Wallet address format is correct!
-                    </p>
-                  )}
-                </div>
-              </TabsContent>
-              {/* Bank Transfer Form (India) */}
-              <TabsContent value="bank_transfer" className="pt-4 space-y-2">
-                <div
-                  className={cn(
-                    "space-y-1",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}
-                >
-                  <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
-                  <Input
-                    id="payoutFriendlyNameBank"
-                    value={payoutFriendlyName}
-                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                    placeholder="e.g., Primary Savings"
-                    disabled={isLoading}
-                    className={cn(
-                      isDark
-                        ? "bg-[#06021D] border border-gray-600 text-white"
-                        : "bg-white text-black"
-                    )}
-                  />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div
-                    className={cn(
-                      "space-y-1",
-                      isDark ? "text-white" : "text-gray-800"
-                    )}
-                  >
-                    <Label htmlFor="bankAccountHolder">
-                      Account Holder Name
-                    </Label>
-                    <Input
-                      id="bankAccountHolder"
-                      value={bankAccountHolder}
-                      onChange={(e) => setBankAccountHolder(e.target.value)}
-                      disabled={isLoading}
-                      className={cn(
-                        isDark
-                          ? "bg-[#06021D] border border-gray-600 text-white"
-                          : "bg-white text-black"
-                      )}
-                    />
-                  </div>
-                  <div
-                    className={cn(
-                      "space-y-1",
-                      isDark ? "text-white" : "text-gray-800"
-                    )}
-                  >
-                    <Label htmlFor="bankAccountNumber">Account Number</Label>
-                    <Input
-                      id="bankAccountNumber"
-                      value={bankAccountNumber}
-                      onChange={(e) => setBankAccountNumber(e.target.value)}
-                      disabled={isLoading}
-                      className={cn(
-                        isDark
-                          ? "bg-[#06021D] border border-gray-600 text-white"
-                          : "bg-white text-black"
-                      )}
-                    />
-                  </div>
-                  <div
-                    className={cn(
-                      "space-y-1",
-                      isDark ? "text-white" : "text-gray-800"
-                    )}
-                  >
-                    <Label htmlFor="bankIfscCode">IFSC Code</Label>
-                    <Input
-                      id="bankIfscCode"
-                      value={bankIfscCode}
-                      onChange={(e) => setBankIfscCode(e.target.value)}
-                      disabled={isLoading}
-                      className={cn(
-                        isDark
-                          ? "bg-[#06021D] border border-gray-600 text-white"
-                          : "bg-white text-black"
-                      )}
-                    />
-                  </div>
-                  <div
-                    className={cn(
-                      "space-y-1",
-                      isDark ? "text-white" : "text-gray-800"
-                    )}
-                  >
-                    <Label htmlFor="bankName">Bank Name (Optional)</Label>
-                    <Input
-                      id="bankName"
-                      value={bankName}
-                      onChange={(e) => setBankName(e.target.value)}
-                      disabled={isLoading}
-                      className={cn(
-                        isDark
-                          ? "bg-[#06021D] border border-gray-600 text-white"
-                          : "bg-white text-black"
-                      )}
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Bank transfers may take 2–24 hours. Your bank may charge a
-                  small fee. You are responsible for declaring your earnings and
-                  paying any taxes as per Indian law.
-                </p>
-              </TabsContent>
-
-              {/* UPI Form (India, default) */}
-              <TabsContent value="upi" className="pt-4 space-y-2">
-                <div
-                  className={cn(
-                    "space-y-1",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}
-                >
-                  <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
-                  <Input
-                    id="payoutFriendlyNameUpi"
-                    value={payoutFriendlyName}
-                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                    placeholder="e.g., My UPI"
-                    disabled={isLoading}
-                    className={cn(
-                      isDark
-                        ? "bg-[#06021D] border border-gray-600 text-white"
-                        : "bg-white text-black"
-                    )}
-                  />
-                </div>
-                <div
-                  className={cn(
-                    "space-y-1",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}
-                >
-                  <Label htmlFor="upiHolder">Account Holder Name</Label>
-                  <Input
-                    id="upiHolder"
-                    value={bankAccountHolder}
-                    onChange={(e) => setBankAccountHolder(e.target.value)}
-                    placeholder="e.g., Rahul Kumar"
-                    disabled={isLoading}
-                    className={cn(
-                      isDark
-                        ? "bg-[#06021D] border border-gray-600 text-white"
-                        : "bg-white text-black"
-                    )}
-                  />
-                </div>
-                <div
-                  className={cn(
-                    "space-y-1",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}
-                >
-                  <Label htmlFor="upiId">UPI ID</Label>
-                  <Input
-                    id="upiId"
-                    value={upiId}
-                    onChange={(e) => setUpiId(e.target.value)}
-                    placeholder="yourname@bank"
-                    disabled={isLoading}
-                    className={cn(
-                      isDark
-                        ? "bg-[#06021D] border border-gray-600 text-white"
-                        : "bg-white text-black"
-                    )}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  UPI withdrawals are instant and usually free. You are
-                  responsible for declaring your earnings and paying any taxes
-                  as per Indian law.
-                </p>
-              </TabsContent>
-            </Tabs>
-          </div>
-          <DialogFooter className="sm:justify-between">
-            <DialogClose asChild>
-              <button
-                disabled={isLoading}
-                className={cn(
-                  "w-full text-md rounded-full",
-                  isDark
-                    ? "py-3 border border-[#FF5353] text-[#FF5353]"
-                    : "bg-[#FF323224] text-[#E50000] py-3.5"
-                )}
-              >
-                Cancel
-              </button>
-            </DialogClose>
-            <button
-              onClick={handleSavePayoutMethod}
-              disabled={isLoading}
-              className={cn(
-                "w-full text-md rounded-full",
-                isDark
-                  ? "bg-[#7F39EC]  py-3 text-white"
-                  : " bg-[#D9C0FF61]  py-3.5 text-[#7F39EC] "
-              )}
-            >
-              {isLoading
-                ? "Saving..."
-                : currentPayoutMethod?.id
-                ? "Save Changes"
-                : "Add Method"}
-            </button>
-          </DialogFooter>
-
-          {payoutMethods.length > 0 && (
-            <div
-              className={cn(
-                "mt-6 pt-4 border-t",
-                isDark
-                  ? "border-gray-700 text-white"
-                  : "border-gray-200 text-gray-800"
-              )}
-            >
-              <h3 className="text-lg font-medium mb-3">Your Saved Methods</h3>
-              <div className="space-y-3 max-h-60 overflow-y-auto">
-                {payoutMethods.map((method) => (
-                  <div
-                    key={method.id}
-                    className={cn(
-                      "flex items-center justify-between p-3 border rounded-md",
-                      isDark
-                        ? "border-[#C9A7FF]"
-                        : "border-[#7F39EC] bg-[#D9C0FF26]"
-                    )}
-                  >
-                    <div className="flex items-center">
-                      <PayoutMethodIcon type={method.method_type} />
-                      <div>
-                        <p className="font-medium text-sm">
-                          {getPayoutMethodSummary(method)}
-                        </p>
-                        {method.is_default && (
-                          <Badge variant="secondary" className="text-xs">
-                            Default
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {!method.is_default && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className={cn(
-                            "rounded-lg text-white hover:text-white",
-                            isDark
-                              ? "bg-[#5B1BD6] hover:bg-[#7240DE]"
-                              : "bg-[#4A00BE] hover:bg-[#5B1BD6]"
-                          )}
-                          onClick={() =>
-                            handleSetDefaultPayoutMethod(method.id)
-                          }
-                          disabled={isLoading}
-                        >
-                          Set Default
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEditPayoutMethod(method)}
-                        disabled={isLoading}
-                        className={cn(
-                          "rounded-full",
-                          isDark
-                            ? "text-white bg-[#2A0A5E] hover:bg-[#3A1390]"
-                            : "text-[#4A00BE] bg-[#D8C3FF] hover:bg-[#C8ABFF]"
-                        )}
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={cn(
-                          "rounded-full",
-                          isDark
-                            ? "text-[#FF6F6F] bg-[#3A1212] hover:bg-[#4D1818]"
-                            : "text-[#4A00BE] bg-[#D8C3FF] hover:bg-[#C8ABFF]"
-                        )}
-                        onClick={() => handleDeletePayoutMethod(method.id)}
-                        disabled={isLoading}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setIsPayoutModalOpen}
+        initialView={payoutDialogView}
+        isDark={isDark}
+        payoutMethods={payoutMethods}
+        withdrawableBalanceCents={withdrawableBalanceCents}
+        pausedMethodTypes={pausedPayoutMethodTypes}
+        onSave={savePayoutMethod}
+        onDelete={deletePayoutMethod}
+        onSetDefault={setDefaultPayoutMethod}
+      />
 
       {/* Withdraw Balance Modal */}
-      <Dialog
+      <WithdrawBalanceDialog
         open={isWithdrawModalOpen}
-        onOpenChange={(isOpen) => {
-          if (isSubmittingWithdrawal && isOpen) return;
-          setIsWithdrawModalOpen(isOpen);
+        onOpenChange={setIsWithdrawModalOpen}
+        isDark={isDark}
+        availableBalanceCents={profile?.withdrawable_balance ?? 0}
+        minWithdrawalCents={MIN_WITHDRAWAL_AMOUNT}
+        payoutMethods={payoutMethods}
+        availableMethodIds={availablePayoutMethodsForWithdraw.map((m) => m.id)}
+        pausedMethodTypes={pausedPayoutMethodTypes}
+        onManageMethods={() => {
+          setIsWithdrawModalOpen(false);
+          openPayoutDialog("list");
         }}
-        isdark={isDark}
-      >
-        <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle
-              className={cn(isDark ? "text-white" : "text-gray-800")}
-            >
-              Withdraw {activeTabModal === "cash" ? "Balance" : "Coins"}
-            </DialogTitle>
-            <DialogDescription
-              className={cn(isDark ? "text-white" : "text-gray-800")}
-            >
-              Withdraw funds to your preferred payout method. Minimum withdrawal
-              is {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            {activeTabModal === "cash" && (
-              <>
-                <div
-                  className={cn(
-                    "text-lg",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}
-                >
-                  Available:{" "}
-                  <span className="font-semibold">
-                    {profile
-                      ? formatCurrencyFromCents(profile.withdrawable_balance)
-                      : formatCurrencyFromCents(0)}
-                  </span>
-                </div>
-                <div className={cn(isDark ? "text-white" : "text-gray-800")}>
-                  <Label htmlFor="withdrawAmountDollars">
-                    Amount to Withdraw (USD)
-                  </Label>
-                  <Input
-                    id="withdrawAmountDollars"
-                    type="number"
-                    value={
-                      withdrawAmountDollars <= 0 ? "" : withdrawAmountDollars
-                    }
-                    onChange={(e) =>
-                      setWithdrawAmountDollars(parseFloat(e.target.value) || 0)
-                    }
-                    min={MIN_WITHDRAWAL_AMOUNT / 100}
-                    step="0.01"
-                    placeholder="e.g., 50.00"
-                    disabled={isLoading}
-                    className={cn(
-                      isDark
-                        ? "bg-[#06021D] border border-gray-600 text-white"
-                        : "bg-white text-black"
-                    )}
-                  />
-                </div>
-              </>
-            )}
-            {activeTabModal === "coins" && (
-              <>
-                <div
-                  className={cn(
-                    "text-lg",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}
-                >
-                  Available Coins:{" "}
-                  <span className="font-semibold">
-                    {formatCoins(userData?.coins || 0)}
-                  </span>
-                </div>
-                <div>
-                  <Label htmlFor="withdrawAmountCoins">Coins to Redeem</Label>
-                  <Input
-                    id="withdrawAmountCoins"
-                    type="number"
-                    value={withdrawAmountCoins <= 0 ? "" : withdrawAmountCoins}
-                    onChange={(e) =>
-                      setWithdrawAmountCoins(parseInt(e.target.value, 10) || 0)
-                    }
-                    placeholder="e.g., 1000"
-                    disabled={isLoading}
-                    className={cn(
-                      isDark
-                        ? "bg-[#06021D] border border-gray-600 text-white"
-                        : "bg-white text-black"
-                    )}
-                  />
-                </div>
-              </>
-            )}
-            <div>
-              <Label
-                htmlFor="withdrawalUserNotes"
-                className={cn(isDark ? "text-white" : "text-gray-800")}
-              >
-                Notes (Optional)
-              </Label>
-              <Input
-                id="withdrawalUserNotes"
-                value={withdrawalUserNotes}
-                onChange={(e) => setWithdrawalUserNotes(e.target.value)}
-                placeholder="Optional notes for your withdrawal request"
-                disabled={isLoading}
-                className={cn(
-                  isDark
-                    ? "bg-[#06021D] border border-gray-600 text-white"
-                    : "bg-white text-black"
-                )}
-              />
-            </div>
-            <div>
-              <Label
-                htmlFor="payoutMethodSelect"
-                className={cn(isDark ? "text-white" : "text-gray-800")}
-              >
-                Select Payout Method
-              </Label>
-              <Select
-                value={
-                  selectedWithdrawMethodId &&
-                  availablePayoutMethodsForWithdraw.some(
-                    (m) => m.id === selectedWithdrawMethodId
-                  )
-                    ? selectedWithdrawMethodId
-                    : ""
-                }
-                onValueChange={setSelectedWithdrawMethodId}
-                disabled={
-                  isLoading ||
-                  payoutMethods.length === 0 ||
-                  availablePayoutMethodsForWithdraw.length === 0
-                }
-              >
-                <SelectTrigger
-                  id="payoutMethodSelect"
-                  className={cn(
-                    isDark ? "border-gray-600" : "border-slate-300"
-                  )}
-                >
-                  <SelectValue placeholder="Choose a method..." />
-                </SelectTrigger>
-                <SelectContent isDark={isDark}>
-                  {availablePayoutMethodsForWithdraw
-                    .filter((m) => m.is_default)
-                    .map((method) => (
-                      <SelectItem
-                        key={method.id}
-                        value={method.id}
-                        isDark={isDark}
-                      >
-                        {getPayoutMethodSummary(method)} (Default)
-                      </SelectItem>
-                    ))}
-                  {availablePayoutMethodsForWithdraw
-                    .filter((m) => !m.is_default)
-                    .map((method) => (
-                      <SelectItem
-                        key={method.id}
-                        value={method.id}
-                        isDark={isDark}
-                      >
-                        {getPayoutMethodSummary(method)}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {pausedPayoutMethodTypes.length > 0 && (
-              <div
-                className={cn(
-                  "rounded-lg border p-3 text-sm",
-                  isDark
-                    ? "border-amber-800/50 bg-amber-950/30 text-amber-200"
-                    : "border-amber-200 bg-amber-50 text-amber-900"
-                )}
-              >
-                <p className="font-medium">Some payment methods are temporarily unavailable</p>
-                <p className="mt-1">
-                  The following payment methods are not available for withdrawals right now:{" "}
-                  <span className="font-medium">
-                    {pausedPayoutMethodTypes
-                      .map((t) => PAYOUT_METHOD_LABELS[t] || t)
-                      .join(", ")}
-                  </span>
-                  . Please use one of the available methods
-                  {enabledPayoutMethodTypes.length > 0
-                    ? ` (e.g. ${enabledPayoutMethodTypes
-                        .slice(0, 3)
-                        .map((t) => PAYOUT_METHOD_LABELS[t] || t)
-                        .join(", ")})`
-                    : ""}
-                  .
-                </p>
-              </div>
-            )}
-            {payoutMethods.length === 0 && (
-              <p className="text-sm text-red-500">
-                You have no payout methods. Please add one first.
-              </p>
-            )}
-            {payoutMethods.length > 0 && availablePayoutMethodsForWithdraw.length === 0 && (
-              <p className="text-sm text-amber-600 dark:text-amber-400">
-                None of your payout methods are currently available for withdrawal. Please try again later or add another payment method.
-              </p>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button
-              onClick={handleWithdraw}
-              loading={isSubmittingWithdrawal}
-              loadingText="Processing..."
-              disabled={
-                !selectedWithdrawMethodId ||
-                (activeTabModal === "cash" &&
-                  withdrawAmountDollars < MIN_WITHDRAWAL_AMOUNT / 100) ||
-                (activeTabModal === "cash" &&
-                  (!profile ||
-                    withdrawAmountDollars * 100 >
-                      (profile.withdrawable_balance || 0))) ||
-                (activeTabModal === "coins" &&
-                  (!userData ||
-                    withdrawAmountCoins > (userData.coins || 0) ||
-                    withdrawAmountCoins <= 0)) ||
-                // For coins, payoutMethod is optional, so don't disable if it's not selected and tab is coins
-                (activeTabModal === "cash" && !selectedWithdrawMethodId) ||
-                (activeTabModal === "cash" && availablePayoutMethodsForWithdraw.length === 0)
-              }
-              className={cn(
-                "w-full text-md rounded-full",
-                isDark
-                  ? "bg-[#7F39EC] py-3 text-white"
-                  : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
-              )}
-            >
-              Request Withdrawal
-            </Button>
-            <DialogClose asChild>
-              <Button
-                disabled={isLoading}
-                className={cn(
-                  "w-full text-md rounded-full",
-                  isDark
-                    ? "py-2 border bg-[#06021D] border-[#FF5353] text-[#FF5353]"
-                    : "bg-[#FF323224] text-[#E50000] py-2"
-                )}
-              >
-                Cancel
-              </Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onSubmit={submitWithdrawal}
+      />
     </div>
   );
 }
