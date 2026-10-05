@@ -51,7 +51,14 @@ export interface CoinTransaction {
   withdrawal_request_id?: string | null; // Added for linking to withdrawal requests
 }
 
-export type PayoutMethodType = "crypto" | "upi" | "bank_transfer" | "phantom";
+export type PayoutMethodType =
+  | "crypto"
+  | "upi"
+  | "bank_transfer"
+  | "phantom"
+  | "skydo";
+
+export type SkydoStatus = "email_pending" | "email_sent" | "verified";
 
 // For the 'user_payout_info' table
 export interface PayoutMethod {
@@ -63,6 +70,10 @@ export interface PayoutMethod {
   created_at: string;
   updated_at?: string;
   friendly_name?: string | null;
+  /** Only set for Skydo methods; changed by admins only. */
+  skydo_status?: SkydoStatus | null;
+  skydo_status_updated_at?: string | null;
+  admin_notes?: string | null;
 }
 
 export interface CryptoPayoutDetails {
@@ -93,11 +104,16 @@ export interface BankPayoutDetails {
   country: string;
 }
 
+export interface SkydoPayoutDetails {
+  email: string;
+}
+
 export type PayoutMethodDetails =
   | CryptoPayoutDetails
   | UpiPayoutDetails
   | BankPayoutDetails
-  | PhantomPayoutDetails;
+  | PhantomPayoutDetails
+  | SkydoPayoutDetails;
 
 // For creator earnings props
 export interface EarningsClientPageProps {
