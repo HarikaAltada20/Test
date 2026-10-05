@@ -96,18 +96,14 @@ function GocAnimatedLogoSpinner({
           y="5.5"
           width="5.5"
           height="17.5"
-          rx="2"
+          rx="0"
           fill={barFill}
           className="goc-bar-left"
         />
 
         {/* Top Bar */}
-        <rect
-          x="5.5"
-          y="0"
-          width="22.5"
-          height="5.5"
-          rx="2"
+        <path
+          d="M 5.5 0 h 18.5 a 2 2 0 0 1 2 2 v 1.5 a 2 2 0 0 1 -2 2 H 5.5 Z"
           fill={barFill}
           className="goc-bar-top"
         />
@@ -116,20 +112,16 @@ function GocAnimatedLogoSpinner({
         <rect
           x="5.5"
           y="23"
-          width="22.5"
+          width="20.5"
           height="5.5"
-          rx="2"
+          rx="0"
           fill={barFill}
           className="goc-bar-bottom"
         />
 
         {/* Right Short Connector Bar */}
-        <rect
-          x="25"
-          y="15.5"
-          width="5.5"
-          height="7.5"
-          rx="2"
+        <path
+          d="M 27 15.5 h 1.5 a 2 2 0 0 1 2 2 v 5.5 h -5.5 v -5.5 a 2 2 0 0 1 2 -2 z"
           fill={barFill}
           className="goc-bar-right"
         />

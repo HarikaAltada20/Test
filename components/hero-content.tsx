@@ -612,50 +612,50 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
               </div>
 
               {/* Platform + Campaign Type */}
-              <div className="grid grid-cols-2 gap-3.5">
-                <div className="relative" ref={platformRef}>
-                  <label className="text-[12px] font-medium text-[#C4C4C4] flex items-center gap-1">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3.5">
+                <div className="relative min-w-0" ref={platformRef}>
+                  <label className="text-[11px] sm:text-[12px] font-medium text-[#C4C4C4] flex items-center gap-1">
                     <span>Platform</span>
                     <span className="text-[#EF4444]">*</span>
                   </label>
                   <div
                     className={cn(
-                      "mt-1.5 flex h-[34px] items-center justify-between rounded-md border px-3 text-[11px] cursor-pointer",
+                      "mt-1.5 flex h-[34px] items-center justify-between rounded-md border px-2 sm:px-3 text-[10px] sm:text-[11px] cursor-pointer min-w-0",
                       isLight ? "bg-white border-[#E5E5E5]" : "bg-[#222222] border-[#353535] text-white",
                     )}
                   >
-                    <span className="flex items-center gap-1.5">
+                    <span className="flex items-center gap-1 sm:gap-1.5 min-w-0 truncate">
                       {selectedPlatform === "YouTube" ? (
-                        <SiYoutube className="h-4 w-4 text-[#737373]" />
+                        <SiYoutube className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#737373] shrink-0" />
                       ) : selectedPlatform === "Instagram" ? (
-                        <SiInstagram className="h-4 w-4 text-[#737373]" />
+                        <SiInstagram className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#737373] shrink-0" />
                       ) : selectedPlatform === "TikTok" ? (
-                        <SiTiktok className="h-4 w-4 text-[#737373]" />
+                        <SiTiktok className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#737373] shrink-0" />
                       ) : null}
-                      <span className={cn(selectedPlatform ? "text-white" : "text-white/45")}>
+                      <span className={cn(selectedPlatform ? "text-white" : "text-white/45", "truncate whitespace-nowrap")}>
                         {selectedPlatform ?? "Select platform"}
                       </span>
                     </span>
-                    <ChevronDown className="h-3.5 w-3.5 text-white/45" />
+                    <ChevronDown className="h-3.5 w-3.5 text-white/45 shrink-0 ml-1" />
                   </div>
 
                   {platformDropdownOpen ? (
                     <div
                       className={cn(
-                        "absolute left-0 right-0 top-[calc(100%+4px)] z-50 rounded-md border py-1 shadow-lg",
+                        "absolute left-0 right-0 top-[calc(100%+4px)] z-50 rounded-md border py-1 shadow-lg min-w-full",
                         isLight ? "bg-white border-[#E5E5E5]" : "bg-[#292929] border-white/10",
                       )}
                     >
                       {[
-                        { name: "YouTube", icon: <SiYoutube className="h-4 w-4 text-[#737373]" /> },
-                        { name: "Instagram", icon: <SiInstagram className="h-4 w-4 text-[#737373]" /> },
-                        { name: "TikTok", icon: <SiTiktok className="h-4 w-4 text-[#737373]" /> },
+                        { name: "YouTube", icon: <SiYoutube className="h-3.5 w-3.5 text-[#737373] shrink-0" /> },
+                        { name: "Instagram", icon: <SiInstagram className="h-3.5 w-3.5 text-[#737373] shrink-0" /> },
+                        { name: "TikTok", icon: <SiTiktok className="h-3.5 w-3.5 text-[#737373] shrink-0" /> },
                       ].map((p) => (
                         <div
                           key={p.name}
                           ref={p.name === "YouTube" ? platformYoutubeRef : null}
                           className={cn(
-                            "flex h-[30px] items-center gap-2 px-3 text-[11px] cursor-pointer",
+                            "flex h-[30px] items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 text-[10px] sm:text-[11px] cursor-pointer whitespace-nowrap",
                             hoveredPlatform === p.name
                               ? "bg-white/10 text-white"
                               : "text-white/70",
@@ -669,24 +669,26 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
                   ) : null}
                 </div>
 
-                <div className="relative" ref={campaignTypeRef}>
-                  <label className="text-[12px] font-medium text-[#C4C4C4] block">
+                <div className="relative min-w-0" ref={campaignTypeRef}>
+                  <label className="text-[11px] sm:text-[12px] font-medium text-[#C4C4C4] block truncate">
                     Campaign type
                   </label>
                   <div
                     className={cn(
-                      "mt-1.5 flex h-[34px] items-center justify-between rounded-md border px-3 text-[11px]",
+                      "mt-1.5 flex h-[34px] items-center justify-between rounded-md border px-2 sm:px-3 text-[10px] sm:text-[11px] cursor-pointer min-w-0",
                       isLight ? "bg-white border-[#E5E5E5]" : "bg-[#222222] border-[#353535] text-white",
                     )}
                   >
-                    <span>{selectedCampaignType ?? "Select campaign type"}</span>
-                    <ChevronDown className="h-3.5 w-3.5 text-white/45" />
+                    <span className={cn(selectedPlatform ? "text-white" : "text-white/45", "truncate whitespace-nowrap min-w-0 block")}>
+                      {selectedCampaignType ?? "Select campaign type"}
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5 text-white/45 shrink-0 ml-1" />
                   </div>
 
                   {typeDropdownOpen ? (
                     <div
                       className={cn(
-                        "absolute left-0 right-0 top-[calc(100%+4px)] z-40 rounded-md border py-1 shadow-lg",
+                        "absolute left-0 right-0 top-[calc(100%+4px)] z-40 rounded-md border py-1 shadow-lg min-w-full",
                         isLight ? "bg-white border-[#E5E5E5]" : "bg-[#292929] border-white/10",
                       )}
                     >
@@ -695,7 +697,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
                           key={type}
                           ref={type === "Milestone" ? milestoneRef : null}
                           className={cn(
-                            "flex h-[30px] items-center px-3 text-[11px]",
+                            "flex h-[30px] items-center px-2.5 sm:px-3 text-[10px] sm:text-[11px] whitespace-nowrap",
                             hoveredCampaignType === type
                               ? "bg-white/10 text-white"
                               : "text-white/70",
@@ -713,7 +715,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
               <div
                 ref={thumbnailRef}
                 className={cn(
-                  "relative flex h-[170px] items-center justify-center rounded-md border border-dashed",
+                  "relative flex h-[140px] sm:h-[170px] items-center justify-center rounded-md border border-dashed px-2",
                   isLight ? "bg-white border-[#E5E5E5]" : "bg-[#222222] border-[#353535]",
                 )}
               >
@@ -722,9 +724,9 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
                     <Image src={FORM_DEMO_THUMB} alt="" fill className="object-cover" sizes="320px" />
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center text-center">
-                    <Upload className="h-5 w-5 text-white/30" />
-                    <div className="mt-1 text-[11px] text-white/45">
+                  <div className="flex flex-col items-center text-center max-w-full px-1">
+                    <Upload className="h-4 w-4 sm:h-5 sm:w-5 text-white/30" />
+                    <div className="mt-1 text-[10px] sm:text-[11px] text-white/45 truncate max-w-full">
                       Drag, drop or <span className="underline">browse</span> thumbnail
                     </div>
                   </div>
@@ -740,7 +742,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
         <div
           ref={budgetRef}
           className={cn(
-            "absolute top-[360px] left-[200px] -translate-x-1/2 z-40 w-[160px] sm:w-[190px] rounded-[12px] sm:rounded-[14px] border p-3.5 animate-form-dropdown-in shadow-2xl ",
+            "absolute top-[360px] left-[80px] sm:left-[150px] md:left-[200px] -translate-x-1/2 z-40 w-[160px] sm:w-[190px] rounded-[12px] sm:rounded-[14px] border p-3.5 animate-form-dropdown-in shadow-2xl ",
             isLight
               ? "border-[#0000000D] bg-[#ECECEC] text-black shadow-[0_10px_28px_rgba(20,16,40,0.08)]"
               : "border-white/[0.12] bg-[#1b1b1b] text-white shadow-[0_15px_35px_rgba(0,0,0,.45)]",
@@ -1186,126 +1188,66 @@ export default function HeroContent() {
             <div className="absolute left-1/2 top-[15%] h-[750px] w-[1000px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.035),transparent_68%)]" />
           )}
 
-          {/* Two gray orbit circles — purple travels on outer, yellow on inner */}
-          <svg
+          {/* Orbit concentric rings using div elements */}
+          <div
             className={cn(
               "absolute left-1/2 top-[0%] aspect-square w-[min(112vw,1080px)] max-w-none -translate-x-1/2 sm:top-[-4%] sm:w-[min(108vw,1180px)] lg:top-[-20%] lg:w-[min(98vw,1280px)]",
               isLight ? "opacity-45" : "opacity-100",
             )}
-            viewBox="0 0 1000 1000"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
             aria-hidden
-            preserveAspectRatio="xMidYMid meet"
           >
-            <defs>
-              {/* Inner circle border */}
-              <linearGradient
-                id="heroCircleBorderInner"
-                x1="500"
-                y1="90"
-                x2="500"
-                y2="910"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop
-                  offset="0%"
-                  stopColor="rgb(37, 37, 37)"
-                  stopOpacity="0.074"
-                />
-                <stop
-                  offset="50%"
-                  stopColor="rgb(88, 88, 88)"
-                  stopOpacity="0.37"
-                />
-                <stop
-                  offset="100%"
-                  stopColor="rgb(139, 139, 139)"
-                  stopOpacity="0"
-                />
-              </linearGradient>
-              <linearGradient id="heroYellowOrbit" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#c9a016" stopOpacity="0" />
-                <stop offset="30%" stopColor="#e8b820" stopOpacity="0.5" />
-                <stop offset="50%" stopColor="#FFE566" stopOpacity="1" />
-                <stop offset="70%" stopColor="#e8b820" stopOpacity="0.45" />
-                <stop offset="100%" stopColor="#c9a016" stopOpacity="0" />
-              </linearGradient>
-              <linearGradient id="heroPurpleOrbit" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#72129a" stopOpacity="0" />
-                <stop offset="30%" stopColor="#9b1fd4" stopOpacity="0.55" />
-                <stop offset="50%" stopColor="#C84BFF" stopOpacity="1" />
-                <stop offset="70%" stopColor="#9b1fd4" stopOpacity="0.45" />
-                <stop offset="100%" stopColor="#72129a" stopOpacity="0" />
-              </linearGradient>
-              <filter
-                id="heroYellowGlow"
-                x="-50%"
-                y="-50%"
-                width="200%"
-                height="200%"
-              >
-                <feGaussianBlur stdDeviation="6" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-              <filter
-                id="heroPurpleGlow"
-                x="-50%"
-                y="-50%"
-                width="200%"
-                height="200%"
-              >
-                <feGaussianBlur stdDeviation="6" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-
-            {/* Outer circle — no border, purple arc only */}
-            {/* Inner circle — gradient border (5px) */}
-            <circle
-              cx="500"
-              cy="500"
-              r="420"
-              stroke="url(#heroCircleBorderInner)"
-              strokeWidth="5"
+            {/* Static inner gray orbit ring div */}
+            <div
+              className="absolute left-1/2 top-1/2 h-[84%] w-[84%] -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none"
+              style={{
+                padding: "5px",
+                background:
+                  "linear-gradient(180deg, rgba(37,37,37,0.07) 0%, rgba(88,88,88,0.37) 50%, rgba(139,139,139,0) 100%)",
+                borderRadius: "50%",
+                WebkitMask:
+                  "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                WebkitMaskComposite: "xor",
+                maskComposite: "exclude",
+              }}
             />
 
-            {/* Traveling glow arcs */}
+            {/* Traveling glow arcs using div elements */}
             {!prefersReducedMotion ? (
               <>
-                {/* Outer — purple */}
-                <circle
-                  className="animate-hero-orbit-purple"
-                  cx="500"
-                  cy="500"
-                  r="420"
-                  stroke="url(#heroPurpleOrbit)"
-                  strokeWidth="2.75"
-                  strokeLinecap="round"
-                  strokeDasharray="150 2928"
-                  filter="url(#heroPurpleGlow)"
+                {/* Outer purple arc div */}
+                <div
+                  className="animate-hero-orbit-purple absolute left-1/2 top-1/2 h-[84%] w-[84%] rounded-full pointer-events-none"
+                  style={{
+                    padding: "5px",
+                    background:
+                      "conic-gradient(from 30.12deg, #BB00FF 0%, #BB00FF 1.5%, rgba(0, 0, 0, 0) 5%, rgba(0, 0, 0, 0) 100%)",
+                    borderRadius: "50%",
+                    WebkitMask:
+                      "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                    WebkitMaskComposite: "xor",
+                    maskComposite: "exclude",
+                    boxShadow: "0 0 16px rgba(187, 0, 255, 0.5)",
+                  }}
                 />
-                {/* Inner — yellow */}
-                <circle
-                  className="animate-hero-orbit-yellow"
-                  cx="500"
-                  cy="500"
-                  r="490"
-                  stroke="url(#heroYellowOrbit)"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeDasharray="130 3100"
-                  filter="url(#heroYellowGlow)"
+
+                {/* Inner yellow/orange arc div */}
+                <div
+                  className="animate-hero-orbit-yellow absolute left-1/2 top-1/2 h-[98%] w-[98%] rounded-full pointer-events-none"
+                  style={{
+                    padding: "5px",
+                    background:
+                      "conic-gradient(from 274.65deg, #FF8800 0%, #FF8800 1.5%, rgba(0, 0, 0, 0) 5%, rgba(0, 0, 0, 0) 100%)",
+                    borderRadius: "50%",
+                    WebkitMask:
+                      "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                    WebkitMaskComposite: "xor",
+                    maskComposite: "exclude",
+                    boxShadow: "0 0 16px rgba(255, 136, 0, 0.5)",
+                  }}
                 />
               </>
             ) : null}
-          </svg>
+          </div>
         </div>
 
         {/* =========================================================
@@ -1389,20 +1331,38 @@ export default function HeroContent() {
                     justify-center
                     rounded-[10px]
                     sm:rounded-[14px]
-                    md:rounded-[16.09px]
-                    bg-[linear-gradient(180deg,#FF8800_0%,#FFA53E_50%,#FFC27C_100%)]
-                    shadow-[0px_3.71px_4.95px_0px_#FFFFFF40_inset,3.71px_-8.66px_4.95px_0px_#FFD2D20D_inset,6.19px_-11.14px_13.36px_0px_#FFF4F440_inset,13.61px_13.61px_49.5px_0px_#FFAD0038,3.71px_4.95px_29.7px_0px_#FFAD0026,1.24px_3.71px_8.17px_0px_#FFAD001A]
-                    [background-clip:padding-box]
+                    md:rounded-[16px]
+                    bg-white/10
+                    p-[2px]
+                    sm:p-[2.47px]
+                    shadow-[13.61px_13.61px_49.5px_0px_rgba(255,173,0,0.22),3.71px_4.95px_29.7px_0px_rgba(255,173,0,0.15),1.24px_3.71px_8.17px_0px_rgba(255,173,0,0.10),inset_0px_3.71px_4.95px_0px_rgba(255,255,255,0.25),inset_3.71px_-8.66px_4.95px_0px_rgba(255,210,210,0.05),inset_6.19px_-11.14px_13.36px_0px_rgba(255,244,244,0.25)]
+                    overflow-hidden
                     [-webkit-text-fill-color:initial]
                   "
                 >
-                  <Image
-                    src="/images/Vector1234.png"
-                    alt=""
-                    width={32}
-                    height={32}
-                    className="h-[18px] w-[18px] xs:h-[22px] xs:w-[22px] sm:h-[26px] sm:w-[26px] md:h-[32px] md:w-[32px] object-contain"
-                  />
+                  <div
+                    className="
+                      flex
+                      h-full
+                      w-full
+                      items-center
+                      justify-center
+                      rounded-[8px]
+                      sm:rounded-[12px]
+                      md:rounded-[14px]
+                      bg-[linear-gradient(180deg,#FF8800_0%,#FFA53E_50%,#FFC27C_100%)]
+                      shadow-[-1px_2px_4px_0px_rgba(0,0,0,0.25),inset_4.95px_4.95px_4.95px_0px_rgba(255,255,255,0.10)]
+                      overflow-hidden
+                    "
+                  >
+                    <Image
+                      src="/images/Vector1234.png"
+                      alt=""
+                      width={32}
+                      height={32}
+                      className="h-[18px] w-[18px] xs:h-[22px] xs:w-[22px] sm:h-[26px] sm:w-[26px] md:h-[32px] md:w-[32px] object-contain"
+                    />
+                  </div>
                 </span>
                 <span className={isLight ? "text-black" : "text-white"}>
                   performance

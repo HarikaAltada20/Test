@@ -204,7 +204,7 @@ export default function CtcBanner() {
   return (
     <section
       className={cn(
-        "relative flex flex-col items-center justify-start pt-20 sm:pt-30 md:pt-40 pb-12 sm:pb-16 text-center overflow-hidden transition-colors duration-300",
+        "relative flex flex-col items-center justify-start pt-20 sm:pt-30 md:pt-40 pb-[64px] text-center overflow-hidden transition-colors duration-300",
         isLight
           ? "bg-[#F1F1F1] text-black"
           : "bg-black text-white",
@@ -231,7 +231,7 @@ export default function CtcBanner() {
               Pay for Performance
             </div>
 
-            <div className="relative mt-2 flex flex-col items-center justify-center w-full max-w-[780px] pt-6 pb-4 sm:pt-8 sm:pb-6 md:pt-8 md:pb-6">
+            <div className="relative mt-[20px] pt-0 flex flex-col items-center justify-center w-full max-w-[780px] pb-4 sm:pb-6 md:pb-6">
               <AnimatedBackgroundArcs isLight={isLight} />
 
               <div
@@ -323,7 +323,7 @@ export default function CtcBanner() {
             </div>
 
             {/* Static circles around heading + buttons */}
-            <div className="relative  flex flex-col items-center justify-center w-full max-w-[780px] pb-4  sm:pb-6 mt-4 md:pb-6">
+            <div className="relative mt-[20px] pt-0 flex flex-col items-center justify-center w-full max-w-[780px] pb-4 sm:pb-6 md:pb-6">
               <AnimatedBackgroundArcs isLight={isLight} />
 
               <div

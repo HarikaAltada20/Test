@@ -1449,7 +1449,7 @@ export default function CreatorsClient({
                                   : "text-white"
                                 : isLight
                                   ? "text-black/40 group-hover:text-black/60"
-                                  : "text-zinc-500 group-hover:text-zinc-300",
+                                  : "text-[#C4C4C4] group-hover:text-zinc-300",
                             )}
                           >
                             {step.title}
@@ -1849,7 +1849,7 @@ export default function CreatorsClient({
 
         <section
           className={cn(
-            "relative flex min-h-[420px] w-full items-center justify-center overflow-hidden px-4 py-16 sm:min-h-[560px] sm:py-20 md:min-h-[600px] transition-colors duration-300",
+            "relative flex min-h-[420px] w-full items-center justify-center overflow-hidden px-4 py-16 sm:min-h-[560px] sm:py-20 md:min-h-[700px] transition-colors duration-300",
             isLight ? "bg-[#F1F1F1]" : "bg-black",
           )}
         >

@@ -739,8 +739,14 @@ export default function BrandsClient({
                   const y = e.clientY - rect.top;
                   const el = revealImgRef.current;
                   if (el) {
-                    el.style.setProperty("--mx", `${x}px`);
-                    el.style.setProperty("--my", `${y}px`);
+                    // Only trigger hover reveal spotlight on the right section
+                    if (x > rect.width * 0.42) {
+                      el.style.setProperty("--mx", `${x}px`);
+                      el.style.setProperty("--my", `${y}px`);
+                    } else {
+                      el.style.setProperty("--mx", "-9999px");
+                      el.style.setProperty("--my", "-9999px");
+                    }
                   }
                 }}
                 onMouseLeave={() => {
@@ -760,7 +766,7 @@ export default function BrandsClient({
                     src={
                       isLight
                         ? "/images/5c1bc9327aecb9290b3284179d46d09ae2c7635c.png"
-                        : "/images/2398b700eadec2cb27b247febe9b4b7935fa92d0.png"
+                        : "/images/photo_6199738614531428773_y.jpg"
                     }
                     alt=""
                     fill
@@ -798,7 +804,7 @@ export default function BrandsClient({
                   src={
                     isLight
                       ? "/images/5c1bc9327aecb9290b3284179d46d09ae2c7635c.png"
-                      : "/images/2398b700eadec2cb27b247febe9b4b7935fa92d0.png"
+                      : "/images/photo_6199738614531428773_y.jpg"
                   }
                   alt="Reveal effect"
                   className="pointer-events-none absolute inset-0 z-[5] h-full w-full object-cover object-right-top sm:object-[45%_0%]"

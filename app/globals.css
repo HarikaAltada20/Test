@@ -413,19 +413,19 @@ body {
 /* Hero — gray rings with traveling purple / yellow glow arcs */
 @keyframes hero-orbit-cw {
   from {
-    stroke-dashoffset: 0;
+    transform: translate(-50%, -50%) rotate(0deg);
   }
   to {
-    stroke-dashoffset: -3079;
+    transform: translate(-50%, -50%) rotate(360deg);
   }
 }
 
 @keyframes hero-orbit-ccw {
   from {
-    stroke-dashoffset: 0;
+    transform: translate(-50%, -50%) rotate(0deg);
   }
   to {
-    stroke-dashoffset: 2702;
+    transform: translate(-50%, -50%) rotate(-360deg);
   }
 }
 

@@ -16,7 +16,7 @@ export function Footer() {
   return (
     <footer
       className={cn(
-        "relative w-full px-4 sm:px-6 lg:px-8 pb-8 pt-4 overflow-hidden transition-colors duration-300",
+        "relative w-full px-4 sm:px-6 lg:px-8 pb-8 pt-0 overflow-hidden transition-colors duration-300",
         isLight
           ? "bg-[#F1F1F1] text-black"
           : "bg-black text-white",

@@ -118,14 +118,14 @@ type CardPosition = {
 const desktopCardPositions: CardPosition[] = [
   // Card 0 (Top Left)
   { left: "0%", top: "15px" },
-  // Card 1 (Top Center - moved down)
-  { left: "36%", top: "235px" },
+  // Card 1 (Top Center - centered horizontally)
+  { left: "calc(50% - 160px)", top: "220px" },
   // Card 2 (Top Right)
   { right: "0%", top: "0px" },
-  // Card 3 (Bottom Left)
-  { left: "4%", top: "495px" },
-  // Card 4 (Bottom Right)
-  { right: "4%", top: "475px" },
+  // Card 3 (Bottom Left - aligned with left boundary)
+  { left: "0%", top: "450px" },
+  // Card 4 (Bottom Right - aligned with right boundary)
+  { right: "0%", top: "435px" },
 ];
 
 function Rivets({ isLight }: { isLight: boolean }) {
