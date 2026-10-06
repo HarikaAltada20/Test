@@ -197,6 +197,12 @@ export function DashboardSidebar({
       description: "Manage payout withdrawals",
     },
     {
+      name: "Payout Methods",
+      href: "/dashboard/admin/payout-methods",
+      icon: CreditCard,
+      description: "User payout methods & Skydo",
+    },
+    {
       name: "Affiliate",
       href: "/dashboard/admin/affiliate",
       icon: BarChart3,

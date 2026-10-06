@@ -69,6 +69,7 @@ function payoutExtras(r: Record<string, unknown>) {
       (d.ifsc_code || d.swift_bic_code || "") as string,
     ),
     bank_name: String(d.bank_name || ""),
+    skydo_email: type === "skydo" ? String(d.email || "") : "",
     payout_details_json: JSON.stringify(d),
   };
 }
@@ -102,6 +103,7 @@ function rowToExport(
     bank_account_last4: pe.bank_account_last4,
     ifsc_or_swift: pe.ifsc_or_swift,
     bank_name: pe.bank_name,
+    skydo_email: pe.skydo_email,
     transaction_reference: String(m.transaction_reference ?? ""),
     admin_notes: String(m.admin_notes ?? ""),
     user_notes: String(m.user_notes ?? ""),

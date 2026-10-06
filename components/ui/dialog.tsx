@@ -45,16 +45,21 @@ const DialogOverlay = React.forwardRef<
 });
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+const hasDialogTitleInChildren = (children: React.ReactNode): boolean =>
+  React.Children.toArray(children).some((child) => {
+    if (!React.isValidElement(child)) return false;
+    if (child.type === DialogTitle) return true;
+    const nested = (child.props as { children?: React.ReactNode }).children;
+    return nested ? hasDialogTitleInChildren(nested) : false;
+  });
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     hideCloseButton?: boolean;
   }
 >(({ className, children, hideCloseButton = false, ...props }, ref) => {
-  // Check if children contains a DialogTitle
-  const hasDialogTitle = React.Children.toArray(children).some(
-    (child) => React.isValidElement(child) && child.type === DialogTitle
-  );
+  const hasDialogTitle = hasDialogTitleInChildren(children);
   const isdark = React.useContext(DialogIsDarkContext);
   return (
     <DialogPortal>
