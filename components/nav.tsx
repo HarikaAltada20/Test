@@ -186,20 +186,20 @@ export function Nav({
     { label: "Why GOC", href: "/creators#why-goc" },
     { label: "FAQ", href: "/creators#faq" },
     { label: "For Brands", href: "/brands" },
-    { label: "Contact", href: "/contact" },
+    // { label: "Contact", href: "/contact" },
   ] as const;
 
   const brandsNavLinks = [
     { label: "Home", href: marketingHomeHref },
     { label: "How it works", href: "/brands#how-it-works" },
     { label: "For Creators", href: "/creators" },
-    { label: "Contact", href: "/contact" },
+    // { label: "Contact", href: "/contact" },
   ] as const;
 
   const homeNavLinks = [
     { label: "For Brands", href: "/brands" },
     { label: "For Creators", href: "/creators" },
-    { label: "Contact", href: "/contact" },
+    // { label: "Contact", href: "/contact" },
   ] as const;
 
   const marketingPageLinks = isCreatorsPage

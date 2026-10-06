@@ -1030,21 +1030,21 @@ export default function BrandsClient({
 
             {/* CARDS CONTAINER */}
             <div className="flex w-full flex-col items-center justify-center px-0 sm:px-2">
-              {/* CAMPAIGN BUDGET & RISK CARD (Compact Height + Interactive Slider) */}
-              <div className="relative flex h-auto w-full max-w-[460px] shrink-0 flex-col gap-4 rounded-[20px] sm:rounded-[23px] bg-[#171719] p-4 xs:p-5 sm:p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+              {/* CAMPAIGN BUDGET & RISK CARD */}
+              <div className="relative flex h-auto w-full max-w-[520px] shrink-0 flex-col gap-2 rounded-[22px] sm:rounded-[26px] bg-[#171719] p-5 xs:p-6 sm:p-8 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
                 <div>
                   {/* Top row: Gold coins graphic + Budget */}
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center justify-between mb-5">
                     {/* Gold Coins Stack Image */}
                     <img
                       src="/images/Icon area.png"
                       alt="Campaign Budget Coins"
-                      className="h-8 w-9 sm:h-10 sm:w-11 object-contain select-none pointer-events-none"
+                      className="h-10 w-11 sm:h-12 sm:w-14 object-contain select-none pointer-events-none"
                     />
 
                     <div className="text-right">
-                      <p className="text-[10.5px] sm:text-[12px] font-medium text-[#8E8E8E] leading-4">Campaign budget</p>
-                      <p className="text-2xl sm:text-3xl md:text-[40px] font-bold text-[#F1F1F1] leading-tight sm:leading-[43px] mt-0.5">
+                      <p className="text-[12px] sm:text-[14px] font-medium text-[#8E8E8E] leading-4">Campaign budget</p>
+                      <p className="text-3xl sm:text-4xl md:text-[46px] font-bold text-[#F1F1F1] leading-tight sm:leading-[50px] mt-1">
                         ${budgetAmount.toLocaleString()}
                       </p>
                     </div>
@@ -1056,8 +1056,8 @@ export default function BrandsClient({
                     const max = 20000;
                     const pct = Math.min(100, Math.max(0, ((budgetAmount - min) / (max - min)) * 100));
                     return (
-                      <div className="my-4">
-                        <div className="relative h-[28px] sm:h-[32px] w-full rounded-[100px] bg-[#353535] p-1 overflow-hidden">
+                      <div className="my-5">
+                        <div className="relative h-[34px] sm:h-[38px] w-full rounded-[100px] bg-[#353535] p-1 overflow-hidden">
                           <div
                             className={cn(
                               "h-full rounded-[16777240px] transition-all duration-150 shadow-[inset_0_1px_5px_rgba(255,255,255,0.25)]",
@@ -1068,9 +1068,9 @@ export default function BrandsClient({
                             style={{ width: `${Math.max(10, pct)}%` }}
                           />
                           <div
-                            className="absolute top-[3px] sm:top-[3.5px] h-[22px] w-[22px] sm:h-[25px] sm:w-[25px] rounded-full bg-[#F1F1F1] shadow-[0_1px_3px_rgba(0,0,0,0.20)] transition-all duration-150 pointer-events-none"
+                            className="absolute top-[4px] sm:top-[4px] h-[26px] w-[26px] sm:h-[30px] sm:w-[30px] rounded-full bg-[#F1F1F1] shadow-[0_1px_3px_rgba(0,0,0,0.20)] transition-all duration-150 pointer-events-none"
                             style={{
-                              left: `calc(${pct}% - ${(pct / 100) * 20}px - 6px)`,
+                              left: `calc(${pct}% - ${(pct / 100) * 24}px - 6px)`,
                             }}
                           />
                           <input
@@ -1084,7 +1084,7 @@ export default function BrandsClient({
                           />
                         </div>
                         {/* Scale values */}
-                        <div className="mt-2 flex items-center justify-between text-[8px] xs:text-[8.5px] sm:text-[9px] font-semibold text-[#8E8E8E]">
+                        <div className="mt-2.5 flex items-center justify-between text-[10px] sm:text-[12px] font-semibold text-[#8E8E8E]">
                           <span>$1k</span>
                           <span>$5k</span>
                           <span>$10k</span>
@@ -1096,14 +1096,14 @@ export default function BrandsClient({
                   })()}
 
                   {/* Two Stat Boxes */}
-                  <div className="my-4 grid grid-cols-2 gap-2 sm:gap-2.5">
-                    <div className="flex flex-col justify-between rounded-[11px] bg-[#252525] p-2.5 sm:p-3">
-                      <p className="text-[10.5px] sm:text-[12px] font-medium text-[#8E8E8E] leading-4">
+                  <div className="my-5 grid grid-cols-2 gap-3 sm:gap-4">
+                    <div className="flex flex-col justify-start rounded-[14px] bg-[#252525] p-3.5 sm:p-4.5">
+                      <p className="text-[12px] sm:text-[14px] font-medium text-[#8E8E8E] leading-tight">
                         {comparisonTab === "old" ? "Fixed fee at risk" : "Estimated CPM cost"}
                       </p>
                       <p
                         className={cn(
-                          "mt-1 text-sm xs:text-base sm:text-lg font-bold leading-5 transition-colors duration-300",
+                          "mt-1.5 text-lg sm:text-xl md:text-2xl font-bold leading-tight transition-colors duration-300",
                           comparisonTab === "old" ? "text-[#FF4938]" : "text-[#8B5CF6]"
                         )}
                       >
@@ -1111,13 +1111,13 @@ export default function BrandsClient({
                       </p>
                     </div>
 
-                    <div className="flex flex-col justify-between rounded-[11px] bg-[#252525] p-2.5 sm:p-3">
-                      <p className="text-[10.5px] sm:text-[12px] font-medium text-[#8E8E8E] leading-4">
+                    <div className="flex flex-col justify-start rounded-[14px] bg-[#252525] p-3.5 sm:p-4.5">
+                      <p className="text-[12px] sm:text-[14px] font-medium text-[#8E8E8E] leading-tight">
                         {comparisonTab === "old" ? "Guaranteed views" : "Est. verified views"}
                       </p>
                       <p
                         className={cn(
-                          "mt-1 text-sm xs:text-base sm:text-lg font-bold leading-5 transition-colors duration-300",
+                          "mt-1.5 text-lg sm:text-xl md:text-2xl font-bold leading-tight transition-colors duration-300",
                           comparisonTab === "old" ? "text-[#F1F1F1]" : "text-[#22C55E]"
                         )}
                       >
@@ -1132,7 +1132,7 @@ export default function BrandsClient({
                 </div>
 
                 {/* Footer Note */}
-                <p className="text-center text-[8.5px] sm:text-[9px] font-medium text-[#757575] mt-1">
+                <p className="text-center text-[11px] sm:text-[12px] font-medium text-[#757575] mt-1">
                   • Illustrative example
                 </p>
               </div>
@@ -2977,94 +2977,99 @@ export default function BrandsClient({
             isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
           )}
         >
-          <div className="mx-auto w-full max-w-[960px]">
-            {/* Centered Testimonial Card */}
+          <div className="mx-auto w-full max-w-[1100px] px-2 sm:px-4">
+            {/* Testimonial Card */}
             <div
               className={cn(
-                "relative mx-auto flex flex-col items-center text-center rounded-[24px] sm:rounded-[36px] p-6 sm:p-12 md:p-16 transition-all duration-300",
+                "relative mx-auto overflow-hidden rounded-[28px] sm:rounded-[32px] transition-all duration-300 border flex flex-col lg:flex-row items-stretch",
                 isLight
-                  ? "bg-[#ECECEC] border border-black/10 shadow-[0_10px_30px_rgba(0,0,0,0.05)]"
-                  : "bg-[#161616] border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)]",
+                  ? "bg-white border-black/10 shadow-[0_10px_30px_rgba(0,0,0,0.05)]"
+                  : "bg-[linear-gradient(360deg,#000000_0%,#353535_100%)] border-[#353535] shadow-[0_10px_40px_rgba(0,0,0,0.5)]",
               )}
             >
-              {/* Profile Image */}
-              <div className="relative h-16 w-16 sm:h-20 sm:w-20 overflow-hidden rounded-2xl border border-white/10 shadow-md">
+              {/* Left: Image Card (Full cover left, top & bottom) */}
+              <div className="relative w-full lg:w-[384px] h-[380px] sm:h-[440px] lg:h-auto lg:min-h-[482px] flex-shrink-0 overflow-hidden">
                 <Image
                   src="/images/ranveer_testimonial.png"
                   alt="Ranveer Allahbadia"
                   fill
                   priority
                   className="object-cover object-top"
-                  sizes="(max-width: 640px) 64px, 80px"
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 100vw, 384px"
                 />
+                {/* Bottom gradient overlay for author text */}
+                <div className="absolute bottom-0 left-0 right-0 h-[140px] bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none" />
+
+                {/* Author Details overlay */}
+                <div className="absolute left-6 lg:left-[35px] bottom-6 lg:bottom-[35px] flex flex-col items-start justify-start z-10 text-left">
+                  <div className="text-[#F1F1F1] text-lg sm:text-[20px] font-semibold leading-snug sm:leading-[30px]">
+                    Ranveer Allahbadia
+                  </div>
+                  <div className="text-[#A8A8A8] text-sm sm:text-[16px] font-normal leading-normal sm:leading-[24px]">
+                    Founder, BeerBiceps
+                  </div>
+                </div>
               </div>
 
-              {/* Author Details */}
-              <div className="mt-3.5 sm:mt-4">
-                <h3
-                  className={cn(
-                    "text-[15px] sm:text-[17px] font-medium tracking-tight",
-                    isLight ? "text-black/80" : "text-[#a1a1a1]",
-                  )}
-                >
-                  Ranveer Allahbadia
-                </h3>
-                <p
-                  className={cn(
-                    "mt-0.5 text-[12px] sm:text-[14px] font-normal",
-                    isLight ? "text-black/50" : "text-[#666666]",
-                  )}
-                >
-                  Founder, BeerBiceps
-                </p>
-              </div>
+              {/* Right: Content & Metrics */}
+              <div className="flex-1 flex flex-col justify-center items-start gap-4 sm:gap-5 text-left p-6 sm:p-10 lg:py-12 lg:pr-[52px] lg:pl-12 max-w-[760px]">
+                {/* Campaign subtitle badge */}
+                <div className="text-[#757575] text-xs sm:text-[14px] font-medium leading-[21px]">
+                  Ran 3+ campaigns on GOC
+                </div>
 
-              {/* Quote */}
-              <p
-                className={cn(
-                  "mt-5 sm:mt-8 max-w-[760px] px-1 sm:px-0 text-[16px] sm:text-[22px] md:text-[24px] font-medium italic leading-[1.6] tracking-[-0.3px]",
-                  isLight ? "text-black/80" : "text-[#dedede]",
-                )}
-              >
-                “GOC helped us move from paying for reach to understanding the
-                actual performance behind every piece of content. The
-                visibility made campaign decisions much easier.”
-              </p>
-
-              {/* Stats Box */}
-              <div
-                className={cn(
-                  "mt-6 sm:mt-12 grid grid-cols-3 w-full max-w-[560px] items-center text-center rounded-[16px] sm:rounded-[20px] px-3 py-3.5 sm:px-10 sm:py-5 gap-1 sm:gap-4 transition-colors",
-                  isLight
-                    ? "bg-[#DEDEDE] border border-black/5 shadow-[inset_0px_1px_0px_0px_#FFFFFF54]"
-                    : "bg-[#222222] border border-white/5 shadow-inner",
-                )}
-              >
-                <div className="flex flex-col items-center justify-center">
-                  <p className="text-[20px] sm:text-[34px] font-bold leading-none text-[#A855F7]">
-                    3+
-                  </p>
-                  <p className="mt-1.5 sm:mt-2 text-[10px] sm:text-[13px] text-[#858585] leading-tight">
-                    Campaigns Launched
+                {/* Main Quote */}
+                <div className="w-full">
+                  <p className="text-xl sm:text-2xl lg:text-[32px] font-medium leading-relaxed sm:leading-[44px] lg:leading-[48px] tracking-tight">
+                    <span className={isLight ? "text-black" : "text-[#DEDEDE]"}>
+                      “GOC helped us move{" "}
+                    </span>
+                    <span className="text-[#8E8E8E]">
+                      from paying for reach to understanding the actual performance behind every piece of content. The visibility made campaign decisions much easier.
+                    </span>
+                    <span className={isLight ? "text-black" : "text-[#DEDEDE]"}>
+                      ”
+                    </span>
                   </p>
                 </div>
 
-                <div className="flex flex-col items-center justify-center">
-                  <p className="text-[20px] sm:text-[34px] font-bold leading-none text-[#A855F7]">
-                    2.5M+
-                  </p>
-                  <p className="mt-1.5 sm:mt-2 text-[10px] sm:text-[13px] text-[#858585] leading-tight">
-                    Views generated
-                  </p>
-                </div>
+                {/* Divider line */}
+                <div
+                  className={cn(
+                    "w-full h-[1px] my-1 sm:my-3",
+                    isLight ? "bg-black/10" : "bg-[#353535]",
+                  )}
+                />
 
-                <div className="flex flex-col items-center justify-center">
-                  <p className="text-[20px] sm:text-[34px] font-bold leading-none text-[#A855F7]">
-                    16%
-                  </p>
-                  <p className="mt-1.5 sm:mt-2 text-[10px] sm:text-[13px] text-[#858585] leading-tight">
-                    Engagement Rate
-                  </p>
+                {/* Metrics Box */}
+                <div className="w-full flex items-center justify-between sm:justify-start gap-6 sm:gap-12 md:gap-16 pt-1 sm:pt-2">
+                  {/* Stat 1 */}
+                  <div className="flex flex-col justify-center items-start gap-1">
+                    <div className={cn("text-3xl sm:text-4xl lg:text-[52px] font-semibold leading-tight lg:leading-[57.2px]", isLight ? "text-purple-600" : "text-[#F1EDFE]")}>
+                      2.5M+
+                    </div>
+                    <div className="text-[#8E8E8E] text-xs sm:text-[15px] font-normal leading-tight sm:leading-[21px]">
+                      Views generated
+                    </div>
+                  </div>
+
+                  {/* Vertical Divider */}
+                  <div
+                    className={cn(
+                      "w-[1px] h-12 sm:h-16 self-stretch",
+                      isLight ? "bg-black/10" : "bg-[#434343]",
+                    )}
+                  />
+
+                  {/* Stat 2 */}
+                  <div className="flex flex-col justify-center items-start gap-1">
+                    <div className={cn("text-3xl sm:text-4xl lg:text-[52px] font-semibold leading-tight lg:leading-[57.2px]", isLight ? "text-purple-600" : "text-[#F1EDFE]")}>
+                      16%
+                    </div>
+                    <div className="text-[#8E8E8E] text-xs sm:text-[15px] font-normal leading-tight sm:leading-[21px]">
+                      Engagement Rate
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

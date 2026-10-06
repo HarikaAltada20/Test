@@ -464,34 +464,15 @@ export default function PricingClient() {
         
          
           <div className="container mx-auto px-4 text-center relative z-10">
-            {/* Premium Badge */}
-            <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-4 sm:py-2 md:px-6 md:py-3 mb-6 sm:mb-8 flex-wrap justify-center max-w-full">
-              <Crown className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5 text-white flex-shrink-0" />
-              <span className="text-xs sm:text-sm md:text-base lg:text-lg font-semibold bg-white bg-clip-text text-transparent text-center leading-tight">
-                #1 Gamified Creator Marketing Platform
-              </span>
-            </div>
+         
 
-            {/* Enhanced Social Icons */}
-            <div className="flex justify-center mb-8">
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-orange-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
-                <div className="relative">
-                  <Image
-                    src={socialPair}
-                    alt="Social Media Icons"
-                    width={150}
-                    height={40}
-                    className="relative z-10"
-                  />
-                </div>
-              </div>
-            </div>
+       
+         
 
             {/* Massive Gaming Title */}
             <h1
-              className="bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent text-3xl sm:text-3xl md:text-5xl lg:text-6xl xl:text-7xl flex flex-wrap justify-center gap-x-2 gap-y-1 mb-6 leading-tight text-center slide-up "
-              style={{ animationDelay: "1s" }}
+              className="bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent text-3xl sm:text-3xl md:text-4xl lg:text-[52px] flex flex-wrap justify-center gap-x-2 gap-y-1 mb-6 leading-tight text-center slide-up "
+              // style={{ animationDelay: "1s" }}
             >
               <span
                 className="font-semibold text-white drop-shadow-2xl"
@@ -506,7 +487,7 @@ export default function PricingClient() {
               >
                 <span className="relative">
                   <span
-                    className="bg-clip-text text-transparent"
+                    className=""
                    
                   >
                     Detected

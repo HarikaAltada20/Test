@@ -218,7 +218,7 @@ export function SubscriptionUpgradeModal({
   // 👇 conditional color based on route and dark mode
   const dialogBg =
     pathname === "/pricing" || isDark
-      ? "bg-[#06021D] border-gray-600 text-white"
+      ? "bg-black border-gray-600 text-white"
       : "bg-white border-gray-200 text-black";
 
 
@@ -612,7 +612,7 @@ export function SubscriptionUpgradeModal({
             className={`w-full py-6 rounded-full text-md 
                 ${
                   pathname === "/pricing" || isDark
-                    ? "bg-[#7F39EC] text-white hover:bg-[#6A29D9]"
+                    ? "bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] border border-white/25 text-white hover:bg-white/10 hover:border-white/40"
                     : "bg-[#D9C0FF61] text-[#7F39EC] hover:bg-[#D9C0FF61]"
                 }`}
           >
@@ -636,7 +636,7 @@ export function SubscriptionUpgradeModal({
             className={`py-6 rounded-full text-md 
                 ${
                   pathname === "/pricing" || isDark
-                    ? "text-md border-2 border-red-500 text-red-500 bg-[#06021D]"
+                    ? "bg-white text-black"
                     : "bg-[#FF323224] text-[#E50000]"
                 }`}
           >

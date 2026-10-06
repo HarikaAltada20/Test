@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { ArrowLeft } from "lucide-react";
 import { TableOfContents } from "@/components/TableOfContents";
 import CtcBanner from "@/components/CtcBanner";
@@ -382,6 +383,45 @@ export default async function BlogDetailPage({ params }: BlogPageProps) {
           </div>
         </section>
 
+<section className="pt-16 px-4 sm:px-8 lg:px-24 bg-black flex justify-center items-center">
+                      <div className="relative w-full max-w-[1200px] min-h-[471px] py-16 px-6 sm:px-12 flex flex-col justify-center items-center overflow-hidden rounded-[28px] border border-[#3A3636] bg-[linear-gradient(360deg,#000000_0%,#353535_100%)] shadow-[inset_0px_0px_4px_rgba(255,255,255,0.25)]">
+                        {/* Background Decorative Shapes */}
+                        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                          {/* <div className="w-[990px] h-[441px] absolute left-[27px] top-[335px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
+                          <div className="w-[990px] h-[441px] absolute left-[267px] top-[-202px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" /> */}
+                          {/* <div className="w-[990px] h-[441px] absolute left-[27px] top-[354px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
+                          <div className="w-[990px] h-[441px] absolute left-[267px] top-[-183px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
+                          <div className="w-[990px] h-[441px] absolute left-[27px] top-[308px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
+                          <div className="w-[990px] h-[441px] absolute left-[267px] top-[-230px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
+                          <div className="w-[990px] h-[441px] absolute left-[27px] top-[288px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
+                          <div className="w-[990px] h-[441px] absolute left-[267px] top-[-250px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" /> */}
+                        </div>
+              
+                        {/* Main Content Box */}
+                        <div className="relative z-10 max-w-[654px] mx-auto flex flex-col items-center text-center gap-9">
+                          <div className="flex flex-col items-center gap-4">
+                            <h2 className="text-[28px] sm:text-[36px] md:text-[40px] font-medium text-white leading-[130%] tracking-tight">
+                              Not sure which plan is right for you?
+                            </h2>
+                            <p className="text-[15px] sm:text-[17px] font-medium text-[#8E8E8E] leading-[150%]">
+                              Book a demo with{" "}
+                              <span className="text-[#F1F1F1] font-semibold">Vishesh</span>
+                              , Founder of Game Of Creators. Join hundreds of successful businesses. Get answers and start launching impactful campaigns with a free consultation.
+                            </p>
+                          </div>
+              
+                          <a
+                            href="https://calendly.com/guptavishesh2/30min"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center gap-2.5 px-9 py-3 bg-[#DEDEDE] text-[#353535] hover:bg-white rounded-[14px] font-semibold text-base leading-[20px] transition-all duration-200 cursor-pointer shadow-md group"
+                          >
+                            <span>Book Call Now</span>
+                            <ArrowRight className="w-4 h-4 text-[#353535] transition-transform group-hover:translate-x-0.5" />
+                          </a>
+                        </div>
+                      </div>
+                    </section>
         <CtcBanner />
       </div>
     </>
