@@ -116,15 +116,15 @@ export function Footer() {
               )}
             >
               {[
-                { name: "How it Works", href: "/brands" },
-                { name: "Get Started", href: "/get-started" },
+                { name: "How it Works", href: "/brands#how-it-works" },
+                // { name: "Get Started", href: "/get-started" },
                 { name: "Pricing", href: "/pricing" },
                 {
                   name: "Book a Demo",
                   href: "https://calendly.com/guptavishesh2/30min",
                   external: true,
                 },
-                { name: "FAQ", href: "/#faq" },
+                { name: "FAQ", href: "/brands#faq" },
               ].map(({ name, href, external }) => (
                 <li key={name}>
                   <Link

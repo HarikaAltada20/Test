@@ -159,9 +159,11 @@ export function BlogPostsGrid({ posts }: BlogPostsGridProps) {
                         {/* Main Content Box */}
                         <div className="relative z-10 max-w-[654px] mx-auto flex flex-col items-center text-center gap-9">
                           <div className="flex flex-col items-center gap-4">
-                            <h2 className="text-[28px] sm:text-[36px] md:text-[40px] font-medium text-white leading-[130%] tracking-tight">
-                              Not sure which plan is right for you?
-                            </h2>
+                             <h2 className="text-[28px] sm:text-[36px] md:text-[40px] font-medium text-white leading-[130%] tracking-tight">
+                        Want to promote your brand?
+                        <br/>
+                        Book a Call
+                      </h2>
                             <p className="text-[15px] sm:text-[17px] font-medium text-[#8E8E8E] leading-[150%]">
                               Book a demo with{" "}
                               <span className="text-[#F1F1F1] font-semibold">Vishesh</span>

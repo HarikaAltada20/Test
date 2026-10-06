@@ -113,7 +113,7 @@ export default function AboutPage() {
 
             {/* Title & Description */}
             <div className="flex flex-col items-center gap-4 mt-2">
-              <h1 className="font-['Inter'] font-bold text-3xl sm:text-[4xl] md:text-[50px] leading-[110%] tracking-[-4%] text-center bg-gradient-to-b from-white via-white/90 to-neutral-400 bg-clip-text text-transparent leading-[110%] tracking-tight px-2 py-1">
+              <h1 className="font-['Inter'] font-bold text-3xl sm:text-[4xl] md:text-[52px] leading-[110%] tracking-[-4%] text-center bg-gradient-to-b from-white via-white/90 to-neutral-400 bg-clip-text text-transparent leading-[110%] tracking-tight px-2 py-1">
                 Our Story
               </h1>
               <p className="text-[#8E8E8E] text-base sm:text-lg md:text-[20px] font-medium leading-[150%] md:leading-[30px] text-center">
@@ -555,7 +555,9 @@ export default function AboutPage() {
                   <div className="relative z-10 max-w-[654px] mx-auto flex flex-col items-center text-center gap-9">
                     <div className="flex flex-col items-center gap-4">
                       <h2 className="text-[28px] sm:text-[36px] md:text-[40px] font-medium text-white leading-[130%] tracking-tight">
-                        Not sure which plan is right for you?
+                        Want to promote your brand?
+                        <br/>
+                        Book a Call
                       </h2>
                       <p className="text-[15px] sm:text-[17px] font-medium text-[#8E8E8E] leading-[150%]">
                         Book a demo with{" "}
