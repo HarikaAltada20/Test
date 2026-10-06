@@ -384,6 +384,18 @@ export default function BrandsClient({
     );
   }, [mapStage]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#how-it-works") {
+      const timer = setTimeout(() => {
+        const el = document.getElementById("how-it-works");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   const oldWayRef = useRef<HTMLDivElement>(null);
   const [oldWayStep, setOldWayStep] = useState(0);
   const [comparisonTab, setComparisonTab] = useState<"old" | "goc">("old");
@@ -1198,8 +1210,10 @@ export default function BrandsClient({
 
         {/* Campaign Process Cards */}
         <section
+          id="how-it-works"
+          ref={howItWorksRef}
           className={cn(
-            "relative py-14 sm:py-20 md:py-28 transition-colors duration-300",
+            "relative py-14 sm:py-20 md:py-28 transition-colors duration-300 scroll-mt-20",
             isLight ? "bg-[#F1F1F1]" : "bg-[#030405]",
           )}
         >
