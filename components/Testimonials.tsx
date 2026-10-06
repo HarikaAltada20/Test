@@ -396,11 +396,11 @@ export default function Testimonials() {
         <Link
           href={href}
           onClick={() => setIsNavigating(true)}
-          className="relative z-10 flex items-center gap-2 overflow-hidden rounded-3xl px-8 py-2.5 text-lg font-bold text-white disabled:cursor-not-allowed disabled:opacity-70"
+          className={cn(
+            "relative z-10 flex items-center gap-2 overflow-hidden rounded-xl border border-white/20 px-8 py-2.5 text-[15px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all duration-300 hover:border-white/30 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-70",
+          )}
           style={{
-            backgroundImage: pathname?.includes("creators")
-              ? "linear-gradient(90deg, #FF512F 0%, #F09819 50%, #FF512F 100%)"
-              : "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+            background: "linear-gradient(0deg, #000000 0%, #353535 138.24%)",
           }}
         >
           {isNavigating ? <ButtonLoadingSpinner /> : null}
