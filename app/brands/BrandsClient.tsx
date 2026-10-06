@@ -1064,8 +1064,8 @@ export default function BrandsClient({
 
                   {/* Interactive Budget Progress Bar Slider */}
                   {(() => {
-                    const min = 1000;
-                    const max = 20000;
+                    const min = comparisonTab === "old" ? 1000 : 500;
+                    const max = 10000;
                     const pct = Math.min(100, Math.max(0, ((budgetAmount - min) / (max - min)) * 100));
                     return (
                       <div className="my-5">
@@ -1097,11 +1097,23 @@ export default function BrandsClient({
                         </div>
                         {/* Scale values */}
                         <div className="mt-2.5 flex items-center justify-between text-[10px] sm:text-[12px] font-semibold text-[#8E8E8E]">
-                          <span>$1k</span>
-                          <span>$5k</span>
-                          <span>$10k</span>
-                          <span>$15k</span>
-                          <span>$20k</span>
+                          {comparisonTab === "old" ? (
+                            <>
+                              <span>$1k</span>
+                              <span>$3k</span>
+                              <span>$5k</span>
+                              <span>$7k</span>
+                              <span>$10k</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>$500</span>
+                              <span>$2k</span>
+                              <span>$5k</span>
+                              <span>$7k</span>
+                              <span>$10k</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     );
@@ -1111,15 +1123,22 @@ export default function BrandsClient({
                   <div className="my-5 grid grid-cols-2 gap-3 sm:gap-4">
                     <div className="flex flex-col justify-start rounded-[14px] bg-[#252525] p-3.5 sm:p-4.5">
                       <p className="text-[12px] sm:text-[14px] font-medium text-[#8E8E8E] leading-tight">
-                        {comparisonTab === "old" ? "Fixed fee at risk" : "Estimated CPM cost"}
+                        {comparisonTab === "old" ? "Fixed fee at risk" : "Milestone"}
                       </p>
                       <p
                         className={cn(
                           "mt-1.5 text-lg sm:text-xl md:text-2xl font-bold leading-tight transition-colors duration-300",
-                          comparisonTab === "old" ? "text-[#FF4938]" : "text-[#8B5CF6]"
+                          comparisonTab === "old" ? "text-[#FF4938]" : "text-white"
                         )}
                       >
-                        ${budgetAmount.toLocaleString()}
+                        {comparisonTab === "old" ? (
+                          `$${budgetAmount.toLocaleString()}`
+                        ) : (
+                          <span className="flex items-baseline gap-1">
+                            <span className="text-[#8B5CF6]">${Math.round(budgetAmount / 100)}</span>
+                            <span className="text-xs sm:text-sm font-medium text-[#8E8E8E]">/{Math.round(budgetAmount / 100)}K views</span>
+                          </span>
+                        )}
                       </p>
                     </div>
 
@@ -1135,9 +1154,9 @@ export default function BrandsClient({
                       >
                         {comparisonTab === "old"
                           ? "0"
-                          : budgetAmount * 600 >= 1000000
-                          ? `${((budgetAmount * 600) / 1000000).toFixed(1)}M`
-                          : `${Math.round((budgetAmount * 600) / 1000)}K`}
+                          : budgetAmount * 598 >= 1000000
+                          ? `${((budgetAmount * 598) / 1000000).toFixed(1)}M`
+                          : `${Math.round((budgetAmount * 598) / 1000)}K`}
                       </p>
                     </div>
                   </div>

@@ -400,77 +400,34 @@ export default function ReviewsPage() {
         <div className="relative z-20">
           {/* Floating Decorative Elements */}
           <section className="pt-20 pb-16 md:pt-28 md:pb-24 relative overflow-hidden">
-            <div className="inset-0 z-10 pointer-events-none">
-              <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/40 animate-pulse" />
-              <Sparkles
-                className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
-                style={{ animationDelay: "1s" }}
-              />
-              <Star
-                className="absolute top-40 left-1/4 h-9 w-9 text-purple-400/30 animate-pulse"
-                style={{ animationDelay: "2s" }}
-              />
-              <Heart
-                className="absolute top-60 right-1/3 h-5 w-5 text-pink-400/40 animate-bounce"
-                style={{ animationDelay: "0.5s" }}
-              />
-              <Palette
-                className="absolute bottom-40 left-16 h-6 w-6 text-indigo-400/30 animate-pulse"
-                style={{ animationDelay: "1.5s" }}
-              />
-              <Trophy
-                className="absolute bottom-32 right-12 h-9 w-9 text-amber-400/40 animate-bounce"
-                style={{ animationDelay: "0.8s" }}
-              />
-            </div>
+         
 
             <div className="container mx-auto px-4 text-center relative z-10">
-              {/* Premium Badge */}
-              <div className="inline-grid grid-cols-[auto_1fr] items-center gap-2 bg-white/10 backdrop-blur-md border border-white/15 rounded-full px-4 py-2 sm:px-6 sm:py-2.5 mb-8 max-w-[92vw] sm:max-w-none mx-auto shadow-lg shadow-purple-950/20">
-                <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 shrink-0" />
-                <span className="text-xs sm:text-base font-semibold text-white leading-tight whitespace-normal text-left">
-                  #1 Gamified Creator Marketing Platform
-                </span>
-              </div>
+             
 
-              {/* Enhanced Social Icons */}
-              <div className="flex justify-center mb-8">
-                <div className="relative group">
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-purple-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
-                  <div className="relative">
-                    <Image
-                      src={SocialPair}
-                      alt="Social Media Icons"
-                      width={150}
-                      height={40}
-                      className="relative z-10"
-                    />
-                  </div>
-                </div>
-              </div>
+            <h1 className="font-['Inter'] font-bold text-3xl sm:text-[4xl] md:text-[50px] leading-[110%] tracking-[-4%] text-center bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent leading-[110%] tracking-tight px-2 py-1">
+               What Our Brands and Creators Say
+              </h1>
 
               {/* Massive Title */}
-              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl flex flex-wrap justify-center gap-x-2 md:gap-x-3 mb-6 leading-tight text-center font-bold tracking-tight text-white">
+              {/* <h1 className="text-3xl sm:text-4xl md:text-[52px] flex flex-wrap justify-center gap-x-2 md:gap-x-3 mb-6 leading-tight text-center font-bold tracking-tight text-white">
                 <span>What Our</span>
                 <span className="relative">
                   <span
-                    className="bg-clip-text text-transparent"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
-                    }}
+                    className="text-white"
+                 
                   >
                     Brands and Creators
                   </span>
                   <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl -z-10"></div>
                 </span>
                 <span>Say</span>
-              </h1>
+              </h1> */}
 
               {/* Strategic Subtitle */}
-              <p className="text-lg md:text-xl text-zinc-300 max-w-3xl mx-auto mb-6 leading-relaxed">
+              <p className="mt-4 text-lg md:text-xl text-zinc-400 max-w-3xl mx-auto mb-6 leading-relaxed">
                 Real reviews from{" "}
-                <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">
+                <span className="text-zinc-400 font-semibold">
                   brands and creators
                 </span>{" "}
                 about their experience with Game of Creators.
@@ -509,7 +466,7 @@ export default function ReviewsPage() {
                       onClick={() => setActiveTab('creators')}
                       className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 ${
                         activeTab === 'creators'
-                          ? 'bg-gradient-to-r from-[#4C238D] via-[#7F39EC] to-fuchsia-500 text-white shadow-lg shadow-[#7F39EC]/40 ring-1 ring-purple-400/50'
+                          ? 'bg-gradient-to-r from-[#4C238D] via-[#7F39EC] to-fuchsia-500 text-white ring-1 ring-purple-400/50'
                           : 'text-zinc-400 hover:text-white hover:bg-white/5'
                       }`}
                     >
@@ -520,7 +477,7 @@ export default function ReviewsPage() {
                       onClick={() => setActiveTab('brands')}
                       className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 ${
                         activeTab === 'brands'
-                          ? 'bg-gradient-to-r from-[#4C238D] via-[#7F39EC] to-fuchsia-500 text-white shadow-lg shadow-[#7F39EC]/40 ring-1 ring-purple-400/50'
+                          ? 'bg-gradient-to-r from-[#4C238D] via-[#7F39EC] to-fuchsia-500 text-white ring-1 ring-purple-400/50'
                           : 'text-zinc-400 hover:text-white hover:bg-white/5'
                       }`}
                     >
