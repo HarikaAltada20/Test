@@ -2200,7 +2200,7 @@ export default function BrandsClient({
                               />
                             </div>
 
-                            <div className="min-w-0 flex-1 leading-none">
+                            <div className="min-w-0 flex-1 leading-none flex items-center">
                               <div
                                 className={cn(
                                   "truncate text-[11px] font-medium",
@@ -2208,14 +2208,6 @@ export default function BrandsClient({
                                 )}
                               >
                                 {profile.name}
-                              </div>
-                              <div
-                                className={cn(
-                                  "mt-1 truncate text-[9px]",
-                                  isLight ? "text-black/40" : "text-white/35",
-                                )}
-                              >
-                                Verified Views
                               </div>
                             </div>
 
