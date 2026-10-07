@@ -251,16 +251,16 @@ export default function ReviewsPage() {
           {filteredReviews.map((review) => (
             <div
               key={review.id}
-              className="w-full relative bg-[#171717] rounded-3xl p-9 flex flex-col gap-1 overflow-hidden"
+              className="w-full relative bg-[#171717] rounded-3xl p-6 sm:p-9 flex flex-col gap-1 overflow-hidden"
               style={{
                 boxShadow: '8px 8px 50px black, 4px 12px 4px rgba(0, 0, 0, 0.20), inset 0px 0px 4px rgba(255, 255, 255, 0.25)'
               }}
             >
               <div className="flex flex-col gap-8 w-full relative z-10">
-                <div className="flex justify-between items-start w-full">
-                  <div className="flex items-center gap-4">
+                <div className="flex justify-between items-start w-full flex-wrap gap-3 sm:flex-nowrap">
+                  <div className="flex items-center gap-4 min-w-0">
                     {/* Avatar */}
-                    <Avatar className="w-12 h-12 rounded-lg">
+                    <Avatar className="w-12 h-12 rounded-lg shrink-0">
                       <AvatarImage
                         src={review.users.profile_picture_url || undefined}
                         alt={review.users.full_name || 'User'}
@@ -275,8 +275,8 @@ export default function ReviewsPage() {
                           : review.users.email.charAt(0).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex flex-col gap-1">
-                      <div className="text-white text-lg font-medium leading-tight">
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <div className="text-white text-lg font-medium leading-tight truncate">
                         {review.users.username || review.users.full_name || review.users.email}
                       </div>
                       <div className="text-[#8E8E8E] text-base font-normal leading-tight">
@@ -284,7 +284,7 @@ export default function ReviewsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="text-white text-lg italic font-medium leading-relaxed">
+                  <div className="text-white text-lg italic font-medium leading-relaxed whitespace-nowrap shrink-0">
                     {Array(Math.max(1, review.rating)).fill('⭐').join(' ')}
                   </div>
                 </div>
