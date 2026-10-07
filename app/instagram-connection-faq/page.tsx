@@ -63,7 +63,7 @@ export default function InstagramConnectionFAQPage() {
       <section className="px-4 text-white w-full">
         <div className="max-w-5xl mx-auto text-center">
           {/* Title */}
-          <h2
+          <h1
             className="text-3xl md:text-5xl font-bold flex flex-wrap justify-center gap-4 slide-up"
             style={{ animationDelay: "0.2s" }}
           >
@@ -86,7 +86,7 @@ export default function InstagramConnectionFAQPage() {
             >
               FAQ
             </span>
-          </h2>
+          </h1>
 
           {/* Subtitle */}
           <p

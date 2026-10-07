@@ -20,63 +20,11 @@ import { MobileAuthBridge } from "@/components/MobileAuthBridge";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Game Of Creators - Performance-Based Creator Marketing Platform",
-  description:
-    "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
-  metadataBase: new URL("https://www.gameofcreators.com"),
-  manifest: "/manifest.json",
-  icons: {
-    icon: [
-      { url: "/favicon.ico", type: "image/x-icon" },
-      { url: "/goc.png", type: "image/png" },
-      { url: "/icon1.png", sizes: "96x96", type: "image/png" },
-      { url: "/icon0.svg", type: "image/svg+xml" },
-    ],
-    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
-  },
-  openGraph: {
-    title: "Game Of Creators - Performance-Based Creator Marketing Platform",
-    description:
-      "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
-    url: "https://www.gameofcreators.com/",
-    siteName: "Game Of Creators",
-    images: [
-      {
-        url: "https://www.gameofcreators.com/goc_ogc.png",
-        width: 1200,
-        height: 630,
-        alt: "Game Of Creators - Performance-based creator marketing platform where creators get paid based on views and ranking",
-        type: "image/png",
-      },
-    ],
-    locale: "en_US",
-    type: "website",
-  },
-  facebook: {
-    appId: "9901516833263498",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Game Of Creators - Performance-Based Creator Marketing Platform",
-    description:
-      "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers.",
-    images: ["https://www.gameofcreators.com/goc_ogc.png"],
-    creator: "@gameofcreators",
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-    },
-  },
-  other: {
-    "apple-mobile-web-app-title": "Game Of Creators",
-  },
+ title:'Game of Creators',description:'Game of Creators account and platform tools.',
+ metadataBase:new URL('https://www.gameofcreators.com'),manifest:'/manifest.json',
+ icons:{icon:[{url:'/favicon.ico',type:'image/x-icon'},{url:'/goc.png',type:'image/png'},{url:'/icon1.png',sizes:'96x96',type:'image/png'},{url:'/icon0.svg',type:'image/svg+xml'}],apple:[{url:'/apple-icon.png',sizes:'180x180',type:'image/png'}]},
+ facebook:{appId:'9901516833263498'},other:{'apple-mobile-web-app-title':'Game Of Creators'},
+ robots:{index:false,follow:true,googleBot:{index:false,follow:true}},
 };
 
 export default async function RootLayout({

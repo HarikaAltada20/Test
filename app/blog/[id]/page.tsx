@@ -1,3 +1,4 @@
+import { SEO_ORIGIN } from "@/lib/seo/metadata";
 import { createClient } from "@/utils/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -38,13 +39,13 @@ export async function generateMetadata({
     };
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const siteUrl = SEO_ORIGIN;
   const articleUrl = `${siteUrl}/blog/${id}`;
   const description =
     stripHtml(post.short_description) ||
     `Read ${post.title} on Game Of Creators - Creator marketing insights for brands and creators.`;
   const title = `${post.title} | Game Of Creators Blog`;
-  const imageUrl = post.thumbnail || `${siteUrl}/goc_ogc.png`;
+  const imageUrl = post.thumbnail || `${siteUrl}/social/blog.png`;
 
   return {
     title,
@@ -67,8 +68,7 @@ export async function generateMetadata({
       images: [
         {
           url: imageUrl,
-          width: 1200,
-          height: 630,
+          ...(post.thumbnail ? {} : { width: 1200, height: 630 }),
           alt: post.title,
         },
       ],
@@ -220,7 +220,7 @@ export default async function BlogDetailPage({ params }: BlogPageProps) {
     });
   };
 
-  const siteUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const siteUrl = SEO_ORIGIN;
   const articleUrl = `${siteUrl}/blog/${post.id}`;
 
   // Strip HTML from description for structured data
@@ -234,9 +234,8 @@ export default async function BlogDetailPage({ params }: BlogPageProps) {
     "@type": "BlogPosting",
     headline: post.title,
     description: plainDescription,
-    image: post.thumbnail ? [post.thumbnail] : [`${siteUrl}/goc_ogc.png`],
-    datePublished: post.published_at || post.created_at,
-    dateModified: post.published_at || post.created_at,
+    image: post.thumbnail ? [post.thumbnail] : [`${siteUrl}/social/blog.png`],
+    datePublished: post.published_at || undefined,
     author: {
       "@type": "Organization",
       name: "Game Of Creators",

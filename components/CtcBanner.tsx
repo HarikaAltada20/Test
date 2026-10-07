@@ -204,7 +204,7 @@ export default function CtcBanner() {
       </div>
 
       {/* Main Heading */}
-      <h1
+      <h2
         className={`mt-6 text-3xl md:text-5xl font-bold z-10 ${inView ? "slide-up" : "opacity-0 translate-y-10"
           }`}
       >
@@ -222,7 +222,7 @@ export default function CtcBanner() {
               : "Content Strategy"}
         </span>
         ?
-      </h1>
+      </h2>
 
       {/* Subtitle */}
       <p
