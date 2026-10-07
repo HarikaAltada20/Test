@@ -395,7 +395,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
           <div className="max-w-[1200px] mx-auto px-4 md:px-12 xl:px-4 text-center">
             {/* Heading */}
 
-            <h1
+            <h2
               className={`text-2xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
                 isAnimated ? "slide-up" : "hide-before-animate"
               }`}
@@ -408,7 +408,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               <span className="bg-gradient-to-r from-orange-500 to-orange-300 bg-clip-text text-transparent">
                 Creators
               </span>
-            </h1>
+            </h2>
 
             <p
               className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${

@@ -1,0 +1,72 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/update-youtube-metrics",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/trigger-instagram-refresh",
+      "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/update-tiktok-metrics",
+      "schedule": "30 5 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-all-tokens",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/snapshot-daily-challenge-winners",
+      "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/cron/snapshot-weekly-challenge-winners",
+      "schedule": "0 21 * * 0"
+    },
+    {
+      "path": "/api/cron/snapshot-monthly-challenge-winners",
+      "schedule": "0 21 28-31 * *"
+    },
+    {
+      "path": "/api/cron/process-scheduled-notifications",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/process-admin-notification-delivery-queue",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/process-admin-email-delivery-queue",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/process-warm-up-sends?action=reset",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/process-warm-up-sends?action=sends",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/process-warm-up-sends?action=metrics",
+      "schedule": "59 23 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-stale-contest-stats",
+      "schedule": "25 5 * * *"
+    },
+    {
+      "path": "/api/cron/process-video-download-queue",
+      "schedule": "15 4 * * *"
+    },
+    {
+      "path": "/api/cron/process-bulk-payment-queue",
+      "schedule": "20 4 * * *"
+    },
+    {
+      "path": "/api/cron/process-bulk-verify-queue",
+      "schedule": "25 4 * * *"
+    }
+  ]
+}
