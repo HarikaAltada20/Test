@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {runInNewContext} from 'node:vm';
 const read=f=>readFileSync(f,'utf8'),hash=f=>createHash('sha256').update(readFileSync(f)).digest('hex');
+const exceptions=JSON.parse(read('verification/original-upload-exceptions.json'));for(const [file,sha]of Object.entries(exceptions))if(existsSync(file))assert.equal(hash(file),sha);
 const originals=JSON.parse(read('verification/original-files.json'));
 for(const [file,sha] of Object.entries(originals))assert.equal(hash(file),sha,'Original product source changed: '+file);
 const original=f=>read('verification/original-sources/'+f+'.txt');
@@ -17,6 +18,8 @@ assert.equal(article,original('app/blog/[id]/page.tsx'),'Original blog queries/c
 const brandSource=original('app/brands/BrandsClient.tsx'),brandHeading=Array.from(brandSource.matchAll(/<h1\b[\s\S]*?<\/h1>/g))[1][0];
 assert.equal(read('app/brands/BrandsClient.tsx').replace(brandHeading.replace('<h1','<h2').replace('</h1>','</h2>'),brandHeading),brandSource,'Original brands content/handlers changed');
 const pkg=JSON.parse(read('package.json')),base=JSON.parse(original('package.json'));delete pkg.scripts.prebuild;assert.deepEqual(pkg,base,'Original dependencies/scripts changed');
+const direct=JSON.parse(read('verification/original-runtime-versions.json')).versions;
+for(const [name,version] of Object.entries(direct))assert.equal(JSON.parse(read('node_modules/'+name+'/package.json')).version,version,'Pinned direct runtime version changed: '+name);
 assert.equal(JSON.parse(read('node_modules/next/package.json')).version,'15.5.26');
 // Existing provider pnpm regenerates its originally empty lock; Git upload is verified separately.
 const pages=JSON.parse(read('lib/seo/pages.json'));assert.equal(pages.length,13);assert.equal(new Set(pages.map(p=>p.sha256)).size,13);
