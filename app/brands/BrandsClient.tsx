@@ -1099,8 +1099,8 @@ export default function BrandsClient({
                         <div className="mt-2.5 flex items-center justify-between text-[10px] sm:text-[12px] font-semibold text-[#8E8E8E]">
                           {comparisonTab === "old" ? (
                             <>
+                              <span>$500</span>
                               <span>$1k</span>
-                              <span>$3k</span>
                               <span>$5k</span>
                               <span>$7k</span>
                               <span>$10k</span>
@@ -1108,7 +1108,7 @@ export default function BrandsClient({
                           ) : (
                             <>
                               <span>$500</span>
-                              <span>$2k</span>
+                              <span>$1k</span>
                               <span>$5k</span>
                               <span>$7k</span>
                               <span>$10k</span>
