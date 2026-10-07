@@ -1064,9 +1064,20 @@ export default function BrandsClient({
 
                   {/* Interactive Budget Progress Bar Slider */}
                   {(() => {
-                    const min = comparisonTab === "old" ? 1000 : 500;
-                    const max = 10000;
-                    const pct = Math.min(100, Math.max(0, ((budgetAmount - min) / (max - min)) * 100));
+                    const toPct = (val: number) => {
+                      if (val <= 1000) return 0 + ((val - 500) / 500) * 25;
+                      if (val <= 5000) return 25 + ((val - 1000) / 4000) * 25;
+                      if (val <= 7000) return 50 + ((val - 5000) / 2000) * 25;
+                      return 75 + ((val - 7000) / 3000) * 25;
+                    };
+                    const fromPct = (pct: number) => {
+                      if (pct <= 25) return 500 + (pct / 25) * 500;
+                      if (pct <= 50) return 1000 + ((pct - 25) / 25) * 4000;
+                      if (pct <= 75) return 5000 + ((pct - 50) / 25) * 2000;
+                      return 7000 + ((pct - 75) / 25) * 3000;
+                    };
+                    const pct = toPct(budgetAmount);
+                    const minBudget = comparisonTab === "old" ? 1000 : 500;
                     return (
                       <div className="my-5">
                         <div className="relative h-[34px] sm:h-[38px] w-full rounded-[100px] bg-[#353535] p-1 overflow-hidden">
@@ -1087,33 +1098,25 @@ export default function BrandsClient({
                           />
                           <input
                             type="range"
-                            min={min}
-                            max={max}
-                            step={500}
-                            value={budgetAmount}
-                            onChange={(e) => setBudgetAmount(Number(e.target.value))}
+                            min={0}
+                            max={100}
+                            step={0.1}
+                            value={pct}
+                            onChange={(e) => {
+                              const rawVal = fromPct(Number(e.target.value));
+                              const steppedVal = Math.round(rawVal / 500) * 500;
+                              setBudgetAmount(Math.max(minBudget, Math.min(10000, steppedVal)));
+                            }}
                             className="absolute inset-0 h-full w-full opacity-0 cursor-pointer z-20"
                           />
                         </div>
                         {/* Scale values */}
                         <div className="mt-2.5 flex items-center justify-between text-[10px] sm:text-[12px] font-semibold text-[#8E8E8E]">
-                          {comparisonTab === "old" ? (
-                            <>
-                              <span>$500</span>
-                              <span>$1k</span>
-                              <span>$5k</span>
-                              <span>$7k</span>
-                              <span>$10k</span>
-                            </>
-                          ) : (
-                            <>
-                              <span>$500</span>
-                              <span>$1k</span>
-                              <span>$5k</span>
-                              <span>$7k</span>
-                              <span>$10k</span>
-                            </>
-                          )}
+                          <span>$500</span>
+                          <span>$1k</span>
+                          <span>$5k</span>
+                          <span>$7k</span>
+                          <span>$10k</span>
                         </div>
                       </div>
                     );
