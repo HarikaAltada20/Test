@@ -307,7 +307,7 @@ export function PaginationControls({
               className={cn(
                 "h-8 w-8 p-0 hidden sm:flex",
                 isDark &&
-                  "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
+                  "border-[#434343] bg-[#242424] text-slate-200 hover:bg-[#353535] disabled:border-[#353535] disabled:bg-[#242424] disabled:opacity-50"
               )}
             >
               <ChevronsLeft className="h-4 w-4" />
@@ -324,7 +324,7 @@ export function PaginationControls({
               className={cn(
                 "h-8 w-8 p-0 sm:w-8",
                 isDark &&
-                  "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
+                  "border-[#434343] bg-[#242424] text-slate-200 hover:bg-[#353535] disabled:border-[#353535] disabled:bg-[#242424] disabled:opacity-50"
               )}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -354,8 +354,8 @@ export function PaginationControls({
                       "h-8 min-w-8 px-2 sm:w-8 sm:p-0 text-xs sm:text-sm",
                       isDark &&
                         (pageNum === page
-                          ? "border-slate-700 bg-[#7F39EC] text-slate-100 hover:bg-slate-700"
-                          : "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800")
+                          ? "border-white bg-white text-black hover:bg-gray-200"
+                          : "border-[#434343] bg-[#242424] text-slate-200 hover:bg-[#353535]")
                     )}
                   >
                     {pageNum}
@@ -375,7 +375,7 @@ export function PaginationControls({
               className={cn(
                 "h-8 w-8 p-0",
                 isDark &&
-                  "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
+                  "border-[#434343] bg-[#242424] text-slate-200 hover:bg-[#353535] disabled:border-[#353535] disabled:bg-[#242424] disabled:opacity-50"
               )}
             >
               <ChevronRight className="h-4 w-4" />
@@ -392,7 +392,7 @@ export function PaginationControls({
               className={cn(
                 "h-8 w-8 p-0 hidden sm:flex",
                 isDark &&
-                  "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
+                  "border-[#434343] bg-[#242424] text-slate-200 hover:bg-[#353535] disabled:border-[#353535] disabled:bg-[#242424] disabled:opacity-50"
               )}
             >
               <ChevronsRight className="h-4 w-4" />

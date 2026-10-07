@@ -352,11 +352,11 @@ export default function Testimonials() {
         isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
       )}
     >
-      <div className="mx-auto max-w-[1200px]" ref={headingRef}>
+      <div className="mx-auto max-w-[1200px]" >
         <h2
           className={cn(
             "mx-auto max-w-[720px] text-center text-[28px] font-bold leading-[1.15] tracking-[-1px] sm:text-[36px] sm:tracking-[-1.4px] md:text-[44px] md:tracking-[-1.8px]",
-            headingAnimated ? "slide-up" : "hide-before-animate",
+            // headingAnimated ? "slide-up" : "hide-before-animate",
             isLight ? "text-black" : "text-white",
           )}
           style={{ animationDelay: "0.15s" }}

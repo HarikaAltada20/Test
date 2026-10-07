@@ -4,11 +4,11 @@ export default function PrivacyPolicyPage() {
       <div className="container mx-auto px-2 py-12 max-w-[1250px]">
         {/* Header */}
         <div className="mb-12">
-          <h1 className="text-4xl md:text-5xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent drop-shadow-2xl mb-4">
+          <h1 className="text-4xl md:text-5xl pb-4 font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent drop-shadow-2xl mb-4">
             Privacy Policy
           </h1>
 
-          <p className="text-[#8E8E8E] mt-4 text-lg font-medium">
+          <p className="text-[#8E8E8E] text-lg font-medium">
             Last Updated: {new Date("2025-08-01").toLocaleDateString("en-GB")}
           </p>
         </div>

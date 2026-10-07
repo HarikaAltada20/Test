@@ -572,8 +572,12 @@ export default function CreatorsClient({
   };
 
   const handleViewMoreClick = () => {
+    if (userType === "advertiser") {
+      setShowAdvertiserModal(true);
+      return;
+    }
     setIsNavigatingViewMore(true);
-    router.push(getViewMoreLink());
+    router.push("/dashboard/opportunities");
   };
 
   // Get pathname for route change detection
@@ -665,7 +669,7 @@ export default function CreatorsClient({
           .single();
 
         if (userData?.user_type === "advertiser") {
-          router.push("/dashboard/contests");
+          setShowAdvertiserModal(true);
         } else {
           router.push("/dashboard/opportunities");
         }
@@ -1366,13 +1370,13 @@ export default function CreatorsClient({
             "scroll-mt-24 py-12 sm:py-16 md:py-20 transition-colors duration-300",
             isLight ? "text-black" : "text-white",
           )}
-          ref={animationRef}
+          // ref={animationRef}
         >
           <div className="mx-auto max-w-[1200px] px-4 md:px-8 xl:px-4">
             <h2
               className={cn(
                 "mb-8 sm:mb-10 text-[28px] sm:text-[42px] md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
-                isAnimated ? "slide-up" : "hide-before-animate",
+                // isAnimated ? "slide-up" : "hide-before-animate",
                 isLight ? "text-black" : "text-[#EFEFEF]",
               )}
             >
@@ -1594,13 +1598,13 @@ export default function CreatorsClient({
             "scroll-mt-24 px-4 py-12 sm:py-16 md:py-20 transition-colors duration-300",
             isLight ? "text-black" : "text-white",
           )}
-          ref={howItWorksRef}
+          // ref={howItWorksRef}
         >
           <div className="container mx-auto max-w-[1150px]">
             <h2
               className={cn(
                 "mb-8 sm:mb-10 text-[28px] sm:text-[42px] md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
-                isAnimated ? "slide-up" : "hide-before-animate",
+                // isAnimated ? "slide-up" : "hide-before-animate",
                 isLight ? "text-black" : "text-[#EFEFEF]",
               )}
             >
@@ -2054,49 +2058,34 @@ export default function CreatorsClient({
         <Dialog
           open={showAdvertiserModal}
           onOpenChange={setShowAdvertiserModal}
+            
         >
-          <DialogContent className="bg-[#050816] border border-orange-500/30 text-white rounded-2xl shadow-2xl shadow-orange-900/40 sm:max-w-xl p-8">
+          <DialogContent className="bg-[#0A0A0A] border border-white/10 text-white rounded-xl shadow-2xl sm:max-w-xl p-8">
             <DialogHeader>
-              {/* <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-r from-orange-500/30 to-amber-500/30 border border-orange-400/30">
-                <Sparkles className="h-6 w-6 text-orange-300" />
-              </div> */}
-              <DialogTitle className="text-xl mb-2 lg:text-2xl leading-tight">
-                <span
-                  className="font-semibold text-white drop-shadow-2xl"
-                  style={{ fontFamily: "Montserrat, sans-serif" }}
-                >
-                  You are logged in as{" "}
-                </span>
-                <span
-                  className="font-semibold text-white drop-shadow-2xl"
-                  style={{ fontFamily: "Montserrat, sans-serif" }}
-                >
-                  <span className="relative">
-                    <span
-                      className="bg-clip-text text-transparent"
-                      style={{
-                        backgroundImage:
-                          "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
-                      }}
-                    >
-                      a brand
-                    </span>
-                    <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl "></div>
+              <DialogTitle className="text-xl bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent mb-1 lg:text-[22px] leading-tight font-semibold flex flex-wrap gap-1.5 font-['Inter']">
+                <span >You are logged in as</span>
+                <span className="relative">
+                  <span
+                    className="bg-clip-text text-transparent"
+                    // style={{
+                    //   backgroundImage:
+                    //     "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
+                    // }}
+                  >
+                    a brand
                   </span>
                 </span>
               </DialogTitle>
-              {/* <DialogTitle className="text-2xl font-bold text-white">
-                You are logged in as a brand
-              </DialogTitle> */}
-              <DialogDescription className="text-base text-slate-300 leading-relaxed">
+              <DialogDescription className="text-[15px] text-[#A1A1AA] leading-relaxed pt-2 font-['Inter']">
                 To continue as a creator, please sign out from your brand
                 account first, then log in or sign up as a creator account.
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter className="mt-4 flex-col gap-4 sm:flex-row sm:justify-center">
+            <DialogFooter className="mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4 sm:justify-start">
               <Button
                 variant="outline"
-                className="inline-flex w-full items-center justify-center gap-2 border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5 sm:w-auto"
+                className="inline-flex bg-white w-full sm:w-auto items-center justify-center gap-2 border-[1.5px] border-white/80 text-[15px] font-medium text-black px-5 py-5 rounded-lg transition-colors"
+                
                 onClick={handleContinueAsAdvertiser}
                 disabled={isSigningOut || isNavigating}
               >
@@ -2104,7 +2093,7 @@ export default function CreatorsClient({
                 <span>Continue as Brand</span>
               </Button>
               <Button
-                className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-[#DD7209] to-[#FF652D] text-md text-white hover:from-[#DD7209]/90 hover:to-[#FF652D]/90 px-6 py-5 sm:w-auto"
+                className="inline-flex w-full sm:w-auto items-center justify-center gap-2 border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]  text-[15px] font-medium text-white px-5 py-5 rounded-lg transition-colors shadow-md"
                 onClick={handleSignOutAndContinueCreator}
                 disabled={isSigningOut || isNavigating}
               >

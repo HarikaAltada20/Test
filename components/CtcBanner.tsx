@@ -90,6 +90,7 @@ export default function CtcBanner() {
     pathname === "/pricing" ||
     pathname === "/about" ||
     pathname === "/about-us" ||
+    pathname === "/reviews" ||
     pathname?.startsWith("/blog");
   const isCreators = pathname === "/creators";
   const isHome = pathname === "/";
@@ -382,10 +383,7 @@ export default function CtcBanner() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => {
-                      setIsNavigating(true);
-                      router.push("/dashboard/opportunities");
-                    }}
+                    onClick={handleMainCtaClick}
                     disabled={isNavigating || isCheckingAccount}
                    className={cn(
                       "inline-flex items-center gap-2 rounded-xl px-6 py-3 text-[15px] font-medium transition-colors disabled:opacity-70",
@@ -420,29 +418,29 @@ export default function CtcBanner() {
       )}
 
       <Dialog open={showAdvertiserModal} onOpenChange={setShowAdvertiserModal}>
-        <DialogContent className="bg-[#050816] border border-orange-500/30 text-white rounded-2xl shadow-2xl shadow-orange-900/40 sm:max-w-xl p-8">
+        <DialogContent className="bg-[#0A0A0A] border border-white/10  text-white rounded-2xl shadow-2xl sm:max-w-xl p-8">
           <DialogHeader>
           <DialogTitle
-              className="text-xl mb-2 lg:text-2xl leading-tight"
+              className="text-xl mb-2 lg:text-2xl leading-tight bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent"
 
             >
               <span
-                className="font-semibold text-white drop-shadow-2xl"
+                className="font-semibold"
                 style={{ fontFamily: "Montserrat, sans-serif" }}
               >
                  You are logged in as {" "}
               </span>
               <span
-                className="font-semibold text-white drop-shadow-2xl"
+                className="font-semibold"
                 style={{ fontFamily: "Montserrat, sans-serif" }}
               >
                 <span className="relative">
                   <span
-                    className="bg-clip-text text-transparent"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
-                    }}
+                    // className="bg-clip-text text-transparent"
+                    // style={{
+                    //   backgroundImage:
+                    //     "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
+                    // }}
                   >
                     a brand
                   </span>
@@ -450,14 +448,14 @@ export default function CtcBanner() {
                 </span>
               </span>
             </DialogTitle>
-            <DialogDescription className="text-base md:text-lg text-slate-300 leading-relaxed">
+            <DialogDescription className="text-base md:text-lg text-slate-400 leading-relaxed">
               To continue as a creator, please sign out from your brand account first, then log in or sign up as a creator account.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-2 flex-col gap-2 sm:flex-row sm:justify-center">
             <Button
               variant="outline"
-              className="inline-flex w-full items-center justify-center gap-2 border-slate-600 bg-transparent text-[15px] text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5 sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 text-black text-[15px] border border-white bg-white py-5 sm:w-auto"
               onClick={handleContinueAsAdvertiser}
               disabled={isSigningOut}
             >
@@ -465,7 +463,7 @@ export default function CtcBanner() {
               <span>Continue as Brand</span>
             </Button>
             <Button
-              className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-[#DD7209] to-[#FF652D] text-[15px] text-white hover:from-[#DD7209]/90 hover:to-[#FF652D]/90 px-6 py-5 sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 border border-white/20 text-white bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-[15px] px-6 py-5 sm:w-auto"
               onClick={handleSignOutAndContinueCreator}
               disabled={isSigningOut}
             >
@@ -477,22 +475,22 @@ export default function CtcBanner() {
       </Dialog>
 
       <Dialog open={showCreatorModal} onOpenChange={setShowCreatorModal}>
-        <DialogContent className="bg-[#050816] border border-violet-500/30 text-white rounded-2xl shadow-2xl shadow-violet-900/40 sm:max-w-xl p-8">
+        <DialogContent className="bg-[#0A0A0A] border border-white/10 text-white rounded-2xl sm:max-w-xl p-8">
           <DialogHeader>
           <DialogTitle
-              className="text-xl mb-4 lg:text-2xl leading-tight"
+              className="text-xl mb-4 lg:text-2xl leading-tight bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent"
   
              
             >
               <span
-                className="font-semibold text-white drop-shadow-2xl"
+                className="font-semibold "
                 style={{ fontFamily: "Montserrat, sans-serif" }}
               >
                 You are logged in as {" "}
               </span>
 
               <span
-                className="font-semibold text-white drop-shadow-2xl"
+                className="font-semibold "
                 style={{ fontFamily: "Montserrat, sans-serif" }}
               >
                 <span className="relative">
@@ -512,14 +510,14 @@ export default function CtcBanner() {
                 </span>
               </span>
             </DialogTitle>
-            <DialogDescription className="text-base md:text-lg text-slate-300 leading-relaxed">
+            <DialogDescription className="text-base md:text-lg text-slate-400 leading-relaxed">
               To continue as a brand, please sign out from your creator account first, then log in or sign up as a brand account.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-2 flex-col gap-4 sm:flex-row sm:justify-center">
             <Button
               variant="outline"
-              className="inline-flex w-full items-center justify-center gap-2 border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5 sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 text-base text-md bg-white border border-white text-black px-6 py-5 sm:w-auto"
               onClick={handleContinueAsCreator}
               disabled={isSigningOut}
             >
@@ -527,7 +525,7 @@ export default function CtcBanner() {
               <span>Continue as Creator</span>
             </Button>
             <Button
-              className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-[#4C238B] to-[#7F39EC] text-base text-md text-white hover:from-[#4C238B]/90 hover:to-[#7F39EC]/90 px-6 py-5 sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2  text-base text-md border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] px-6 py-5 sm:w-auto"
               onClick={handleSignOutAndContinueBrand}
               disabled={isSigningOut}
             >

@@ -471,19 +471,19 @@ export default function PricingClient() {
 
             {/* Massive Gaming Title */}
             <h1
-              className="bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent text-3xl sm:text-3xl md:text-4xl lg:text-[52px] flex flex-wrap justify-center gap-x-2 gap-y-1 mb-6 leading-tight text-center slide-up "
+              className="bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent text-3xl sm:text-3xl md:text-4xl lg:text-[52px] flex flex-wrap justify-center gap-x-2 gap-y-1 pb-6 pt-2 leading-tight text-center "
               // style={{ animationDelay: "1s" }}
             >
               <span
-                className="font-semibold text-white drop-shadow-2xl"
-                style={{ fontFamily: "Montserrat, sans-serif" }}
+                className="font-semibold "
+                // style={{ fontFamily: "Montserrat, sans-serif" }}
               >
                 Creator Account
               </span>
 
               <span
-                className="font-semibold text-white drop-shadow-2xl"
-                style={{ fontFamily: "Montserrat, sans-serif" }}
+                className="font-semibold "
+                // style={{ fontFamily: "Montserrat, sans-serif" }}
               >
                 <span className="relative">
                   <span
@@ -499,8 +499,8 @@ export default function PricingClient() {
 
             {/* Strategic Subtitle */}
             <p
-              className="text-lg md:text-2xl text-slate-400 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
-              style={{ animationDelay: "2s" }}
+              className="text-lg md:text-2xl text-[#8E8E8E] max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg"
+              // style={{ animationDelay: "2s" }}
             >
               This pricing page is designed for brands and advertisers who want
               to launch creator contests.
@@ -521,7 +521,10 @@ export default function PricingClient() {
         </Alert>
 
         <div className="max-w-[1250px] py-6 sm:py-8 md:py-10 lg:py-12 px-4 sm:px-6 lg:px-8 mx-auto grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 md:gap-8 mb-6 sm:mb-8">
-          <Card className="bg-[linear-gradient(135deg,rgba(255,255,255,0.05)_0%,rgba(0,0,0,0.8)_100%)] rounded-xl sm:rounded-2xl text-white hover:shadow-lg hover:scale-[1.02] md:hover:scale-105 transition border border-white/10 hover:border-white/20 cursor-pointer">
+          <Card className="bg-[#171717] rounded-xl sm:rounded-2xl text-white hover:shadow-lg hover:scale-[1.02] md:hover:scale-105 transition border border-white/10 hover:border-white/20 cursor-pointer"
+           style={{
+                boxShadow: '8px 8px 50px black, 4px 12px 4px rgba(0, 0, 0, 0.20), inset 0px 0px 4px rgba(255, 255, 255, 0.25)'
+              }}>
             <CardHeader className="mb-2 px-4 sm:px-6 pt-4 sm:pt-6">
               <CardTitle className="flex items-center gap-2 sm:gap-3 text-base sm:text-lg md:text-xl">
                 <div className="rounded-full p-1.5 sm:p-2 border border-white/20 bg-white/10 flex items-center justify-center flex-shrink-0">
@@ -554,7 +557,10 @@ export default function PricingClient() {
             </CardContent>
           </Card>
 
-          <Card className="bg-[linear-gradient(135deg,rgba(255,255,255,0.05)_0%,rgba(0,0,0,0.8)_100%)] rounded-xl sm:rounded-2xl text-white border border-white/10 hover:shadow-lg hover:scale-[1.02] md:hover:scale-105 transition hover:border-white/20 cursor-pointer">
+          <Card className="bg-[#171717] rounded-xl sm:rounded-2xl text-white border border-white/10 hover:shadow-lg hover:scale-[1.02] md:hover:scale-105 transition hover:border-white/20 cursor-pointer"
+          style={{
+                boxShadow: '8px 8px 50px black, 4px 12px 4px rgba(0, 0, 0, 0.20), inset 0px 0px 4px rgba(255, 255, 255, 0.25)'
+              }}>
             <CardHeader className="mb-2 px-4 sm:px-6 pt-4 sm:pt-6">
               <CardTitle className="flex items-center gap-2 sm:gap-3 text-base sm:text-lg md:text-xl">
                 <div className="rounded-full p-1.5 sm:p-2 border border-white/20 bg-white/10 flex items-center justify-center flex-shrink-0">

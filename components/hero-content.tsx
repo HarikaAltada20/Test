@@ -739,15 +739,16 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
       {/* FLOATING BUDGET CARD - SHOWN IN STEP 2 ONLY */}
       {step === 2 ? (
-        <div
-          ref={budgetRef}
-          className={cn(
-            "absolute top-[360px] left-[80px] sm:left-[150px] md:left-[200px] -translate-x-1/2 z-40 w-[160px] sm:w-[190px] rounded-[12px] sm:rounded-[14px] border p-3.5 animate-form-dropdown-in shadow-2xl ",
-            isLight
-              ? "border-[#0000000D] bg-[#ECECEC] text-black shadow-[0_10px_28px_rgba(20,16,40,0.08)]"
-              : "border-white/[0.12] bg-[#1b1b1b] text-white shadow-[0_15px_35px_rgba(0,0,0,.45)]",
-          )}
-        >
+        <div className="absolute top-[360px] left-1/2 -translate-x-1/2 z-40">
+          <div
+            ref={budgetRef}
+            className={cn(
+              "w-[160px] sm:w-[190px] rounded-[12px] sm:rounded-[14px] border p-3.5 animate-form-dropdown-in shadow-2xl ",
+              isLight
+                ? "border-[#0000000D] bg-[#ECECEC] text-black shadow-[0_10px_28px_rgba(20,16,40,0.08)]"
+                : "border-white/[0.12] bg-[#1b1b1b] text-white shadow-[0_15px_35px_rgba(0,0,0,.45)]",
+            )}
+          >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 sm:gap-2 text-[12px] sm:text-[14px] font-medium">
               <Image
@@ -784,6 +785,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
             ) : null}
           </div>
         </div>
+      </div>
       ) : null}
 
       {/* Animated cursor arrow — clicks fields, drags thumbnail from 2nd card, then Launch */}

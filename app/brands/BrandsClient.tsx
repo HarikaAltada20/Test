@@ -3469,23 +3469,23 @@ export default function BrandsClient({
         <CtcBanner />
 
         <Dialog open={showCreatorModal} onOpenChange={setShowCreatorModal}>
-          <DialogContent className="bg-[#050816] border border-violet-500/30 text-white rounded-2xl shadow-2xl shadow-violet-900/40 sm:max-w-xl p-8">
+          <DialogContent className="bg-[#0A0A0A] rounded-2xl shadow-2xl sm:max-w-xl p-8">
             <DialogHeader>
-              <DialogTitle className="text-xl mb-4 lg:text-2xl leading-tight font-semibold">
+              <DialogTitle className="text-xl mb-4 lg:text-2xl leading-tight font-semibold bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent ">
                 You&apos;re logged in as{" "}
                 <span
-                  style={{
-                    background:
-                      "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    backgroundClip: "text",
-                  }}
+                  // style={{
+                  //   background:
+                  //     "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
+                  //   WebkitBackgroundClip: "text",
+                  //   WebkitTextFillColor: "transparent",
+                  //   backgroundClip: "text",
+                  // }}
                 >
                   a creator
                 </span>
               </DialogTitle>
-              <DialogDescription className="text-base text-slate-300 leading-relaxed">
+              <DialogDescription className="text-base text-slate-400 leading-relaxed">
                 To continue as a brand, please sign out from your creator
                 account first, then sign up or log in as a brand.
               </DialogDescription>
@@ -3493,7 +3493,7 @@ export default function BrandsClient({
             <DialogFooter className="mt-4 flex-col gap-3 sm:flex-row sm:justify-center">
               <Button
                 variant="outline"
-                className="inline-flex w-full items-center justify-center gap-2 border-slate-600 bg-transparent text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5 sm:w-auto"
+                className="inline-flex w-full items-center justify-center gap-2 border-white bg-white text-black px-6 py-5 sm:w-auto"
                 onClick={handleContinueAsCreator}
                 disabled={isSigningOut || isLaunchingCampaign}
               >
@@ -3501,7 +3501,7 @@ export default function BrandsClient({
                 <span>Continue as Creator</span>
               </Button>
               <Button
-                className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-[#4C238B] to-[#7F39EC] text-white hover:from-[#5a2ba3] hover:to-[#8f45f5] px-6 py-5 sm:w-auto"
+                className="inline-flex w-full items-center justify-center gap-2 text-white border border-white/20  bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]  px-6 py-5 sm:w-auto"
                 onClick={handleSignOutAndContinueBrand}
                 disabled={isSigningOut || isLaunchingCampaign}
               >

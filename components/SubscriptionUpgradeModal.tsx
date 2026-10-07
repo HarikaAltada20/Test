@@ -410,7 +410,7 @@ export function SubscriptionUpgradeModal({
                   <Alert
                     className={`ml-2 ${
                       pathname === "/pricing" || isDark
-                        ? "bg-[#B16FF43D] border text-white"
+                        ? "border-gray-700 border text-white"
                         : "bg-white text-black border border-gray-200"
                     }`}
                   >
@@ -477,7 +477,7 @@ export function SubscriptionUpgradeModal({
                   <Alert
                     className={`ml-2 ${
                       pathname === "/pricing" || isDark
-                        ? "bg-[#B16FF43D] text-white"
+                        ? "border border-gray-700 text-white"
                         : "bg-white text-black border border-gray-200"
                     }`}
                   >
