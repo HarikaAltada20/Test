@@ -1771,6 +1771,5 @@
   "utils/supabase/middleware.ts": "c78bec1bec0d982e12fc856512f81b7182dc6b1e3b1e7660dfd8b05d64ef17da",
   "utils/supabase/public-server.ts": "94972edded8329a204bce89eb5079a7bad83ee5824cc90f97720fdbbf9afbad6",
   "utils/supabase/server.ts": "713ebf74caed195b781e89010b64198818af4a6ec14cfdae42ecaed4c2eacb06",
-  "vercel copy.txt": "b6bd52da409add7cc94e0edd515e5f9706c18ef35cdbf8953d2b7d7ff51367d7",
-  "vercel.json": "19ac0d080a4fa4b8a29213107e977a54dae944bff9d07e9e8112089abc2fe475"
+  "vercel copy.txt": "b6bd52da409add7cc94e0edd515e5f9706c18ef35cdbf8953d2b7d7ff51367d7"
 }

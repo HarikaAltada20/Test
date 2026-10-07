@@ -7,6 +7,9 @@ const read=f=>readFileSync(f,'utf8'),hash=f=>createHash('sha256').update(readFil
 const exceptions=JSON.parse(read('verification/original-upload-exceptions.json'));for(const [file,sha]of Object.entries(exceptions))if(existsSync(file))assert.equal(hash(file),sha);
 const originals=JSON.parse(read('verification/original-files.json'));
 for(const [file,sha] of Object.entries(originals))assert.equal(hash(file),sha,'Original product source changed: '+file);
+const originalConfig=JSON.parse(read('verification/original-sources/vercel.json.txt')),runtimeConfig=JSON.parse(read('vercel.json'));
+if(JSON.stringify(runtimeConfig)!==JSON.stringify(originalConfig))console.log('Provider build config comparison: '+JSON.stringify({originalKeys:Object.keys(originalConfig),runtimeKeys:Object.keys(runtimeConfig),sameOriginalCrons:JSON.stringify(runtimeConfig.crons)===JSON.stringify(originalConfig.crons)}));
+assert.deepEqual(runtimeConfig,originalConfig,'Original provider configuration changed');
 const original=f=>read('verification/original-sources/'+f+'.txt');
 const stripMetadata=s=>s.replace(/^import \{ publicPageMetadata(?:, SEO_ORIGIN)? \} from "@\/lib\/seo\/metadata";\n/m,'').replace(/export const metadata: Metadata = (?:\{[\s\S]*?\n\}|publicPageMetadata\([^;]+\));/,'OWNED_METADATA');
 for(const f of ['app/layout.tsx','app/page.tsx','app/brands/page.tsx','app/creators/page.tsx','app/pricing/page.tsx','app/get-started/page.tsx','app/get-started/apply/page.tsx'])assert.equal(stripMetadata(read(f)),stripMetadata(original(f)),'Original render/auth/forms changed: '+f);
