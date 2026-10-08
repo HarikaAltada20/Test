@@ -2337,7 +2337,7 @@ export default function BrandsClient({
                 </div>
 
                 {/* Pinched purple curve */}
-                <div className="pointer-events-none absolute inset-x-0 top-[5px] min-[520px]:top-[-22px] min-[700px]:top-[10px] md:top-[0px] z-[4] flex items-center justify-center">
+                <div className="pointer-events-none absolute inset-x-0 top-[25px] min-[480px]:top-[-28px] min-[700px]:top-[20px] md:top-[0px] z-[4] flex items-center justify-center">
                   <img
                     src="/images/Vector 958.png"
                     alt=""
