@@ -351,7 +351,7 @@ export default function AboutPage() {
                     Set up your campaign
                   </h2>
 
-                  <p className="text-md leading-[1.45] text-[#a8a8a8]">
+                  <p className="text-[15px] leading-[1.45] text-[#a8a8a8]">
                     Define your brief, content requirements, rules, platforms
                     and budget to tailor your campaign strategy.
                   </p>
@@ -390,7 +390,7 @@ export default function AboutPage() {
                 {/* Center creator image */}
                 <div className="absolute inset-x-0 bottom-0 top-2">
                   <Image
-                    src="/images/Mask group (1).png"
+                    src="/images/Mask group.png"
                     alt="Creator publishing a reel"
                     fill
                     className="object-contain object-top"
@@ -426,7 +426,7 @@ export default function AboutPage() {
                     Creators discover & publish
                   </h3>
 
-                  <p className="text-base leading-6 text-gray-400">
+                  <p className="text-[15px] leading-[1.5] text-[#8E8E8E]">
                     Creators create content based on your brief, gets reviewed and goes live after your approval
                   </p>
                 </div>
@@ -527,7 +527,7 @@ export default function AboutPage() {
                     Verified results. Rewards paid.
                   </h3>
 
-                  <p className="text-base leading-6 text-gray-400">
+                  <p className="text-[15px] leading-[1.5] text-[#8E8E8E]">
                     We track performance so creators get paid on results and you
                     see where your budget went.
                   </p>

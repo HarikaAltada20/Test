@@ -1,5 +1,5 @@
 "use client";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, ArrowRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
@@ -280,7 +280,7 @@ export default function CtcBanner() {
                   )}
                 >
                   {isNavigating ? <ButtonLoadingSpinner /> : null}
-                  For Brands →
+                  For Brands <ArrowRight className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
@@ -297,7 +297,7 @@ export default function CtcBanner() {
                   )}
                 >
                   {isNavigating ? <ButtonLoadingSpinner /> : null}
-                  For Creators →
+                  For Creators <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -378,7 +378,7 @@ export default function CtcBanner() {
                     {isNavigating || isCheckingAccount ? (
                       <ButtonLoadingSpinner />
                     ) : null}
-                    Launch a Campaign →
+                    Launch a Campaign <ArrowRight className="h-4 w-4" />
                   </button>
                 ) : (
                   <button
@@ -395,7 +395,7 @@ export default function CtcBanner() {
                     {isNavigating || isCheckingAccount ? (
                       <ButtonLoadingSpinner />
                     ) : null}
-                    Browse Campaigns →
+                    Browse Campaigns <ArrowRight className="h-4 w-4" />
                   </button>
                 )}
                 <a
@@ -409,7 +409,7 @@ export default function CtcBanner() {
                       : "bg-[#F0E6F6] text-black",
                   )}
                 >
-                  Talk to team →
+                  Talk to team <ArrowRight className="h-4 w-4" />
                 </a>
               </div>
             </div>

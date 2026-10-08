@@ -1548,7 +1548,7 @@ export default function HeroContent() {
                         : "bg-[#351149] text-[#c239f5]",
                     )}
                   >
-                    →
+                    <ArrowRight className="h-4 w-4" />
                   </div>
                 </div>
               </div>
@@ -1796,7 +1796,7 @@ export default function HeroContent() {
                       : "bg-[#351149] text-[#c239f5]",
                   )}
                 >
-                  →
+                 <ArrowRight className="h-5 w-5"/>
                 </div>
               </div>
             </div>

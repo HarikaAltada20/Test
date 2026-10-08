@@ -2,9 +2,17 @@
 import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
+import { PerformanceOverviewCard } from "@/components/analytics/PerformanceOverviewCard";
+import { BudgetDistributionCard } from "@/components/analytics/BudgetDistributionCard";
 import { gsap } from "gsap";
+import { Caveat } from "next/font/google";
 import { Button } from "@/components/ui/button";
+
+const caveat = Caveat({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
 import Link from "next/link";
 import {
   ArrowRight,
@@ -403,6 +411,46 @@ export default function BrandsClient({
   const lastStepTimeRef = useRef<number>(0);
 
   const revealImgRef = useRef<HTMLImageElement | null>(null);
+
+  const stickyControlSectionRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress: approvalScrollProgress } = useScroll({
+    target: stickyControlSectionRef,
+    offset: ["start start", "end end"],
+  });
+
+  const [manualApprovalCard, setManualApprovalCard] = useState<number | null>(null);
+  const [scrollApprovalActiveIndex, setScrollApprovalActiveIndex] = useState(0);
+
+  useEffect(() => {
+    return approvalScrollProgress.on("change", (latest) => {
+      if (latest >= 0.65) {
+        setScrollApprovalActiveIndex(2);
+      } else if (latest >= 0.33) {
+        setScrollApprovalActiveIndex(1);
+      } else {
+        setScrollApprovalActiveIndex(0);
+      }
+    });
+  }, [approvalScrollProgress]);
+
+  const activeApprovalCardIndex =
+    manualApprovalCard !== null ? manualApprovalCard : scrollApprovalActiveIndex;
+
+  const card1Opacity = useTransform(approvalScrollProgress, [0, 0.31, 0.33], [1, 1, 0]);
+  const card1Y = useTransform(approvalScrollProgress, [0, 0.31, 0.33], [0, 0, -30]);
+  const card1Scale = useTransform(approvalScrollProgress, [0, 0.31, 0.33], [1, 1, 0.95]);
+
+  const card2Opacity = useTransform(approvalScrollProgress, [0.33, 0.35, 0.64, 0.66], [0, 1, 1, 0]);
+  const card2Y = useTransform(approvalScrollProgress, [0.33, 0.35, 0.64, 0.66], [30, 0, 0, -30]);
+  const card2Scale = useTransform(approvalScrollProgress, [0.33, 0.35, 0.64, 0.66], [0.95, 1, 1, 0.95]);
+
+  const card3Opacity = useTransform(approvalScrollProgress, [0.66, 0.68, 1], [0, 1, 1]);
+  const card3Y = useTransform(approvalScrollProgress, [0.66, 0.68, 1], [30, 0, 0]);
+  const card3Scale = useTransform(approvalScrollProgress, [0.66, 0.68, 1], [0.95, 1, 1]);
+
+  const text1Opacity = useTransform(approvalScrollProgress, [0, 0.31, 0.33], [1, 1, 0]);
+  const text2Opacity = useTransform(approvalScrollProgress, [0.33, 0.35, 0.64, 0.66], [0, 1, 1, 0]);
+  const text3Opacity = useTransform(approvalScrollProgress, [0.66, 0.68, 1], [0, 1, 1]);
 
   // Window scroll listener driving the sticky "The Old way of promoting your brand" step animation
   useEffect(() => {
@@ -843,7 +891,7 @@ export default function BrandsClient({
                 <div className="relative z-10 flex min-h-[340px] flex-col justify-center px-6 py-12 sm:min-h-[440px] md:min-h-[480px] sm:px-12 sm:py-16 md:px-14">
                   <h2
                     className={cn(
-                      "max-w-[510px] text-[22px] font-bold leading-[1.15] tracking-[-0.8px] sm:text-[28px] sm:tracking-[-1px] md:text-[31px]",
+                      "max-w-[510px] text-[22px] font-bold leading-[1.25] tracking-[-0.8px] sm:text-[28px] sm:tracking-[-1px] md:text-[31px]",
                       isLight ? "text-black" : "text-white",
                     )}
                   >
@@ -854,7 +902,7 @@ export default function BrandsClient({
 
                   <p
                     className={cn(
-                      "mt-4 max-w-[390px] text-[13px] leading-6 sm:text-[14px]",
+                      "mt-4 max-w-[390px] text-[13px] leading-6 sm:text-[16px]",
                       isLight ? "text-black/50" : "text-white/45",
                     )}
                   >
@@ -1601,7 +1649,7 @@ export default function BrandsClient({
 
                   <p
                     className={cn(
-                      "text-md leading-[1.45]",
+                      "text-[15px] leading-[1.45]",
                       isLight ? "text-black/50" : "text-[#a8a8a8]",
                     )}
                   >
@@ -1668,7 +1716,7 @@ export default function BrandsClient({
                     src={
                       isLight
                         ? "/images/5ea833a17e931da84955c160c3b7bcff595137d2.png"
-                        : "/images/Mask group (1).png"
+                        : "/images/Mask group.png"
                     }
                     alt="Creator publishing a reel"
                     fill
@@ -1726,8 +1774,8 @@ export default function BrandsClient({
 
                   <p
                     className={cn(
-                      "text-base leading-6",
-                      isLight ? "text-black/50" : "text-gray-400",
+                      "text-[15px] leading-[1.5]",
+                      isLight ? "text-black/50" : "text-[#8E8E8E]",
                     )}
                   >
                     {isLight
@@ -1895,8 +1943,8 @@ export default function BrandsClient({
 
                   <p
                     className={cn(
-                      "text-base leading-6",
-                      isLight ? "text-black/50" : "text-gray-400",
+                      "text-[15px] leading-[1.5]",
+                      isLight ? "text-black/50" : "text-[#8E8E8E]",
                     )}
                   >
                     We track performance so creators get paid on results and you
@@ -1909,219 +1957,397 @@ export default function BrandsClient({
         </section>
 
         <section
+          ref={stickyControlSectionRef}
           className={cn(
-            "relative overflow-hidden px-4 py-16 sm:py-20 md:py-24 transition-colors duration-300",
+            "relative min-h-[220vh] transition-colors duration-300",
             isLight ? "bg-[#F1F1F1]" : "bg-[#030307]",
           )}
         >
-          {/* Purple background glow — dark mode only */}
-          {!isLight ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 top-1/2 opacity-70 mix-blend-screen">
-              <Image
-                src="/images/eda9d4af3a5188c592e888012bb7b9e177b3c04d.png"
-                alt=""
-                fill
-                className="scale-y-[-1] object-fill"
-              />
-            </div>
-          ) : null}
-
-          {/* Annotation */}
-          <div className="relative z-10 mx-auto mb-10 flex max-w-[900px] justify-center px-2 sm:mb-16 sm:justify-end sm:px-6 md:mb-24">
-            <div className="relative mr-0 text-center sm:mr-4 sm:text-left">
-              <p
-                className={cn(
-                  "font-[cursive] text-lg italic sm:text-xl md:text-2xl",
-                  isLight ? "text-[#535353]" : "text-white/75",
-                )}
-              >
-                Get full control to approve a reel before making live
-              </p>
-
-              {/* Curved arrow */}
-              <svg
-                className={cn(
-                  "absolute -bottom-16 left-1/2 hidden h-20 w-20 -translate-x-1/2 sm:-bottom-20 sm:left-24 sm:block sm:h-24 sm:w-24 sm:translate-x-0",
-                  isLight ? "text-black/35" : "text-white/70",
-                )}
-                viewBox="0 0 100 100"
-                fill="none"
-              >
-                <path
-                  d="M15 80 C30 45, 65 40, 55 15"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M51 18 L55 12 L58 20"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle
-                  cx="54"
-                  cy="50"
-                  r="5"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                />
-              </svg>
-            </div>
-          </div>
-
-          {/* Main glass container — outer shell for half-merged card */}
-          <div
-            className={cn(
-              "relative z-10 mx-auto flex min-h-[380px] w-full max-w-[730px] items-start justify-center overflow-hidden rounded-[16px] px-3 pt-5 pb-6 sm:h-[400px] sm:min-h-0 sm:pb-0 sm:w-[90%] sm:rounded-[18px] sm:px-4 sm:pt-10 md:h-[430px] md:pt-12",
-              isLight
-                ? "border border-[#0000001A] bg-white"
-                : "border border-white/15 bg-[#121212] shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40]",
-            )}
-          >
-            {/* Dark overlay — dark mode only */}
-            {!isLight ? <div className="absolute inset-0 bg-black/30" /> : null}
-
-            {/* Top-left haze */}
+          <div className="sticky top-0 flex h-screen flex-col justify-center overflow-hidden px-4 py-8 sm:px-6">
+            {/* Purple background glow — dark mode only */}
             {!isLight ? (
-              <div className="pointer-events-none absolute -left-24 -top-24 h-80 w-80 rounded-full bg-[#D9D9D9]/25 blur-[120px]" />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 top-1/2 opacity-70 mix-blend-screen">
+                <Image
+                  src="/images/eda9d4af3a5188c592e888012bb7b9e177b3c04d.png"
+                  alt=""
+                  fill
+                  className="scale-y-[-1] object-fill"
+                />
+              </div>
             ) : null}
 
-            {/* Submission card — sits inside outer shell and is clipped at the bottom */}
-            <div
-              className={cn(
-                "relative z-10 w-full max-w-[485px] rounded-[16px] px-3.5 py-4 sm:rounded-[18px] sm:px-9 sm:py-9",
-                isLight
-                  ? "bg-[#F8F8F8] shadow-[0_10.18px_20.36px_0_#6C6C6C1A] border border-[#0000000D]"
-                  : "border border-[#353535] bg-[#171717] shadow-[8px_8px_50px_0px_#00000080] sm:shadow-[4px_12px_4px_0px_#0000001A]",
-              )}
-            >
-              {/* Header */}
-              <div className="mb-4 flex items-start justify-between gap-3 sm:mb-7">
-                <div className="min-w-0">
-                  <h2
-                    className={cn(
-                      "text-base font-medium sm:text-xl",
-                      isLight ? "text-black" : "text-[#d8d8df]",
-                    )}
-                  >
-                    Creator Submissions
-                  </h2>
-
+            {/* Annotation Container with Motion Text */}
+            <div className="relative z-10 mx-auto mb-4 mt-20 flex h-14 w-full max-w-[900px] items-center justify-center px-2 sm:px-6">
+              <div className="relative w-full text-center">
+                <motion.div
+                  style={{ opacity: text1Opacity, display: activeApprovalCardIndex === 0 ? "block" : "none" }}
+                  className="relative"
+                >
                   <p
                     className={cn(
-                      "mt-0.5 text-[11px] sm:text-sm",
-                      isLight ? "text-black/45" : "text-[#92929a]",
+                      caveat.className,
+                      "text-2xl sm:text-3xl md:text-4xl",
+                      isLight ? "text-[#535353]" : "text-white/85"
                     )}
                   >
-                    Payment are done after brand approves
+                    Get full control to approve a reel before making live
                   </p>
-                </div>
 
-                <p
-                  className={cn(
-                    "shrink-0 pt-0.5 text-base font-medium sm:text-xl",
-                    isLight ? "text-black" : "text-[#d8d8df]",
-                  )}
-                >
-                  $2,000
-                </p>
-              </div>
-
-              {/* Submission list */}
-              <div>
-                {submissions.map((submission, index) => (
-                  <div
-                    key={submission.name}
+                  {/* Curved arrow */}
+                  <svg
                     className={cn(
-                      "flex items-center justify-between gap-2.5 py-2.5 sm:py-4",
-                      index !== submissions.length - 1 &&
-                        (isLight
-                          ? "border-b border-black/[0.06]"
-                          : "border-b border-white/[0.04]"),
+                      "absolute -bottom-28 left-1/2 hidden h-24 w-24 -translate-x-1/2 sm:block",
+                      isLight ? "text-black/35" : "text-white/70"
+                    )}
+                    viewBox="0 0 100 100"
+                    fill="none"
+                  >
+                    <path
+                      d="M15 80 C30 45, 65 40, 55 15"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M51 18 L55 12 L58 20"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle
+                      cx="54"
+                      cy="50"
+                      r="5"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    />
+                  </svg>
+                </motion.div>
+
+                <motion.div
+                  style={{ opacity: text2Opacity, display: activeApprovalCardIndex === 1 ? "block" : "none" }}
+                  className="relative"
+                >
+                  <p
+                    className={cn(
+                      caveat.className,
+                      "text-2xl sm:text-3xl md:text-4xl",
+                      isLight ? "text-[#535353]" : "text-white/85"
                     )}
                   >
-                    <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-                      <div
-                        className={cn(
-                          "h-8 w-8 shrink-0 overflow-hidden rounded-full sm:h-11 sm:w-11",
-                          isLight ? "bg-[#DEDEDE]" : "bg-white/10",
-                        )}
-                      >
-                        <Image
-                          src={submission.image}
-                          alt={submission.name}
-                          width={44}
-                          height={44}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
+                    Track how your social media performs after creator posts
+                  </p>
 
-                      <div className="min-w-0">
-                        <h3
-                          className={cn(
-                            "truncate text-[13px] font-medium sm:text-[16px]",
-                            isLight ? "text-black" : "text-[#dedee3]",
-                          )}
-                        >
-                          {submission.name}
-                        </h3>
-
-                        <p
-                          className={cn(
-                            "mt-0.5 truncate text-[11px] sm:text-sm",
-                            isLight ? "text-black/45" : "text-[#92929a]",
-                          )}
-                        >
-                          {submission.subtitle}
-                        </p>
-                      </div>
-                    </div>
-
-                    {submission.approved ? (
-                      <span
-                        className={cn(
-                          "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium sm:px-4 sm:py-2 sm:text-sm",
-                          isLight
-                            ? "bg-[#E8F8F1] text-[#1EAA7D]"
-                            : "bg-[#1eaa7d] text-white",
-                        )}
-                      >
-                        ✓ Approved
-                      </span>
-                    ) : (
-                      <span
-                        className={cn(
-                          "shrink-0 flex items-center gap-1 rounded-full px-2 py-1 text-[11px] sm:px-3 sm:py-2 sm:text-sm",
-                          isLight
-                            ? "border border-[#0000000D] bg-[#DEDEDE] text-black/50"
-                            : "border border-white/10 bg-white/[0.02] text-[#a3a3aa]",
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "flex h-3 w-3 items-center justify-center rounded-full border text-[8px]",
-                            isLight ? "border-black/30" : "border-[#8b8b94]",
-                          )}
-                        >
-                          ○
-                        </span>
-                        Under Review
-                      </span>
+                  {/* Curved arrow pointing down to chart */}
+                  <svg
+                    className={cn(
+                      "absolute -bottom-28 left-1/2 hidden h-24 w-24 -translate-x-1/2 sm:block",
+                      isLight ? "text-black/35" : "text-white/70"
                     )}
-                  </div>
-                ))}
+                    viewBox="0 0 100 100"
+                    fill="none"
+                  >
+                    <path
+                      d="M15 80 C30 45, 65 40, 55 15"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M51 18 L55 12 L58 20"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle
+                      cx="54"
+                      cy="50"
+                      r="5"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    />
+                  </svg>
+                </motion.div>
+
+                <motion.div
+                  style={{ opacity: text3Opacity, display: activeApprovalCardIndex === 2 ? "block" : "none" }}
+                  className="relative"
+                >
+                  <p
+                    className={cn(
+                      caveat.className,
+                      "text-2xl sm:text-3xl md:text-4xl",
+                      isLight ? "text-[#535353]" : "text-white/85"
+                    )}
+                  >
+                   Automatic pay to creators
+                  </p>
+
+                  {/* Curved arrow pointing down to chart */}
+                  <svg
+                    className={cn(
+                      "absolute -bottom-28 left-1/2 hidden h-24 w-24 -translate-x-1/2 sm:block",
+                      isLight ? "text-black/35" : "text-white/70"
+                    )}
+                    viewBox="0 0 100 100"
+                    fill="none"
+                  >
+                    <path
+                      d="M15 80 C30 45, 65 40, 55 15"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M51 18 L55 12 L58 20"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle
+                      cx="54"
+                      cy="50"
+                      r="5"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    />
+                  </svg>
+                </motion.div>
               </div>
             </div>
 
-            {/* Bottom fade so the clipped card reads as half-merged into the shell */}
-            <div
-              className={cn(
-                "pointer-events-none absolute inset-x-0 bottom-0 z-20 h-16 bg-gradient-to-t to-transparent sm:h-20",
-                isLight ? "" : "from-[#121212]",
-              )}
-            />
+            {/* Whole Card Stage Container */}
+            <div className="relative z-10 mx-auto mt-20 flex w-full max-w-[990px] items-center justify-center">
+              {/* WHOLE CARD 1: Original Outer Glass Shell + Submissions Card */}
+              <motion.div
+                style={{
+                  opacity: card1Opacity,
+                  y: card1Y,
+                  scale: card1Scale,
+                  pointerEvents: activeApprovalCardIndex === 0 ? "auto" : "none",
+                }}
+                className="w-full flex justify-center"
+              >
+                <div
+                  className={cn(
+                    "relative z-10 flex min-h-[380px] w-full max-w-[730px] items-start justify-center overflow-hidden rounded-[16px] px-3 pt-5 pb-6 sm:h-[400px] sm:min-h-0 sm:pb-0 sm:w-[90%] sm:rounded-[18px] sm:px-4 sm:pt-10 md:h-[430px] md:pt-12",
+                    isLight
+                      ? "border border-[#0000001A] bg-white"
+                      : "border border-white/15 bg-[#121212] shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40]"
+                  )}
+                >
+                  {!isLight ? <div className="absolute inset-0 bg-black/30 pointer-events-none" /> : null}
+                  {!isLight ? (
+                    <div className="pointer-events-none absolute -left-24 -top-24 h-80 w-80 rounded-full bg-[#D9D9D9]/25 blur-[120px]" />
+                  ) : null}
+
+                  {/* Creator Submissions Card */}
+                  <div
+                    className={cn(
+                      "relative z-10 w-full max-w-[485px] rounded-[16px] px-3.5 py-4 sm:rounded-[18px] sm:px-9 sm:py-9",
+                      isLight
+                        ? "bg-[#F8F8F8] shadow-[0_10.18px_20.36px_0_#6C6C6C1A] border border-[#0000000D]"
+                        : "border border-[#353535] bg-[#171717] shadow-[8px_8px_50px_0px_#00000080] sm:shadow-[4px_12px_4px_0px_#0000001A]"
+                    )}
+                  >
+                    {/* Header */}
+                    <div className="mb-4 flex items-start justify-between gap-3 sm:mb-7">
+                      <div className="min-w-0">
+                        <h2
+                          className={cn(
+                            "text-base font-medium sm:text-xl",
+                            isLight ? "text-black" : "text-[#d8d8df]"
+                          )}
+                        >
+                          Creator Submissions
+                        </h2>
+                        <p
+                          className={cn(
+                            "mt-0.5 text-[11px] sm:text-sm",
+                            isLight ? "text-black/45" : "text-[#92929a]"
+                          )}
+                        >
+                          Payment are done after brand approves
+                        </p>
+                      </div>
+                      <p
+                        className={cn(
+                          "shrink-0 pt-0.5 text-base font-medium sm:text-xl",
+                          isLight ? "text-black" : "text-[#d8d8df]"
+                        )}
+                      >
+                        $2,000
+                      </p>
+                    </div>
+
+                    {/* Submission list */}
+                    <div>
+                      {submissions.map((submission, index) => (
+                        <div
+                          key={submission.name}
+                          className={cn(
+                            "flex items-center justify-between gap-2.5 py-2.5 sm:py-4",
+                            index !== submissions.length - 1 &&
+                              (isLight
+                                ? "border-b border-black/[0.06]"
+                                : "border-b border-white/[0.04]")
+                          )}
+                        >
+                          <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+                            <div
+                              className={cn(
+                                "h-8 w-8 shrink-0 overflow-hidden rounded-full sm:h-11 sm:w-11",
+                                isLight ? "bg-[#DEDEDE]" : "bg-white/10"
+                              )}
+                            >
+                              <Image
+                                src={submission.image}
+                                alt={submission.name}
+                                width={44}
+                                height={44}
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+
+                            <div className="min-w-0">
+                              <h3
+                                className={cn(
+                                  "truncate text-[13px] font-medium sm:text-[16px]",
+                                  isLight ? "text-black" : "text-[#dedee3]"
+                                )}
+                              >
+                                {submission.name}
+                              </h3>
+                              <p
+                                className={cn(
+                                  "mt-0.5 truncate text-[11px] sm:text-sm",
+                                  isLight ? "text-black/45" : "text-[#92929a]"
+                                )}
+                              >
+                                {submission.subtitle}
+                              </p>
+                            </div>
+                          </div>
+
+                          {submission.approved ? (
+                            <span
+                              className={cn(
+                                "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium sm:px-4 sm:py-2 sm:text-sm",
+                                isLight
+                                  ? "bg-[#E8F8F1] text-[#1EAA7D]"
+                                  : "bg-[#1eaa7d] text-white"
+                              )}
+                            >
+                              ✓ Approved
+                            </span>
+                          ) : (
+                            <span
+                              className={cn(
+                                "shrink-0 flex items-center gap-1 rounded-full px-2 py-1 text-[11px] sm:px-3 sm:py-2 sm:text-sm",
+                                isLight
+                                  ? "border border-[#0000000D] bg-[#DEDEDE] text-black/50"
+                                  : "border border-white/10 bg-white/[0.02] text-[#a3a3aa]"
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  "flex h-3 w-3 items-center justify-center rounded-full border text-[8px]",
+                                  isLight ? "border-black/30" : "border-[#8b8b94]"
+                                )}
+                              >
+                                ○
+                              </span>
+                              Under Review
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Bottom fade overlay */}
+                  <div
+                    className={cn(
+                      "pointer-events-none absolute inset-x-0 bottom-0 z-20 h-16 bg-gradient-to-t to-transparent sm:h-20",
+                      isLight ? "" : "from-[#121212]"
+                    )}
+                  />
+                </div>
+              </motion.div>
+
+              {/* WHOLE CARD 2: Performance Overview Card in identical outer glass shell */}
+              <motion.div
+                style={{
+                  opacity: card2Opacity,
+                  y: card2Y,
+                  scale: card2Scale,
+                  pointerEvents: activeApprovalCardIndex === 1 ? "auto" : "none",
+                }}
+                className="absolute inset-0 flex items-center justify-center w-full"
+              >
+                <div
+                  className={cn(
+                    "relative z-10 flex min-h-[380px] w-full max-w-[730px] items-start justify-center overflow-hidden rounded-[16px] px-3 pt-5 pb-6 sm:h-[400px] sm:min-h-0 sm:pb-0 sm:w-[90%] sm:rounded-[18px] sm:px-4 sm:pt-10 md:h-[430px] md:pt-12",
+                    isLight
+                      ? "border border-[#0000001A] bg-white"
+                      : "border border-white/15 bg-[#121212] shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40]"
+                  )}
+                >
+                  {!isLight ? <div className="absolute inset-0 bg-black/30 pointer-events-none" /> : null}
+                  {!isLight ? (
+                    <div className="pointer-events-none absolute -left-24 -top-24 h-80 w-80 rounded-full bg-[#D9D9D9]/25 blur-[120px]" />
+                  ) : null}
+
+                  {/* Performance Overview Card */}
+                  <div className="relative z-10 w-full h-full flex items-center justify-center -mx-4">
+                    <PerformanceOverviewCard className="w-full h-full" />
+                  </div>
+
+
+                </div>
+              </motion.div>
+
+              {/* WHOLE CARD 3: Budget Distribution Card in identical outer glass shell */}
+              <motion.div
+                style={{
+                  opacity: card3Opacity,
+                  y: card3Y,
+                  scale: card3Scale,
+                  pointerEvents: activeApprovalCardIndex === 2 ? "auto" : "none",
+                }}
+                className="absolute inset-0 flex items-center justify-center w-full"
+              >
+                <div
+                  className={cn(
+                    "relative z-10 flex min-h-[380px] w-full max-w-[730px] items-start justify-center overflow-hidden rounded-[16px] px-3 pt-5 pb-6 sm:h-[400px] sm:min-h-0 sm:pb-0 sm:w-[90%] sm:rounded-[18px] sm:px-4 sm:pt-10 md:h-[430px] md:pt-12",
+                    isLight
+                      ? "border border-[#0000001A] bg-white"
+                      : "border border-white/15 bg-[#121212] shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40]"
+                  )}
+                >
+                  {!isLight ? <div className="absolute inset-0 bg-black/30 pointer-events-none" /> : null}
+                  {!isLight ? (
+                    <div className="pointer-events-none absolute -left-24 -top-24 h-80 w-80 rounded-full bg-[#D9D9D9]/25 blur-[120px]" />
+                  ) : null}
+
+                  {/* Budget Distribution Card */}
+                  <div className="relative z-10 w-full h-full flex items-center justify-center -mx-4 -mt-6">
+                    <BudgetDistributionCard className="w-full h-full" />
+                  </div>
+
+                  {/* Bottom fade overlay */}
+                  <div
+                    className={cn(
+                      "pointer-events-none absolute inset-x-0 bottom-0 z-20 h-16 bg-gradient-to-t to-transparent sm:h-20",
+                      isLight ? "" : "from-[#121212]"
+                    )}
+                  />
+                </div>
+              </motion.div>
+            </div>
           </div>
         </section>
 
@@ -3136,7 +3362,7 @@ export default function BrandsClient({
               onClick={handleLaunchCampaign}
               disabled={isLaunchingCampaign}
               className={cn(
-                "mt-6 inline-flex items-center gap-3 rounded-xl px-4 py-3 text-[12px] md:text-[13px] font-medium transition disabled:cursor-not-allowed disabled:opacity-70",
+                "mt-6 inline-flex items-center gap-3 rounded-xl px-4 py-3 text-[12px] md:text-[15px] font-medium transition disabled:cursor-not-allowed disabled:opacity-70",
                 isLight
                   ? "bg-black text-white hover:bg-black/90 shadow-[0_10px_30px_rgba(15,15,30,0.12)]"
                   : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_30px_rgba(0,0,0,0.4)] hover:bg-white/10",

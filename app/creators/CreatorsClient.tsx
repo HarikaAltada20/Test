@@ -1047,14 +1047,15 @@ export default function CreatorsClient({
                     onClick={handleStartEarningClick}
                     disabled={isCheckingStartEarning}
                     className={cn(
-                      "inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-[15px] font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
+                      "w-full sm:w-[210px] inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-[15px] font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
                       isLight
                         ? "bg-[#FF6A1A] text-white hover:bg-[#ff7a33] shadow-lg shadow-orange-500/25"
                         : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white hover:border-white/35 hover:bg-[#242424]",
                     )}
                   >
                     {isCheckingStartEarning ? <ButtonLoadingSpinner /> : null}
-                    <span>Start Earning →</span>
+                    <span>Start Earning</span>
+                    <ArrowRight className="h-4 w-4" />
                   </Button>
 
                   <Button
@@ -1062,14 +1063,15 @@ export default function CreatorsClient({
                     onClick={handleViewMoreClick}
                     disabled={isNavigatingViewMore}
                     className={cn(
-                      "inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-[15px] font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
+                      "w-full sm:w-[210px] inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-[15px] font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
                       isLight
                         ? "border border-black/15 bg-white text-black hover:bg-[#f7f7f7]"
                         : "bg-[#DEDEDE] text-black hover:bg-white",
                     )}
                   >
                     {isNavigatingViewMore ? <ButtonLoadingSpinner /> : null}
-                    <span>Browse Campaigns →</span>
+                    <span>Browse Campaigns</span>
+                    <ArrowRight className="h-4 w-4" />
                   </Button>
                 </div>
 
