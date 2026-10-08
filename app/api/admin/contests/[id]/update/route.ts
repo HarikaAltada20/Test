@@ -9,6 +9,7 @@ import {
   type CreatorRequirementFieldInput,
 } from "@/lib/contest-creator-requirements-validation";
 import { invalidateCampaignListCachesAfterMutation } from "@/lib/campaign-list-cache";
+import { validateCampaignAccessFields } from "@/lib/campaign-access";
 import { preserveExistingBudgetSpentFields } from "@/lib/contest-budget-spent-fields";
 import { schedulePersistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 import {
@@ -76,6 +77,8 @@ export async function POST(
       "platform",
       "contest_format",
       "subscription_info_of_user",
+      "access_mode",
+      "access_list_skips_requirements",
     ]);
 
     const updateData: Record<string, any> = {};
@@ -90,6 +93,11 @@ export async function POST(
         { error: "No valid fields to update" },
         { status: 400 }
       );
+    }
+
+    const accessFieldsError = validateCampaignAccessFields(updateData);
+    if (accessFieldsError) {
+      return NextResponse.json({ error: accessFieldsError }, { status: 400 });
     }
 
     // Validate payout adjustment fields when present
@@ -307,7 +315,9 @@ export async function POST(
       updateData.platform !== undefined ||
       updateData.contest_format !== undefined ||
       updateData.start_date !== undefined ||
-      updateData.end_date !== undefined;
+      updateData.end_date !== undefined ||
+      updateData.access_mode !== undefined ||
+      updateData.access_list_skips_requirements !== undefined;
 
     await invalidateCampaignListCachesAfterMutation({
       advertiserId: data.advertiser_id,

@@ -712,6 +712,47 @@ export async function getCreatorRequirementsSnapshot(
   return snapshot;
 }
 
+/** Mirrors the submission trigger: listed creators bypass requirements when the campaign opts in. */
+export async function creatorSkipsContestRequirements(
+  supabase: SupabaseClient,
+  contest: { access_mode?: string | null; access_list_skips_requirements?: boolean | null },
+  contestId: string,
+  creatorId: string,
+): Promise<boolean> {
+  if (
+    !contest.access_list_skips_requirements ||
+    !contest.access_mode ||
+    contest.access_mode === "public"
+  ) {
+    return false;
+  }
+  const { data } = await supabase
+    .from("contest_access_list")
+    .select("user_id")
+    .eq("contest_id", contestId)
+    .eq("user_id", creatorId)
+    .maybeSingle();
+  return !!data;
+}
+
+/** Batch form of creatorSkipsContestRequirements for list pages. */
+export async function getRequirementsSkippedContestIds(
+  supabase: SupabaseClient,
+  creatorId: string,
+  contestIds: string[],
+): Promise<Set<string>> {
+  if (contestIds.length === 0) return new Set();
+  const { data, error } = await supabase
+    .from("contest_access_list")
+    .select("contest_id, contests!inner(access_mode, access_list_skips_requirements)")
+    .eq("user_id", creatorId)
+    .in("contest_id", contestIds)
+    .eq("contests.access_list_skips_requirements", true)
+    .neq("contests.access_mode", "public");
+  if (error || !data) return new Set();
+  return new Set(data.map((row: { contest_id: string }) => row.contest_id));
+}
+
 export async function assertCreatorMeetsContestRequirements(
   supabase: SupabaseClient,
   contestId: string,
@@ -729,7 +770,7 @@ export async function assertCreatorMeetsContestRequirements(
   const { data: contest, error: contestError } = await supabase
     .from("contests")
     .select(
-      "trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_quality_score, min_platform_earnings, min_platform_views, contest_format",
+      "trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_quality_score, min_platform_earnings, min_platform_views, contest_format, access_mode, access_list_skips_requirements",
     )
     .eq("id", contestId)
     .maybeSingle();
@@ -741,6 +782,12 @@ export async function assertCreatorMeetsContestRequirements(
       status: 404,
       failures: [],
     };
+  }
+
+  if (
+    await creatorSkipsContestRequirements(supabase, contest, contestId, creatorId)
+  ) {
+    return { ok: true };
   }
 
   const requirements = parseContestCreatorRequirements(contest);

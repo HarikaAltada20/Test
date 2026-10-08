@@ -2929,7 +2929,8 @@ export function ContestClientPage({
           .maybeSingle();
 
         if (contestError) throw contestError;
-        if (!fetchedContestData) throw new Error("Contest not found.");
+        if (!fetchedContestData)
+          throw new Error("This campaign is private or unavailable.");
 
         const { data: requirementFields, error: requirementError } =
           await supabase

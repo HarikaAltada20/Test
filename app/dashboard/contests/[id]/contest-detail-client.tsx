@@ -9,6 +9,11 @@ import React, {
 } from "react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
+import { CampaignAccessPanel } from "@/components/campaign-access/CampaignAccessPanel";
+import {
+  isPrivateLikeAccessMode,
+  type AccessMode,
+} from "@/lib/campaign-access";
 import {
   CONTEST_VIRTUAL_BODY_CLASS,
   CONTEST_VIRTUAL_ROW_CLASS,
@@ -846,6 +851,8 @@ interface Contest {
   min_quality_score?: number | null;
   min_platform_earnings?: number | null;
   min_platform_views?: number | null;
+  access_mode?: AccessMode | null;
+  advertiser_id?: string | null;
 }
 
 interface Submission {
@@ -1843,6 +1850,9 @@ export default function ContestDetailClient({
       ? [{ id: "twitter-feed", label: "Twitter Feed" }]
       : []),
     { id: "analytics", label: "Analytics" },
+    ...(isPrivateLikeAccessMode(contest?.access_mode)
+      ? [{ id: "access", label: "Access" }]
+      : []),
   ];
 
   const { activeTab, setActiveTab } = useTabState(tabs, {
@@ -4191,8 +4201,11 @@ export default function ContestDetailClient({
         ? [{ id: "twitter-feed", label: "Twitter Feed" }]
         : []),
       { id: "analytics", label: "Analytics" },
+      ...(isPrivateLikeAccessMode(contest?.access_mode)
+        ? [{ id: "access", label: "Access" }]
+        : []),
     ],
-    [submissionTotalCount, contest?.platform],
+    [submissionTotalCount, contest?.platform, contest?.access_mode],
   );
 
   // Filter + sort (memoized so virtualizer isn't fed a new array every render).
@@ -34256,6 +34269,14 @@ export default function ContestDetailClient({
               </CardContent>
             </div>
           </TabPanel>
+          {isPrivateLikeAccessMode(contest?.access_mode) && (
+            <TabPanel value="access" activeTab={activeTab}>
+              <CampaignAccessPanel
+                contestId={contestId}
+                advertiserId={isAdminView ? contest?.advertiser_id : null}
+              />
+            </TabPanel>
+          )}
         </TabContent>
       </div>
 

@@ -7,6 +7,7 @@ import {
   validateCreatorRequirementFields,
 } from "@/lib/contest-creator-requirements-validation";
 import { invalidateCampaignListCachesAfterMutation } from "@/lib/campaign-list-cache";
+import { validateCampaignAccessFields } from "@/lib/campaign-access";
 
 export async function POST(request: NextRequest) {
   try {
@@ -74,8 +75,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const accessFieldsError = validateCampaignAccessFields(draftFields);
+    if (accessFieldsError) {
+      return NextResponse.json({ error: accessFieldsError }, { status: 400 });
+    }
+
     const insertData = {
       advertiser_id: advertiserId,
+      access_mode: draftFields.access_mode ?? "public",
+      access_list_skips_requirements:
+        draftFields.access_list_skips_requirements ?? false,
       title: draftFields.title || "No Title - Draft",
       brief_html: draftFields.brief_html ?? "",
       brief_json: draftFields.brief_json ?? null,

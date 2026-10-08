@@ -121,6 +121,12 @@ export function DashboardSidebar({
       description: "Create/Manage Campaigns",
     },
     {
+      name: "Saved allowlists",
+      href: "/dashboard/allowlists",
+      icon: Users,
+      description: "Creator lists for private campaigns",
+    },
+    {
       name: "Dashboard",
       href: "/dashboard",
       icon: LayoutDashboard,

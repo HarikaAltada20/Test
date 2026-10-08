@@ -74,6 +74,8 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import { UserResponse } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
+import { AccessModeSelector } from "@/components/campaign-access/AccessModeSelector";
+import type { AccessMode } from "@/lib/campaign-access";
 import { reconcileLeaderboardPrizeAmounts } from "@/lib/contest-prize-utils";
 import { getChargeableBudgetCents } from "@/lib/contest-chargeable-budget";
 import { preserveExistingBudgetSpentFields } from "@/lib/contest-budget-spent-fields";
@@ -803,6 +805,15 @@ export default function EditContestPage({
   const [contentType, setContentType] = useState<
     "ugc" | "clipping" | "other" | "" | "raid" | "awareness"
   >("other");
+  const [accessMode, setAccessMode] = useState<AccessMode>("public");
+  const [savedAccessMode, setSavedAccessMode] = useState<AccessMode>("public");
+  const [accessListSkipsRequirements, setAccessListSkipsRequirements] =
+    useState(false);
+  const accessFields = {
+    access_mode: accessMode,
+    access_list_skips_requirements:
+      accessMode !== "public" && accessListSkipsRequirements,
+  };
   const [category, setCategory] = useState<string>("technology");
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
   const [flatFeeBonusCap, setFlatFeeBonusCap] = useState<number | string>(""); // In dollars - for CPM campaigns only
@@ -2293,6 +2304,13 @@ export default function EditContestPage({
             }
             setContentType(data.content_type || "other");
             setCategory(data.category || "technology");
+            const loadedAccessMode: AccessMode =
+              data.access_mode === "private" ? "private" : "public";
+            setAccessMode(loadedAccessMode);
+            setSavedAccessMode(loadedAccessMode);
+            setAccessListSkipsRequirements(
+              !!data.access_list_skips_requirements,
+            );
 
             // Load flat fee bonus from contest_based_details
             if (data.contest_type === "leaderboard") {
@@ -4290,6 +4308,7 @@ export default function EditContestPage({
       updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled
         ? maxSubmissionsPerCreator
         : 1;
+      Object.assign(updatePayload, accessFields);
       Object.assign(
         updatePayload,
         buildCreatorRequirementFields(contest?.contest_format, {
@@ -6488,6 +6507,7 @@ export default function EditContestPage({
           max_submissions_per_creator: multipleSubmissionsEnabled
             ? maxSubmissionsPerCreator
             : 1,
+          ...accessFields,
           ...buildCreatorRequirementFields(contest?.contest_format, {
             trustScoreEnabled,
             contestTrustScore,
@@ -7144,6 +7164,7 @@ export default function EditContestPage({
           max_submissions_per_creator: multipleSubmissionsEnabled
             ? maxSubmissionsPerCreator
             : 1,
+          ...accessFields,
           ...buildCreatorRequirementFields(contest?.contest_format, {
             trustScoreEnabled,
             contestTrustScore,
@@ -8872,6 +8893,7 @@ export default function EditContestPage({
       updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled
         ? maxSubmissionsPerCreator
         : 1;
+      Object.assign(updatePayload, accessFields);
       Object.assign(
         updatePayload,
         buildCreatorRequirementFields(contest?.contest_format, {
@@ -9674,6 +9696,71 @@ export default function EditContestPage({
                   Specify the type of content you need from creators. This helps
                   creators filter opportunities.
                 </p>
+              </div>
+
+              <div
+                className={cn(
+                  "space-y-4 p-4 border rounded-lg",
+                  isDark
+                    ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
+                    : "bg-gray-50",
+                )}
+              >
+                <div>
+                  <Label className="text-base font-semibold">
+                    Who can see this campaign
+                  </Label>
+                  <p
+                    className={cn(
+                      "text-sm mt-1",
+                      isDark ? "text-gray-300" : "text-gray-600",
+                    )}
+                  >
+                    Manage which creators are on the access list from the
+                    campaign&apos;s Access tab.
+                  </p>
+                </div>
+                <AccessModeSelector
+                  value={accessMode}
+                  onChange={async (next) => {
+                    if (savedAccessMode === "public" && next !== "public") {
+                      const { count } = await supabase
+                        .from("submissions")
+                        .select("id", { count: "exact", head: true })
+                        .eq("contest_id", contestId);
+                      if (
+                        (count ?? 0) > 0 &&
+                        !window.confirm(
+                          `This campaign has ${count} submission${count === 1 ? "" : "s"}. Creators who already submitted will be added to the access list and keep access. Continue?`,
+                        )
+                      ) {
+                        return;
+                      }
+                    }
+                    setAccessMode(next);
+                  }}
+                />
+                {accessMode === "private" && (
+                  <div className="flex items-start gap-3 pt-2 border-t">
+                    <Checkbox
+                      id="accessListSkipsRequirements"
+                      checked={accessListSkipsRequirements}
+                      onCheckedChange={(checked: any) =>
+                        setAccessListSkipsRequirements(Boolean(checked))
+                      }
+                      className={cn(
+                        "border h-5 w-5 mt-0.5",
+                        isDark ? "border-gray-300" : "border-gray-500",
+                      )}
+                    />
+                    <Label
+                      htmlFor="accessListSkipsRequirements"
+                      className="text-sm font-normal leading-snug"
+                    >
+                      Creators on the access list skip requirements
+                    </Label>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">

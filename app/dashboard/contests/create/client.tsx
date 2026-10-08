@@ -99,6 +99,15 @@ import {
 import { VideoPlatformMultiSelect } from "@/components/contest/VideoPlatformMultiSelect";
 import { PlatformCampaignTabs } from "@/components/contest/PlatformCampaignTabs";
 import { toast } from "@/hooks/use-toast"; // Added import
+import { AccessModeSelector } from "@/components/campaign-access/AccessModeSelector";
+import {
+  AllowlistPicker,
+  EMPTY_ALLOWLIST_SELECTION,
+  applyAllowlistSelection,
+  hasAllowlistSelection,
+  type AllowlistSelection,
+} from "@/components/campaign-access/AllowlistPicker";
+import type { AccessMode } from "@/lib/campaign-access";
 import dynamic from "next/dynamic";
 import REGIONS_AND_COUNTRIES_DATA from "@/data/regions-and-countries.json";
 
@@ -502,6 +511,11 @@ export default function CreateContestPage({
     useState(false);
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
     useState<number>(1);
+  const [accessMode, setAccessMode] = useState<AccessMode>("public");
+  const [accessListSkipsRequirements, setAccessListSkipsRequirements] =
+    useState(false);
+  const [allowlistSelection, setAllowlistSelection] =
+    useState<AllowlistSelection>(EMPTY_ALLOWLIST_SELECTION);
   const [contentType, setContentType] = useState<
     "ugc" | "clipping" | "other" | "" | "raid" | "awareness"
   >("");
@@ -4197,6 +4211,9 @@ export default function CreateContestPage({
         max_submissions_per_creator: multipleSubmissionsEnabled
           ? maxSubmissionsPerCreator
           : 1,
+        access_mode: accessMode,
+        access_list_skips_requirements:
+          accessMode !== "public" && accessListSkipsRequirements,
         trust_score:
           isVideoContestFormat(contestFormat) &&
           trustScoreEnabled &&
@@ -4371,6 +4388,33 @@ export default function CreateContestPage({
         if (!draftId) {
           console.log("Setting draftId to:", newContestId);
           setDraftId(newContestId);
+        }
+
+        if (accessMode !== "public" && hasAllowlistSelection(allowlistSelection)) {
+          try {
+            const accessResult = await applyAllowlistSelection(
+              newContestId,
+              allowlistSelection,
+              isAdmin ? effectiveAdvertiserId : null,
+            );
+            setAllowlistSelection(EMPTY_ALLOWLIST_SELECTION);
+            const missing = [...accessResult.notFound, ...accessResult.invalid];
+            if (missing.length > 0) {
+              toast({
+                title: "Some usernames were not added",
+                description: `Not found or invalid: ${missing.join(", ")}`,
+                variant: "destructive",
+              });
+            }
+          } catch (accessError: any) {
+            toast({
+              title: "Campaign saved, but the access list was not updated",
+              description:
+                accessError?.message ||
+                "Add creators from the campaign's Access tab.",
+              variant: "destructive",
+            });
+          }
         }
 
         // Sync Twitter campaign metrics if this is a Twitter contest
@@ -6114,6 +6158,11 @@ export default function CreateContestPage({
         console.log("Invalid content_type:", draft.content_type);
       }
     }
+
+    if (draft.access_mode === "public" || draft.access_mode === "private") {
+      setAccessMode(draft.access_mode);
+    }
+    setAccessListSkipsRequirements(!!draft.access_list_skips_requirements);
 
     // Thumbnail
     if (draft.thumbnail_url) {
@@ -11583,6 +11632,69 @@ export default function CreateContestPage({
                   Specify the type of content you need from creators. This helps
                   creators filter opportunities.
                 </p>
+              </div>
+
+              <div
+                className={cn(
+                  "space-y-4 p-4 border rounded-lg",
+                  isDark
+                    ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
+                    : "bg-gray-50",
+                )}
+              >
+                <div>
+                  <Label className="text-base font-semibold">
+                    Who can see this campaign
+                  </Label>
+                  <p
+                    className={cn(
+                      "text-sm mt-1",
+                      isDark ? "text-gray-300" : "text-gray-600",
+                    )}
+                  >
+                    Private campaigns are hidden from everyone except the
+                    creators you add. The requirements below still decide who
+                    can submit.
+                  </p>
+                </div>
+                <AccessModeSelector value={accessMode} onChange={setAccessMode} />
+                {accessMode === "private" && (
+                  <div className="space-y-4 pt-2 border-t">
+                    <AllowlistPicker
+                      value={allowlistSelection}
+                      onChange={setAllowlistSelection}
+                      advertiserId={isAdmin ? effectiveAdvertiserId : null}
+                    />
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="accessListSkipsRequirements"
+                        checked={accessListSkipsRequirements}
+                        onCheckedChange={(checked: any) =>
+                          setAccessListSkipsRequirements(Boolean(checked))
+                        }
+                        className={cn(
+                          "border h-5 w-5 mt-0.5",
+                          isDark ? "border-gray-300" : "border-gray-500",
+                        )}
+                      />
+                      <Label
+                        htmlFor="accessListSkipsRequirements"
+                        className="text-sm font-normal leading-snug"
+                      >
+                        Creators on the access list skip requirements
+                        <span
+                          className={cn(
+                            "block text-xs",
+                            isDark ? "text-gray-400" : "text-gray-500",
+                          )}
+                        >
+                          You can add more creators later from the
+                          campaign&apos;s Access tab.
+                        </span>
+                      </Label>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {isVideoContestFormat(contestFormat) && (

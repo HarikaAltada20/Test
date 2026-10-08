@@ -1679,6 +1679,10 @@ export default function OpportunitiesPage({
                   isDark={isDark}
                   size="default"
                   showEligibility
+                  requirementsSkipped={
+                    (contest as { requirements_skipped?: boolean })
+                      .requirements_skipped === true
+                  }
                 />
               </div>
             </CardHeader>
@@ -2894,6 +2898,10 @@ export default function OpportunitiesPage({
                                 isDark={isDark}
                                 size="compact"
                                 showEligibility
+                                requirementsSkipped={
+                                  (contest as { requirements_skipped?: boolean })
+                                    .requirements_skipped === true
+                                }
                               />
                             </div>
 

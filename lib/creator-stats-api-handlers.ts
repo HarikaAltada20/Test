@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   assertCreatorMeetsContestRequirements,
   buildCreatorRequirementsSnapshotFromProfile,
+  creatorSkipsContestRequirements,
   getCreatorRequirementsSnapshot,
   parseContestCreatorRequirements,
   evaluateCreatorRequirements,
@@ -92,7 +93,7 @@ export async function evaluateContestEligibilityResponse(
   const { data: contest, error: contestError } = await supabase
     .from("contests")
     .select(
-      "trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_quality_score, min_platform_earnings, min_platform_views, contest_format",
+      "trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_quality_score, min_platform_earnings, min_platform_views, contest_format, access_mode, access_list_skips_requirements",
     )
     .eq("id", contestId)
     .maybeSingle();
@@ -105,13 +106,22 @@ export async function evaluateContestEligibilityResponse(
   const snapshot = await getCreatorRequirementsSnapshot(supabase, userId, {
     forGateCheck: true,
   });
-  const failures = evaluateCreatorRequirements({ requirements, snapshot });
+  const skips = await creatorSkipsContestRequirements(
+    supabase,
+    contest,
+    contestId,
+    userId,
+  );
+  const failures = skips
+    ? []
+    : evaluateCreatorRequirements({ requirements, snapshot });
 
   return NextResponse.json({
     eligible: failures.length === 0,
     failures,
     snapshot,
     requirements,
+    requirementsSkipped: skips,
   });
 }
 
