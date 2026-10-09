@@ -232,7 +232,7 @@ export function PerformanceOverviewCard({
         {/* Tooltip */}
         <div
           className="
-            absolute right-0 top-2
+            absolute right-[4%] top-2
             w-[143px]
             rounded-[9px]
             border border-[#444]

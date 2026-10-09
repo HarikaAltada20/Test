@@ -1481,19 +1481,54 @@ export default function HeroContent() {
               >
                 {/* Card header */}
                 <div className="flex items-center gap-2">
-                  <div
-                    className={cn(
-                      "flex h-[29px] w-[29px] items-center justify-center rounded-[8px]",
-                      isLight ? "bg-[#efe8f8]" : "bg-[#40344c]",
-                    )}
-                  >
-                    <Users
-                      className={cn(
-                        "h-[15px] w-[15px]",
-                        isLight ? "text-[#7c3aed]" : "text-white/80",
-                      )}
-                    />
-                  </div>
+                   <div className="relative inline-flex items-center justify-center">
+      {/* Outer purple glow */}
+      {/* <div
+        aria-hidden
+        className="
+          pointer-events-none absolute -inset-2
+          rounded-lg
+          bg-[radial-gradient(circle,rgba(187,0,255,0.45)_0%,transparent_70%)]
+          opacity-55 blur-[10px]
+        "
+      /> */}
+
+      {/* Badge */}
+      <div
+        className="
+          relative flex h-[30px] w-[30px]
+          items-center justify-center
+          overflow-hidden rounded-[7px]
+          border border-white/[0.07]
+          bg-[#FFFFFF03]
+          backdrop-blur-[8.853px]
+        "
+      >
+        {/* Purple-to-gray bottom glow */}
+        <div
+          aria-hidden
+          className="
+            pointer-events-none absolute
+            bottom-[-6px] left-1/2
+            h-[14px] w-[78%]
+            -translate-x-1/2 rounded-[100%]
+            bg-[linear-gradient(180deg,rgba(187,0,255,0.6)_0%,rgba(217,217,217,0.55)_100%)]
+            blur-[7px]
+          "
+        />
+
+        <Image
+          src="/images/users_icon.png"
+          alt="Users"
+          width={16}
+          height={16}
+          className={cn(
+            "relative z-10 h-5 w-5 object-contain",
+            isLight && "invert"
+          )}
+        />
+      </div>
+    </div>
 
                   <span
                     className={cn(
@@ -1627,22 +1662,26 @@ export default function HeroContent() {
                 {/* Tabs */}
                 <div
                   className={cn(
-                    "flex flex-wrap items-center gap-1 text-[11px]",
+                    "grid grid-cols-3 w-full items-center text-[11px]",
                     isLight ? "text-black/35" : "text-white/35",
                   )}
                 >
                   <span
                     className={cn(
-                      "rounded-[9px] px-3 py-[7px]",
+                      "flex items-center justify-center rounded-[8px] py-1.5 text-center font-medium",
                       isLight
-                        ? "bg-black/[0.06] text-black/80"
-                        : "bg-white/[0.08] text-white/80",
+                        ? "bg-black/[0.06] text-black/80 font-semibold"
+                        : "bg-white/[0.08] text-white/80 font-semibold",
                     )}
                   >
                     Overview
                   </span>
-                  <span className="px-1.5">Submissions</span>
-                  <span className="px-1.5">Analytics</span>
+                  <span className="flex items-center justify-center py-1.5 text-center">
+                    Submissions
+                  </span>
+                  <span className="flex items-center justify-center py-1.5 text-center">
+                    Analytics
+                  </span>
                 </div>
 
                 {/* Stats */}
@@ -1729,19 +1768,54 @@ export default function HeroContent() {
             >
               {/* Card header */}
               <div className="flex items-center gap-2">
-                <div
-                  className={cn(
-                    "flex h-[29px] w-[29px] items-center justify-center rounded-[8px]",
-                    isLight ? "bg-[#efe8f8]" : "bg-[#40344c]",
-                  )}
-                >
-                  <Users
-                    className={cn(
-                      "h-[15px] w-[15px]",
-                      isLight ? "text-[#7c3aed]" : "text-white/80",
-                    )}
-                  />
-                </div>
+                <div className="relative inline-flex items-center justify-center">
+      {/* Outer purple glow */}
+      {/* <div
+        aria-hidden
+        className="
+          pointer-events-none absolute -inset-2
+          rounded-lg
+          bg-[radial-gradient(circle,rgba(187,0,255,0.45)_0%,transparent_70%)]
+          opacity-55 blur-[10px]
+        "
+      /> */}
+
+      {/* Badge */}
+      <div
+        className="
+          relative flex h-[30px] w-[30px]
+          items-center justify-center
+          overflow-hidden rounded-[7px]
+          border border-white/[0.07]
+          bg-[#FFFFFF03]
+          backdrop-blur-[8.853px]
+        "
+      >
+        {/* Purple-to-gray bottom glow */}
+        <div
+          aria-hidden
+          className="
+            pointer-events-none absolute
+            bottom-[-6px] left-1/2
+            h-[14px] w-[78%]
+            -translate-x-1/2 rounded-[100%]
+            bg-[linear-gradient(180deg,rgba(187,0,255,0.6)_0%,rgba(217,217,217,0.55)_100%)]
+            blur-[7px]
+          "
+        />
+
+        <Image
+          src="/images/users_icon.png"
+          alt="Users"
+          width={16}
+          height={16}
+          className={cn(
+            "relative z-10 h-5 w-5 object-contain",
+            isLight && "invert"
+          )}
+        />
+      </div>
+    </div>
 
                 <span
                   className={cn(
@@ -1871,24 +1945,26 @@ export default function HeroContent() {
               {/* Tabs */}
               <div
                 className={cn(
-                  "flex flex-wrap items-center gap-1 text-[11px]",
+                  "grid grid-cols-3 w-full items-center text-[11px]",
                   isLight ? "text-black/35" : "text-white/35",
                 )}
               >
                 <span
                   className={cn(
-                    "rounded-[9px] px-3 py-[9px]",
+                    "flex items-center justify-center rounded-[8px] py-1.5 text-center font-medium",
                     isLight
-                      ? "bg-black/[0.06] text-black/80"
-                      : "bg-white/[0.08] text-white/80",
+                      ? "bg-black/[0.06] text-black/80 font-semibold"
+                      : "bg-white/[0.08] text-white/80 font-semibold",
                   )}
                 >
                   Overview
                 </span>
-
-                <span className="px-2">Submissions</span>
-
-                <span className="px-2">Analytics</span>
+                <span className="flex items-center justify-center py-1.5 text-center">
+                  Submissions
+                </span>
+                <span className="flex items-center justify-center py-1.5 text-center">
+                  Analytics
+                </span>
               </div>
 
               {/* Stats */}

@@ -117,15 +117,15 @@ type CardPosition = {
 
 const desktopCardPositions: CardPosition[] = [
   // Card 0 (Top Left)
-  { left: "0%", top: "15px" },
-  // Card 1 (Top Center - centered horizontally)
-  { left: "calc(50% - 160px)", top: "220px" },
+  { left: "0%", top: "10px" },
+  // Card 1 (Center Staggered)
+  { left: "calc(50% - 165px)", top: "270px" },
   // Card 2 (Top Right)
   { right: "0%", top: "0px" },
-  // Card 3 (Bottom Left - aligned with left boundary)
-  { left: "0%", top: "450px" },
-  // Card 4 (Bottom Right - aligned with right boundary)
-  { right: "0%", top: "435px" },
+  // Card 3 (Bottom Left)
+  { left: "1%", top: "540px" },
+  // Card 4 (Bottom Right)
+  { right: "1%", top: "520px" },
 ];
 
 function Rivets({ isLight }: { isLight: boolean }) {
@@ -217,7 +217,7 @@ function TestimonialCard({
   return (
     <article
       className={cn(
-        "relative w-full max-w-[340px] rounded-3xl p-7 sm:p-9 inline-flex flex-col overflow-hidden",
+        "relative w-full max-w-[360px] rounded-3xl p-[36px] inline-flex flex-col overflow-hidden",
         isLight
           ? "border-[#0000000D] border bg-[#ECECEC]"
           : "bg-neutral-900 shadow-[8px_8px_50px_0px_rgba(0,0,0,1.00),4px_12px_4px_0px_rgba(0,0,0,0.20),inset_0px_0px_4px_0px_rgba(255,255,255,0.25)]",
@@ -268,7 +268,7 @@ function DraggableTestimonialCard({
         position: "absolute",
       }}
       className={cn(
-        "w-[280px] sm:w-[310px] lg:w-80 cursor-grab touch-none select-none rounded-3xl p-6 sm:p-7 lg:p-9 active:cursor-grabbing inline-flex flex-col overflow-hidden",
+        "w-[300px] sm:w-[330px] lg:w-[360px] cursor-grab touch-none select-none rounded-3xl p-[36px] active:cursor-grabbing inline-flex flex-col overflow-hidden",
         isLight
           ? "border-[#0000000D] border bg-[#ECECEC]"
           : "bg-neutral-900 shadow-[8px_8px_50px_0px_rgba(0,0,0,1.00),4px_12px_4px_0px_rgba(0,0,0,0.20),inset_0px_0px_4px_0px_rgba(255,255,255,0.25)]",
@@ -352,7 +352,7 @@ export default function Testimonials() {
         isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
       )}
     >
-      <div className="mx-auto max-w-[1200px]" >
+      <div className="mx-auto max-w-[1280px]">
         <h2
           className={cn(
             "mx-auto max-w-[720px] text-center text-[28px] font-bold leading-[1.15] tracking-[-1px] sm:text-[36px] sm:tracking-[-1.4px] md:text-[44px] md:tracking-[-1.8px]",
@@ -378,7 +378,7 @@ export default function Testimonials() {
         {/* Desktop: staggered + draggable */}
         <div
           ref={boardRef}
-          className="relative mx-auto mt-14 hidden w-full h-[800px] max-w-[1100px] md:block"
+          className="relative mx-auto mt-14 hidden w-full h-[880px] max-w-[1240px] md:block"
         >
           {testimonials.map((testimonial, index) => (
             <DraggableTestimonialCard

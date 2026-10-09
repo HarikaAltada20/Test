@@ -242,7 +242,7 @@ export function SubscriptionUpgradeModal({
           <DialogDescription
             className={`text-sm sm:text-base ${
               pathname === "/pricing" || isDark || isDark
-                ? "text-white"
+                ? "text-gray-400"
                 : "text-gray-600"
             }`}
           >
@@ -261,25 +261,27 @@ export function SubscriptionUpgradeModal({
             {/* Current Plan */}
             <div className={`border rounded-2xl ${
               pathname === "/pricing" || isDark
-                ? "border-gray-600 text-white bg-[linear-gradient(180deg,rgba(201,167,255,0.1225)_2%,rgba(201,167,255,0.03)_100%)]"
+                ? " bg-[#171717] shadow-[inset_0px_0px_4px_rgba(255,255,255,0.25)]"
                 : "border-gray-300 bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)]"
             }`}>
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
-                  <div
+                  {/* <div
                     className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(
                       currentPlan.name
                     )} text-white`}
                   >
                     {getPlanIcon(currentPlan.name)}
-                  </div>
+                  </div> */}
                   <div className="min-w-0 flex-1">
-                    <CardTitle className="text-sm font-bold">
+                    <CardTitle className="text-sm font-bold mb-1.5">
                       Current Plan
                     </CardTitle>
-                    <p className="font-semibold text-md text-[#B16FF4] truncate">
-                      {currentPlan.displayName || currentPlan.name}
-                    </p>
+                    <div className="inline-flex px-3.5 py-1.5 bg-[linear-gradient(90deg,#212121_0%,#131313_100%)] shadow-[inset_0px_-4px_8px_rgba(255,255,255,0.08)] rounded-[103px] border border-black/60 items-center justify-center gap-2">
+                      <span className="text-white text-xs sm:text-sm font-semibold font-sans leading-[16.8px] truncate">
+                        {currentPlan.displayName || currentPlan.name}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </CardHeader>
@@ -303,23 +305,25 @@ export function SubscriptionUpgradeModal({
             <div
              className={`border rounded-2xl ${
               pathname === "/pricing" || isDark
-                ? "border-gray-600 text-white bg-[linear-gradient(180deg,rgba(201,167,255,0.1225)_2%,rgba(201,167,255,0.03)_100%)]"
+                ? " bg-[#171717] shadow-[inset_0px_0px_4px_rgba(255,255,255,0.25)]"
                 : "border-gray-300 bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)]"
             }`}>
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
-                  <div
+                  {/* <div
                     className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(
                       targetPlan.name
                     )} text-white`}
                   >
                     {getPlanIcon(targetPlan.name)}
-                  </div>
+                  </div> */}
                   <div className="min-w-0 flex-1">
-                    <CardTitle className="text-sm">New Plan</CardTitle>
-                    <p className="font-semibold text-[#B16FF4] text-md truncate">
-                      {targetPlan.displayName || targetPlan.name}
-                    </p>
+                    <CardTitle className="text-sm font-bold mb-1.5">New Plan</CardTitle>
+                    <div className="inline-flex px-3.5 py-1.5 bg-[linear-gradient(90deg,#212121_0%,#131313_100%)] shadow-[inset_0px_-4px_8px_rgba(255,255,255,0.08)] rounded-[103px] border border-black/60 items-center justify-center gap-2">
+                      <span className="text-white text-xs sm:text-sm font-semibold font-sans leading-[16.8px] truncate">
+                        {targetPlan.displayName || targetPlan.name}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </CardHeader>

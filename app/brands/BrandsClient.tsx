@@ -2,7 +2,7 @@
 import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
+import { motion, AnimatePresence, useScroll, useTransform, type MotionValue } from "framer-motion";
 import { PerformanceOverviewCard } from "@/components/analytics/PerformanceOverviewCard";
 import { BudgetDistributionCard } from "@/components/analytics/BudgetDistributionCard";
 import { gsap } from "gsap";
@@ -55,6 +55,189 @@ import {
 } from "@/components/ui/dialog";
 import { useThemeMode } from "@/hooks/use-theme-mode";
 import { cn } from "@/lib/utils";
+
+function BrandQuoteScrollReveal({
+  scrollYProgress,
+  isLight,
+}: {
+  scrollYProgress?: MotionValue<number>;
+  isLight: boolean;
+}) {
+  const containerRef = useRef<HTMLParagraphElement>(null);
+  const internalScroll = useScroll({
+    target: containerRef,
+    offset: ["start 0.9", "start 0.35"],
+  });
+
+  const rawProgress = scrollYProgress ?? internalScroll.scrollYProgress;
+  const textProgress = useTransform(
+    rawProgress,
+    scrollYProgress ? [0.05, 0.85] : [0, 1],
+    [0, 1]
+  );
+
+  const fullQuote =
+    "“GOC helped us move from paying for reach to understanding the actual performance behind every piece of content. The visibility made campaign decisions much easier.”";
+  const words = fullQuote.split(" ");
+
+  return (
+    <p
+      ref={containerRef}
+      className="text-xl sm:text-2xl lg:text-[32px] font-medium leading-relaxed sm:leading-[44px] lg:leading-[48px] tracking-tight"
+    >
+      {words.map((word, i) => {
+        const start = i / words.length;
+        const end = start + 1 / words.length;
+        return (
+          <ScrollRevealWord
+            key={`word-${i}`}
+            word={word}
+            progress={textProgress}
+            range={[start, end]}
+            isLight={isLight}
+          />
+        );
+      })}
+    </p>
+  );
+}
+
+function ScrollRevealWord({
+  word,
+  progress,
+  range,
+  isLight,
+}: {
+  word: string;
+  progress: MotionValue<number>;
+  range: [number, number];
+  isLight: boolean;
+}) {
+  const color = useTransform(
+    progress,
+    range,
+    isLight
+      ? ["#8E8E8E", "#000000"]
+      : ["#8E8E8E", "#FFFFFF"]
+  );
+
+  return (
+    <motion.span
+      style={{ color }}
+      className="inline-block mr-[0.25em]"
+    >
+      {word}
+    </motion.span>
+  );
+}
+
+function StickyTestimonialSection({ isLight }: { isLight: boolean }) {
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start start", "end end"],
+  });
+
+  return (
+    <div
+      ref={sectionRef}
+      className={cn(
+        "relative h-[180vh] w-full transition-colors duration-300",
+        isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white"
+      )}
+    >
+      <div className="sticky top-0 flex min-h-screen w-full items-center justify-center px-4 py-8 sm:px-6">
+        <div className="mx-auto w-full max-w-[1100px] px-2 sm:px-4">
+          {/* Testimonial Card */}
+          <div
+            className={cn(
+              "relative mx-auto overflow-hidden rounded-[24px] sm:rounded-[32px] transition-all duration-300 border flex flex-col min-[520px]:flex-row items-stretch",
+              isLight
+                ? "bg-white border-black/10 shadow-[0_10px_30px_rgba(0,0,0,0.05)]"
+                : "bg-[linear-gradient(360deg,#000000_0%,#353535_100%)] border-[#353535] shadow-[0_10px_40px_rgba(0,0,0,0.5)]"
+            )}
+          >
+            {/* Left: Image Card */}
+            <div className="relative w-full min-[520px]:w-[220px] sm:w-[250px] md:w-[300px] lg:w-[384px] h-[350px] min-[430px]:h-[420px] min-[520px]:h-auto min-[520px]:min-h-[380px] md:min-h-[440px] flex-shrink-0 overflow-hidden">
+              <Image
+                src="/images/ranveer_testimonial.png"
+                alt="Ranveer Allahbadia"
+                fill
+                priority
+                className="object-cover object-top"
+                sizes="(max-width: 520px) 100vw, (max-width: 1024px) 300px, 384px"
+              />
+              <div className="absolute bottom-0 left-0 right-0 h-[140px] bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none" />
+              <div className="absolute left-4 sm:left-6 lg:left-[35px] bottom-4 sm:bottom-6 lg:bottom-[35px] flex flex-col items-start justify-start z-10 text-left">
+                <div className="text-[#F1F1F1] text-base sm:text-lg lg:text-[20px] font-semibold leading-snug sm:leading-[30px]">
+                  Ranveer Allahbadia
+                </div>
+                <div className="text-[#A8A8A8] text-xs sm:text-sm lg:text-[16px] font-normal leading-normal sm:leading-[24px]">
+                  Founder, BeerBiceps
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Content & Metrics */}
+            <div className="flex-1 flex flex-col justify-center items-start gap-3 sm:gap-4 md:gap-5 text-left p-5 sm:p-7 md:p-10 lg:py-12 lg:pr-[52px] lg:pl-12 max-w-[760px]">
+              <div className="text-[#757575] text-xs sm:text-[14px] font-medium leading-[21px]">
+                Ran 3+ campaigns on GOC
+              </div>
+
+              <div className="w-full">
+                <BrandQuoteScrollReveal scrollYProgress={scrollYProgress} isLight={isLight} />
+              </div>
+
+              <div
+                className={cn(
+                  "w-full h-[1px] my-1 sm:my-3",
+                  isLight ? "bg-black/10" : "bg-[#353535]"
+                )}
+              />
+
+              <div className="w-full flex items-center justify-between sm:justify-start gap-6 sm:gap-12 md:gap-16 pt-1 sm:pt-2">
+                <div className="flex flex-col justify-center items-start gap-1">
+                  <div
+                    className={cn(
+                      "text-3xl sm:text-4xl lg:text-[52px] font-semibold leading-tight lg:leading-[57.2px]",
+                      isLight ? "text-purple-600" : "text-[#F1EDFE]"
+                    )}
+                  >
+                    2.5M+
+                  </div>
+                  <div className="text-[#8E8E8E] text-xs sm:text-[15px] font-normal leading-tight sm:leading-[21px]">
+                    Views generated
+                  </div>
+                </div>
+
+                <div
+                  className={cn(
+                    "w-[1px] h-12 sm:h-16 self-stretch",
+                    isLight ? "bg-black/10" : "bg-[#434343]"
+                  )}
+                />
+
+                <div className="flex flex-col justify-center items-start gap-1">
+                  <div
+                    className={cn(
+                      "text-3xl sm:text-4xl lg:text-[52px] font-semibold leading-tight lg:leading-[57.2px]",
+                      isLight ? "text-purple-600" : "text-[#F1EDFE]"
+                    )}
+                  >
+                    16%
+                  </div>
+                  <div className="text-[#8E8E8E] text-xs sm:text-[15px] font-normal leading-tight sm:leading-[21px]">
+                    Engagement Rate
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // const faqItemsBrands = [
 //   {
@@ -423,9 +606,9 @@ export default function BrandsClient({
 
   useEffect(() => {
     return approvalScrollProgress.on("change", (latest) => {
-      if (latest >= 0.65) {
+      if (latest >= 0.61) {
         setScrollApprovalActiveIndex(2);
-      } else if (latest >= 0.33) {
+      } else if (latest >= 0.28) {
         setScrollApprovalActiveIndex(1);
       } else {
         setScrollApprovalActiveIndex(0);
@@ -436,21 +619,21 @@ export default function BrandsClient({
   const activeApprovalCardIndex =
     manualApprovalCard !== null ? manualApprovalCard : scrollApprovalActiveIndex;
 
-  const card1Opacity = useTransform(approvalScrollProgress, [0, 0.31, 0.33], [1, 1, 0]);
-  const card1Y = useTransform(approvalScrollProgress, [0, 0.31, 0.33], [0, 0, -30]);
-  const card1Scale = useTransform(approvalScrollProgress, [0, 0.31, 0.33], [1, 1, 0.95]);
+  const card1Opacity = useTransform(approvalScrollProgress, [0, 0.28, 0.33], [1, 1, 0]);
+  const card1Y = useTransform(approvalScrollProgress, [0, 0.28, 0.33], [0, 0, -20]);
+  const card1Scale = useTransform(approvalScrollProgress, [0, 0.28, 0.33], [1, 1, 0.96]);
 
-  const card2Opacity = useTransform(approvalScrollProgress, [0.33, 0.35, 0.64, 0.66], [0, 1, 1, 0]);
-  const card2Y = useTransform(approvalScrollProgress, [0.33, 0.35, 0.64, 0.66], [30, 0, 0, -30]);
-  const card2Scale = useTransform(approvalScrollProgress, [0.33, 0.35, 0.64, 0.66], [0.95, 1, 1, 0.95]);
+  const card2Opacity = useTransform(approvalScrollProgress, [0.28, 0.33, 0.61, 0.66], [0, 1, 1, 0]);
+  const card2Y = useTransform(approvalScrollProgress, [0.28, 0.33, 0.61, 0.66], [20, 0, 0, -20]);
+  const card2Scale = useTransform(approvalScrollProgress, [0.28, 0.33, 0.61, 0.66], [0.96, 1, 1, 0.96]);
 
-  const card3Opacity = useTransform(approvalScrollProgress, [0.66, 0.68, 1], [0, 1, 1]);
-  const card3Y = useTransform(approvalScrollProgress, [0.66, 0.68, 1], [30, 0, 0]);
-  const card3Scale = useTransform(approvalScrollProgress, [0.66, 0.68, 1], [0.95, 1, 1]);
+  const card3Opacity = useTransform(approvalScrollProgress, [0.61, 0.66, 1], [0, 1, 1]);
+  const card3Y = useTransform(approvalScrollProgress, [0.61, 0.66, 1], [20, 0, 0]);
+  const card3Scale = useTransform(approvalScrollProgress, [0.61, 0.66, 1], [0.96, 1, 1]);
 
-  const text1Opacity = useTransform(approvalScrollProgress, [0, 0.31, 0.33], [1, 1, 0]);
-  const text2Opacity = useTransform(approvalScrollProgress, [0.33, 0.35, 0.64, 0.66], [0, 1, 1, 0]);
-  const text3Opacity = useTransform(approvalScrollProgress, [0.66, 0.68, 1], [0, 1, 1]);
+  const text1Opacity = useTransform(approvalScrollProgress, [0, 0.28, 0.33], [1, 1, 0]);
+  const text2Opacity = useTransform(approvalScrollProgress, [0.28, 0.33, 0.61, 0.66], [0, 1, 1, 0]);
+  const text3Opacity = useTransform(approvalScrollProgress, [0.61, 0.66, 1], [0, 1, 1]);
 
   // Window scroll listener driving the sticky "The Old way of promoting your brand" step animation
   useEffect(() => {
@@ -1746,7 +1929,7 @@ export default function BrandsClient({
                 {/* Publish badge */}
                 <div className="absolute right-9 top-7 z-10">
                   <div className="relative inline-flex items-center">
-                    <span className="inline-flex items-center rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] px-4 py-2 text-sm font-medium text-white shadow-lg">
+                    <span className="inline-flex items-center rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] shadow-[0px_0px_12px_0px_#754FF680] px-4 py-2 text-sm font-medium text-white shadow-lg">
                       Publish
                     </span>
                     <div className="pointer-events-none absolute -bottom-3.5 -left-3.5 h-7 w-7">
@@ -1963,7 +2146,7 @@ export default function BrandsClient({
             isLight ? "bg-[#F1F1F1]" : "bg-[#030307]",
           )}
         >
-          <div className="sticky top-0 flex h-screen flex-col justify-center overflow-hidden px-4 py-8 sm:px-6">
+          <div className="sticky top-0 flex h-screen flex-col justify-center overflow-hidden px-3 py-2 sm:px-6 sm:py-8">
             {/* Purple background glow — dark mode only */}
             {!isLight ? (
               <div className="pointer-events-none absolute inset-x-0 bottom-0 top-1/2 opacity-70 mix-blend-screen">
@@ -1977,150 +2160,96 @@ export default function BrandsClient({
             ) : null}
 
             {/* Annotation Container with Motion Text */}
-            <div className="relative z-10 mx-auto mb-4 mt-20 flex h-14 w-full max-w-[900px] items-center justify-center px-2 sm:px-6">
-              <div className="relative w-full text-center">
+            <div className="relative z-20 mx-auto mb-1 mt-1 sm:mt-8 flex w-full max-w-[990px] items-center justify-center sm:justify-end px-2 sm:px-10">
+              <div className="relative w-full flex justify-center sm:justify-end">
                 <motion.div
-                  style={{ opacity: text1Opacity, display: activeApprovalCardIndex === 0 ? "block" : "none" }}
-                  className="relative"
+                  style={{ opacity: text1Opacity, display: activeApprovalCardIndex === 0 ? "flex" : "none" }}
+                  className="flex flex-col items-center sm:items-end text-center sm:text-right mr-0 sm:mr-12 lg:mr-16 max-w-full"
                 >
                   <p
                     className={cn(
                       caveat.className,
-                      "text-2xl sm:text-3xl md:text-4xl",
+                      "text-xs min-[360px]:text-sm min-[440px]:text-base sm:text-2xl md:text-3xl lg:text-[32px] max-w-[280px] min-[440px]:max-w-[360px] sm:max-w-none whitespace-normal sm:whitespace-nowrap leading-tight text-center sm:text-right",
                       isLight ? "text-[#535353]" : "text-white/85"
                     )}
                   >
                     Get full control to approve a reel before making live
                   </p>
 
-                  {/* Curved arrow */}
-                  <svg
-                    className={cn(
-                      "absolute -bottom-28 left-1/2 hidden h-24 w-24 -translate-x-1/2 sm:block",
-                      isLight ? "text-black/35" : "text-white/70"
-                    )}
-                    viewBox="0 0 100 100"
-                    fill="none"
-                  >
-                    <path
-                      d="M15 80 C30 45, 65 40, 55 15"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
+                  {/* Hand-drawn arrow */}
+                  <div className="relative mt-0.5 h-6 w-6 min-[440px]:h-8 min-[440px]:w-8 sm:h-16 sm:w-16 lg:h-20 lg:w-20 pointer-events-none self-center sm:self-auto mr-0 sm:mr-20">
+                    <Image
+                      src="/images/hand_arrow.png"
+                      alt=""
+                      fill
+                      className={cn(
+                        "object-contain rotate-[75deg] scale-x-[-1]",
+                        isLight ? "invert" : ""
+                      )}
                     />
-                    <path
-                      d="M51 18 L55 12 L58 20"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <circle
-                      cx="54"
-                      cy="50"
-                      r="5"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    />
-                  </svg>
+                  </div>
                 </motion.div>
 
                 <motion.div
-                  style={{ opacity: text2Opacity, display: activeApprovalCardIndex === 1 ? "block" : "none" }}
-                  className="relative"
+                  style={{ opacity: text2Opacity, display: activeApprovalCardIndex === 1 ? "flex" : "none" }}
+                  className="flex flex-col items-center sm:items-end text-center sm:text-right mr-0 sm:mr-12 lg:mr-16 max-w-full"
                 >
                   <p
                     className={cn(
                       caveat.className,
-                      "text-2xl sm:text-3xl md:text-4xl",
+                      "text-xs min-[360px]:text-sm min-[440px]:text-base sm:text-2xl md:text-3xl lg:text-[32px] max-w-[280px] min-[440px]:max-w-[360px] sm:max-w-none whitespace-normal sm:whitespace-nowrap leading-tight text-center sm:text-right",
                       isLight ? "text-[#535353]" : "text-white/85"
                     )}
                   >
                     Track how your social media performs after creator posts
                   </p>
 
-                  {/* Curved arrow pointing down to chart */}
-                  <svg
-                    className={cn(
-                      "absolute -bottom-28 left-1/2 hidden h-24 w-24 -translate-x-1/2 sm:block",
-                      isLight ? "text-black/35" : "text-white/70"
-                    )}
-                    viewBox="0 0 100 100"
-                    fill="none"
-                  >
-                    <path
-                      d="M15 80 C30 45, 65 40, 55 15"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
+                  {/* Hand-drawn arrow */}
+                  <div className="relative mt-0.5 h-6 w-6 min-[440px]:h-8 min-[440px]:w-8 sm:h-16 sm:w-16 lg:h-20 lg:w-20 pointer-events-none self-center sm:self-auto mr-0 sm:mr-20">
+                    <Image
+                      src="/images/hand_arrow.png"
+                      alt=""
+                      fill
+                      className={cn(
+                        "object-contain rotate-[75deg] scale-x-[-1]",
+                        isLight ? "invert" : ""
+                      )}
                     />
-                    <path
-                      d="M51 18 L55 12 L58 20"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <circle
-                      cx="54"
-                      cy="50"
-                      r="5"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    />
-                  </svg>
+                  </div>
                 </motion.div>
 
                 <motion.div
-                  style={{ opacity: text3Opacity, display: activeApprovalCardIndex === 2 ? "block" : "none" }}
-                  className="relative"
+                  style={{ opacity: text3Opacity, display: activeApprovalCardIndex === 2 ? "flex" : "none" }}
+                  className="flex flex-col items-center sm:items-end text-center sm:text-right mr-0 sm:mr-12 lg:mr-16 max-w-full"
                 >
                   <p
                     className={cn(
                       caveat.className,
-                      "text-2xl sm:text-3xl md:text-4xl",
+                      "text-xs min-[360px]:text-sm min-[440px]:text-base sm:text-2xl md:text-3xl lg:text-[32px] max-w-[280px] min-[440px]:max-w-[360px] sm:max-w-none whitespace-normal sm:whitespace-nowrap leading-tight text-center sm:text-right",
                       isLight ? "text-[#535353]" : "text-white/85"
                     )}
                   >
-                   Automatic pay to creators
+                    Automatic pay to creators
                   </p>
 
-                  {/* Curved arrow pointing down to chart */}
-                  <svg
-                    className={cn(
-                      "absolute -bottom-28 left-1/2 hidden h-24 w-24 -translate-x-1/2 sm:block",
-                      isLight ? "text-black/35" : "text-white/70"
-                    )}
-                    viewBox="0 0 100 100"
-                    fill="none"
-                  >
-                    <path
-                      d="M15 80 C30 45, 65 40, 55 15"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
+                  {/* Hand-drawn arrow */}
+                  <div className="relative mt-0.5 h-6 w-6 min-[440px]:h-8 min-[440px]:w-8 sm:h-16 sm:w-16 lg:h-20 lg:w-20 pointer-events-none self-center sm:self-auto mr-0 sm:mr-20">
+                    <Image
+                      src="/images/hand_arrow.png"
+                      alt=""
+                      fill
+                      className={cn(
+                        "object-contain rotate-[75deg] scale-x-[-1]",
+                        isLight ? "invert" : ""
+                      )}
                     />
-                    <path
-                      d="M51 18 L55 12 L58 20"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <circle
-                      cx="54"
-                      cy="50"
-                      r="5"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    />
-                  </svg>
+                  </div>
                 </motion.div>
               </div>
             </div>
 
             {/* Whole Card Stage Container */}
-            <div className="relative z-10 mx-auto mt-20 flex w-full max-w-[990px] items-center justify-center">
+            <div className="relative z-10 mx-auto mt-1 sm:mt-4 flex w-full max-w-[990px] items-center justify-center">
               {/* WHOLE CARD 1: Original Outer Glass Shell + Submissions Card */}
               <motion.div
                 style={{
@@ -3210,110 +3339,7 @@ export default function BrandsClient({
           </div>
         </section>
 
-        <section
-          className={cn(
-            "px-4 py-12 sm:px-6 sm:py-20 md:py-24 transition-colors duration-300 flex items-center justify-center min-h-[500px] sm:min-h-[600px]",
-            isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
-          )}
-        >
-          <div className="mx-auto w-full max-w-[1100px] px-2 sm:px-4">
-            {/* Testimonial Card */}
-            <div
-              className={cn(
-                "relative mx-auto overflow-hidden rounded-[28px] sm:rounded-[32px] transition-all duration-300 border flex flex-col lg:flex-row items-stretch",
-                isLight
-                  ? "bg-white border-black/10 shadow-[0_10px_30px_rgba(0,0,0,0.05)]"
-                  : "bg-[linear-gradient(360deg,#000000_0%,#353535_100%)] border-[#353535] shadow-[0_10px_40px_rgba(0,0,0,0.5)]",
-              )}
-            >
-              {/* Left: Image Card (Full cover left, top & bottom) */}
-              <div className="relative w-full lg:w-[384px] h-[380px] sm:h-[440px] lg:h-auto lg:min-h-[482px] flex-shrink-0 overflow-hidden">
-                <Image
-                  src="/images/ranveer_testimonial.png"
-                  alt="Ranveer Allahbadia"
-                  fill
-                  priority
-                  className="object-cover object-top"
-                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 100vw, 384px"
-                />
-                {/* Bottom gradient overlay for author text */}
-                <div className="absolute bottom-0 left-0 right-0 h-[140px] bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none" />
-
-                {/* Author Details overlay */}
-                <div className="absolute left-6 lg:left-[35px] bottom-6 lg:bottom-[35px] flex flex-col items-start justify-start z-10 text-left">
-                  <div className="text-[#F1F1F1] text-lg sm:text-[20px] font-semibold leading-snug sm:leading-[30px]">
-                    Ranveer Allahbadia
-                  </div>
-                  <div className="text-[#A8A8A8] text-sm sm:text-[16px] font-normal leading-normal sm:leading-[24px]">
-                    Founder, BeerBiceps
-                  </div>
-                </div>
-              </div>
-
-              {/* Right: Content & Metrics */}
-              <div className="flex-1 flex flex-col justify-center items-start gap-4 sm:gap-5 text-left p-6 sm:p-10 lg:py-12 lg:pr-[52px] lg:pl-12 max-w-[760px]">
-                {/* Campaign subtitle badge */}
-                <div className="text-[#757575] text-xs sm:text-[14px] font-medium leading-[21px]">
-                  Ran 3+ campaigns on GOC
-                </div>
-
-                {/* Main Quote */}
-                <div className="w-full">
-                  <p className="text-xl sm:text-2xl lg:text-[32px] font-medium leading-relaxed sm:leading-[44px] lg:leading-[48px] tracking-tight">
-                    <span className={isLight ? "text-black" : "text-[#DEDEDE]"}>
-                      “GOC helped us move{" "}
-                    </span>
-                    <span className="text-[#8E8E8E]">
-                      from paying for reach to understanding the actual performance behind every piece of content. The visibility made campaign decisions much easier.
-                    </span>
-                    <span className={isLight ? "text-black" : "text-[#DEDEDE]"}>
-                      ”
-                    </span>
-                  </p>
-                </div>
-
-                {/* Divider line */}
-                <div
-                  className={cn(
-                    "w-full h-[1px] my-1 sm:my-3",
-                    isLight ? "bg-black/10" : "bg-[#353535]",
-                  )}
-                />
-
-                {/* Metrics Box */}
-                <div className="w-full flex items-center justify-between sm:justify-start gap-6 sm:gap-12 md:gap-16 pt-1 sm:pt-2">
-                  {/* Stat 1 */}
-                  <div className="flex flex-col justify-center items-start gap-1">
-                    <div className={cn("text-3xl sm:text-4xl lg:text-[52px] font-semibold leading-tight lg:leading-[57.2px]", isLight ? "text-purple-600" : "text-[#F1EDFE]")}>
-                      2.5M+
-                    </div>
-                    <div className="text-[#8E8E8E] text-xs sm:text-[15px] font-normal leading-tight sm:leading-[21px]">
-                      Views generated
-                    </div>
-                  </div>
-
-                  {/* Vertical Divider */}
-                  <div
-                    className={cn(
-                      "w-[1px] h-12 sm:h-16 self-stretch",
-                      isLight ? "bg-black/10" : "bg-[#434343]",
-                    )}
-                  />
-
-                  {/* Stat 2 */}
-                  <div className="flex flex-col justify-center items-start gap-1">
-                    <div className={cn("text-3xl sm:text-4xl lg:text-[52px] font-semibold leading-tight lg:leading-[57.2px]", isLight ? "text-purple-600" : "text-[#F1EDFE]")}>
-                      16%
-                    </div>
-                    <div className="text-[#8E8E8E] text-xs sm:text-[15px] font-normal leading-tight sm:leading-[21px]">
-                      Engagement Rate
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+        <StickyTestimonialSection isLight={isLight} />
 
         <section
           className={cn(
