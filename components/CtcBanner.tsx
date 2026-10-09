@@ -237,7 +237,7 @@ export default function CtcBanner() {
 
               <div
                 className={cn(
-                  "pointer-events-none absolute left-1/2 top-[36%] z-0 h-[180px] w-[180px] sm:h-[220px] sm:w-[220px] md:h-[400px] md:w-[400px] -translate-x-1/2 -translate-y-1/2 rotate-[25.29deg]",
+                  "pointer-events-none absolute left-1/2 top-[36%] z-0 h-[280px] w-[280px] min-[400px]:h-[320px] min-[400px]:w-[320px] sm:h-[360px] sm:w-[360px] md:h-[420px] md:w-[420px] -translate-x-1/2 -translate-y-1/2 rotate-[25.29deg]",
                   isLight ? "opacity-40" : "opacity-85",
                 )}
               >
@@ -246,7 +246,7 @@ export default function CtcBanner() {
                   alt=""
                   fill
                   className="object-contain"
-                  sizes="260px"
+                  sizes="(max-width: 620px) 320px, 420px"
                   priority
                 />
               </div>
@@ -329,7 +329,7 @@ export default function CtcBanner() {
 
               <div
                 className={cn(
-                  "pointer-events-none absolute left-1/2 top-[36%] z-0 h-[180px] w-[180px] sm:h-[220px] sm:w-[220px] md:h-[400px] md:w-[400px] -translate-x-1/2 -translate-y-1/2 rotate-[25.29deg]",
+                  "pointer-events-none absolute left-1/2 top-[36%] z-0 h-[280px] w-[280px] min-[400px]:h-[320px] min-[400px]:w-[320px] sm:h-[360px] sm:w-[360px] md:h-[420px] md:w-[420px] -translate-x-1/2 -translate-y-1/2 rotate-[25.29deg]",
                   isLight ? "opacity-40" : "opacity-85",
                 )}
               >
@@ -338,7 +338,7 @@ export default function CtcBanner() {
                   alt=""
                   fill
                   className="object-contain"
-                  sizes="260px"
+                  sizes="(max-width: 620px) 320px, 420px"
                   priority
                 />
               </div>

@@ -479,147 +479,151 @@ export function Nav({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
-                      className="w-64 bg-[#141419]/95 border border-white/15 backdrop-blur-xl shadow-2xl shadow-black/80 rounded-2xl p-1.5 text-white"
+                      className="w-64 bg-[#222222] border border-[#353535] rounded-[8px] p-3 text-white shadow-2xl space-y-2"
                       align="end"
                     >
                       <DropdownMenuLabel className="font-normal p-0">
                         <Link
                           href="/dashboard/profile"
-                          className="flex flex-col space-y-2 p-3 hover:bg-white/5 rounded-xl transition-colors cursor-pointer"
+                          className="flex flex-col space-y-2 py-1.5 px-1 hover:bg-[#353535]/40 rounded transition-colors cursor-pointer"
                         >
                           <div className="flex items-center space-x-2">
-                            <Star className="h-4 w-4 text-zinc-400" />
-                            <p className="text-sm font-medium text-white">
+                            {/* <Star className="h-4 w-4 text-zinc-400 shrink-0" /> */}
+                            <p className="text-sm font-medium text-[#F1F1F1] font-sans truncate">
                               {displayName}
                             </p>
                           </div>
-                          <p className="text-xs text-zinc-400">
+                          <p className="text-sm text-[#8E8E8E] font-sans truncate">
                             {displayEmail}
                           </p>
                           {userType === "advertiser" && (
-                            <Badge className="bg-white/10 text-white text-xs w-fit border border-white/15">
-                              {getPlanName(subscriptionPlan)}
-                            </Badge>
+                            <div className="px-2 py-1 bg-[#353535] rounded-[22px] border border-[#434343] w-fit flex items-center justify-center mt-1">
+                              <span className="text-[#8E8E8E] text-xs font-medium font-sans">
+                                {getPlanName(subscriptionPlan)}
+                              </span>
+                            </div>
                           )}
                         </Link>
                       </DropdownMenuLabel>
-                      <DropdownMenuSeparator className="bg-white/10" />
-                      <DropdownMenuItem
-                        asChild
-                        className="text-zinc-300 hover:text-white hover:bg-white/10 focus:bg-white/10 focus:text-white rounded-lg cursor-pointer transition-colors"
-                      >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setQuickLinkLoading(true);
-                            window.location.href = quickLinkHref;
-                          }}
-                          disabled={quickLinkLoading}
-                          className="flex w-full items-center"
+                      <DropdownMenuSeparator className="bg-[#353535] my-1" />
+                      <div className="flex flex-col gap-1">
+                        <DropdownMenuItem
+                          asChild
+                          className="text-[#C4C4C4] text-[13px] font-normal font-sans hover:text-white hover:bg-[#353535] focus:bg-[#353535] focus:text-white rounded-[8px] cursor-pointer transition-colors px-2 py-1.5"
                         >
-                          {quickLinkLoading ? (
-                            <ButtonLoadingSpinner />
-                          ) : (
-                            <QuickLinkIcon className="mr-2 h-4 w-4" />
-                          )}
-                          {quickLinkLabel}
-                        </button>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        asChild
-                        className="text-zinc-300 hover:text-white hover:bg-white/10 focus:bg-white/10 focus:text-white rounded-lg cursor-pointer transition-colors"
-                      >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setDashboardLoading(true);
-                            window.location.href = "/dashboard";
-                          }}
-                          disabled={dashboardLoading}
-                          className="flex w-full items-center"
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setQuickLinkLoading(true);
+                              window.location.href = quickLinkHref;
+                            }}
+                            disabled={quickLinkLoading}
+                            className="flex w-full items-center"
+                          >
+                            {quickLinkLoading ? (
+                              <ButtonLoadingSpinner />
+                            ) : (
+                              <QuickLinkIcon className="mr-2 h-3.5 w-3.5 text-[#757575]" />
+                            )}
+                            {quickLinkLabel}
+                          </button>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          asChild
+                          className="text-[#C4C4C4] text-[13px] font-normal font-sans hover:text-white hover:bg-[#353535] focus:bg-[#353535] focus:text-white rounded-[8px] cursor-pointer transition-colors px-2 py-1.5"
                         >
-                          {dashboardLoading ? (
-                            <ButtonLoadingSpinner />
-                          ) : (
-                            <LayoutDashboard className="mr-2 h-4 w-4" />
-                          )}
-                          Dashboard
-                        </button>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        asChild
-                        className="text-zinc-300 hover:text-white hover:bg-white/10 focus:bg-white/10 focus:text-white rounded-lg cursor-pointer transition-colors"
-                      >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setHomeLoading(true);
-                            window.location.href = MARKETING_HOME_AS_GUEST;
-                          }}
-                          disabled={homeLoading}
-                          className="flex w-full items-center"
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDashboardLoading(true);
+                              window.location.href = "/dashboard";
+                            }}
+                            disabled={dashboardLoading}
+                            className="flex w-full items-center"
+                          >
+                            {dashboardLoading ? (
+                              <ButtonLoadingSpinner />
+                            ) : (
+                              <LayoutDashboard className="mr-2 h-3.5 w-3.5 text-[#757575]" />
+                            )}
+                            Dashboard
+                          </button>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          asChild
+                          className="text-[#C4C4C4] text-[13px] font-normal font-sans hover:text-white hover:bg-[#353535] focus:bg-[#353535] focus:text-white rounded-[8px] cursor-pointer transition-colors px-2 py-1.5"
                         >
-                          {homeLoading ? (
-                            <ButtonLoadingSpinner />
-                          ) : (
-                            <Home className="mr-2 h-4 w-4" />
-                          )}
-                          Home
-                        </button>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        asChild
-                        className="text-zinc-300 hover:text-white hover:bg-white/10 focus:bg-white/10 focus:text-white rounded-lg cursor-pointer transition-colors"
-                      >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setSettingsLoading(true);
-                            window.location.href = "/dashboard/settings";
-                          }}
-                          disabled={settingsLoading}
-                          className="flex w-full items-center"
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setHomeLoading(true);
+                              window.location.href = MARKETING_HOME_AS_GUEST;
+                            }}
+                            disabled={homeLoading}
+                            className="flex w-full items-center"
+                          >
+                            {homeLoading ? (
+                              <ButtonLoadingSpinner />
+                            ) : (
+                              <Home className="mr-2 h-3.5 w-3.5 text-[#757575]" />
+                            )}
+                            Home
+                          </button>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          asChild
+                          className="text-[#C4C4C4] text-[13px] font-normal font-sans hover:text-white hover:bg-[#353535] focus:bg-[#353535] focus:text-white rounded-[8px] cursor-pointer transition-colors px-2 py-1.5"
                         >
-                          {settingsLoading ? (
-                            <ButtonLoadingSpinner />
-                          ) : (
-                            <Settings className="mr-2 h-4 w-4" />
-                          )}
-                          Settings
-                        </button>
-                      </DropdownMenuItem>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setSettingsLoading(true);
+                              window.location.href = "/dashboard/settings";
+                            }}
+                            disabled={settingsLoading}
+                            className="flex w-full items-center"
+                          >
+                            {settingsLoading ? (
+                              <ButtonLoadingSpinner />
+                            ) : (
+                              <Settings className="mr-2 h-3.5 w-3.5 text-[#757575]" />
+                            )}
+                            Settings
+                          </button>
+                        </DropdownMenuItem>
+                      </div>
                       {userType === "advertiser" &&
                         subscriptionPlan !== PRODUCT_IDS.CHAMPION && (
                           <>
-                            <DropdownMenuSeparator className="bg-white/10" />
+                            <DropdownMenuSeparator className="bg-[#353535] my-1" />
                             <DropdownMenuItem
                               asChild
-                              className="text-purple-300 hover:text-purple-200 hover:bg-purple-600/20 focus:bg-purple-600/20 focus:text-purple-200 rounded-lg cursor-pointer transition-colors"
+                              className="text-[#F1EDFE] text-[13px] font-normal font-sans hover:text-white hover:bg-white/10 focus:bg-white/10 focus:text-white rounded-[8px] cursor-pointer transition-colors px-2 py-1.5"
                             >
                               <Link
                                 href="/dashboard/billing?tab=subscription"
                                 className="flex items-center"
                               >
-                                <Crown className="mr-2 h-4 w-4" />
+                                <Crown className="mr-2 h-3.5 w-3.5 text-[#F1EDFE]" />
                                 Upgrade Plan
                               </Link>
                             </DropdownMenuItem>
                           </>
                         )}
-                      <DropdownMenuSeparator className="bg-white/10" />
+                      <DropdownMenuSeparator className="bg-[#353535] my-1" />
                       <DropdownMenuItem
-                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 focus:bg-red-500/10 focus:text-red-300 rounded-lg cursor-pointer transition-colors"
+                        className="text-[#FF665E] text-[13px] font-normal font-sans hover:text-[#ff8078] hover:bg-[#FF665E]/10 focus:bg-[#FF665E]/10 focus:text-[#FF665E] rounded-[8px] cursor-pointer transition-colors px-2 py-1.5"
                         onClick={handleSignOut}
                       >
-                        <LogOut className="mr-2 h-4 w-4" />
+                        <LogOut className="mr-2 h-3.5 w-3.5 text-[#FF665E]" />
                         Log out
                       </DropdownMenuItem>
                     </DropdownMenuContent>

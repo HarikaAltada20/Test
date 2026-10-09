@@ -1760,7 +1760,7 @@ export default function HeroContent() {
             {/* LEFT CAMPAIGN CARD */}
             <div
               className={cn(
-                "absolute left-[2%] top-[35px] z-20 w-[200px] rotate-[7deg] rounded-[23px] p-[15px] xl:left-[4%] xl:w-[220px]",
+                "absolute left-[1%] top-[35px] z-20 w-[200px] rotate-[7deg] rounded-[23px] p-[15px] xl:left-[4%] xl:w-[220px]",
                 isLight
                   ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
                   : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
@@ -1878,19 +1878,19 @@ export default function HeroContent() {
             {/* LEFT TEXT */}
             <div
               className={cn(
-                "absolute left-[6%] top-[260px] z-20 rotate-[-4deg] text-[26px] xl:left-[9%]",
+                "absolute left-[2%] top-[320px] min-[1100px]:left-[4%] min-[1180px]:left-[6%] xl:left-[9%] xl:top-[260px] z-20 rotate-[-4deg] text-[24px] xl:text-[26px]",
                 caveat.className,
                 isLight ? "text-black/70" : "text-white/85",
               )}
             >
-              <div className="relative ml-[70px] mt-0.5">
+              <div className="relative ml-[50px] xl:ml-[70px] mt-0.5">
                 <Image
                   src="/images/Vector 945.png"
                   alt=""
                   width={46}
                   height={79}
                   className={cn(
-                    "h-[78px] w-auto object-contain",
+                    "h-[60px] xl:h-[78px] w-auto object-contain",
                     isLight && "invert",
                   )}
                 />
@@ -1936,7 +1936,7 @@ export default function HeroContent() {
             {/* RIGHT ANALYTICS CARD */}
             <div
               className={cn(
-                "absolute right-[2%] top-[130px] z-20 w-[240px] rotate-[-15deg] rounded-[22px] p-4 xl:right-[4%] xl:w-[280px]",
+                "absolute right-[1%] top-[155px] z-20 w-[240px] rotate-[-15deg] rounded-[22px] p-4 xl:right-[4%] xl:top-[130px] xl:w-[280px]",
                 isLight
                   ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_6.02px_0px_#FFFFFF40]"
                   : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
@@ -2037,7 +2037,7 @@ export default function HeroContent() {
             {/* RIGHT TEXT */}
             <div
               className={cn(
-                "absolute right-[6%] top-[10px] z-20 rotate-[3deg] text-center text-[26px] leading-[28px] xl:right-[10%]",
+                "absolute right-[2%] top-[-10px] min-[1100px]:right-[4%] min-[1180px]:right-[6%] xl:right-[10%] xl:top-[10px] z-20 rotate-[3deg] text-center text-[24px] leading-[26px] xl:text-[26px] xl:leading-[28px]",
                 caveat.className,
                 isLight ? "text-black/70" : "text-white/85",
               )}
@@ -2052,7 +2052,7 @@ export default function HeroContent() {
                   width={42}
                   height={81}
                   className={cn(
-                    "h-[78px] w-auto object-contain",
+                    "h-[64px] xl:h-[78px] w-auto object-contain",
                     isLight && "invert",
                   )}
                 />

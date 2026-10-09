@@ -152,7 +152,7 @@ export default function ForgotPasswordPage() {
                 </h1>
 
                 {!isSuccess && (
-                  <p className="text-slate-300 text-lg leading-relaxed">
+                  <p className="text-[#8E8E8E] text-lg leading-relaxed">
                     Enter your email to receive arena access recovery
                   </p>
                 )}
@@ -172,13 +172,13 @@ export default function ForgotPasswordPage() {
                     <h3 className="text-3xl font-bold bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent">
                       Recovery Portal Sent!
                     </h3>
-                    <p className="text-lg mb-3 text-slate-300">
+                    <p className="text-lg mb-3 text-[#8E8E8E]">
                        We've dispatched a recovery link to{" "}
                       <span className="font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
                         {email}
                       </span>
                     </p>
-                    <p className="text-slate-400 text-sm">
+                    <p className="text-[#8E8E8E] text-sm">
                       Can't find the email? Check your spam folder.
                     </p>
                   </div>
@@ -215,7 +215,7 @@ export default function ForgotPasswordPage() {
                         placeholder="Enter your registered email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="pl-10 h-12 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl"
+                        className="pl-10 h-12 bg-black border-white/20 placeholder:text-[#8E8E8E] text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl"
                         required
                       />
                     </div>
@@ -257,7 +257,7 @@ export default function ForgotPasswordPage() {
                   <div className="text-center pt-4">
                     <Link
                       href="/auth/signin"
-                      className="text-md inline-flex items-center text-white hover:text-slate-300 transition-colors font-medium"
+                      className="text-md inline-flex items-center text-[#8E8E8E] hover:text-slate-300 transition-colors font-medium"
                     >
                       <ArrowLeft className="mr-2 h-4 w-4" />
                       Return to arena entrance

@@ -242,7 +242,7 @@ export function SubscriptionUpgradeModal({
           <DialogDescription
             className={`text-sm sm:text-base ${
               pathname === "/pricing" || isDark || isDark
-                ? "text-gray-400"
+                ? "text-[#8E8E8E]"
                 : "text-gray-600"
             }`}
           >
@@ -328,7 +328,7 @@ export function SubscriptionUpgradeModal({
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-xl sm:text-2xl font-bold text-green-600">
+                <div className="text-xl sm:text-2xl font-bold text-[#00FF6C]">
                   {formatCurrencyFromCents(targetPlan.price)}
                   <span
                     className={`text-sm font-normal ${

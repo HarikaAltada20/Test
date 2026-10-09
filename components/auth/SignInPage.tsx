@@ -245,7 +245,7 @@ export default function SignInPage() {
                 <h1 className="text-3xl md:text-4xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent drop-shadow-2xl mb-4">
                   Welcome Back Champion
                 </h1>
-                <p className="text-slate-300 text-md leading-relaxed">
+                <p className="text-[#8E8E8E] text-lg leading-relaxed">
                   Enter your credentials to access the Game Of Creators arena
                 </p>
               </div>
@@ -264,7 +264,7 @@ export default function SignInPage() {
                       placeholder="Enter your email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="pl-10 h-12 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl"
+                      className="pl-10 h-12 bg-black border-white/20 placeholder:text-[#8E8E8E] text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl"
                       required
                       disabled={isLoading || isGoogleLoading}
                     />
@@ -287,7 +287,7 @@ export default function SignInPage() {
                       placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10 pr-12 h-12 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl"
+                      className="pl-10 pr-12 h-12 bg-black border-white/20 placeholder:text-[#8E8E8E] text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl"
                       required
                       disabled={isLoading || isGoogleLoading}
                     />
@@ -309,7 +309,7 @@ export default function SignInPage() {
                 <div className="flex justify-end">
                   <Link
                     href="/auth/forgot-password"
-                    className="text-md text-white hover:text-gray-300 transition-colors"
+                    className="text-md text-[#8E8E8E] hover:text-gray-300 transition-colors"
                   >
                     Forgot password?
                   </Link>
@@ -345,7 +345,7 @@ export default function SignInPage() {
               {/* Divider */}
               <div className="flex items-center my-6">
                 <hr className="flex-1 border-gray-600" />
-                <span className="px-3 text-gray-400">Or Continue with</span>
+                <span className="px-3 text-[#8E8E8E]">Or Continue with</span>
                 <hr className="flex-1 border-gray-600" />
               </div>
               <div className="flex justify-center gap-4">
@@ -378,7 +378,7 @@ export default function SignInPage() {
               </div>
               {/* Sign Up Link */}
               <div className="mt-8 text-center">
-                <p className="text-slate-400">
+                <p className="text-[#8E8E8E]">
                   New to the arena?{" "}
                   <Link
                     href="/auth/signup"

@@ -246,7 +246,7 @@ export default function ResetPasswordPage() {
                 </h1>
 
                 {!isSuccess && (
-                  <p className="text-slate-300 text-lg leading-relaxed">
+                  <p className="text-[#8E8E8E] text-lg leading-relaxed">
                     Create a powerful new password for your account
                   </p>
                 )}
@@ -266,7 +266,7 @@ export default function ResetPasswordPage() {
                     <h3 className="text-3xl font-bold bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent">
                       Access Restored!
                     </h3>
-                    <p className="text-slate-300">
+                    <p className="text-[#8E8E8E]">
                       Your password has been successfully updated.
                       <br />
                       Welcome back!
@@ -304,7 +304,7 @@ export default function ResetPasswordPage() {
                         placeholder="Create your new password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="pl-10 pr-12 h-12 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl"
+                        className="pl-10 pr-12 h-12 bg-black border-white/20 placeholder:text-[#8E8E8E] text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl"
                         required
                         autoComplete="new-password"
                       />
@@ -345,7 +345,7 @@ export default function ResetPasswordPage() {
                         placeholder="Confirm your new password"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="pl-10 pr-12 h-12 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl"
+                        className="pl-10 pr-12 h-12 bg-black border-white/20 placeholder:text-[#8E8E8E] text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl"
                         required
                         autoComplete="new-password"
                       />

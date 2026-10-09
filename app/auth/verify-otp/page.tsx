@@ -217,7 +217,7 @@ export default function VerifyOTPPage() {
                     onChange={(e) =>
                       setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
                     }
-                    className="text-center text-2xl tracking-[0.5em] h-16 bg-black border-white/20 placeholder:text-slate-400 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl font-mono font-bold"
+                    className="text-center text-2xl tracking-[0.5em] h-16 bg-black border-white/20 placeholder:text-[#8E8E8E] text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl font-mono font-bold"
                     maxLength={6}
                     required
                     disabled={isLoading}

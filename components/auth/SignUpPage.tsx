@@ -205,7 +205,7 @@ export default function SignUpPage() {
                 <h1 className="text-3xl md:text-4xl font-black  bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,#FFFFFF_0%,#999999_100%)] bg-clip-text text-transparent mb-4">
                   Join The Arena
                 </h1>
-                <p className="text-slate-300 text-lg leading-relaxed">
+                <p className="text-[#8E8E8E] text-lg leading-relaxed">
                   Start your creator journey and unlock epic opportunities
                 </p>
               </div>
@@ -224,7 +224,7 @@ export default function SignUpPage() {
                       placeholder="Enter your email to begin"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="pl-10 h-12 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl"
+                      className="pl-10 h-12 bg-black border-white/20 placeholder:text-[#8E8E8E] text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl"
                       required
                       disabled={isLoading || isGoogleLoading}
                     />
@@ -261,7 +261,7 @@ export default function SignUpPage() {
               {/* Divider */}
               <div className="flex items-center my-6">
                 <hr className="flex-1 border-gray-600" />
-                <span className="px-3 text-gray-400">Or Continue with</span>
+                <span className="px-3 text-[#8E8E8E]">Or Continue with</span>
                 <hr className="flex-1 border-gray-600" />
               </div>
               <div className="flex justify-center gap-4">
@@ -293,7 +293,7 @@ export default function SignUpPage() {
               </div>
               {/* Sign In Link */}
               <div className="mt-8 text-center">
-                <p className="text-slate-400">
+                <p className="text-[#8E8E8E]">
                   Already in the arena?{" "}
                   <Link
                     href="/auth/signin"

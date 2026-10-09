@@ -1027,7 +1027,7 @@ export default function ChooseUsernamePage() {
                   <h1 className="mt-4 text-3xl md:text-4xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent drop-shadow-2xl mb-4">
                     Complete Your Profile
                   </h1>
-                  <p className="text-slate-400 text-lg leading-relaxed">
+                  <p className="text-[#8E8E8E] text-lg leading-relaxed">
                     {userData?.isGoogleUser
                       ? "Almost there! Complete your gaming profile to unlock all features."
                       : userData?.needsUserTypeSelection ||
@@ -1059,7 +1059,7 @@ export default function ChooseUsernamePage() {
                           onChange={(e) =>
                             handleFirstNameChange(e.target.value)
                           }
-                          className={`h-11 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 ${
+                          className={`h-11 bg-black border-white/20 placeholder:text-[#8E8E8E] text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 ${
                             firstNameError
                               ? "border-red-500 focus:border-red-500 focus:ring-red-500"
                               : ""
@@ -1098,7 +1098,7 @@ export default function ChooseUsernamePage() {
                           type="text"
                           value={lastName}
                           onChange={(e) => handleLastNameChange(e.target.value)}
-                          className={`h-11 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 ${
+                          className={`h-11 bg-black border-white/20 placeholder:text-[#8E8E8E] text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 ${
                             lastNameError
                               ? "border-red-500 focus:border-red-500 focus:ring-red-500"
                               : ""
@@ -1138,7 +1138,7 @@ export default function ChooseUsernamePage() {
                             type={showPassword ? "text" : "password"}
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="h-11 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 pr-10"
+                            className="h-11 bg-black border-white/20 placeholder:text-[#8E8E8E] text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 pr-10"
                             placeholder="Enter your password"
                             autoComplete="new-password"
                             required
@@ -1170,7 +1170,7 @@ export default function ChooseUsernamePage() {
                             type={showConfirmPassword ? "text" : "password"}
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="h-11 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 pr-10"
+                            className="h-11 bg-black border-white/20 placeholder:text-[#8E8E8E] text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 pr-10"
                             placeholder="Confirm your password"
                             autoComplete="new-password"
                             required
@@ -1216,7 +1216,7 @@ export default function ChooseUsernamePage() {
                         required
                         minLength={3}
                         maxLength={20}
-                        className={`h-11 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 pr-10 ${
+                        className={`h-11 bg-black border-white/20 placeholder:text-[#8E8E8E] text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 pr-10 ${
                           usernameAvailable === true
                             ? "!border-emerald-500/50 focus:!border-emerald-500 focus:!ring-emerald-500"
                             : usernameAvailable === false
@@ -1343,7 +1343,7 @@ export default function ChooseUsernamePage() {
                         onChange={(e) =>
                           handleReferralCodeChange(e.target.value)
                         }
-                        className={`h-11 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 ${
+                        className={`h-11 bg-black border-white/20 placeholder:text-[#8E8E8E] text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 ${
                           referralCodeError
                             ? "border-red-500 focus:border-red-500 focus:ring-red-500"
                             : ""

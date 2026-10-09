@@ -333,7 +333,7 @@ export function VerifyOtpForm() {
         <h2 className="text-2xl font-semibold text-white mb-3">
           Check Your Email
         </h2>
-        <p className="text-slate-400 mb-1">
+        <p className="text-[#8E8E8E] mb-1">
           We&apos;ve sent a 6-digit verification code to:
         </p>
         <p className="text-amber-400 font-medium mb-6 break-all">
@@ -385,10 +385,10 @@ export function VerifyOtpForm() {
         </form>
 
         <div className="mt-6 text-sm">
-          <p className="text-slate-400">
+          <p className="text-[#8E8E8E]">
             Didn&apos;t receive the code?{" "}
             {resendCooldown > 0 ? (
-              <span className="text-slate-500">
+              <span className="text-[#8E8E8E]">
                 Resend available in {resendCooldown}s
               </span>
             ) : (
@@ -412,7 +412,7 @@ export function VerifyOtpForm() {
         </div>
 
         <div className="mt-8 text-center">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-[#8E8E8E]">
             Signed up with the wrong email?{" "}
           </p>
           <p>

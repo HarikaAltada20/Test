@@ -624,18 +624,16 @@ export default function PricingClient() {
           </div>
         ) : (
           <>
-            <div ref={section1Ref} className="text-center mt-10 mb-12">
+            <div  className="text-center mt-10 mb-12">
               <h2
-                className={`text-3xl sm:text-4xl md:text-5xl font-extrabold text-white mb-3 tracking-tight ${
-                  section1Visible ? "slide-up" : "opacity-0"
-                }`}
+                className="text-3xl sm:text-4xl md:text-[45px] font-extrabold text-white mb-3 tracking-tight"
+                  // section1Visible ? "slide-up" : "opacity-0"
+               
               >
                 Choose your Game Plan
               </h2>
               <p
-                className={`${
-                  section1Visible ? "slide-left" : "opacity-0"
-                } text-gray-400 text-sm md:text-base max-w-2xl mx-auto mb-8 leading-relaxed`}
+                className="text-[#8E8E8E] text-[15px] sm:text-[18px] max-w-3xl mx-auto mb-8 leading-relaxed"
               >
                 Set your campaign, your brief, and your budget. Game of Creators puts it in front of a creator network, and pays out on verified performance
               </p>
@@ -943,16 +941,14 @@ export default function PricingClient() {
           {/* Header */}
           <div className="flex flex-col justify-start items-center gap-4 text-center">
             <h2
-              className={`text-3xl sm:text-4xl md:text-[45px] font-bold text-white leading-[1.1] transition-all duration-700 ${
-                section2Visible ? "slide-up" : "opacity-0"
-              }`}
+              className="text-3xl sm:text-4xl md:text-[45px] font-bold text-white leading-[1.1] transition-all duration-700"
+              
             >
               What’s Included in every plan
             </h2>
             <p
-              className={`max-w-[654px] text-center text-[#8E8E8E] text-base md:text-[20px] font-medium leading-[30px] transition-all duration-700 ${
-                section2Visible ? "slide-left" : "opacity-0"
-              }`}
+              className="max-w-[654px] text-center text-[#8E8E8E] text-base md:text-[20px] font-medium leading-[30px] transition-all duration-700"
+               
             >
               Essential Elements for Your Influencer Marketing Strategy
             </p>
