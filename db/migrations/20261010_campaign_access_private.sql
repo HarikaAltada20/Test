@@ -35,6 +35,78 @@ COMMENT ON COLUMN public.contests.access_mode IS
 COMMENT ON COLUMN public.contests.access_list_skips_requirements IS
   'When true, creators on contest_access_list skip trust/quality/earnings/views requirements.';
 
+-- Expose the access columns on contests_with_status. Column list copied from
+-- SUPABASE/migrations/20260904_max_earnings_per_creator_jsonb.sql with the two
+-- new columns appended: CREATE OR REPLACE may only add columns at the end, and
+-- fails (instead of silently dropping anything) if the live view differs.
+CREATE OR REPLACE VIEW public.contests_with_status
+WITH (security_invoker = on) AS
+SELECT
+  contests.id,
+  contests.advertiser_id,
+  contests.title,
+  contests.platform,
+  contests.start_date,
+  contests.end_date,
+  contests.thumbnail_url,
+  contests.resources,
+  contests.category,
+  contests.inspiration_links,
+  contests.tracking_links,
+  contests.created_at,
+  contests.subscription_info_of_user,
+  contests.updated_at,
+  contests.contest_type,
+  contests.contest_based_details,
+  contests.live_submission_count,
+  contests.post_contest_status,
+  contests.brief_html,
+  contests.brief_json,
+  contests.last_metrics_updated,
+  contests.rules_html,
+  contests.rules_json,
+  contests.moderation_status,
+  contests.submitted_for_approval_at,
+  contests.approved_at,
+  contests.approved_by,
+  contests.published_at,
+  contests.rejection_reason,
+  contests.payment_details,
+  CASE
+    WHEN contests.moderation_status <> 'published'::public.contest_moderation_status_enum THEN NULL::text
+    WHEN contests.start_date IS NULL OR contests.end_date IS NULL THEN 'incomplete'::text
+    WHEN (now() AT TIME ZONE 'UTC'::text) < contests.start_date THEN 'upcoming'::text
+    WHEN (now() AT TIME ZONE 'UTC'::text) >= contests.start_date
+      AND (now() AT TIME ZONE 'UTC'::text) < contests.end_date THEN 'active'::text
+    WHEN (now() AT TIME ZONE 'UTC'::text) >= contests.end_date THEN 'ended'::text
+    ELSE 'unknown'::text
+  END AS status,
+  contests.views_locked_at,
+  contests.multiple_submissions_enabled,
+  contests.max_submissions_per_creator,
+  contests.content_type,
+  contests.bonus_details,
+  contests.max_earnings_per_creator,
+  contests.categories,
+  contests.subcategories,
+  contests.interests,
+  contests.region,
+  contests.contest_format,
+  contests.payout_adjustment_percentage,
+  contests.payout_adjustment_mode,
+  contests.trust_score,
+  contests.trust_number,
+  contests.min_avg_quality_score,
+  contests.min_best_quality_score,
+  contests.min_platform_earnings,
+  contests.min_platform_views,
+  contests.min_quality_score,
+  contests.post_campaign_last_metrics_updated,
+  contests.post_campaign_last_synced_at,
+  contests.access_mode,
+  contests.access_list_skips_requirements
+FROM public.contests;
+
 -- ---------------------------------------------------------------------------
 -- 2. Tables
 -- ---------------------------------------------------------------------------
@@ -267,7 +339,8 @@ GRANT ALL ON public.brand_allowlists, public.brand_allowlist_members, public.con
 -- ---------------------------------------------------------------------------
 -- 6. Campaign list RPCs: hide non-public campaigns from opportunities unless
 --    the caller has access. Bodies copied from 20260904; only the
---    "p_scope <> 'opportunities' OR public.can_access_contest(c.id)" filter is new.
+--    access filter is new. The access_mode check comes first so
+--    can_access_contest() only runs for non-public rows.
 -- ---------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.contest_ids_matching_user_countries(
@@ -296,7 +369,7 @@ BEGIN
   FROM public.contests_with_status c
   WHERE c.moderation_status = 'published'::public.contest_moderation_status_enum
     AND public.contest_matches_user_countries(c.region, v_countries)
-    AND public.can_access_contest(c.id);
+    AND (c.access_mode = 'public' OR public.can_access_contest(c.id));
 END;
 $$;
 
@@ -404,6 +477,7 @@ BEGIN
       )
       AND (
         p_scope <> 'opportunities'
+        OR c.access_mode = 'public'
         OR public.can_access_contest(c.id)
       )
       AND (
@@ -672,6 +746,7 @@ BEGIN
       )
       AND (
         p_scope <> 'opportunities'
+        OR c.access_mode = 'public'
         OR public.can_access_contest(c.id)
       )
       AND (

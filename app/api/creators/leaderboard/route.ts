@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import {
   leaderboardCache,
   adminLeaderboardCache,
@@ -194,9 +195,11 @@ export async function GET(request: NextRequest) {
       summaryRows = summaryResult.data;
       metricsPrefix = "platform";
     } else {
-      // YouTube / Instagram / TikTok: aggregates from submissions table in SQL
+      // YouTube / Instagram / TikTok: aggregates from submissions table in SQL.
+      // Service role so private-campaign submissions count for every viewer: the
+      // response is cached once for all viewers and only exposes per-creator totals.
       const [pageResult, summaryResult] = await Promise.all([
-        supabase.rpc("get_platform_leaderboard_page", {
+        createAdminClient().rpc("get_platform_leaderboard_page", {
           p_platform: platform,
           p_sort_by: rpcSortBy,
           p_limit: effectiveLimit,
