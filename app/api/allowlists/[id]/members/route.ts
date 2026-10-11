@@ -4,6 +4,7 @@ import {
   addAllowlistMembers,
   assertCanManageAllowlist,
   campaignAccessErrorResponse,
+  fetchAllRows,
   getAccessActor,
   getServiceClient,
   loadUserDisplay,
@@ -12,6 +13,9 @@ import {
 import type { AllowlistMember } from "@/lib/campaign-access";
 
 export const dynamic = "force-dynamic";
+
+/** Keeps `in.(...)` filters well under URL length limits. */
+const DELETE_CHUNK = 200;
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -23,18 +27,20 @@ export async function GET(_request: Request, { params }: Ctx) {
     const admin = getServiceClient();
     const allowlist = await assertCanManageAllowlist(admin, actor, id);
 
-    const { data, error } = await admin
-      .from("brand_allowlist_members")
-      .select("user_id, added_at")
-      .eq("allowlist_id", id)
-      .order("added_at", { ascending: false });
-    if (error) throw error;
+    const rows = await fetchAllRows<{ user_id: string; added_at: string }>(() =>
+      admin
+        .from("brand_allowlist_members")
+        .select("user_id, added_at")
+        .eq("allowlist_id", id)
+        .order("added_at", { ascending: false })
+        .order("user_id"),
+    );
 
     const users = await loadUserDisplay(
       admin,
-      (data || []).map((r) => r.user_id),
+      rows.map((r) => r.user_id),
     );
-    const members: AllowlistMember[] = (data || []).map((r) => {
+    const members: AllowlistMember[] = rows.map((r) => {
       const u = users.get(r.user_id);
       return {
         user_id: r.user_id,
@@ -95,12 +101,14 @@ export async function DELETE(request: Request, { params }: Ctx) {
       : [];
     if (userIds.length === 0) throw new CampaignAccessError("userIds is required", 400);
 
-    const { error } = await admin
-      .from("brand_allowlist_members")
-      .delete()
-      .eq("allowlist_id", id)
-      .in("user_id", userIds);
-    if (error) throw error;
+    for (let i = 0; i < userIds.length; i += DELETE_CHUNK) {
+      const { error } = await admin
+        .from("brand_allowlist_members")
+        .delete()
+        .eq("allowlist_id", id)
+        .in("user_id", userIds.slice(i, i + DELETE_CHUNK));
+      if (error) throw error;
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {

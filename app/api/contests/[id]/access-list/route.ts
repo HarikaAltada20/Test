@@ -4,9 +4,13 @@ import {
   assertCanManageAllowlist,
   assertCanManageCampaignAccess,
   campaignAccessErrorResponse,
+  WRITE_BATCH_SIZE,
   createAllowlistWithMembers,
+  fetchAllRows,
   getAccessActor,
   getServiceClient,
+  loadAllowlistMemberIds,
+  loadCampaignAccessUserIds,
   loadUserDisplay,
   resolveUsernamesToUserIds,
 } from "@/lib/campaign-access-server";
@@ -21,7 +25,17 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-const INSERT_CHUNK = 500;
+const INSERT_CHUNK = WRITE_BATCH_SIZE;
+/** Keeps `in.(...)` filters well under URL length limits. */
+const DELETE_CHUNK = 200;
+
+type AccessListRow = {
+  user_id: string;
+  source: string;
+  source_allowlist_id: string | null;
+  source_invite_link_id: string | null;
+  added_at: string;
+};
 
 async function addToAccessList(
   admin: ReturnType<typeof getServiceClient>,
@@ -59,13 +73,14 @@ export async function GET(_request: Request, { params }: Ctx) {
     const admin = getServiceClient();
     const contest = await assertCanManageCampaignAccess(admin, actor, id);
 
-    const { data, error } = await admin
-      .from("contest_access_list")
-      .select("user_id, source, source_allowlist_id, source_invite_link_id, added_at")
-      .eq("contest_id", id)
-      .order("added_at", { ascending: false });
-    if (error) throw error;
-    const rows = data || [];
+    const rows = await fetchAllRows<AccessListRow>(() =>
+      admin
+        .from("contest_access_list")
+        .select("user_id, source, source_allowlist_id, source_invite_link_id, added_at")
+        .eq("contest_id", id)
+        .order("added_at", { ascending: false })
+        .order("user_id"),
+    );
 
     const users = await loadUserDisplay(admin, rows.map((r) => r.user_id));
     const listIds = Array.from(
@@ -136,17 +151,11 @@ export async function POST(request: Request, { params }: Ctx) {
       if (!name) throw new CampaignAccessError("List name is required (max 100 characters)", 400);
       if (!contest.advertiser_id) throw new CampaignAccessError("Campaign has no brand", 400);
 
-      const { data: rows, error } = await admin
-        .from("contest_access_list")
-        .select("user_id")
-        .eq("contest_id", id);
-      if (error) throw error;
-
       const allowlist = await createAllowlistWithMembers(admin, {
         ownerId: contest.advertiser_id,
         name,
         createdBy: actor.userId,
-        userIds: (rows || []).map((r) => r.user_id),
+        userIds: await loadCampaignAccessUserIds(admin, id),
       });
       return NextResponse.json({ allowlist });
     }
@@ -156,13 +165,7 @@ export async function POST(request: Request, { params }: Ctx) {
       if (list.advertiser_id !== contest.advertiser_id) {
         throw new CampaignAccessError("This list belongs to a different brand", 403);
       }
-      const { data: members, error } = await admin
-        .from("brand_allowlist_members")
-        .select("user_id")
-        .eq("allowlist_id", list.id);
-      if (error) throw error;
-
-      const ids = (members || []).map((m) => m.user_id);
+      const ids = await loadAllowlistMemberIds(admin, list.id);
       const added = await addToAccessList(admin, id, ids, "saved_list", actor.userId, list.id);
       await invalidateOpportunitiesListCache();
       return NextResponse.json({ added, alreadyOnList: ids.length - added });
@@ -225,12 +228,14 @@ export async function DELETE(request: Request, { params }: Ctx) {
       : [];
     if (userIds.length === 0) throw new CampaignAccessError("userIds is required", 400);
 
-    const { error } = await admin
-      .from("contest_access_list")
-      .delete()
-      .eq("contest_id", id)
-      .in("user_id", userIds);
-    if (error) throw error;
+    for (let i = 0; i < userIds.length; i += DELETE_CHUNK) {
+      const { error } = await admin
+        .from("contest_access_list")
+        .delete()
+        .eq("contest_id", id)
+        .in("user_id", userIds.slice(i, i + DELETE_CHUNK));
+      if (error) throw error;
+    }
 
     await invalidateOpportunitiesListCache();
     return NextResponse.json({ success: true });

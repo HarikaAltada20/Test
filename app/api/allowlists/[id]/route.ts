@@ -6,6 +6,7 @@ import {
   createAllowlistWithMembers,
   getAccessActor,
   getServiceClient,
+  loadAllowlistMemberIds,
   renameAllowlist,
 } from "@/lib/campaign-access-server";
 import { MAX_ALLOWLIST_NAME_LENGTH, normalizeAllowlistName } from "@/lib/campaign-access";
@@ -67,17 +68,11 @@ export async function POST(request: Request, { params }: Ctx) {
       normalizeAllowlistName(body?.name) ??
       `${source.name} (copy)`.slice(0, MAX_ALLOWLIST_NAME_LENGTH);
 
-    const { data: members, error } = await admin
-      .from("brand_allowlist_members")
-      .select("user_id")
-      .eq("allowlist_id", id);
-    if (error) throw error;
-
     const allowlist = await createAllowlistWithMembers(admin, {
       ownerId: source.advertiser_id,
       name,
       createdBy: actor.userId,
-      userIds: (members || []).map((m) => m.user_id),
+      userIds: await loadAllowlistMemberIds(admin, id),
     });
     return NextResponse.json({ allowlist });
   } catch (err) {

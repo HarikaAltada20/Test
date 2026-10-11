@@ -28,8 +28,24 @@ export function hasAllowlistSelection(sel: AllowlistSelection): boolean {
 }
 
 /**
+ * Thrown when only part of a selection was applied. `retrySelection` is safe to
+ * pass back to applyAllowlistSelection: a list that was already created is
+ * referenced by id instead of being created again (which would 409).
+ */
+export class AllowlistApplyError extends Error {
+  constructor(
+    message: string,
+    public retrySelection: AllowlistSelection,
+  ) {
+    super(message);
+    this.name = "AllowlistApplyError";
+  }
+}
+
+/**
  * Copies the selection into a campaign's access list. Call after the campaign
  * row exists. Returns usernames that could not be resolved.
+ * Imports are idempotent, so retrying with the same selection is safe.
  */
 export async function applyAllowlistSelection(
   contestId: string,
@@ -40,29 +56,39 @@ export async function applyAllowlistSelection(
   const notFound: string[] = [];
   const invalid: string[] = [];
   const listIds = [...selection.allowlistIds];
+  let retrySelection = selection;
 
   const hasUsernames = parseUsernames(selection.usernames).valid.length > 0;
   const newName = selection.newListName.trim();
 
-  if (hasUsernames && newName) {
-    const created = await allowlistApi.create({
-      name: newName,
-      usernames: selection.usernames,
-      advertiserId,
-    });
-    notFound.push(...created.notFound);
-    invalid.push(...created.invalid);
-    listIds.push(created.allowlist.id);
-  } else if (hasUsernames) {
-    const res = await accessListApi.addUsernames(contestId, selection.usernames);
-    added += res.added;
-    notFound.push(...(res.notFound || []));
-    invalid.push(...(res.invalid || []));
-  }
+  try {
+    if (hasUsernames && newName) {
+      const created = await allowlistApi.create({
+        name: newName,
+        usernames: selection.usernames,
+        advertiserId,
+      });
+      notFound.push(...created.notFound);
+      invalid.push(...created.invalid);
+      listIds.push(created.allowlist.id);
+      retrySelection = { allowlistIds: [...listIds], usernames: "", newListName: "" };
+    } else if (hasUsernames) {
+      const res = await accessListApi.addUsernames(contestId, selection.usernames);
+      added += res.added;
+      notFound.push(...(res.notFound || []));
+      invalid.push(...(res.invalid || []));
+      retrySelection = { ...selection, usernames: "", newListName: "" };
+    }
 
-  for (const id of listIds) {
-    const res = await accessListApi.importList(contestId, id);
-    added += res.added;
+    for (const id of listIds) {
+      const res = await accessListApi.importList(contestId, id);
+      added += res.added;
+    }
+  } catch (err) {
+    throw new AllowlistApplyError(
+      err instanceof Error ? err.message : "Could not update the access list",
+      retrySelection,
+    );
   }
   return { notFound, invalid, added };
 }
@@ -79,6 +105,7 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
   const [lists, setLists] = useState<BrandAllowlist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,7 +118,14 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
     return () => {
       cancelled = true;
     };
-  }, [advertiserId]);
+  }, [advertiserId, reloadKey]);
+
+  // A list created during a failed save is selected by id but not loaded yet.
+  const hasUnloadedSelection =
+    !loading && value.allowlistIds.some((id) => !lists.some((l) => l.id === id));
+  useEffect(() => {
+    if (hasUnloadedSelection && reloadKey === 0) setReloadKey(1);
+  }, [hasUnloadedSelection, reloadKey]);
 
   const toggleList = (id: string, checked: boolean) => {
     const set = new Set(value.allowlistIds);

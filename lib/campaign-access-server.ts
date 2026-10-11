@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getUserSafe } from "@/utils/supabase/auth-server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { fetchAllRows } from "@/lib/supabase-paging";
 import {
   MAX_USERNAMES_PER_REQUEST,
   parseUsernames,
@@ -133,26 +134,87 @@ export async function renameAllowlist(
   return data as AllowlistRow;
 }
 
-/** Inserts members, skipping ones already on the list. Returns how many were new. */
+export { fetchAllRows };
+export const WRITE_BATCH_SIZE = 500;
+
+/** All user ids on a saved list (no 1,000-row truncation). */
+export async function loadAllowlistMemberIds(
+  admin: SupabaseClient,
+  allowlistId: string,
+): Promise<string[]> {
+  const rows = await fetchAllRows<{ user_id: string }>(() =>
+    admin
+      .from("brand_allowlist_members")
+      .select("user_id")
+      .eq("allowlist_id", allowlistId)
+      .order("user_id"),
+  );
+  return rows.map((r) => r.user_id);
+}
+
+/** All user ids on a campaign's access list (no 1,000-row truncation). */
+export async function loadCampaignAccessUserIds(
+  admin: SupabaseClient,
+  contestId: string,
+): Promise<string[]> {
+  const rows = await fetchAllRows<{ user_id: string }>(() =>
+    admin
+      .from("contest_access_list")
+      .select("user_id")
+      .eq("contest_id", contestId)
+      .order("user_id"),
+  );
+  return rows.map((r) => r.user_id);
+}
+
+/** Inserts members in batches, skipping ones already on the list. Returns how many were new. */
 export async function addAllowlistMembers(
   admin: SupabaseClient,
   allowlistId: string,
   userIds: string[],
   addedBy: string,
 ): Promise<number> {
-  if (userIds.length === 0) return 0;
-  const rows = Array.from(new Set(userIds)).map((user_id) => ({
-    allowlist_id: allowlistId,
-    user_id,
-    added_by: addedBy,
-  }));
-  const { data, error } = await admin
-    .from("brand_allowlist_members")
-    .upsert(rows, { onConflict: "allowlist_id,user_id", ignoreDuplicates: true })
-    .select("user_id");
-  if (error) throw error;
-  return data?.length ?? 0;
+  const unique = Array.from(new Set(userIds));
+  let added = 0;
+  for (let i = 0; i < unique.length; i += WRITE_BATCH_SIZE) {
+    const rows = unique.slice(i, i + WRITE_BATCH_SIZE).map((user_id) => ({
+      allowlist_id: allowlistId,
+      user_id,
+      added_by: addedBy,
+    }));
+    const { data, error } = await admin
+      .from("brand_allowlist_members")
+      .upsert(rows, { onConflict: "allowlist_id,user_id", ignoreDuplicates: true })
+      .select("user_id");
+    if (error) throw error;
+    added += data?.length ?? 0;
+  }
+  return added;
 }
+
+/**
+ * Whether the current visitor may see a campaign's data (leaderboards, feeds).
+ * Public campaigns are open to everyone; private ones require a signed-in user
+ * who passes can_access_contest (access list, owning brand, or admin).
+ * Unknown ids return true so the caller keeps its own not-found handling.
+ */
+export async function canViewCampaign(contestId: string): Promise<boolean> {
+  const { data: contest } = await createAdminClient()
+    .from("contests")
+    .select("access_mode")
+    .eq("id", contestId)
+    .maybeSingle();
+  if (!contest || contest.access_mode === "public") return true;
+
+  const supabase = await createClient();
+  const { data: allowed, error } = await supabase.rpc("can_access_contest", {
+    p_contest_id: contestId,
+  });
+  return !error && allowed === true;
+}
+
+export const PRIVATE_CAMPAIGN_FORBIDDEN_MESSAGE =
+  "This campaign is private or unavailable.";
 
 export async function assertCanManageAllowlist(
   admin: SupabaseClient,

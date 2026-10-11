@@ -101,6 +101,7 @@ import { PlatformCampaignTabs } from "@/components/contest/PlatformCampaignTabs"
 import { toast } from "@/hooks/use-toast"; // Added import
 import { AccessModeSelector } from "@/components/campaign-access/AccessModeSelector";
 import {
+  AllowlistApplyError,
   AllowlistPicker,
   EMPTY_ALLOWLIST_SELECTION,
   applyAllowlistSelection,
@@ -4407,13 +4408,20 @@ export default function CreateContestPage({
               });
             }
           } catch (accessError: any) {
+            if (accessError instanceof AllowlistApplyError) {
+              setAllowlistSelection(accessError.retrySelection);
+            }
+            if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
             toast({
-              title: "Campaign saved, but the access list was not updated",
-              description:
-                accessError?.message ||
-                "Add creators from the campaign's Access tab.",
+              title: "Couldn't set up who can join",
+              description: `${
+                accessError?.message || "The access list was not saved."
+              } Your campaign is saved — please try again.`,
               variant: "destructive",
             });
+            setIsLoading(false);
+            setUploadProgress(null);
+            return;
           }
         }
 
@@ -4492,7 +4500,10 @@ export default function CreateContestPage({
       return;
     }
 
-    const submitForApproval = async (retries = 5, delay = 2000) => {
+    const submitForApproval = async (
+      retries = 5,
+      delay = 2000,
+    ): Promise<void> => {
       try {
         console.log(
           `Attempting to submit campaign for approval. Retries left: ${retries}`,
