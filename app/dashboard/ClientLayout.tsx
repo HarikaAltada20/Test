@@ -1,6 +1,7 @@
 "use client";
 
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
+import { PendingInviteRedeemer } from "@/components/campaign-access/PendingInviteRedeemer";
 import { LoadingPlaceholder } from "@/components/loading-placeholder";
 import { ReviewModal } from "@/components/ReviewModal";
 import { submitReview, ReviewData } from "@/lib/reviews";
@@ -2796,6 +2797,7 @@ function DashboardContent({
                   data-mode={currentMode}
                   data-compact={isCompactMode ? "true" : "false"}
                 >
+                  <PendingInviteRedeemer userRole={userRole} />
                   <BulkModerationProgressProvider>
                     <BulkPaymentProgressProvider>
                       <BulkVideoDownloadProgressProvider>

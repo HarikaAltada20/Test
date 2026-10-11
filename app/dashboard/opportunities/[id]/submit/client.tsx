@@ -54,6 +54,7 @@ import {
   getSettingsUrlWithReturnTo,
 } from "@/lib/oauth-return-to";
 import { getRequirementsBlockedMessage, type RequirementFailure } from "@/lib/creator-requirements";
+import { isCampaignAccessDeniedError } from "@/lib/campaign-access";
 import {
   CreatorContestRequirementsGate,
 } from "@/components/CreatorContestRequirementsGate";
@@ -96,6 +97,9 @@ function formatSubmissionInsertError(error: {
   const msg = error?.message || "";
   const refreshHint =
     " Refresh the page — your eligibility may have changed since you started submitting.";
+  if (isCampaignAccessDeniedError(msg)) {
+    return "This campaign is private and you're not on its access list.";
+  }
   if (msg.includes("trust_score_too_low")) {
     return `Trust % too low to submit to this campaign.${refreshHint}`;
   }

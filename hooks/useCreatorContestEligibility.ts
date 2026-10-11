@@ -22,6 +22,7 @@ export function useCreatorContestEligibility(
   const [snapshot, setSnapshot] = useState<CreatorRequirementsSnapshot | null>(
     null,
   );
+  const [skipped, setSkipped] = useState(false);
 
   const hasRequirements =
     contest != null && hasAnyContestCreatorRequirement(contest);
@@ -55,9 +56,15 @@ export function useCreatorContestEligibility(
       const data = await res.json();
       const requirements = parseContestCreatorRequirements(contest);
       const snap = data.snapshot as CreatorRequirementsSnapshot;
+      const requirementsSkipped = data.requirementsSkipped === true;
       setSnapshot(snap);
+      setSkipped(requirementsSkipped);
       setFailures((data.failures as RequirementFailure[]) ?? []);
-      setItems(buildRequirementChecklist({ requirements, snapshot: snap }));
+      setItems(
+        requirementsSkipped
+          ? []
+          : buildRequirementChecklist({ requirements, snapshot: snap }),
+      );
     } catch {
       setFetchFailed(true);
       setItems([]);
@@ -84,6 +91,7 @@ export function useCreatorContestEligibility(
     failures,
     failingItems,
     snapshot,
+    skipped,
     isBlocked,
     refresh,
   };

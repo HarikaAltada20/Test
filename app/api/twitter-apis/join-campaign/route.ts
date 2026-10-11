@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
+import {
+  canViewCampaign,
+  PRIVATE_CAMPAIGN_FORBIDDEN_MESSAGE,
+} from "@/lib/campaign-access-server";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +64,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "This contest is not a joinable Twitter campaign" },
         { status: 400 }
+      );
+    }
+
+    if (!(await canViewCampaign(contestId))) {
+      return NextResponse.json(
+        {
+          error: PRIVATE_CAMPAIGN_FORBIDDEN_MESSAGE,
+          code: "CAMPAIGN_ACCESS_DENIED",
+        },
+        { status: 403 },
       );
     }
 

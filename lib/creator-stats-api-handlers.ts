@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   assertCreatorMeetsContestRequirements,
   buildCreatorRequirementsSnapshotFromProfile,
+  creatorSkipsContestRequirements,
   getCreatorRequirementsSnapshot,
   parseContestCreatorRequirements,
   evaluateCreatorRequirements,
@@ -10,6 +11,12 @@ import {
 } from "@/lib/creator-requirements";
 import { getCreatorStatsFromProfile } from "@/lib/creator-profile-stats";
 import { getCreatorTrustMetricsLive } from "@/lib/trust-score";
+import { createAdminClient } from "@/utils/supabase/admin";
+
+/** Computed metric columns are DB-managed; user sessions cannot write them. */
+function recomputeWithServiceRole(userId: string) {
+  return recomputeCreatorProfileMetrics(createAdminClient(), userId);
+}
 
 export async function loadCreatorStatsResponse(
   supabase: SupabaseClient,
@@ -17,7 +24,7 @@ export async function loadCreatorStatsResponse(
   options?: { recompute?: boolean },
 ) {
   if (options?.recompute) {
-    const recomputeResult = await recomputeCreatorProfileMetrics(supabase, userId);
+    const recomputeResult = await recomputeWithServiceRole(userId);
     if (!recomputeResult.ok) {
       return NextResponse.json(
         { error: recomputeResult.errors.join("; ") },
@@ -92,7 +99,7 @@ export async function evaluateContestEligibilityResponse(
   const { data: contest, error: contestError } = await supabase
     .from("contests")
     .select(
-      "trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_quality_score, min_platform_earnings, min_platform_views, contest_format",
+      "trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_quality_score, min_platform_earnings, min_platform_views, contest_format, access_mode, access_list_skips_requirements",
     )
     .eq("id", contestId)
     .maybeSingle();
@@ -105,13 +112,22 @@ export async function evaluateContestEligibilityResponse(
   const snapshot = await getCreatorRequirementsSnapshot(supabase, userId, {
     forGateCheck: true,
   });
-  const failures = evaluateCreatorRequirements({ requirements, snapshot });
+  const skips = await creatorSkipsContestRequirements(
+    supabase,
+    contest,
+    contestId,
+    userId,
+  );
+  const failures = skips
+    ? []
+    : evaluateCreatorRequirements({ requirements, snapshot });
 
   return NextResponse.json({
     eligible: failures.length === 0,
     failures,
     snapshot,
     requirements,
+    requirementsSkipped: skips,
   });
 }
 
@@ -119,7 +135,7 @@ export async function refreshCreatorStatsResponse(
   supabase: SupabaseClient,
   userId: string,
 ) {
-  const recomputeResult = await recomputeCreatorProfileMetrics(supabase, userId);
+  const recomputeResult = await recomputeWithServiceRole(userId);
   if (!recomputeResult.ok) {
     return NextResponse.json(
       { error: recomputeResult.errors.join("; ") },

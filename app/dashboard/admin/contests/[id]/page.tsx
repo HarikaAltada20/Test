@@ -75,7 +75,7 @@ export default async function AdminContestDetailPage({
     const { data: payoutRow } = await supabase
       .from("contests")
       .select(
-        "payout_adjustment_percentage, payout_adjustment_mode, trust_score, trust_number, min_best_quality_score, min_avg_quality_score, min_quality_score, min_platform_earnings, min_platform_views",
+        "payout_adjustment_percentage, payout_adjustment_mode, trust_score, trust_number, min_best_quality_score, min_avg_quality_score, min_quality_score, min_platform_earnings, min_platform_views, access_mode",
       )
       .eq("id", contestId)
       .maybeSingle();
@@ -376,6 +376,8 @@ export default async function AdminContestDetailPage({
           contestData.min_platform_views ??
           null)
         : null,
+      access_mode: payoutRow?.access_mode ?? "public",
+      advertiser_id: contestData.advertiser_id ?? null,
     };
 
     let brandProfile: {

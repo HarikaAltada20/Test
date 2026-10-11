@@ -1,5 +1,9 @@
 import { fetchLeaderboardPayload } from "@/lib/leaderboard-route-data";
 import {
+  canViewCampaign,
+  PRIVATE_CAMPAIGN_FORBIDDEN_MESSAGE,
+} from "@/lib/campaign-access-server";
+import {
   leaderboardCacheTag,
   LEADERBOARD_CACHE_SECONDS,
 } from "@/lib/leaderboard-cache";
@@ -28,6 +32,13 @@ export async function GET(request: Request) {
   }
 
   try {
+    if (!(await canViewCampaign(contestId))) {
+      return NextResponse.json(
+        { error: PRIVATE_CAMPAIGN_FORBIDDEN_MESSAGE },
+        { status: 403 },
+      );
+    }
+
     const params = { contestId, page, limit, groupBy, platform };
 
     const load = async () => fetchLeaderboardPayload(params);

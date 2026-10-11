@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import {
+  canViewCampaign,
+  PRIVATE_CAMPAIGN_FORBIDDEN_MESSAGE,
+} from "@/lib/campaign-access-server";
 
 export async function GET(
   req: Request,
@@ -16,6 +20,13 @@ export async function GET(
   const offset = (safePage - 1) * safeLimit;
 
   try {
+    if (!(await canViewCampaign(contestId))) {
+      return NextResponse.json(
+        { success: false, error: PRIVATE_CAMPAIGN_FORBIDDEN_MESSAGE },
+        { status: 403 },
+      );
+    }
+
     const supabase = await createClient();
 
     // 1) Fetch active participants (join list). We include participants even if they haven't earned points yet.

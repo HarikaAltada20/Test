@@ -10,7 +10,10 @@ import {
   type OpportunitiesStatusTab,
 } from "@/lib/contest-list-query";
 import { getCreatorUserCountries } from "@/lib/opportunities-user-countries";
-import { getCreatorRequirementsSnapshot } from "@/lib/creator-requirements";
+import {
+  getCreatorRequirementsSnapshot,
+  getRequirementsSkippedContestIds,
+} from "@/lib/creator-requirements";
 import {
   buildCampaignListCacheKeyAsync,
   getCampaignListCache,
@@ -116,7 +119,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const result = await listCampaignsPaginated({
+    const listed = await listCampaignsPaginated({
       supabase,
       scope: "opportunities",
       tab,
@@ -132,6 +135,20 @@ export async function GET(request: NextRequest) {
       eligibleOnly,
       creatorEligibilitySnapshot,
     });
+
+    const skippedIds = await getRequirementsSkippedContestIds(
+      supabase,
+      user.id,
+      listed.contests.map((c) => c.id),
+    );
+    const result = skippedIds.size
+      ? {
+          ...listed,
+          contests: listed.contests.map((c) =>
+            skippedIds.has(c.id) ? { ...c, requirements_skipped: true } : c,
+          ),
+        }
+      : listed;
 
     if (cacheKey) {
       await setCampaignListCache(
