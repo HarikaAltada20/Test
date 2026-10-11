@@ -75,6 +75,7 @@ import { createClient } from "@/utils/supabase/client";
 import { UserResponse } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 import { AccessModeSelector } from "@/components/campaign-access/AccessModeSelector";
+import { invalidateBrandCampaignListCachesAfterMutation } from "@/lib/invalidate-brand-campaign-list-cache";
 import type { AccessMode } from "@/lib/campaign-access";
 import { reconcileLeaderboardPrizeAmounts } from "@/lib/contest-prize-utils";
 import { getChargeableBudgetCents } from "@/lib/contest-chargeable-budget";
@@ -809,10 +810,26 @@ export default function EditContestPage({
   const [savedAccessMode, setSavedAccessMode] = useState<AccessMode>("public");
   const [accessListSkipsRequirements, setAccessListSkipsRequirements] =
     useState(false);
+  const [savedSkipRequirements, setSavedSkipRequirements] = useState(false);
   const accessFields = {
     access_mode: accessMode,
     access_list_skips_requirements:
       accessMode !== "public" && accessListSkipsRequirements,
+  };
+  /** Call after a successful save that wrote accessFields. */
+  const commitSavedAccessFields = (savedViaAdminApi: boolean) => {
+    const changed =
+      accessFields.access_mode !== savedAccessMode ||
+      accessFields.access_list_skips_requirements !== savedSkipRequirements;
+    if (!changed) return;
+    // The admin update route clears list caches server-side.
+    if (!savedViaAdminApi) {
+      invalidateBrandCampaignListCachesAfterMutation({
+        touchOpportunities: true,
+      });
+    }
+    setSavedAccessMode(accessFields.access_mode);
+    setSavedSkipRequirements(accessFields.access_list_skips_requirements);
   };
   const [category, setCategory] = useState<string>("technology");
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
@@ -2310,6 +2327,10 @@ export default function EditContestPage({
             setSavedAccessMode(loadedAccessMode);
             setAccessListSkipsRequirements(
               !!data.access_list_skips_requirements,
+            );
+            setSavedSkipRequirements(
+              loadedAccessMode !== "public" &&
+                !!data.access_list_skips_requirements,
             );
 
             // Load flat fee bonus from contest_based_details
@@ -4488,6 +4509,10 @@ export default function EditContestPage({
         }
       }
 
+      if (updatePayload.access_mode !== undefined) {
+        commitSavedAccessFields(isAdmin);
+      }
+
       // Sync Twitter campaign metrics if this is a Twitter contest and contest_based_details was updated
       if (
         !datesOnly &&
@@ -6547,6 +6572,7 @@ export default function EditContestPage({
           );
           throw new Error(`Failed to update campaign: ${updateError.message}`);
         }
+        commitSavedAccessFields(false);
 
         console.log(
           "✅ Complete contest data updated in database after payment",
@@ -7197,6 +7223,7 @@ export default function EditContestPage({
           console.error("❌ Failed to save campaign as draft:", updateError);
           throw new Error(`Failed to save campaign: ${updateError.message}`);
         }
+        commitSavedAccessFields(false);
 
         console.log(
           "✅ Contest saved as draft with all form data after payment",
@@ -9001,6 +9028,9 @@ export default function EditContestPage({
         }
         const result = await resp.json().catch(() => ({}));
         console.log("✅ Admin draft update successful:", result);
+        if (updatePayload.access_mode !== undefined) {
+          commitSavedAccessFields(true);
+        }
       } else {
         console.log("📤 Direct Supabase draft update:", {
           contestId,
@@ -9033,6 +9063,9 @@ export default function EditContestPage({
           subcategories: updateData?.[0]?.subcategories,
           interests: updateData?.[0]?.interests,
         });
+        if (updatePayload.access_mode !== undefined) {
+          commitSavedAccessFields(false);
+        }
 
         // Verify the update actually worked
         if (updateData && updateData.length > 0) {

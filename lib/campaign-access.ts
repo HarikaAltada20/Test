@@ -4,12 +4,17 @@ export type AccessMode = (typeof ACCESS_MODES)[number];
 /** Modes brands/admins may select today. `restricted` ships in a later phase. */
 export const SELECTABLE_ACCESS_MODES: readonly AccessMode[] = ["public", "private"];
 
-export type ContestAccessSource = "saved_list" | "manual" | "existing_submitter";
+export type ContestAccessSource =
+  | "saved_list"
+  | "manual"
+  | "existing_submitter"
+  | "invite_link";
 
 export const ACCESS_SOURCE_LABELS: Record<ContestAccessSource, string> = {
   saved_list: "Saved list",
   manual: "Added manually",
   existing_submitter: "Existing submitter",
+  invite_link: "Invite link",
 };
 
 export type BrandAllowlist = {
@@ -33,6 +38,61 @@ export type ContestAccessMember = AllowlistMember & {
   source: ContestAccessSource;
   source_allowlist_id: string | null;
   source_allowlist_name: string | null;
+  source_invite_link_id: string | null;
+  source_invite_link_label: string | null;
+};
+
+export type InviteLinkStatus = "active" | "expired" | "full" | "revoked";
+
+export type InviteLink = {
+  id: string;
+  contest_id: string;
+  token: string;
+  label: string | null;
+  expires_at: string | null;
+  max_uses: number | null;
+  use_count: number;
+  revoked_at: string | null;
+  created_at: string;
+};
+
+export const INVITE_EXPIRY_PRESETS = [
+  { value: "24h", label: "24 hours", ms: 24 * 60 * 60 * 1000 },
+  { value: "7d", label: "7 days", ms: 7 * 24 * 60 * 60 * 1000 },
+  { value: "30d", label: "30 days", ms: 30 * 24 * 60 * 60 * 1000 },
+  { value: "custom", label: "Custom date", ms: null },
+  { value: "never", label: "Never", ms: null },
+] as const;
+export type InviteExpiryPreset = (typeof INVITE_EXPIRY_PRESETS)[number]["value"];
+export const DEFAULT_INVITE_EXPIRY: InviteExpiryPreset = "7d";
+
+export const MAX_INVITE_USES = 100_000;
+export const MAX_INVITE_LABEL_LENGTH = 60;
+
+/** Result codes from redeem_contest_invite / get_contest_invite_preview. */
+export type InviteRedeemResult =
+  | "joined"
+  | "already_member"
+  | "not_signed_in"
+  | "not_creator"
+  | "not_found"
+  | "revoked"
+  | "expired"
+  | "full"
+  | "public"
+  | "ended";
+
+export const INVITE_RESULT_MESSAGES: Record<InviteRedeemResult, string> = {
+  joined: "You've joined this campaign.",
+  already_member: "You already have access to this campaign.",
+  not_signed_in: "Sign in to join this campaign.",
+  not_creator: "Invite links are for creator accounts.",
+  not_found: "This invite link isn't valid.",
+  revoked: "This invite link is no longer active. Ask the brand for a new one.",
+  expired: "This invite link has expired. Ask the brand for a new one.",
+  full: "This invite link has reached its limit. Ask the brand for a new one.",
+  public: "This campaign is now open to everyone.",
+  ended: "This campaign has ended.",
 };
 
 export type UsernameResolution = {
@@ -110,4 +170,53 @@ export function validateCampaignAccessFields(data: Record<string, unknown>): str
 /** Maps the submission trigger's access error to a user-facing message. */
 export function isCampaignAccessDeniedError(message: string | null | undefined): boolean {
   return typeof message === "string" && message.includes("campaign_access_denied");
+}
+
+export function isInviteExpiryPreset(value: unknown): value is InviteExpiryPreset {
+  return INVITE_EXPIRY_PRESETS.some((p) => p.value === value);
+}
+
+/**
+ * Turns an expiry choice into an ISO timestamp (null = never).
+ * Custom dates must be in the future; returns an error message otherwise.
+ */
+export function resolveInviteExpiry(
+  preset: InviteExpiryPreset,
+  customExpiresAt: string | null | undefined,
+  now: Date = new Date(),
+): { expiresAt: string | null } | { error: string } {
+  if (preset === "never") return { expiresAt: null };
+  if (preset === "custom") {
+    const date = customExpiresAt ? new Date(customExpiresAt) : null;
+    if (!date || Number.isNaN(date.getTime())) {
+      return { error: "Choose an expiry date" };
+    }
+    if (date.getTime() <= now.getTime()) {
+      return { error: "The expiry date must be in the future" };
+    }
+    return { expiresAt: date.toISOString() };
+  }
+  const ms = INVITE_EXPIRY_PRESETS.find((p) => p.value === preset)?.ms ?? 0;
+  return { expiresAt: new Date(now.getTime() + ms).toISOString() };
+}
+
+/** Mirrors contest_invite_link_status for the link itself (campaign state aside). */
+export function getInviteLinkStatus(
+  link: Pick<InviteLink, "revoked_at" | "expires_at" | "max_uses" | "use_count">,
+  now: Date = new Date(),
+): InviteLinkStatus {
+  if (link.revoked_at) return "revoked";
+  if (link.expires_at && new Date(link.expires_at).getTime() <= now.getTime()) {
+    return "expired";
+  }
+  if (link.max_uses != null && link.use_count >= link.max_uses) return "full";
+  return "active";
+}
+
+export function buildInviteUrl(token: string, origin: string): string {
+  return `${origin.replace(/\/+$/, "")}/invite/${encodeURIComponent(token)}`;
+}
+
+export function isInviteRedeemResult(value: unknown): value is InviteRedeemResult {
+  return typeof value === "string" && value in INVITE_RESULT_MESSAGES;
 }

@@ -29,6 +29,7 @@ import {
   type ContestAccessMember,
 } from "@/lib/campaign-access";
 import { accessListApi, allowlistApi, summarizeAddResult } from "./api";
+import { InviteLinksSection } from "./InviteLinksSection";
 
 type Props = {
   contestId: string;
@@ -85,6 +86,8 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
     for (const m of members) {
       if (m.source === "saved_list" && m.source_allowlist_id) {
         opts.set(`list:${m.source_allowlist_id}`, `From list: ${m.source_allowlist_name ?? "deleted list"}`);
+      } else if (m.source === "invite_link" && m.source_invite_link_id) {
+        opts.set(`invite:${m.source_invite_link_id}`, `Invite link: ${m.source_invite_link_label ?? "Untitled link"}`);
       } else {
         opts.set(m.source, ACCESS_SOURCE_LABELS[m.source]);
       }
@@ -98,13 +101,25 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
       const id = filter.slice(5);
       return members.filter((m) => m.source_allowlist_id === id);
     }
-    return members.filter((m) => m.source === filter && !(m.source === "saved_list" && m.source_allowlist_id));
+    if (filter.startsWith("invite:")) {
+      const id = filter.slice(7);
+      return members.filter((m) => m.source_invite_link_id === id);
+    }
+    return members.filter(
+      (m) =>
+        m.source === filter &&
+        !(m.source === "saved_list" && m.source_allowlist_id) &&
+        !(m.source === "invite_link" && m.source_invite_link_id),
+    );
   }, [members, filter]);
 
-  const sourceLabel = (m: ContestAccessMember) =>
-    m.source === "saved_list"
-      ? `List: ${m.source_allowlist_name ?? "deleted list"}`
-      : ACCESS_SOURCE_LABELS[m.source];
+  const sourceLabel = (m: ContestAccessMember) => {
+    if (m.source === "saved_list") return `List: ${m.source_allowlist_name ?? "deleted list"}`;
+    if (m.source === "invite_link" && m.source_invite_link_id) {
+      return `Invite link: ${m.source_invite_link_label ?? "Untitled link"}`;
+    }
+    return ACCESS_SOURCE_LABELS[m.source];
+  };
 
   if (loading) {
     return (
@@ -205,6 +220,8 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
         </div>
       </div>
 
+      <InviteLinksSection contestId={contestId} />
+
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="w-60">
           <Label className="mb-1 block text-xs text-gray-500">Filter by source</Label>
@@ -261,7 +278,7 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
             {visible.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="py-8 text-center text-sm text-gray-500">
-                  No creators yet. Add usernames or import a saved list.
+                  No creators yet. Add usernames, import a saved list, or share an invite link.
                 </TableCell>
               </TableRow>
             ) : (

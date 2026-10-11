@@ -1,12 +1,81 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildInviteUrl,
+  getInviteLinkStatus,
   isCampaignAccessDeniedError,
+  isInviteRedeemResult,
   isPrivateLikeAccessMode,
   normalizeAllowlistName,
   parseUsernames,
+  resolveInviteExpiry,
   validateCampaignAccessFields,
 } from "./campaign-access";
+
+const NOW = new Date("2026-10-11T12:00:00.000Z");
+
+describe("resolveInviteExpiry", () => {
+  it("adds preset durations to now", () => {
+    assert.deepEqual(resolveInviteExpiry("24h", null, NOW), {
+      expiresAt: "2026-10-12T12:00:00.000Z",
+    });
+    assert.deepEqual(resolveInviteExpiry("7d", null, NOW), {
+      expiresAt: "2026-10-18T12:00:00.000Z",
+    });
+    assert.deepEqual(resolveInviteExpiry("30d", null, NOW), {
+      expiresAt: "2026-11-10T12:00:00.000Z",
+    });
+  });
+
+  it("returns null for never", () => {
+    assert.deepEqual(resolveInviteExpiry("never", null, NOW), { expiresAt: null });
+  });
+
+  it("accepts a future custom date and rejects past or missing ones", () => {
+    assert.deepEqual(resolveInviteExpiry("custom", "2026-12-01T00:00:00.000Z", NOW), {
+      expiresAt: "2026-12-01T00:00:00.000Z",
+    });
+    assert.ok("error" in resolveInviteExpiry("custom", "2026-10-01T00:00:00.000Z", NOW));
+    assert.ok("error" in resolveInviteExpiry("custom", null, NOW));
+    assert.ok("error" in resolveInviteExpiry("custom", "not a date", NOW));
+  });
+});
+
+describe("getInviteLinkStatus", () => {
+  const base = { revoked_at: null, expires_at: null, max_uses: null, use_count: 0 };
+
+  it("is active when never expires and unlimited", () => {
+    assert.equal(getInviteLinkStatus({ ...base, use_count: 500 }, NOW), "active");
+  });
+
+  it("detects expired, full and revoked", () => {
+    assert.equal(
+      getInviteLinkStatus({ ...base, expires_at: "2026-10-11T11:59:59.000Z" }, NOW),
+      "expired",
+    );
+    assert.equal(getInviteLinkStatus({ ...base, max_uses: 2, use_count: 2 }, NOW), "full");
+    assert.equal(getInviteLinkStatus({ ...base, max_uses: 2, use_count: 1 }, NOW), "active");
+    assert.equal(
+      getInviteLinkStatus(
+        { ...base, revoked_at: "2026-10-10T00:00:00.000Z", max_uses: 1, use_count: 1 },
+        NOW,
+      ),
+      "revoked",
+    );
+  });
+});
+
+describe("invite helpers", () => {
+  it("builds invite URLs without double slashes", () => {
+    assert.equal(buildInviteUrl("abc_123", "https://goviral.app/"), "https://goviral.app/invite/abc_123");
+  });
+
+  it("recognises redeem result codes", () => {
+    assert.equal(isInviteRedeemResult("joined"), true);
+    assert.equal(isInviteRedeemResult("full"), true);
+    assert.equal(isInviteRedeemResult("hacked"), false);
+  });
+});
 
 describe("parseUsernames", () => {
   it("splits on commas, whitespace, semicolons and new lines", () => {

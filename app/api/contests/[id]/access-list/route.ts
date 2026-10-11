@@ -61,7 +61,7 @@ export async function GET(_request: Request, { params }: Ctx) {
 
     const { data, error } = await admin
       .from("contest_access_list")
-      .select("user_id, source, source_allowlist_id, added_at")
+      .select("user_id, source, source_allowlist_id, source_invite_link_id, added_at")
       .eq("contest_id", id)
       .order("added_at", { ascending: false });
     if (error) throw error;
@@ -79,6 +79,17 @@ export async function GET(_request: Request, { params }: Ctx) {
         .in("id", listIds);
       for (const l of lists || []) listNames.set(l.id, l.name);
     }
+    const linkIds = Array.from(
+      new Set(rows.map((r) => r.source_invite_link_id).filter(Boolean)),
+    ) as string[];
+    const linkLabels = new Map<string, string | null>();
+    if (linkIds.length > 0) {
+      const { data: links } = await admin
+        .from("contest_invite_links")
+        .select("id, label")
+        .in("id", linkIds);
+      for (const l of links || []) linkLabels.set(l.id, l.label);
+    }
 
     const members: ContestAccessMember[] = rows.map((r) => {
       const u = users.get(r.user_id);
@@ -92,6 +103,10 @@ export async function GET(_request: Request, { params }: Ctx) {
         source_allowlist_id: r.source_allowlist_id,
         source_allowlist_name: r.source_allowlist_id
           ? listNames.get(r.source_allowlist_id) ?? null
+          : null,
+        source_invite_link_id: r.source_invite_link_id,
+        source_invite_link_label: r.source_invite_link_id
+          ? linkLabels.get(r.source_invite_link_id) ?? null
           : null,
       };
     });

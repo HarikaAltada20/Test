@@ -2,6 +2,9 @@ import type {
   AllowlistMember,
   BrandAllowlist,
   ContestAccessMember,
+  InviteExpiryPreset,
+  InviteLink,
+  InviteRedeemResult,
 } from "@/lib/campaign-access";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -107,6 +110,48 @@ export const accessListApi = {
       method: "DELETE",
       body: JSON.stringify({ userIds }),
     }),
+};
+
+export type CreateInviteLinkInput = {
+  label?: string;
+  expiry: InviteExpiryPreset;
+  customExpiresAt?: string | null;
+  maxUses?: number | null;
+};
+
+export type RedeemInviteResponse = {
+  result: InviteRedeemResult;
+  contestId: string | null;
+  message: string;
+};
+
+export const inviteLinkApi = {
+  list: (contestId: string) =>
+    request<{ links: InviteLink[] }>(`/api/contests/${contestId}/invite-links`),
+
+  create: (contestId: string, body: CreateInviteLinkInput) =>
+    request<{ link: InviteLink }>(`/api/contests/${contestId}/invite-links`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  revoke: (contestId: string, linkId: string) =>
+    request<{ success: true }>(`/api/contests/${contestId}/invite-links/${linkId}`, {
+      method: "DELETE",
+    }),
+
+  /** Resolves with a result code for expected outcomes (including 401); throws only on server errors. */
+  redeem: async (token: string): Promise<RedeemInviteResponse> => {
+    const res = await fetch(`/api/invite/${encodeURIComponent(token)}`, {
+      method: "POST",
+      cache: "no-store",
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!json?.result) {
+      throw new Error(json?.error || `Request failed (${res.status})`);
+    }
+    return json as RedeemInviteResponse;
+  },
 };
 
 export function summarizeAddResult(result: AddResult): string {
