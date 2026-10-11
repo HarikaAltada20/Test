@@ -44,9 +44,19 @@ export async function POST(_request: Request, { params }: Ctx) {
       await invalidateOpportunitiesListCacheForUser(user.id);
     }
 
+    let isPublished = false;
+    if (result === "joined" || result === "already_member") {
+      const { data: previewRows } = await supabase.rpc("get_contest_invite_preview", {
+        p_token: token,
+      });
+      const preview = Array.isArray(previewRows) ? previewRows[0] : previewRows;
+      isPublished = preview?.is_published === true;
+    }
+
     return NextResponse.json({
       result,
       contestId: row?.contest_id ?? null,
+      isPublished,
       message: INVITE_RESULT_MESSAGES[result],
     });
   } catch (err) {

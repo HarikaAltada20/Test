@@ -1709,31 +1709,36 @@ export default function EditContestPage({
   };
 
   // Get the current user's subscription from new subscription system
-  const getUserPlan = async (contestSubscriptionInfo?: any) => {
+  const getUserPlan = async (
+    contestSubscriptionInfo: any,
+    campaignOwnerId: string | null | undefined,
+  ) => {
     if (!user) return;
     setIsUserPlanLoading(true);
     try {
-      // If we have contest subscription info, use it (this is the plan at campaign creation time)
-      if (contestSubscriptionInfo?.product_id) {
-        setUserPlan(contestSubscriptionInfo.product_id);
+      // Prefer the plan captured at campaign creation time when it is a known plan
+      let savedInfo = contestSubscriptionInfo;
+      if (typeof savedInfo === "string") {
+        try {
+          savedInfo = JSON.parse(savedInfo);
+        } catch {
+          savedInfo = null;
+        }
+      }
+      const savedProductId = savedInfo?.product_id;
+      if (savedProductId && subscriptionPlans.some((p) => p.id === savedProductId)) {
+        setUserPlan(savedProductId);
         setIsUserPlanLoading(false);
         return;
       }
 
-      // Fallback: fetch current user's subscription info
-      const { data: authData, error: authError } =
-        await supabase.auth.getUser();
-      if (authError || !authData.user) {
-        throw new Error("Authentication error");
-      }
-      const userId = authData.user.id;
-
+      // Fallback: the owning brand's current plan (admins edit other brands' campaigns)
+      const ownerId = campaignOwnerId || user.id;
       const { data: advertiserData, error: advertiserError } = await supabase
         .from("advertiser_profiles")
         .select("subscription_info")
-        .eq("id", userId)
+        .eq("id", ownerId)
         .single();
-
       if (!advertiserError && advertiserData?.subscription_info?.product_id) {
         setUserPlan(advertiserData.subscription_info.product_id);
       } else {
@@ -1822,7 +1827,7 @@ export default function EditContestPage({
 
         if (data) {
           // Fetch the correct plan - use the subscription info captured at campaign creation time
-          await getUserPlan(data.subscription_info_of_user);
+          await getUserPlan(data.subscription_info_of_user, data.advertiser_id);
           // Extract commission rate from contest payment details
           if (data.payment_details) {
             try {

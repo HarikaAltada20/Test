@@ -115,13 +115,15 @@ export const accessListApi = {
 export type CreateInviteLinkInput = {
   label?: string;
   expiry: InviteExpiryPreset;
-  customExpiresAt?: string | null;
+  customExpiresDate?: string | null;
+  timezoneOffsetMinutes?: number;
   maxUses?: number | null;
 };
 
 export type RedeemInviteResponse = {
   result: InviteRedeemResult;
   contestId: string | null;
+  isPublished?: boolean;
   message: string;
 };
 

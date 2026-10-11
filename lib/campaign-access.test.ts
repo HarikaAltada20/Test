@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildInviteUrl,
+  earliestInviteExpiryDate,
   getInviteLinkStatus,
   isCampaignAccessDeniedError,
   isInviteRedeemResult,
@@ -31,13 +32,46 @@ describe("resolveInviteExpiry", () => {
     assert.deepEqual(resolveInviteExpiry("never", null, NOW), { expiresAt: null });
   });
 
-  it("accepts a future custom date and rejects past or missing ones", () => {
-    assert.deepEqual(resolveInviteExpiry("custom", "2026-12-01T00:00:00.000Z", NOW), {
-      expiresAt: "2026-12-01T00:00:00.000Z",
-    });
-    assert.ok("error" in resolveInviteExpiry("custom", "2026-10-01T00:00:00.000Z", NOW));
+  const IST = -330;
+
+  it("expires custom dates at the end of that day in the brand's zone", () => {
+    assert.deepEqual(
+      resolveInviteExpiry("custom", { date: "2026-12-01", tzOffsetMinutes: IST }, NOW),
+      { expiresAt: "2026-12-01T18:29:59.000Z" },
+    );
+  });
+
+  it("accepts tomorrow but rejects today, past and malformed dates", () => {
+    // NOW is 17:30 on 11 Oct in IST.
+    assert.ok(
+      "expiresAt" in
+        resolveInviteExpiry("custom", { date: "2026-10-12", tzOffsetMinutes: IST }, NOW),
+    );
+    assert.ok(
+      "error" in resolveInviteExpiry("custom", { date: "2026-10-11", tzOffsetMinutes: IST }, NOW),
+    );
+    assert.ok(
+      "error" in resolveInviteExpiry("custom", { date: "2026-10-01", tzOffsetMinutes: IST }, NOW),
+    );
     assert.ok("error" in resolveInviteExpiry("custom", null, NOW));
-    assert.ok("error" in resolveInviteExpiry("custom", "not a date", NOW));
+    assert.ok(
+      "error" in resolveInviteExpiry("custom", { date: "not a date", tzOffsetMinutes: IST }, NOW),
+    );
+    assert.ok(
+      "error" in resolveInviteExpiry("custom", { date: "2026-02-30", tzOffsetMinutes: IST }, NOW),
+    );
+    assert.ok(
+      "error" in resolveInviteExpiry("custom", { date: "2026-12-01", tzOffsetMinutes: 5000 }, NOW),
+    );
+  });
+
+  it("uses the brand's local day, not UTC, to decide today", () => {
+    // 20:41 UTC on 11 Oct is already 12 Oct 02:11 in IST.
+    const lateUtc = new Date("2026-10-11T20:41:00.000Z");
+    assert.equal(earliestInviteExpiryDate(lateUtc, IST), "2026-10-13");
+    assert.ok(
+      "error" in resolveInviteExpiry("custom", { date: "2026-10-12", tzOffsetMinutes: IST }, lateUtc),
+    );
   });
 });
 

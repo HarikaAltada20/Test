@@ -34,11 +34,19 @@ export function PendingInviteRedeemer({ userRole }: Props) {
       try {
         const res = await inviteLinkApi.redeem(token);
         if (res.result === "joined" || res.result === "already_member") {
+          if (res.contestId && res.isPublished) {
+            toast({
+              title: res.result === "joined" ? "You're in!" : "You already have access",
+              description: res.message,
+            });
+            router.push(`/dashboard/opportunities/${res.contestId}`);
+            return;
+          }
           toast({
-            title: res.result === "joined" ? "You're in!" : "You already have access",
-            description: res.message,
+            title: "You've joined",
+            description: "You've joined. This campaign will appear once published.",
           });
-          if (res.contestId) router.push(`/dashboard/opportunities/${res.contestId}`);
+          router.push("/dashboard/opportunities");
           return;
         }
         toast({ title: "Couldn't join the campaign", description: res.message, variant: "destructive" });

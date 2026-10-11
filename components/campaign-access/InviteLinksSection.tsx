@@ -40,8 +40,10 @@ import {
   MAX_INVITE_LABEL_LENGTH,
   MAX_INVITE_USES,
   buildInviteUrl,
+  earliestInviteExpiryDate,
   getInviteLinkStatus,
   resolveInviteExpiry,
+  type InviteCustomExpiry,
   type InviteExpiryPreset,
   type InviteLink,
   type InviteLinkStatus,
@@ -75,17 +77,9 @@ function formatUses(link: InviteLink): string {
 }
 
 /** Local end-of-day for a yyyy-mm-dd input value. */
-function endOfDayIso(dateValue: string): string | null {
+function customExpiry(dateValue: string): InviteCustomExpiry | null {
   if (!dateValue) return null;
-  const d = new Date(`${dateValue}T23:59:59`);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
-
-function tomorrowInputValue(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return { date: dateValue, tzOffsetMinutes: new Date().getTimezoneOffset() };
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -340,7 +334,7 @@ function CreateInviteLinkDialog({ contestId, open, onOpenChange, onCreated }: Di
 
   const expiryResult = resolveInviteExpiry(
     expiry,
-    expiry === "custom" ? endOfDayIso(customDate) : null,
+    expiry === "custom" ? customExpiry(customDate) : null,
   );
   const expiryError = expiry === "custom" && customDate && "error" in expiryResult
     ? expiryResult.error
@@ -374,7 +368,8 @@ function CreateInviteLinkDialog({ contestId, open, onOpenChange, onCreated }: Di
       const res = await inviteLinkApi.create(contestId, {
         label: label.trim() || undefined,
         expiry,
-        customExpiresAt: expiry === "custom" ? endOfDayIso(customDate) : null,
+        customExpiresDate: expiry === "custom" ? customDate : null,
+        timezoneOffsetMinutes: new Date().getTimezoneOffset(),
         maxUses: limitMode === "limited" ? maxUsesNumber : null,
       });
       onCreated(res.link);
@@ -428,7 +423,7 @@ function CreateInviteLinkDialog({ contestId, open, onOpenChange, onCreated }: Di
               <Input
                 type="date"
                 aria-label="Expiry date"
-                min={tomorrowInputValue()}
+                min={earliestInviteExpiryDate()}
                 value={customDate}
                 onChange={(e) => setCustomDate(e.target.value)}
               />

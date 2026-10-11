@@ -48,6 +48,7 @@ import {
   MessageCircle,
   BarChart3,
   Zap,
+  Lock,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -395,6 +396,8 @@ export function ContestClientPage({
   const [loading, setLoading] = useState(true);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Campaign hidden by access rules, unpublished, or deleted — an expected state, not a failure. */
+  const [isUnavailable, setIsUnavailable] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -2917,6 +2920,7 @@ export function ContestClientPage({
       if (!isMountedRef.current) return;
       setLoading(true); // Start with loading true for both paths initially
       setError(null);
+      setIsUnavailable(false);
 
       // Fetch contest details - this is usually needed for prize info, title, etc.
       // regardless of where leaderboard data comes from.
@@ -2929,8 +2933,13 @@ export function ContestClientPage({
           .maybeSingle();
 
         if (contestError) throw contestError;
-        if (!fetchedContestData)
-          throw new Error("This campaign is private or unavailable.");
+        if (
+          !fetchedContestData ||
+          fetchedContestData.moderation_status !== "published"
+        ) {
+          if (isMountedRef.current) setIsUnavailable(true);
+          return;
+        }
 
         const { data: requirementFields, error: requirementError } =
           await supabase
@@ -2947,11 +2956,6 @@ export function ContestClientPage({
           ...fetchedContestData,
           ...(requirementFields ?? {}),
         };
-
-        // Only published contests should be available to creators
-        if (contestData.moderation_status !== "published") {
-          throw new Error("This contest is not available.");
-        }
 
         // Check if published contest has valid dates
         if (contestData.status === "incomplete") {
@@ -3027,8 +3031,9 @@ export function ContestClientPage({
           if (isTwitterContest) {
             fetchTwitterMetrics();
           }
-          setLoading(false); // Done with initial loading phase
         }
+        // Refused / missing campaigns must leave the spinner so the error shows.
+        if (isMountedRef.current) setLoading(false);
       }
     }
 
@@ -3394,6 +3399,31 @@ export function ContestClientPage({
         </div> */}
 
         <PageLoadingSpinner mode="light" />
+      </div>
+    );
+  }
+
+  if (isUnavailable) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center px-4">
+        <div className="w-full max-w-md rounded-2xl border border-purple-100 bg-white p-8 text-center shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-purple-50 dark:bg-purple-950/40">
+            <Lock className="h-6 w-6 text-[#4A00BE] dark:text-purple-300" />
+          </div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            This campaign is private or unavailable
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
+            It may be invite-only, not published yet, or no longer running. If
+            a brand invited you, open their invite link to join.
+          </p>
+          <Button
+            className="mt-6 w-full bg-[#4A00BE] text-white hover:bg-[#4A00BE]/90"
+            onClick={() => router.push("/dashboard/opportunities")}
+          >
+            Browse campaigns
+          </Button>
+        </div>
       </div>
     );
   }

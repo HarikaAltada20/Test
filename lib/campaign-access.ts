@@ -176,25 +176,54 @@ export function isInviteExpiryPreset(value: unknown): value is InviteExpiryPrese
   return INVITE_EXPIRY_PRESETS.some((p) => p.value === value);
 }
 
+/** A calendar date (YYYY-MM-DD) in the brand's zone; offset uses Date#getTimezoneOffset sign. */
+export type InviteCustomExpiry = { date: string; tzOffsetMinutes: number };
+
+const MAX_TZ_OFFSET_MINUTES = 14 * 60;
+
+/** Earliest selectable custom expiry date: tomorrow in the brand's time zone. */
+export function earliestInviteExpiryDate(
+  now: Date = new Date(),
+  tzOffsetMinutes: number = now.getTimezoneOffset(),
+): string {
+  const local = new Date(now.getTime() - tzOffsetMinutes * 60_000);
+  local.setUTCDate(local.getUTCDate() + 1);
+  return local.toISOString().slice(0, 10);
+}
+
 /**
  * Turns an expiry choice into an ISO timestamp (null = never).
- * Custom dates must be in the future; returns an error message otherwise.
+ * Custom dates must be tomorrow or later in the brand's time zone and expire
+ * at the end of that day; returns an error message otherwise.
  */
 export function resolveInviteExpiry(
   preset: InviteExpiryPreset,
-  customExpiresAt: string | null | undefined,
+  custom: InviteCustomExpiry | null | undefined,
   now: Date = new Date(),
 ): { expiresAt: string | null } | { error: string } {
   if (preset === "never") return { expiresAt: null };
   if (preset === "custom") {
-    const date = customExpiresAt ? new Date(customExpiresAt) : null;
-    if (!date || Number.isNaN(date.getTime())) {
+    const match = typeof custom?.date === "string"
+      ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(custom.date)
+      : null;
+    const offset = custom?.tzOffsetMinutes;
+    if (
+      !match ||
+      typeof offset !== "number" ||
+      !Number.isInteger(offset) ||
+      Math.abs(offset) > MAX_TZ_OFFSET_MINUTES
+    ) {
       return { error: "Choose an expiry date" };
     }
-    if (date.getTime() <= now.getTime()) {
-      return { error: "The expiry date must be in the future" };
+    const [y, m, d] = [Number(match[1]), Number(match[2]), Number(match[3])];
+    const endOfDayUtc = Date.UTC(y, m - 1, d, 23, 59, 59);
+    if (new Date(endOfDayUtc).toISOString().slice(0, 10) !== custom!.date) {
+      return { error: "Choose an expiry date" };
     }
-    return { expiresAt: date.toISOString() };
+    if (custom!.date < earliestInviteExpiryDate(now, offset)) {
+      return { error: "Choose tomorrow or a later date" };
+    }
+    return { expiresAt: new Date(endOfDayUtc + offset * 60_000).toISOString() };
   }
   const ms = INVITE_EXPIRY_PRESETS.find((p) => p.value === preset)?.ms ?? 0;
   return { expiresAt: new Date(now.getTime() + ms).toISOString() };

@@ -11,6 +11,12 @@ import {
 } from "@/lib/creator-requirements";
 import { getCreatorStatsFromProfile } from "@/lib/creator-profile-stats";
 import { getCreatorTrustMetricsLive } from "@/lib/trust-score";
+import { createAdminClient } from "@/utils/supabase/admin";
+
+/** Computed metric columns are DB-managed; user sessions cannot write them. */
+function recomputeWithServiceRole(userId: string) {
+  return recomputeCreatorProfileMetrics(createAdminClient(), userId);
+}
 
 export async function loadCreatorStatsResponse(
   supabase: SupabaseClient,
@@ -18,7 +24,7 @@ export async function loadCreatorStatsResponse(
   options?: { recompute?: boolean },
 ) {
   if (options?.recompute) {
-    const recomputeResult = await recomputeCreatorProfileMetrics(supabase, userId);
+    const recomputeResult = await recomputeWithServiceRole(userId);
     if (!recomputeResult.ok) {
       return NextResponse.json(
         { error: recomputeResult.errors.join("; ") },
@@ -129,7 +135,7 @@ export async function refreshCreatorStatsResponse(
   supabase: SupabaseClient,
   userId: string,
 ) {
-  const recomputeResult = await recomputeCreatorProfileMetrics(supabase, userId);
+  const recomputeResult = await recomputeWithServiceRole(userId);
   if (!recomputeResult.ok) {
     return NextResponse.json(
       { error: recomputeResult.errors.join("; ") },

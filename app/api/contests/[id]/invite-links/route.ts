@@ -45,7 +45,7 @@ export async function GET(_request: Request, { params }: Ctx) {
 
 /**
  * POST /api/contests/:id/invite-links
- * Body: { label?, expiry: "24h"|"7d"|"30d"|"custom"|"never", customExpiresAt?, maxUses? }
+ * Body: { label?, expiry: "24h"|"7d"|"30d"|"custom"|"never", customExpiresDate?, timezoneOffsetMinutes?, maxUses? }
  */
 export async function POST(request: Request, { params }: Ctx) {
   try {
@@ -74,7 +74,12 @@ export async function POST(request: Request, { params }: Ctx) {
     if (!isInviteExpiryPreset(body.expiry)) {
       throw new CampaignAccessError("Choose when the link expires", 400);
     }
-    const expiry = resolveInviteExpiry(body.expiry, body.customExpiresAt);
+    const expiry = resolveInviteExpiry(
+      body.expiry,
+      body.expiry === "custom"
+        ? { date: body.customExpiresDate, tzOffsetMinutes: body.timezoneOffsetMinutes }
+        : null,
+    );
     if ("error" in expiry) throw new CampaignAccessError(expiry.error, 400);
 
     let maxUses: number | null = null;
