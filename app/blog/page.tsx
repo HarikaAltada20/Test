@@ -1,3 +1,4 @@
+import { publicPageMetadata, SEO_ORIGIN } from "@/lib/seo/metadata";
 import { createClient } from "@/utils/supabase/server";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
@@ -10,52 +11,7 @@ import type { Metadata } from "next";
 // Always fetch fresh data so newly published blogs show up immediately
 export const revalidate = 0;
 
-export const metadata: Metadata = {
-  title: "Blog - Creator Marketing Insights | Game Of Creators",
-  description:
-    "Discover creator marketing insights, strategies, and trends for brands and creators. Learn about performance-driven content, viral marketing, and gamified creator contests.",
-  keywords:
-    "creator marketing blog, influencer marketing insights, content creation tips, brand marketing strategies, social media marketing, creator contests, viral marketing, performance marketing",
-  openGraph: {
-    title: "Blog - Creator Marketing Insights | Game Of Creators",
-    description:
-      "Creator marketing insights for brands and creators focused on performance-driven content. Learn strategies, trends, and best practices.",
-    type: "website",
-    url: "https://www.gameofcreators.com/blog",
-    siteName: "Game Of Creators",
-    images: [
-      {
-        url: "https://www.gameofcreators.com/goc_ogc.png",
-        width: 1200,
-        height: 630,
-        alt: "Game Of Creators Blog - Creator Marketing Insights",
-      },
-    ],
-    locale: "en_US",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Blog - Creator Marketing Insights | Game Of Creators",
-    description:
-      "Creator marketing insights for brands and creators focused on performance-driven content.",
-    images: ["https://www.gameofcreators.com/goc_ogc.png"],
-    creator: "@gameofcreators",
-  },
-  alternates: {
-    canonical: "https://www.gameofcreators.com/blog",
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-    },
-  },
-};
+export const metadata: Metadata = publicPageMetadata("/blog");
 
 export default async function BlogIndexPage() {
   const supabase = await createClient();
@@ -85,7 +41,7 @@ export default async function BlogIndexPage() {
   }[];
 
   const siteUrl =
-    process.env.NEXT_PUBLIC_APP_URL;
+    SEO_ORIGIN;
 
   // Structured data for blog listing page
   const structuredData = {

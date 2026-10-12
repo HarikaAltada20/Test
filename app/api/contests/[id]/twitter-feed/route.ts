@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import {
+  canViewCampaign,
+  PRIVATE_CAMPAIGN_FORBIDDEN_MESSAGE,
+} from "@/lib/campaign-access-server";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +21,13 @@ export async function GET(
       return NextResponse.json(
         { error: "Contest ID is required" },
         { status: 400 }
+      );
+    }
+
+    if (!(await canViewCampaign(contestId))) {
+      return NextResponse.json(
+        { error: PRIVATE_CAMPAIGN_FORBIDDEN_MESSAGE },
+        { status: 403 },
       );
     }
 

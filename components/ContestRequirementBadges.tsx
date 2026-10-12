@@ -39,6 +39,8 @@ type ContestRequirementBadgesProps = {
   isDark?: boolean;
   size?: "compact" | "default";
   showEligibility?: boolean;
+  /** Creator is on this campaign's access list and the campaign skips requirements for them. */
+  requirementsSkipped?: boolean;
 };
 
 function getBadgeClassName(
@@ -83,12 +85,13 @@ export function ContestRequirementBadges({
   isDark = false,
   size = "default",
   showEligibility = false,
+  requirementsSkipped = false,
 }: ContestRequirementBadgesProps) {
   const items = buildRequirementBadgeItems(contest);
   if (items.length === 0) return null;
 
   const checklist =
-    showEligibility && snapshot
+    showEligibility && snapshot && !requirementsSkipped
       ? buildRequirementChecklist({
           requirements: parseContestCreatorRequirements(contest),
           snapshot,
@@ -104,9 +107,11 @@ export function ContestRequirementBadges({
         const checklistItem = checklist?.[index] ?? null;
         const passed = checklistItem ? checklistItem.passed : null;
 
-        const tooltip = checklistItem
-          ? `${item.fullLabel} · Yours: ${checklistItem.yoursLabel}`
-          : item.fullLabel;
+        const tooltip = requirementsSkipped
+          ? `${item.fullLabel} · Waived for you on this campaign`
+          : checklistItem
+            ? `${item.fullLabel} · Yours: ${checklistItem.yoursLabel}`
+            : item.fullLabel;
 
         return (
           <Tooltip key={item.key}>

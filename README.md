@@ -1,5 +1,6 @@
-Main Udpated
+v2 Phrase 2 implemented
 
+<<<<<<< HEAD
 
 
 
@@ -7,3 +8,6 @@ Main Udpated
 
 
            
+=======
+Tried to update envs
+>>>>>>> f424126a9df1dd7dff1b2655eee57c7cc69dff34

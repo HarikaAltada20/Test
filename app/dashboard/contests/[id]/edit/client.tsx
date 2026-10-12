@@ -74,6 +74,9 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import { UserResponse } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
+import { AccessModeSelector } from "@/components/campaign-access/AccessModeSelector";
+import { invalidateBrandCampaignListCachesAfterMutation } from "@/lib/invalidate-brand-campaign-list-cache";
+import type { AccessMode } from "@/lib/campaign-access";
 import { reconcileLeaderboardPrizeAmounts } from "@/lib/contest-prize-utils";
 import { getChargeableBudgetCents } from "@/lib/contest-chargeable-budget";
 import { preserveExistingBudgetSpentFields } from "@/lib/contest-budget-spent-fields";
@@ -803,6 +806,31 @@ export default function EditContestPage({
   const [contentType, setContentType] = useState<
     "ugc" | "clipping" | "other" | "" | "raid" | "awareness"
   >("other");
+  const [accessMode, setAccessMode] = useState<AccessMode>("public");
+  const [savedAccessMode, setSavedAccessMode] = useState<AccessMode>("public");
+  const [accessListSkipsRequirements, setAccessListSkipsRequirements] =
+    useState(false);
+  const [savedSkipRequirements, setSavedSkipRequirements] = useState(false);
+  const accessFields = {
+    access_mode: accessMode,
+    access_list_skips_requirements:
+      accessMode !== "public" && accessListSkipsRequirements,
+  };
+  /** Call after a successful save that wrote accessFields. */
+  const commitSavedAccessFields = (savedViaAdminApi: boolean) => {
+    const changed =
+      accessFields.access_mode !== savedAccessMode ||
+      accessFields.access_list_skips_requirements !== savedSkipRequirements;
+    if (!changed) return;
+    // The admin update route clears list caches server-side.
+    if (!savedViaAdminApi) {
+      invalidateBrandCampaignListCachesAfterMutation({
+        touchOpportunities: true,
+      });
+    }
+    setSavedAccessMode(accessFields.access_mode);
+    setSavedSkipRequirements(accessFields.access_list_skips_requirements);
+  };
   const [category, setCategory] = useState<string>("technology");
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
   const [flatFeeBonusCap, setFlatFeeBonusCap] = useState<number | string>(""); // In dollars - for CPM campaigns only
@@ -1681,31 +1709,36 @@ export default function EditContestPage({
   };
 
   // Get the current user's subscription from new subscription system
-  const getUserPlan = async (contestSubscriptionInfo?: any) => {
+  const getUserPlan = async (
+    contestSubscriptionInfo: any,
+    campaignOwnerId: string | null | undefined,
+  ) => {
     if (!user) return;
     setIsUserPlanLoading(true);
     try {
-      // If we have contest subscription info, use it (this is the plan at campaign creation time)
-      if (contestSubscriptionInfo?.product_id) {
-        setUserPlan(contestSubscriptionInfo.product_id);
+      // Prefer the plan captured at campaign creation time when it is a known plan
+      let savedInfo = contestSubscriptionInfo;
+      if (typeof savedInfo === "string") {
+        try {
+          savedInfo = JSON.parse(savedInfo);
+        } catch {
+          savedInfo = null;
+        }
+      }
+      const savedProductId = savedInfo?.product_id;
+      if (savedProductId && subscriptionPlans.some((p) => p.id === savedProductId)) {
+        setUserPlan(savedProductId);
         setIsUserPlanLoading(false);
         return;
       }
 
-      // Fallback: fetch current user's subscription info
-      const { data: authData, error: authError } =
-        await supabase.auth.getUser();
-      if (authError || !authData.user) {
-        throw new Error("Authentication error");
-      }
-      const userId = authData.user.id;
-
+      // Fallback: the owning brand's current plan (admins edit other brands' campaigns)
+      const ownerId = campaignOwnerId || user.id;
       const { data: advertiserData, error: advertiserError } = await supabase
         .from("advertiser_profiles")
         .select("subscription_info")
-        .eq("id", userId)
+        .eq("id", ownerId)
         .single();
-
       if (!advertiserError && advertiserData?.subscription_info?.product_id) {
         setUserPlan(advertiserData.subscription_info.product_id);
       } else {
@@ -1794,7 +1827,7 @@ export default function EditContestPage({
 
         if (data) {
           // Fetch the correct plan - use the subscription info captured at campaign creation time
-          await getUserPlan(data.subscription_info_of_user);
+          await getUserPlan(data.subscription_info_of_user, data.advertiser_id);
           // Extract commission rate from contest payment details
           if (data.payment_details) {
             try {
@@ -2293,6 +2326,17 @@ export default function EditContestPage({
             }
             setContentType(data.content_type || "other");
             setCategory(data.category || "technology");
+            const loadedAccessMode: AccessMode =
+              data.access_mode === "private" ? "private" : "public";
+            setAccessMode(loadedAccessMode);
+            setSavedAccessMode(loadedAccessMode);
+            setAccessListSkipsRequirements(
+              !!data.access_list_skips_requirements,
+            );
+            setSavedSkipRequirements(
+              loadedAccessMode !== "public" &&
+                !!data.access_list_skips_requirements,
+            );
 
             // Load flat fee bonus from contest_based_details
             if (data.contest_type === "leaderboard") {
@@ -4290,6 +4334,7 @@ export default function EditContestPage({
       updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled
         ? maxSubmissionsPerCreator
         : 1;
+      Object.assign(updatePayload, accessFields);
       Object.assign(
         updatePayload,
         buildCreatorRequirementFields(contest?.contest_format, {
@@ -4467,6 +4512,10 @@ export default function EditContestPage({
             });
           }
         }
+      }
+
+      if (updatePayload.access_mode !== undefined) {
+        commitSavedAccessFields(isAdmin);
       }
 
       // Sync Twitter campaign metrics if this is a Twitter contest and contest_based_details was updated
@@ -6488,6 +6537,7 @@ export default function EditContestPage({
           max_submissions_per_creator: multipleSubmissionsEnabled
             ? maxSubmissionsPerCreator
             : 1,
+          ...accessFields,
           ...buildCreatorRequirementFields(contest?.contest_format, {
             trustScoreEnabled,
             contestTrustScore,
@@ -6527,6 +6577,7 @@ export default function EditContestPage({
           );
           throw new Error(`Failed to update campaign: ${updateError.message}`);
         }
+        commitSavedAccessFields(false);
 
         console.log(
           "✅ Complete contest data updated in database after payment",
@@ -7144,6 +7195,7 @@ export default function EditContestPage({
           max_submissions_per_creator: multipleSubmissionsEnabled
             ? maxSubmissionsPerCreator
             : 1,
+          ...accessFields,
           ...buildCreatorRequirementFields(contest?.contest_format, {
             trustScoreEnabled,
             contestTrustScore,
@@ -7176,6 +7228,7 @@ export default function EditContestPage({
           console.error("❌ Failed to save campaign as draft:", updateError);
           throw new Error(`Failed to save campaign: ${updateError.message}`);
         }
+        commitSavedAccessFields(false);
 
         console.log(
           "✅ Contest saved as draft with all form data after payment",
@@ -8872,6 +8925,7 @@ export default function EditContestPage({
       updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled
         ? maxSubmissionsPerCreator
         : 1;
+      Object.assign(updatePayload, accessFields);
       Object.assign(
         updatePayload,
         buildCreatorRequirementFields(contest?.contest_format, {
@@ -8979,6 +9033,9 @@ export default function EditContestPage({
         }
         const result = await resp.json().catch(() => ({}));
         console.log("✅ Admin draft update successful:", result);
+        if (updatePayload.access_mode !== undefined) {
+          commitSavedAccessFields(true);
+        }
       } else {
         console.log("📤 Direct Supabase draft update:", {
           contestId,
@@ -9011,6 +9068,9 @@ export default function EditContestPage({
           subcategories: updateData?.[0]?.subcategories,
           interests: updateData?.[0]?.interests,
         });
+        if (updatePayload.access_mode !== undefined) {
+          commitSavedAccessFields(false);
+        }
 
         // Verify the update actually worked
         if (updateData && updateData.length > 0) {
@@ -9674,6 +9734,71 @@ export default function EditContestPage({
                   Specify the type of content you need from creators. This helps
                   creators filter opportunities.
                 </p>
+              </div>
+
+              <div
+                className={cn(
+                  "space-y-4 p-4 border rounded-lg",
+                  isDark
+                    ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
+                    : "bg-gray-50",
+                )}
+              >
+                <div>
+                  <Label className="text-base font-semibold">
+                    Who can see this campaign
+                  </Label>
+                  <p
+                    className={cn(
+                      "text-sm mt-1",
+                      isDark ? "text-gray-300" : "text-gray-600",
+                    )}
+                  >
+                    Manage which creators are on the access list from the
+                    campaign&apos;s Access tab.
+                  </p>
+                </div>
+                <AccessModeSelector
+                  value={accessMode}
+                  onChange={async (next) => {
+                    if (savedAccessMode === "public" && next !== "public") {
+                      const { count } = await supabase
+                        .from("submissions")
+                        .select("id", { count: "exact", head: true })
+                        .eq("contest_id", contestId);
+                      if (
+                        (count ?? 0) > 0 &&
+                        !window.confirm(
+                          `This campaign has ${count} submission${count === 1 ? "" : "s"}. Creators who already submitted will be added to the access list and keep access. Continue?`,
+                        )
+                      ) {
+                        return;
+                      }
+                    }
+                    setAccessMode(next);
+                  }}
+                />
+                {accessMode === "private" && (
+                  <div className="flex items-start gap-3 pt-2 border-t">
+                    <Checkbox
+                      id="accessListSkipsRequirements"
+                      checked={accessListSkipsRequirements}
+                      onCheckedChange={(checked: any) =>
+                        setAccessListSkipsRequirements(Boolean(checked))
+                      }
+                      className={cn(
+                        "border h-5 w-5 mt-0.5",
+                        isDark ? "border-gray-300" : "border-gray-500",
+                      )}
+                    />
+                    <Label
+                      htmlFor="accessListSkipsRequirements"
+                      className="text-sm font-normal leading-snug"
+                    >
+                      Creators on the access list skip requirements
+                    </Label>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
