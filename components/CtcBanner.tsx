@@ -116,6 +116,8 @@ export default function CtcBanner() {
 
   useEffect(() => {
     setIsNavigating(false);
+    setIsCheckingAccount(false);
+    setIsSigningOut(false);
   }, [pathname]);
 
   const handleMainCtaClick = async () => {
@@ -142,21 +144,46 @@ export default function CtcBanner() {
 
         if (isBrands && userData?.user_type === "creator") {
           setShowCreatorModal(true);
+          setIsCheckingAccount(false);
           return;
         }
 
         if (isCreators && userData?.user_type === "advertiser") {
           setShowAdvertiserModal(true);
+          setIsCheckingAccount(false);
+          return;
+        }
+
+        if (isBrands && userData?.user_type === "advertiser") {
+          setIsNavigating(true);
+          router.push("/dashboard/contests");
+          return;
+        }
+
+        if (isCreators && userData?.user_type === "creator") {
+          setIsNavigating(true);
+          router.push("/dashboard/opportunities");
           return;
         }
       }
 
-      localStorage.setItem("signupRole", isBrands ? "brand" : "creator");
+      setIsNavigating(true);
+      if (isBrands) {
+        router.push("/auth/signin?next=/dashboard/contests");
+        return;
+      }
+
+      localStorage.setItem("signupRole", isCreators ? "creator" : "brand");
       router.push("/auth/signup");
     } catch (error) {
       console.error("Failed to verify account type before sign-up:", error);
-      localStorage.setItem("signupRole", isBrands ? "brand" : "creator");
-      router.push("/auth/signup");
+      setIsNavigating(true);
+      if (isBrands) {
+        router.push("/auth/signin?next=/dashboard/contests");
+      } else {
+        localStorage.setItem("signupRole", isCreators ? "creator" : "brand");
+        router.push("/auth/signup");
+      }
     } finally {
       setIsCheckingAccount(false);
     }
@@ -168,16 +195,17 @@ export default function CtcBanner() {
       await supabase.auth.signOut({ scope: "local" });
       localStorage.setItem("signupRole", "creator");
       setShowAdvertiserModal(false);
+      setIsNavigating(true);
       router.push("/auth/signup");
       router.refresh();
     } catch (error) {
       console.error("Failed to sign out advertiser before creator sign-up:", error);
-    } finally {
       setIsSigningOut(false);
     }
   };
 
   const handleContinueAsAdvertiser = () => {
+    setIsNavigating(true);
     setShowAdvertiserModal(false);
     router.push("/dashboard/contests");
   };
@@ -186,18 +214,18 @@ export default function CtcBanner() {
     setIsSigningOut(true);
     try {
       await supabase.auth.signOut({ scope: "local" });
-      localStorage.setItem("signupRole", "brand");
       setShowCreatorModal(false);
-      router.push("/auth/signup");
+      setIsNavigating(true);
+      router.push("/auth/signin?next=/dashboard/contests");
       router.refresh();
     } catch (error) {
       console.error("Failed to sign out creator before brand sign-up:", error);
-    } finally {
       setIsSigningOut(false);
     }
   };
 
   const handleContinueAsCreator = () => {
+    setIsNavigating(true);
     setShowCreatorModal(false);
     router.push("/dashboard/opportunities");
   };

@@ -723,9 +723,9 @@ export default function BrandsClient({
         return;
       }
 
-      router.push("/get-started");
+      router.push("/auth/signin?next=/dashboard/contests");
     } catch {
-      router.push("/get-started");
+      router.push("/auth/signin?next=/dashboard/contests");
     }
   };
 
@@ -741,7 +741,7 @@ export default function BrandsClient({
       const supabase = createClient();
       await supabase.auth.signOut({ scope: "local" });
       setShowCreatorModal(false);
-      router.push("/get-started");
+      router.push("/auth/signin?next=/dashboard/contests");
       router.refresh();
     } catch {
       setIsSigningOut(false);
