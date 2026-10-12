@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   APPLICATION_RESULT_HTTP_STATUS,
   APPLICATION_RESULT_MESSAGES,
+  applicationQuestionsToSave,
+  clampPage,
   isApplicationResult,
   isUuid,
   validateApplicationAnswer,
@@ -312,6 +314,56 @@ describe("application results", () => {
     assert.ok(isApplicationResult("already_approved"));
     assert.equal(APPLICATION_RESULT_HTTP_STATUS.already_approved, 200);
     assert.equal(APPLICATION_RESULT_MESSAGES.already_approved, "Already approved.");
+  });
+});
+
+describe("clampPage", () => {
+  it("keeps a page that still exists", () => {
+    assert.equal(clampPage(2, 51, 50), 2);
+    assert.equal(clampPage(1, 50, 50), 1);
+  });
+
+  it("moves to the last page when the current one disappears", () => {
+    assert.equal(clampPage(2, 50, 50), 1);
+    assert.equal(clampPage(5, 120, 50), 3);
+  });
+
+  it("goes to page 1 when nothing is left", () => {
+    assert.equal(clampPage(3, 0, 50), 1);
+  });
+
+  it("treats invalid pages as page 1", () => {
+    assert.equal(clampPage(0, 100, 50), 1);
+    assert.equal(clampPage(-2, 100, 50), 1);
+    assert.equal(clampPage(Number.NaN, 100, 50), 1);
+  });
+});
+
+describe("applicationQuestionsToSave", () => {
+  const valid = [{ prompt: "Why you?", kind: "long_text", required: true }];
+
+  it("skips when the campaign isn't restricted or nothing changed", () => {
+    assert.deepEqual(applicationQuestionsToSave("public", true, valid), { skip: true });
+    assert.deepEqual(applicationQuestionsToSave("private", true, valid), { skip: true });
+    assert.deepEqual(applicationQuestionsToSave("restricted", false, valid), { skip: true });
+  });
+
+  it("stops on a multiple-choice question without choices", () => {
+    const result = applicationQuestionsToSave("restricted", true, [
+      { prompt: "Pick one", kind: "single_choice", options: [], required: true },
+    ]);
+    assert.ok("error" in result);
+    assert.match(result.error, /choices/);
+  });
+
+  it("returns normalised questions when valid", () => {
+    const result = applicationQuestionsToSave("restricted", true, [
+      { prompt: "  Why   you? ", kind: "long_text" },
+    ]);
+    assert.ok("questions" in result);
+    assert.deepEqual(result.questions, [
+      { position: 0, prompt: "Why you?", kind: "long_text", options: null, required: true },
+    ]);
   });
 });
 
