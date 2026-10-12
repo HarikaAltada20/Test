@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronRight, ClipboardList, Loader2, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,6 +20,7 @@ import {
   APPLICATION_STATUSES,
   APPLICATION_STATUS_LABELS,
   MAX_REJECTION_REASON_LENGTH,
+  clampPage,
   type ApplicationStatus,
   type ContestApplication,
 } from "@/lib/campaign-access";
@@ -65,8 +66,11 @@ export function ApplicationsPanel({ contestId }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [rejectIds, setRejectIds] = useState<string[] | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const latestRequest = useRef(0);
 
   const load = useCallback(async () => {
+    const requestId = ++latestRequest.current;
+    let movingPage = false;
     setLoading(true);
     try {
       const res = await applicationsApi.list(contestId, {
@@ -75,16 +79,25 @@ export function ApplicationsPanel({ contestId }: Props) {
         page,
         limit: PAGE_SIZE,
       });
+      if (requestId !== latestRequest.current) return;
+      // Reviews can shrink the results so this page no longer exists; the page change reloads.
+      const validPage = clampPage(page, res.total, PAGE_SIZE);
+      if (validPage !== page) {
+        movingPage = true;
+        setPage(validPage);
+        return;
+      }
       setData(res);
       setSelected(new Set());
     } catch (e: unknown) {
+      if (requestId !== latestRequest.current) return;
       toast({
         title: "Could not load applications",
         description: e instanceof Error ? e.message : undefined,
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      if (requestId === latestRequest.current && !movingPage) setLoading(false);
     }
   }, [contestId, status, search, page]);
 

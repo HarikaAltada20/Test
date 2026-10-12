@@ -479,6 +479,26 @@ export function validateApplicationQuestions(
   return { questions };
 }
 
+/**
+ * What the campaign editor should do with its application questions on save:
+ * nothing (not restricted, or unchanged), save the validated questions, or stop with an error.
+ */
+export function applicationQuestionsToSave(
+  accessMode: AccessMode,
+  dirty: boolean,
+  questions: unknown,
+): { skip: true } | { questions: ApplicationQuestion[] } | { error: string } {
+  if (accessMode !== "restricted" || !dirty) return { skip: true };
+  return validateApplicationQuestions(questions);
+}
+
+/** Nearest page that exists for `total` results (1 when there are none). */
+export function clampPage(page: number, total: number, pageSize: number): number {
+  const lastPage = Math.max(1, Math.ceil(Math.max(0, total) / Math.max(1, pageSize)));
+  if (!Number.isFinite(page) || page < 1) return 1;
+  return Math.min(Math.floor(page), lastPage);
+}
+
 /** Error message for one answer, or null when it's acceptable. Mirrors the database check. */
 export function validateApplicationAnswer(
   question: Pick<ApplicationQuestion, "kind" | "options" | "required">,
