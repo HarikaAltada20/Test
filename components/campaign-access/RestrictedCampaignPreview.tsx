@@ -209,6 +209,17 @@ export function RestrictedCampaignPreview({ preview, onChanged }: Props) {
         )}
       </div>
     );
+  } else if (app?.status === "approved" && !preview.has_access) {
+    statusBox = (
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <p className="flex items-center gap-2 font-medium text-gray-800">
+          <XCircle className="h-4 w-4" /> Your access was removed
+        </p>
+        <p className="mt-1 text-sm text-gray-600">
+          The brand removed you from this campaign. Contact them if you think this was a mistake.
+        </p>
+      </div>
+    );
   } else if (app?.status === "approved" || preview.has_access) {
     statusBox = (
       <div className="rounded-lg border border-green-200 bg-green-50 p-4">

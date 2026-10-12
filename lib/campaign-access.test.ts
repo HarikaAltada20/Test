@@ -4,6 +4,7 @@ import {
   APPLICATION_RESULT_HTTP_STATUS,
   APPLICATION_RESULT_MESSAGES,
   isApplicationResult,
+  isUuid,
   validateApplicationAnswer,
   validateApplicationAnswers,
   validateApplicationQuestions,
@@ -305,5 +306,26 @@ describe("application results", () => {
       assert.equal(typeof APPLICATION_RESULT_HTTP_STATUS[code as keyof typeof APPLICATION_RESULT_HTTP_STATUS], "number");
     }
     assert.equal(isApplicationResult("nope"), false);
+  });
+
+  it("treats already_approved as a successful no-op", () => {
+    assert.ok(isApplicationResult("already_approved"));
+    assert.equal(APPLICATION_RESULT_HTTP_STATUS.already_approved, 200);
+    assert.equal(APPLICATION_RESULT_MESSAGES.already_approved, "Already approved.");
+  });
+});
+
+describe("isUuid", () => {
+  it("accepts UUIDs in any case", () => {
+    assert.equal(isUuid("6f1c2b9e-1d2a-4c3b-9e8f-0a1b2c3d4e5f"), true);
+    assert.equal(isUuid("6F1C2B9E-1D2A-4C3B-9E8F-0A1B2C3D4E5F"), true);
+  });
+
+  it("rejects anything else", () => {
+    assert.equal(isUuid("not-a-uuid"), false);
+    assert.equal(isUuid("6f1c2b9e-1d2a-4c3b-9e8f-0a1b2c3d4e5"), false);
+    assert.equal(isUuid(" 6f1c2b9e-1d2a-4c3b-9e8f-0a1b2c3d4e5f"), false);
+    assert.equal(isUuid(null), false);
+    assert.equal(isUuid(42), false);
   });
 });

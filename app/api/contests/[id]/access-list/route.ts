@@ -280,7 +280,8 @@ export async function PATCH(request: Request, { params }: Ctx) {
 
 /**
  * DELETE /api/contests/:id/access-list — { userIds }. Existing submissions stay valid;
- * on non-public campaigns the creators also leave the Twitter campaign so they stop being tracked.
+ * on non-public campaigns the creators' Twitter participation is deactivated (not deleted, so their
+ * tracked history stays) and they stop being tracked.
  */
 export async function DELETE(request: Request, { params }: Ctx) {
   try {
@@ -308,7 +309,7 @@ export async function DELETE(request: Request, { params }: Ctx) {
       for (let i = 0; i < userIds.length; i += DELETE_CHUNK) {
         const { error } = await admin
           .from("twitter_campaign_participants")
-          .delete()
+          .update({ is_active: false })
           .eq("contest_id", id)
           .in("creator_id", userIds.slice(i, i + DELETE_CHUNK));
         if (error) throw error;

@@ -133,7 +133,9 @@ export function ApplicationsPanel({ contestId }: Props) {
   const applications = data?.applications ?? [];
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const canApprove = (a: ContestApplication) => a.status === "pending" || a.status === "rejected";
+  const needsReapprove = (a: ContestApplication) => a.status === "approved" && !a.on_access_list;
+  const canApprove = (a: ContestApplication) =>
+    a.status === "pending" || a.status === "rejected" || needsReapprove(a);
   const canReject = (a: ContestApplication) => a.status === "pending";
   const selectable = applications.filter((a) => canApprove(a) || canReject(a));
   const allSelected = selectable.length > 0 && selectable.every((a) => selected.has(a.id));
@@ -288,7 +290,7 @@ export function ApplicationsPanel({ contestId }: Props) {
                     >
                       {APPLICATION_STATUS_LABELS[a.status]}
                     </span>
-                    {a.status === "approved" && !a.on_access_list && (
+                    {needsReapprove(a) && (
                       <span className="mt-1 block text-[11px] text-gray-500">Access removed</span>
                     )}
                   </span>
@@ -301,6 +303,8 @@ export function ApplicationsPanel({ contestId }: Props) {
                       >
                         {busy === `approve:${a.id}` ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : needsReapprove(a) ? (
+                          "Re-approve"
                         ) : (
                           "Approve"
                         )}

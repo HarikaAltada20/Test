@@ -7,6 +7,7 @@ import {
   getServiceClient,
 } from "@/lib/campaign-access-server";
 import {
+  isUuid,
   validateApplicationQuestions,
   type ApplicationQuestion,
 } from "@/lib/campaign-access";
@@ -35,6 +36,7 @@ async function loadQuestions(
 export async function GET(_request: Request, { params }: Ctx) {
   try {
     const { id } = await params;
+    if (!isUuid(id)) throw new CampaignAccessError("Campaign not found", 404);
     const actor = await getAccessActor();
     const admin = getServiceClient();
     await assertCanManageCampaignAccess(admin, actor, id);
@@ -52,6 +54,7 @@ export async function GET(_request: Request, { params }: Ctx) {
 export async function PUT(request: Request, { params }: Ctx) {
   try {
     const { id } = await params;
+    if (!isUuid(id)) throw new CampaignAccessError("Campaign not found", 404);
     const actor = await getAccessActor();
     const admin = getServiceClient();
     await assertCanManageCampaignAccess(admin, actor, id);

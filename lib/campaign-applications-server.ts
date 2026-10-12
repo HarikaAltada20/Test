@@ -53,11 +53,13 @@ export function parseReviewBody(body: unknown): {
   return { decision: b.decision, reason: b.decision === "reject" && reason ? reason : null };
 }
 
-/** After reviews: refresh approved creators' list caches and notify everyone reviewed. */
+/** After reviews: refresh reviewed creators' list caches and notify them. */
 export async function afterReview(rows: ReviewRow[], reason: string | null): Promise<void> {
   const approved = rows.filter((r) => r.result === "approved" && r.user_id);
   const rejected = rows.filter((r) => r.result === "rejected" && r.user_id);
-  await Promise.all(approved.map((r) => invalidateOpportunitiesListCacheForUser(r.user_id)));
+  await Promise.all(
+    [...approved, ...rejected].map((r) => invalidateOpportunitiesListCacheForUser(r.user_id)),
+  );
 
   const contestId = rows.find((r) => r.contest_id)?.contest_id;
   if (!contestId) return;

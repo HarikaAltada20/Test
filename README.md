@@ -72,6 +72,18 @@ Migrations live in `db/migrations` and are applied in filename order through the
 
 New functions get `EXECUTE` for `anon` and `authenticated` by default in Supabase, so every migration that adds a function revokes and grants explicitly.
 
+## Releasing
+
+Run new migrations before deploying the code that uses them. For the campaign access release:
+
+1. `20261014_campaign_restricted_applications.sql`
+2. `20261015_campaign_access_notification_types.sql` — on its own, outside a transaction (adds enum values)
+3. `20261016_access_polish.sql`
+4. `20261017_access_review_fixes.sql`
+5. Deploy the app.
+
+Try the migrations on staging first. The create and edit pages only send the newer campaign columns when they are used, but the restricted-campaign features themselves need the migrations in place.
+
 ## Campaign access
 
 Each campaign has an `access_mode`:
@@ -92,4 +104,4 @@ How it is enforced:
 - Invite links (`contest_invite_links`) can expire or cap joins. Switching a campaign to public revokes its active links, and a dead link shows no campaign details.
 - Creators get in-app notifications when an application is approved or rejected and when a brand adds them; brands are told when applications arrive.
 
-Main code: `lib/campaign-access*.ts`, `lib/campaign-applications-server.ts`, `components/campaign-access/`, `app/api/contests/[id]/{access-list,applications,application-questions,invite-links,preview}`. Migrations: `20261010` through `20261016`.
+Main code: `lib/campaign-access*.ts`, `lib/campaign-applications-server.ts`, `components/campaign-access/`, `app/api/contests/[id]/{access-list,applications,application-questions,invite-links,preview}`. Migrations: `20261010` through `20261017`.

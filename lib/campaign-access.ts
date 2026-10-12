@@ -396,6 +396,11 @@ export function isApplicationStatus(value: unknown): value is ApplicationStatus 
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_PATTERN.test(value);
+}
+
 const ANSWER_URL_PATTERN = /^https?:\/\/\S+$/i;
 
 /**
@@ -523,6 +528,7 @@ export type ApplicationResult =
   | "withdrawn"
   | "not_pending"
   | "approved"
+  | "already_approved"
   | "rejected"
   | "forbidden"
   | "invalid_state"
@@ -541,6 +547,7 @@ export const APPLICATION_RESULT_MESSAGES: Record<ApplicationResult, string> = {
   withdrawn: "Application withdrawn.",
   not_pending: "Only pending applications can be withdrawn.",
   approved: "Application approved.",
+  already_approved: "Already approved.",
   rejected: "Application rejected.",
   forbidden: "You can't review applications for this campaign.",
   invalid_state: "This application can't be changed in its current state.",
@@ -560,6 +567,7 @@ export const APPLICATION_RESULT_HTTP_STATUS: Record<ApplicationResult, number> =
   withdrawn: 200,
   not_pending: 409,
   approved: 200,
+  already_approved: 200,
   rejected: 200,
   forbidden: 403,
   invalid_state: 409,

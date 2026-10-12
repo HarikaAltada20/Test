@@ -828,16 +828,26 @@ export default function EditContestPage({
   const [listOnlyToEligible, setListOnlyToEligible] = useState(false);
   const [savedListOnlyToEligible, setSavedListOnlyToEligible] =
     useState(false);
+  const effectiveListOnlyToEligible =
+    accessMode === "public" && listOnlyToEligible;
+  // Newer columns are only sent when in use (or being turned off), so saving
+  // still works before their migrations have run.
   const accessFields = {
     access_mode: accessMode,
     access_list_skips_requirements:
       accessMode !== "public" && accessListSkipsRequirements,
-    preview_description:
-      accessMode === "restricted" && previewDescription.trim()
-        ? previewDescription.trim()
-        : null,
-    applications_open: applicationsOpen,
-    list_only_to_eligible: accessMode === "public" && listOnlyToEligible,
+    ...(accessMode === "restricted" || savedAccessMode === "restricted"
+      ? {
+          preview_description:
+            accessMode === "restricted" && previewDescription.trim()
+              ? previewDescription.trim()
+              : null,
+          applications_open: applicationsOpen,
+        }
+      : {}),
+    ...(effectiveListOnlyToEligible || savedListOnlyToEligible
+      ? { list_only_to_eligible: effectiveListOnlyToEligible }
+      : {}),
   };
   const saveApplicationQuestions = async () => {
     if (accessMode !== "restricted" || !questionsDirty) return;
@@ -861,7 +871,7 @@ export default function EditContestPage({
     const changed =
       accessFields.access_mode !== savedAccessMode ||
       accessFields.access_list_skips_requirements !== savedSkipRequirements ||
-      accessFields.list_only_to_eligible !== savedListOnlyToEligible;
+      effectiveListOnlyToEligible !== savedListOnlyToEligible;
     if (!changed) return;
     // The admin update route clears list caches server-side.
     if (!savedViaAdminApi) {
@@ -871,7 +881,7 @@ export default function EditContestPage({
     }
     setSavedAccessMode(accessFields.access_mode);
     setSavedSkipRequirements(accessFields.access_list_skips_requirements);
-    setSavedListOnlyToEligible(accessFields.list_only_to_eligible);
+    setSavedListOnlyToEligible(effectiveListOnlyToEligible);
   };
   const [category, setCategory] = useState<string>("technology");
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars

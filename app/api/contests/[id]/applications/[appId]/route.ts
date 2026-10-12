@@ -10,6 +10,7 @@ import {
   parseReviewBody,
   type ReviewRow,
 } from "@/lib/campaign-applications-server";
+import { isUuid } from "@/lib/campaign-access";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ type Ctx = { params: Promise<{ id: string; appId: string }> };
 export async function PATCH(request: Request, { params }: Ctx) {
   try {
     const { id, appId } = await params;
+    if (!isUuid(id) || !isUuid(appId)) throw new CampaignAccessError("Application not found", 404);
     const { supabase } = await getSignedInClient();
     const { decision, reason } = parseReviewBody(await request.json().catch(() => ({})));
 

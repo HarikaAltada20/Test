@@ -11,6 +11,7 @@ import {
 import {
   APPLICATION_STATUSES,
   isApplicationStatus,
+  isUuid,
   type ApplicationAnswer,
   type ApplicationStatus,
   type ContestApplication,
@@ -25,7 +26,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
-const SEARCH_USER_CAP = 500;
+const MAX_SEARCH_LENGTH = 100;
 
 type ApplicationRow = {
   id: string;
@@ -36,6 +37,14 @@ type ApplicationRow = {
   rejection_reason: string | null;
   reviewed_at: string | null;
   created_at: string;
+  on_access_list: boolean;
+};
+
+/** Shape returned by the contest_applications_page RPC. */
+type ApplicationsPage = {
+  total?: number;
+  counts?: Partial<Record<ApplicationStatus, number>>;
+  rows?: ApplicationRow[];
 };
 
 /** Accepts [{ question_id, answer }] or { [questionId]: answer }. */
@@ -59,6 +68,7 @@ function normalizeAnswers(raw: unknown): { question_id: string; answer: string }
 export async function POST(request: Request, { params }: Ctx) {
   try {
     const { id } = await params;
+    if (!isUuid(id)) throw new CampaignAccessError("Campaign not found", 404);
     const { supabase, userId } = await getSignedInClient();
     const body = await request.json().catch(() => ({}));
 
@@ -88,6 +98,7 @@ export async function POST(request: Request, { params }: Ctx) {
 export async function DELETE(_request: Request, { params }: Ctx) {
   try {
     const { id } = await params;
+    if (!isUuid(id)) throw new CampaignAccessError("Campaign not found", 404);
     const { supabase, userId } = await getSignedInClient();
     const { data, error } = await supabase.rpc("withdraw_contest_application", {
       p_contest_id: id,
@@ -107,6 +118,7 @@ export async function DELETE(_request: Request, { params }: Ctx) {
 export async function GET(request: Request, { params }: Ctx) {
   try {
     const { id } = await params;
+    if (!isUuid(id)) throw new CampaignAccessError("Campaign not found", 404);
     const actor = await getAccessActor();
     const admin = getServiceClient();
     await assertCanManageCampaignAccess(admin, actor, id);
@@ -121,68 +133,26 @@ export async function GET(request: Request, { params }: Ctx) {
       MAX_LIMIT,
       Math.max(1, parseInt(sp.get("limit") || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT),
     );
-    const search = (sp.get("search") || "").trim().replace(/[%_,()*\\]/g, "");
+    const search = (sp.get("search") || "").trim().slice(0, MAX_SEARCH_LENGTH);
 
-    let searchUserIds: string[] | null = null;
-    if (search) {
-      const { data: users, error } = await admin
-        .from("users")
-        .select("id")
-        .ilike("username", `%${search}%`)
-        .limit(SEARCH_USER_CAP);
-      if (error) throw error;
-      searchUserIds = (users || []).map((u) => u.id);
-    }
-
-    const counts = Object.fromEntries(APPLICATION_STATUSES.map((s) => [s, 0])) as Record<
-      ApplicationStatus,
-      number
-    >;
-    await Promise.all(
-      APPLICATION_STATUSES.map(async (s) => {
-        const { count, error } = await admin
-          .from("contest_applications")
-          .select("id", { count: "exact", head: true })
-          .eq("contest_id", id)
-          .eq("status", s);
-        if (error) throw error;
-        counts[s] = count ?? 0;
-      }),
-    );
-
-    if (searchUserIds && searchUserIds.length === 0) {
-      return NextResponse.json({ applications: [], total: 0, page, limit, counts });
-    }
-
-    let query = admin
-      .from("contest_applications")
-      .select(
-        "id, contest_id, user_id, status, answers, rejection_reason, reviewed_at, created_at",
-        { count: "exact" },
-      )
-      .eq("contest_id", id)
-      .order("created_at", { ascending: false })
-      .order("id")
-      .range((page - 1) * limit, page * limit - 1);
-    if (statusParam !== "all") query = query.eq("status", statusParam);
-    if (searchUserIds) query = query.in("user_id", searchUserIds);
-
-    const { data, error, count } = await query;
+    const { data, error } = await admin.rpc("contest_applications_page", {
+      p_contest_id: id,
+      p_status: statusParam,
+      p_search: search || null,
+      p_offset: (page - 1) * limit,
+      p_limit: limit,
+    });
     if (error) throw error;
-    const rows = (data || []) as ApplicationRow[];
+    const result = (data ?? {}) as ApplicationsPage;
 
-    const userIds = rows.map((r) => r.user_id);
-    const users = await loadUserDisplay(admin, userIds);
-    const onList = new Set<string>();
-    if (userIds.length > 0) {
-      const { data: access, error: accessError } = await admin
-        .from("contest_access_list")
-        .select("user_id")
-        .eq("contest_id", id)
-        .in("user_id", userIds);
-      if (accessError) throw accessError;
-      for (const a of access || []) onList.add(a.user_id);
-    }
+    const counts = Object.fromEntries(
+      APPLICATION_STATUSES.map((s) => [s, Number(result.counts?.[s] ?? 0)]),
+    ) as Record<ApplicationStatus, number>;
+    const rows = Array.isArray(result.rows) ? result.rows : [];
+    const users = await loadUserDisplay(
+      admin,
+      rows.map((r) => r.user_id),
+    );
 
     const applications: ContestApplication[] = rows.map((r) => {
       const u = users.get(r.user_id);
@@ -192,11 +162,17 @@ export async function GET(request: Request, { params }: Ctx) {
         username: u?.username ?? null,
         full_name: u?.full_name ?? null,
         profile_picture_url: u?.profile_picture_url ?? null,
-        on_access_list: onList.has(r.user_id),
+        on_access_list: !!r.on_access_list,
       };
     });
 
-    return NextResponse.json({ applications, total: count ?? 0, page, limit, counts });
+    return NextResponse.json({
+      applications,
+      total: Number(result.total ?? 0),
+      page,
+      limit,
+      counts,
+    });
   } catch (err) {
     return campaignAccessErrorResponse(err);
   }

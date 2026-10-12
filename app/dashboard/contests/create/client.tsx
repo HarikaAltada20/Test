@@ -4229,12 +4229,16 @@ export default function CreateContestPage({
         access_mode: accessMode,
         access_list_skips_requirements:
           accessMode !== "public" && accessListSkipsRequirements,
-        preview_description:
-          accessMode === "restricted" && previewDescription.trim()
-            ? previewDescription.trim()
-            : null,
-        applications_open: applicationsOpen,
-        list_only_to_eligible: accessMode === "public" && listOnlyToEligible,
+        // Only sent when used, so this page still saves before the column migrations run.
+        ...(accessMode === "restricted"
+          ? {
+              preview_description: previewDescription.trim() || null,
+              applications_open: applicationsOpen,
+            }
+          : {}),
+        ...(accessMode === "public" && listOnlyToEligible
+          ? { list_only_to_eligible: true }
+          : {}),
         trust_score:
           isVideoContestFormat(contestFormat) &&
           trustScoreEnabled &&

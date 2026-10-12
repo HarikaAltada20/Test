@@ -12,6 +12,7 @@ import {
   parseReviewBody,
   type ReviewRow,
 } from "@/lib/campaign-applications-server";
+import { isUuid } from "@/lib/campaign-access";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ const MAX_BULK = 200;
 export async function POST(request: Request, { params }: Ctx) {
   try {
     const { id } = await params;
+    if (!isUuid(id)) throw new CampaignAccessError("Campaign not found", 404);
     const actor = await getAccessActor();
     const admin = getServiceClient();
     await assertCanManageCampaignAccess(admin, actor, id);
@@ -31,7 +33,7 @@ export async function POST(request: Request, { params }: Ctx) {
     const body = await request.json().catch(() => ({}));
     const { decision, reason } = parseReviewBody(body);
     const requested: string[] = Array.isArray(body?.ids)
-      ? Array.from(new Set(body.ids.filter((v: unknown): v is string => typeof v === "string")))
+      ? Array.from(new Set(body.ids.filter(isUuid)))
       : [];
     if (requested.length === 0) throw new CampaignAccessError("ids is required", 400);
     if (requested.length > MAX_BULK) {

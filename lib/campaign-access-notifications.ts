@@ -2,6 +2,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import type { CampaignAccessNotificationType } from "@/lib/campaign-access";
 
 const INSERT_BATCH = 500;
+const UNIQUE_VIOLATION = "23505";
 
 type ContestInfo = {
   id: string;
@@ -38,6 +39,7 @@ async function insertNotifications(
   type: CampaignAccessNotificationType,
   title: string,
   message: string,
+  { ignoreDuplicate = false }: { ignoreDuplicate?: boolean } = {},
 ): Promise<void> {
   const db = createAdminClient();
   const unique = Array.from(new Set(userIds));
@@ -50,7 +52,7 @@ async function insertNotifications(
       message_resolved: message,
     }));
     const { error } = await db.from("user_notifications").insert(rows);
-    if (error) throw error;
+    if (error && !(ignoreDuplicate && error.code === UNIQUE_VIOLATION)) throw error;
   }
 }
 
@@ -84,6 +86,8 @@ export async function notifyApplicationReceived(contestId: string): Promise<void
       "campaign_application_received",
       "New application",
       `Creators are applying to ${contest.title || "your campaign"}. Review them in the Applications tab.`,
+      // A concurrent application may have just created the unread notification.
+      { ignoreDuplicate: true },
     );
   });
 }
