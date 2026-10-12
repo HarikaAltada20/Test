@@ -30,6 +30,7 @@ import {
   parseLegacySupportMessageResolved,
 } from "@/lib/user-notifications/support-sender-display";
 import { cn } from "@/lib/utils";
+import { isCampaignAccessNotificationType } from "@/lib/campaign-access";
 import {
   NOTIFICATIONS_CHANGED_EVENT,
   dispatchNotificationsChanged,
@@ -89,6 +90,15 @@ function isSupportNotificationType(type: string): boolean {
 
 function isPublicAnnouncement(type: string): boolean {
   return type === "public";
+}
+
+/** Notification types whose click opens the linked campaign. */
+function opensContest(n: NotificationRow): boolean {
+  return (
+    !!n.contest_id &&
+    (isPublicAnnouncement(n.notification_type) ||
+      isCampaignAccessNotificationType(n.notification_type))
+  );
 }
 
 function notificationTitle(n: NotificationRow): string {
@@ -189,8 +199,7 @@ function NotificationCard({
     ? getSupportUserMessageDisplay(n)
     : null;
   const bodyText = supportDisplay?.preview ?? n.message_resolved;
-  const hasContestLink =
-    isPublicAnnouncement(n.notification_type) && !!n.contest_id;
+  const hasContestLink = opensContest(n);
   const createdAt = new Date(n.created_at);
   const relativeTime = formatDistanceToNow(createdAt, { addSuffix: true });
 
@@ -382,12 +391,13 @@ export function UserNotificationsBell({
       }
     }
 
+    if (opensContest(n)) {
+      setOpen(false);
+      router.push(getContestDashboardPath(n.contest_id!, userType));
+      return;
+    }
+
     if (isPublicAnnouncement(n.notification_type)) {
-      if (n.contest_id) {
-        setOpen(false);
-        router.push(getContestDashboardPath(n.contest_id, userType));
-        return;
-      }
       setDetailNotification(n);
       return;
     }

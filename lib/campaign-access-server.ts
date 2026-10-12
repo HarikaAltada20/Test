@@ -8,6 +8,7 @@ import {
   MAX_USERNAMES_PER_REQUEST,
   parseUsernames,
   type AccessMode,
+  type ContestPreview,
   type UsernameResolution,
 } from "@/lib/campaign-access";
 
@@ -215,6 +216,31 @@ export async function canViewCampaign(contestId: string): Promise<boolean> {
 
 export const PRIVATE_CAMPAIGN_FORBIDDEN_MESSAGE =
   "This campaign is private or unavailable.";
+
+/** Session client plus the signed-in user's id; 401 when signed out. */
+export async function getSignedInClient(): Promise<{
+  supabase: SupabaseClient;
+  userId: string;
+}> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await getUserSafe(supabase);
+  if (!user) throw new CampaignAccessError("Authentication required", 401);
+  return { supabase, userId: user.id };
+}
+
+/** Restricted-campaign preview for the signed-in caller, or null when not previewable. */
+export async function getCampaignPreview(
+  supabase: SupabaseClient,
+  contestId: string,
+): Promise<ContestPreview | null> {
+  const { data, error } = await supabase.rpc("get_contest_preview", {
+    p_contest_id: contestId,
+  });
+  if (error) throw error;
+  return (data as ContestPreview | null) ?? null;
+}
 
 export async function assertCanManageAllowlist(
   admin: SupabaseClient,

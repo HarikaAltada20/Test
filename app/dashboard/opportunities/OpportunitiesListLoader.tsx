@@ -3,6 +3,7 @@ import type { UserResponse } from "@supabase/supabase-js";
 import { listCampaignsPaginated } from "@/lib/contest-list-query";
 import { buildOpportunitiesListQueryKey } from "@/lib/opportunities-list-query";
 import { getCreatorUserCountries } from "@/lib/opportunities-user-countries";
+import { getCreatorRequirementsSnapshot } from "@/lib/creator-requirements";
 import OpportunitiesPage from "./client";
 
 type OpportunitiesListLoaderProps = {
@@ -46,6 +47,10 @@ export async function OpportunitiesListLoader({
       scope: "opportunities",
       ...listQuery,
       contestFormat: "all",
+      creatorEligibilitySnapshot: await getCreatorRequirementsSnapshot(
+        supabase,
+        user.id,
+      ),
     });
 
     initialContests = list.contests;

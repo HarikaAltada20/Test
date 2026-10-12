@@ -108,7 +108,15 @@ import {
   hasAllowlistSelection,
   type AllowlistSelection,
 } from "@/components/campaign-access/AllowlistPicker";
-import type { AccessMode } from "@/lib/campaign-access";
+import { PreviewEditor } from "@/components/campaign-access/PreviewEditor";
+import { ApplicationQuestionsEditor } from "@/components/campaign-access/ApplicationQuestionsEditor";
+import { questionsApi } from "@/components/campaign-access/api";
+import {
+  isAccessMode,
+  validateApplicationQuestions,
+  type AccessMode,
+  type ApplicationQuestion,
+} from "@/lib/campaign-access";
 import dynamic from "next/dynamic";
 import REGIONS_AND_COUNTRIES_DATA from "@/data/regions-and-countries.json";
 
@@ -517,6 +525,12 @@ export default function CreateContestPage({
     useState(false);
   const [allowlistSelection, setAllowlistSelection] =
     useState<AllowlistSelection>(EMPTY_ALLOWLIST_SELECTION);
+  const [previewDescription, setPreviewDescription] = useState("");
+  const [applicationsOpen, setApplicationsOpen] = useState(true);
+  const [applicationQuestions, setApplicationQuestions] = useState<
+    ApplicationQuestion[]
+  >([]);
+  const [listOnlyToEligible, setListOnlyToEligible] = useState(false);
   const [contentType, setContentType] = useState<
     "ugc" | "clipping" | "other" | "" | "raid" | "awareness"
   >("");
@@ -4215,6 +4229,16 @@ export default function CreateContestPage({
         access_mode: accessMode,
         access_list_skips_requirements:
           accessMode !== "public" && accessListSkipsRequirements,
+        // Only sent when used, so this page still saves before the column migrations run.
+        ...(accessMode === "restricted"
+          ? {
+              preview_description: previewDescription.trim() || null,
+              applications_open: applicationsOpen,
+            }
+          : {}),
+        ...(accessMode === "public" && listOnlyToEligible
+          ? { list_only_to_eligible: true }
+          : {}),
         trust_score:
           isVideoContestFormat(contestFormat) &&
           trustScoreEnabled &&
@@ -4416,6 +4440,27 @@ export default function CreateContestPage({
               title: "Couldn't set up who can join",
               description: `${
                 accessError?.message || "The access list was not saved."
+              } Your campaign is saved — please try again.`,
+              variant: "destructive",
+            });
+            setIsLoading(false);
+            setUploadProgress(null);
+            return;
+          }
+        }
+
+        if (accessMode === "restricted") {
+          try {
+            const parsed = validateApplicationQuestions(applicationQuestions);
+            if ("error" in parsed) throw new Error(parsed.error);
+            const saved = await questionsApi.save(newContestId, parsed.questions);
+            setApplicationQuestions(saved.questions);
+          } catch (questionsError: any) {
+            if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
+            toast({
+              title: "Couldn't save the application questions",
+              description: `${
+                questionsError?.message || "The questions were not saved."
               } Your campaign is saved — please try again.`,
               variant: "destructive",
             });
@@ -6170,10 +6215,19 @@ export default function CreateContestPage({
       }
     }
 
-    if (draft.access_mode === "public" || draft.access_mode === "private") {
+    if (isAccessMode(draft.access_mode)) {
       setAccessMode(draft.access_mode);
     }
     setAccessListSkipsRequirements(!!draft.access_list_skips_requirements);
+    setPreviewDescription(draft.preview_description ?? "");
+    setApplicationsOpen(draft.applications_open !== false);
+    setListOnlyToEligible(!!draft.list_only_to_eligible);
+    if (draft.access_mode === "restricted" && draft.id) {
+      questionsApi
+        .get(draft.id)
+        .then((res) => setApplicationQuestions(res.questions))
+        .catch((err) => console.error("Failed to load application questions:", err));
+    }
 
     // Thumbnail
     if (draft.thumbnail_url) {
@@ -11664,12 +11718,65 @@ export default function CreateContestPage({
                     )}
                   >
                     Private campaigns are hidden from everyone except the
-                    creators you add. The requirements below still decide who
-                    can submit.
+                    creators you add. Restricted campaigns show a preview and
+                    creators apply to join. The requirements below still decide
+                    who can submit.
                   </p>
                 </div>
                 <AccessModeSelector value={accessMode} onChange={setAccessMode} />
-                {accessMode === "private" && (
+                {accessMode === "public" &&
+                  isVideoContestFormat(contestFormat) &&
+                  (trustScoreEnabled ||
+                    trustNumberEnabled ||
+                    bestQualityEnabled ||
+                    avgQualityEnabled ||
+                    minQualityEnabled ||
+                    minEarningsEnabled ||
+                    minViewsEnabled) && (
+                    <div className="flex items-start gap-3 pt-2 border-t">
+                      <Checkbox
+                        id="listOnlyToEligible"
+                        checked={listOnlyToEligible}
+                        onCheckedChange={(checked: any) =>
+                          setListOnlyToEligible(Boolean(checked))
+                        }
+                        className={cn(
+                          "border h-5 w-5 mt-0.5",
+                          isDark ? "border-gray-300" : "border-gray-500",
+                        )}
+                      />
+                      <Label
+                        htmlFor="listOnlyToEligible"
+                        className="text-sm font-normal leading-snug"
+                      >
+                        Only show this campaign to creators who meet the
+                        requirements
+                        <span
+                          className={cn(
+                            "block text-xs",
+                            isDark ? "text-gray-400" : "text-gray-500",
+                          )}
+                        >
+                          Other creators won&apos;t see it in Opportunities.
+                        </span>
+                      </Label>
+                    </div>
+                  )}
+                {accessMode === "restricted" && (
+                  <div className="space-y-4 pt-2 border-t">
+                    <PreviewEditor
+                      description={previewDescription}
+                      onDescriptionChange={setPreviewDescription}
+                      applicationsOpen={applicationsOpen}
+                      onApplicationsOpenChange={setApplicationsOpen}
+                    />
+                    <ApplicationQuestionsEditor
+                      questions={applicationQuestions}
+                      onChange={setApplicationQuestions}
+                    />
+                  </div>
+                )}
+                {accessMode !== "public" && (
                   <div className="space-y-4 pt-2 border-t">
                     <AllowlistPicker
                       value={allowlistSelection}
