@@ -27,7 +27,7 @@ const OPTIONS: {
   {
     value: "restricted",
     title: "Restricted",
-    description: "Visible as a preview; creators apply to join. Coming soon.",
+    description: "Shows a preview to everyone; creators apply and you approve who joins.",
     icon: ClipboardList,
   },
 ];

@@ -10,6 +10,7 @@ import React, {
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import { CampaignAccessPanel } from "@/components/campaign-access/CampaignAccessPanel";
+import { ApplicationsPanel } from "@/components/campaign-access/ApplicationsPanel";
 import {
   isPrivateLikeAccessMode,
   type AccessMode,
@@ -1850,6 +1851,9 @@ export default function ContestDetailClient({
       ? [{ id: "twitter-feed", label: "Twitter Feed" }]
       : []),
     { id: "analytics", label: "Analytics" },
+    ...(contest?.access_mode === "restricted"
+      ? [{ id: "applications", label: "Applications" }]
+      : []),
     ...(isPrivateLikeAccessMode(contest?.access_mode)
       ? [{ id: "access", label: "Access" }]
       : []),
@@ -4201,6 +4205,9 @@ export default function ContestDetailClient({
         ? [{ id: "twitter-feed", label: "Twitter Feed" }]
         : []),
       { id: "analytics", label: "Analytics" },
+      ...(contest?.access_mode === "restricted"
+        ? [{ id: "applications", label: "Applications" }]
+        : []),
       ...(isPrivateLikeAccessMode(contest?.access_mode)
         ? [{ id: "access", label: "Access" }]
         : []),
@@ -34269,6 +34276,11 @@ export default function ContestDetailClient({
               </CardContent>
             </div>
           </TabPanel>
+          {contest?.access_mode === "restricted" && (
+            <TabPanel value="applications" activeTab={activeTab}>
+              <ApplicationsPanel contestId={contestId} />
+            </TabPanel>
+          )}
           {isPrivateLikeAccessMode(contest?.access_mode) && (
             <TabPanel value="access" activeTab={activeTab}>
               <CampaignAccessPanel

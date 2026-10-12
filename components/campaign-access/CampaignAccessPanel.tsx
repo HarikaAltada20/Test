@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Lock, Trash2, UserPlus, Download, Save } from "lucide-react";
+import { Loader2, Lock, Trash2, UserPlus, Download, Save, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +38,7 @@ type Props = {
 };
 
 const ALL = "all";
+const ROSTER_PAGE_SIZE = 50;
 
 export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
   const [members, setMembers] = useState<ContestAccessMember[]>([]);
@@ -49,6 +50,11 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
   const [importListId, setImportListId] = useState("");
   const [saveName, setSaveName] = useState("");
   const [filter, setFilter] = useState<string>(ALL);
+  const [shown, setShown] = useState(ROSTER_PAGE_SIZE);
+
+  useEffect(() => {
+    setShown(ROSTER_PAGE_SIZE);
+  }, [filter]);
 
   const load = useCallback(async () => {
     try {
@@ -113,6 +119,15 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
     );
   }, [members, filter]);
 
+  const usedLists = useMemo(() => {
+    const usedIds = new Set(
+      members
+        .filter((m) => m.source === "saved_list" && m.source_allowlist_id)
+        .map((m) => m.source_allowlist_id as string),
+    );
+    return lists.filter((l) => usedIds.has(l.id));
+  }, [members, lists]);
+
   const sourceLabel = (m: ContestAccessMember) => {
     if (m.source === "saved_list") return `List: ${m.source_allowlist_name ?? "deleted list"}`;
     if (m.source === "invite_link" && m.source_invite_link_id) {
@@ -137,7 +152,7 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
             <Lock className="h-4 w-4" /> Campaign access list
           </h3>
           <p className="text-sm text-gray-500">
-            {members.length} creator{members.length === 1 ? "" : "s"} can see this private campaign.
+            {members.length} creator{members.length === 1 ? "" : "s"} can see this campaign.
           </p>
         </div>
         <label className="flex max-w-sm items-start gap-3 rounded-md border border-gray-200 p-3">
@@ -220,6 +235,40 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
         </div>
       </div>
 
+      {usedLists.length > 0 && (
+        <div className="space-y-2 rounded-md border border-gray-200 p-4">
+          <Label className="font-medium">Sync from saved lists</Label>
+          <p className="text-xs text-gray-500">
+            Adds creators who joined a list after you imported it. Nobody is removed.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {usedLists.map((l) => (
+              <Button
+                key={l.id}
+                size="sm"
+                variant="outline"
+                disabled={busy === `sync:${l.id}`}
+                onClick={() =>
+                  run(`sync:${l.id}`, async () => {
+                    const res = await accessListApi.syncList(contestId, l.id);
+                    return res.added === 0
+                      ? `"${l.name}" is already in sync`
+                      : `Synced "${l.name}": ${summarizeAddResult(res)}`;
+                  })
+                }
+              >
+                {busy === `sync:${l.id}` ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                {l.name}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <InviteLinksSection contestId={contestId} />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -282,7 +331,7 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
                 </TableCell>
               </TableRow>
             ) : (
-              visible.map((m) => (
+              visible.slice(0, shown).map((m) => (
                 <TableRow key={m.user_id}>
                   <TableCell>
                     <div className="font-medium">@{m.username ?? "unknown"}</div>
@@ -313,6 +362,20 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
             )}
           </TableBody>
         </Table>
+        {visible.length > shown && (
+          <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3 text-sm text-gray-500">
+            <span>
+              Showing {shown} of {visible.length}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShown((n) => n + ROSTER_PAGE_SIZE)}
+            >
+              Show more
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

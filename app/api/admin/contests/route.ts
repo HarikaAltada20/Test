@@ -85,6 +85,9 @@ export async function POST(request: NextRequest) {
       access_mode: draftFields.access_mode ?? "public",
       access_list_skips_requirements:
         draftFields.access_list_skips_requirements ?? false,
+      preview_description: draftFields.preview_description ?? null,
+      applications_open: draftFields.applications_open ?? true,
+      list_only_to_eligible: draftFields.list_only_to_eligible ?? false,
       title: draftFields.title || "No Title - Draft",
       brief_html: draftFields.brief_html ?? "",
       brief_json: draftFields.brief_json ?? null,

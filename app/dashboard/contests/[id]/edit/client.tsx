@@ -76,7 +76,15 @@ import { UserResponse } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 import { AccessModeSelector } from "@/components/campaign-access/AccessModeSelector";
 import { invalidateBrandCampaignListCachesAfterMutation } from "@/lib/invalidate-brand-campaign-list-cache";
-import type { AccessMode } from "@/lib/campaign-access";
+import { PreviewEditor } from "@/components/campaign-access/PreviewEditor";
+import { ApplicationQuestionsEditor } from "@/components/campaign-access/ApplicationQuestionsEditor";
+import { questionsApi } from "@/components/campaign-access/api";
+import {
+  isAccessMode,
+  validateApplicationQuestions,
+  type AccessMode,
+  type ApplicationQuestion,
+} from "@/lib/campaign-access";
 import { reconcileLeaderboardPrizeAmounts } from "@/lib/contest-prize-utils";
 import { getChargeableBudgetCents } from "@/lib/contest-chargeable-budget";
 import { preserveExistingBudgetSpentFields } from "@/lib/contest-budget-spent-fields";
@@ -811,16 +819,49 @@ export default function EditContestPage({
   const [accessListSkipsRequirements, setAccessListSkipsRequirements] =
     useState(false);
   const [savedSkipRequirements, setSavedSkipRequirements] = useState(false);
+  const [previewDescription, setPreviewDescription] = useState("");
+  const [applicationsOpen, setApplicationsOpen] = useState(true);
+  const [applicationQuestions, setApplicationQuestions] = useState<
+    ApplicationQuestion[]
+  >([]);
+  const [questionsDirty, setQuestionsDirty] = useState(false);
+  const [listOnlyToEligible, setListOnlyToEligible] = useState(false);
+  const [savedListOnlyToEligible, setSavedListOnlyToEligible] =
+    useState(false);
   const accessFields = {
     access_mode: accessMode,
     access_list_skips_requirements:
       accessMode !== "public" && accessListSkipsRequirements,
+    preview_description:
+      accessMode === "restricted" && previewDescription.trim()
+        ? previewDescription.trim()
+        : null,
+    applications_open: applicationsOpen,
+    list_only_to_eligible: accessMode === "public" && listOnlyToEligible,
+  };
+  const saveApplicationQuestions = async () => {
+    if (accessMode !== "restricted" || !questionsDirty) return;
+    try {
+      const parsed = validateApplicationQuestions(applicationQuestions);
+      if ("error" in parsed) throw new Error(parsed.error);
+      const saved = await questionsApi.save(contestId, parsed.questions);
+      setApplicationQuestions(saved.questions);
+      setQuestionsDirty(false);
+    } catch (err: any) {
+      toast({
+        title: "Couldn't save the application questions",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
   };
   /** Call after a successful save that wrote accessFields. */
   const commitSavedAccessFields = (savedViaAdminApi: boolean) => {
+    void saveApplicationQuestions();
     const changed =
       accessFields.access_mode !== savedAccessMode ||
-      accessFields.access_list_skips_requirements !== savedSkipRequirements;
+      accessFields.access_list_skips_requirements !== savedSkipRequirements ||
+      accessFields.list_only_to_eligible !== savedListOnlyToEligible;
     if (!changed) return;
     // The admin update route clears list caches server-side.
     if (!savedViaAdminApi) {
@@ -830,6 +871,7 @@ export default function EditContestPage({
     }
     setSavedAccessMode(accessFields.access_mode);
     setSavedSkipRequirements(accessFields.access_list_skips_requirements);
+    setSavedListOnlyToEligible(accessFields.list_only_to_eligible);
   };
   const [category, setCategory] = useState<string>("technology");
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
@@ -2326,10 +2368,26 @@ export default function EditContestPage({
             }
             setContentType(data.content_type || "other");
             setCategory(data.category || "technology");
-            const loadedAccessMode: AccessMode =
-              data.access_mode === "private" ? "private" : "public";
+            const loadedAccessMode: AccessMode = isAccessMode(
+              data.access_mode,
+            )
+              ? data.access_mode
+              : "public";
             setAccessMode(loadedAccessMode);
             setSavedAccessMode(loadedAccessMode);
+            setPreviewDescription(data.preview_description || "");
+            setApplicationsOpen(data.applications_open !== false);
+            setListOnlyToEligible(!!data.list_only_to_eligible);
+            setSavedListOnlyToEligible(
+              loadedAccessMode === "public" && !!data.list_only_to_eligible,
+            );
+            questionsApi
+              .get(contestId)
+              .then((res) => {
+                setApplicationQuestions(res.questions);
+                setQuestionsDirty(false);
+              })
+              .catch(() => {});
             setAccessListSkipsRequirements(
               !!data.access_list_skips_requirements,
             );
@@ -9755,7 +9813,8 @@ export default function EditContestPage({
                     )}
                   >
                     Manage which creators are on the access list from the
-                    campaign&apos;s Access tab.
+                    campaign&apos;s Access tab. Review applications to
+                    restricted campaigns from the Applications tab.
                   </p>
                 </div>
                 <AccessModeSelector
@@ -9778,7 +9837,55 @@ export default function EditContestPage({
                     setAccessMode(next);
                   }}
                 />
-                {accessMode === "private" && (
+                {accessMode === "public" &&
+                  isVideoContestFormat(contest?.contest_format) && (
+                    <div className="flex items-start gap-3 pt-2 border-t">
+                      <Checkbox
+                        id="listOnlyToEligible"
+                        checked={listOnlyToEligible}
+                        onCheckedChange={(checked: any) =>
+                          setListOnlyToEligible(Boolean(checked))
+                        }
+                        className={cn(
+                          "border h-5 w-5 mt-0.5",
+                          isDark ? "border-gray-300" : "border-gray-500",
+                        )}
+                      />
+                      <Label
+                        htmlFor="listOnlyToEligible"
+                        className="text-sm font-normal leading-snug"
+                      >
+                        Only show this campaign to creators who meet the
+                        requirements
+                        <span
+                          className={cn(
+                            "block text-xs",
+                            isDark ? "text-gray-400" : "text-gray-500",
+                          )}
+                        >
+                          Has no effect unless you set requirements below.
+                        </span>
+                      </Label>
+                    </div>
+                  )}
+                {accessMode === "restricted" && (
+                  <div className="space-y-4 pt-2 border-t">
+                    <PreviewEditor
+                      description={previewDescription}
+                      onDescriptionChange={setPreviewDescription}
+                      applicationsOpen={applicationsOpen}
+                      onApplicationsOpenChange={setApplicationsOpen}
+                    />
+                    <ApplicationQuestionsEditor
+                      questions={applicationQuestions}
+                      onChange={(next) => {
+                        setApplicationQuestions(next);
+                        setQuestionsDirty(true);
+                      }}
+                    />
+                  </div>
+                )}
+                {accessMode !== "public" && (
                   <div className="flex items-start gap-3 pt-2 border-t">
                     <Checkbox
                       id="accessListSkipsRequirements"

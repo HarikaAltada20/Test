@@ -73,7 +73,10 @@ export default function InviteLandingClient({ token, preview, viewerType }: Prop
     router.push(path);
   };
 
-  const notFound = status === "not_found" || !preview.contestId;
+  // Details are withheld for links that can't be used (expired, revoked, full, ended).
+  const hasDetails = !!preview.contestId;
+  const notFound =
+    status === "not_found" || (!hasDetails && !isInviteRedeemResult(status));
   const blockedMessage =
     !notFound && status !== "active" && status !== "public" && isInviteRedeemResult(status)
       ? INVITE_RESULT_MESSAGES[status]
@@ -177,7 +180,7 @@ export default function InviteLandingClient({ token, preview, viewerType }: Prop
         </Link>
 
         <div className="overflow-hidden rounded-2xl border border-purple-100 bg-white shadow-xl">
-          {!notFound && preview.thumbnailUrl && (
+          {hasDetails && preview.thumbnailUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={preview.thumbnailUrl}
@@ -187,10 +190,10 @@ export default function InviteLandingClient({ token, preview, viewerType }: Prop
           )}
 
           <div className="space-y-5 p-6">
-            {!notFound && (
+            {hasDetails && (
               <div className="space-y-2 text-center">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-100 px-3 py-1 text-xs font-medium text-[#4A00BE]">
-                  <Lock className="h-3 w-3" /> You&apos;ve been invited to a private campaign
+                  <Lock className="h-3 w-3" /> You&apos;ve been invited to a campaign
                 </span>
                 <h1 className="text-xl font-semibold text-gray-900">{preview.title}</h1>
                 {preview.brandName && (

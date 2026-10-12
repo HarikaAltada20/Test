@@ -119,6 +119,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Campaigns with list_only_to_eligible are filtered against this snapshot
+    // even when the creator didn't ask for eligible-only results.
+    if (!creatorEligibilitySnapshot) {
+      creatorEligibilitySnapshot = await getCreatorRequirementsSnapshot(
+        supabase,
+        user.id,
+      );
+    }
+
     const listed = await listCampaignsPaginated({
       supabase,
       scope: "opportunities",
