@@ -83,6 +83,7 @@ export default function CtcBanner() {
   const [isCheckingAccount, setIsCheckingAccount] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [navigatingButton, setNavigatingButton] = useState<"brands" | "creators" | null>(null);
 
   // Route flags
   const isBrands =
@@ -116,6 +117,7 @@ export default function CtcBanner() {
 
   useEffect(() => {
     setIsNavigating(false);
+    setNavigatingButton(null);
     setIsCheckingAccount(false);
     setIsSigningOut(false);
   }, [pathname]);
@@ -296,10 +298,10 @@ export default function CtcBanner() {
                 <button
                   type="button"
                   onClick={() => {
-                    setIsNavigating(true);
+                    setNavigatingButton("brands");
                     router.push("/brands");
                   }}
-                  disabled={isNavigating}
+                  disabled={navigatingButton !== null || isNavigating}
                   className={cn(
                     "group inline-flex items-center gap-2 rounded-xl px-12 py-3 text-[15px] font-medium transition-colors disabled:opacity-70",
                     isLight
@@ -307,24 +309,24 @@ export default function CtcBanner() {
                       : "border border-white/25 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white hover:bg-white/10",
                   )}
                 >
-                  {isNavigating ? <ButtonLoadingSpinner /> : null}
+                  {navigatingButton === "brands" ? <ButtonLoadingSpinner /> : null}
                   For Brands <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setIsNavigating(true);
+                    setNavigatingButton("creators");
                     router.push("/creators");
                   }}
-                  disabled={isNavigating}
+                  disabled={navigatingButton !== null || isNavigating}
                   className={cn(
-                    "group inline-flex items-center gap-2 rounded-xl px-12 py-3 text-[15px] font-medium",
+                    "group inline-flex items-center gap-2 rounded-xl px-12 py-3 text-[15px] font-medium transition-colors disabled:opacity-70",
                     isLight
                       ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
                       : "bg-[#DEDEDE] text-[#26133d] shadow-[0_10px_35px_rgba(200,170,230,0.10)]"
                   )}
                 >
-                  {isNavigating ? <ButtonLoadingSpinner /> : null}
+                  {navigatingButton === "creators" ? <ButtonLoadingSpinner /> : null}
                   For Creators <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </button>
               </div>
