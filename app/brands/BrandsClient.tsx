@@ -619,21 +619,25 @@ export default function BrandsClient({
   const activeApprovalCardIndex =
     manualApprovalCard !== null ? manualApprovalCard : scrollApprovalActiveIndex;
 
-  const card1Opacity = useTransform(approvalScrollProgress, [0, 0.28, 0.33], [1, 1, 0]);
-  const card1Y = useTransform(approvalScrollProgress, [0, 0.28, 0.33], [0, 0, -20]);
-  const card1Scale = useTransform(approvalScrollProgress, [0, 0.28, 0.33], [1, 1, 0.96]);
+  const card1OpacityTransform = useTransform(approvalScrollProgress, [0, 0.24, 0.28], [1, 1, 0]);
+  const card1Y = useTransform(approvalScrollProgress, [0, 0.24, 0.28], [0, 0, -20]);
+  const card1Scale = useTransform(approvalScrollProgress, [0, 0.24, 0.28], [1, 1, 0.96]);
 
-  const card2Opacity = useTransform(approvalScrollProgress, [0.28, 0.33, 0.61, 0.66], [0, 1, 1, 0]);
-  const card2Y = useTransform(approvalScrollProgress, [0.28, 0.33, 0.61, 0.66], [20, 0, 0, -20]);
-  const card2Scale = useTransform(approvalScrollProgress, [0.28, 0.33, 0.61, 0.66], [0.96, 1, 1, 0.96]);
+  const card2OpacityTransform = useTransform(approvalScrollProgress, [0.28, 0.32, 0.57, 0.61], [0, 1, 1, 0]);
+  const card2Y = useTransform(approvalScrollProgress, [0.28, 0.32, 0.57, 0.61], [20, 0, 0, -20]);
+  const card2Scale = useTransform(approvalScrollProgress, [0.28, 0.32, 0.57, 0.61], [0.96, 1, 1, 0.96]);
 
-  const card3Opacity = useTransform(approvalScrollProgress, [0.61, 0.66, 1], [0, 1, 1]);
-  const card3Y = useTransform(approvalScrollProgress, [0.61, 0.66, 1], [20, 0, 0]);
-  const card3Scale = useTransform(approvalScrollProgress, [0.61, 0.66, 1], [0.96, 1, 1]);
+  const card3OpacityTransform = useTransform(approvalScrollProgress, [0.61, 0.65, 1], [0, 1, 1]);
+  const card3Y = useTransform(approvalScrollProgress, [0.61, 0.65, 1], [20, 0, 0]);
+  const card3Scale = useTransform(approvalScrollProgress, [0.61, 0.65, 1], [0.96, 1, 1]);
 
-  const text1Opacity = useTransform(approvalScrollProgress, [0, 0.28, 0.33], [1, 1, 0]);
-  const text2Opacity = useTransform(approvalScrollProgress, [0.28, 0.33, 0.61, 0.66], [0, 1, 1, 0]);
-  const text3Opacity = useTransform(approvalScrollProgress, [0.61, 0.66, 1], [0, 1, 1]);
+  const card1Opacity = activeApprovalCardIndex === 0 ? card1OpacityTransform : 0;
+  const card2Opacity = activeApprovalCardIndex === 1 ? card2OpacityTransform : 0;
+  const card3Opacity = activeApprovalCardIndex === 2 ? card3OpacityTransform : 0;
+
+  const text1Opacity = useTransform(approvalScrollProgress, [0, 0.24, 0.28], [1, 1, 0]);
+  const text2Opacity = useTransform(approvalScrollProgress, [0.28, 0.32, 0.57, 0.61], [0, 1, 1, 0]);
+  const text3Opacity = useTransform(approvalScrollProgress, [0.61, 0.65, 1], [0, 1, 1]);
 
   // Window scroll listener driving the sticky "The Old way of promoting your brand" step animation
   useEffect(() => {
@@ -902,7 +906,7 @@ export default function BrandsClient({
 
               <p
                 className={cn(
-                  "mx-auto mt-4 max-w-[680px] text-[12px] leading-6 sm:mt-5 sm:text-[14px] md:text-[20px] font-['Inter'] font-normal leading-[30px] tracking-[-0.4px] text-center",
+                  "mx-auto mt-4 max-w-[680px] text-[16px] leading-[26px] sm:mt-5 sm:text-[18px] sm:leading-[28px] md:text-[20px] md:leading-[32px] font-['Inter'] font-normal tracking-[-0.4px] text-center",
                   isLight ? "text-black/50" : "text-[#8E8E8E]",
                 )}
               >
@@ -1824,7 +1828,7 @@ export default function BrandsClient({
                   <h2
                     className={cn(
                       "mb-3 text-2xl font-semibold",
-                      isLight ? "text-black" : "text-[#d6d6d6]",
+                      isLight ? "text-black" : "text-[#C4C4C4]",
                     )}
                   >
                     Set up your campaign
@@ -1949,7 +1953,7 @@ export default function BrandsClient({
                   <h3
                     className={cn(
                       "mb-3 text-2xl font-semibold",
-                      isLight ? "text-black" : "text-white",
+                      isLight ? "text-black" : "text-[#C4C4C4]",
                     )}
                   >
                     Creators discover & publish
@@ -2116,7 +2120,7 @@ export default function BrandsClient({
                   <h3
                     className={cn(
                       "mb-3 text-2xl font-semibold",
-                      isLight ? "text-black" : "text-white",
+                      isLight ? "text-black" : "text-[#C4C4C4]",
                     )}
                   >
                     {isLight
@@ -2148,7 +2152,7 @@ export default function BrandsClient({
         >
           <div className="sticky top-0 flex h-screen flex-col justify-center overflow-hidden px-3 py-2 sm:px-6 sm:py-8">
             {/* Purple background glow — dark mode only */}
-            {!isLight ? (
+            {/* {!isLight ? (
               <div className="pointer-events-none absolute inset-x-0 bottom-0 top-1/2 opacity-70 mix-blend-screen">
                 <Image
                   src="/images/eda9d4af3a5188c592e888012bb7b9e177b3c04d.png"
@@ -2157,7 +2161,7 @@ export default function BrandsClient({
                   className="scale-y-[-1] object-fill"
                 />
               </div>
-            ) : null}
+            ) : null} */}
 
             {/* Annotation Container with Motion Text */}
             <div className="relative z-20 mx-auto mb-1 mt-1 sm:mt-8 flex w-full max-w-[990px] items-center justify-center sm:justify-end px-2 sm:px-10">

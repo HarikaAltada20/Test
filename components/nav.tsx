@@ -634,7 +634,7 @@ export function Nav({
                   <Button
                     disabled={isNavigating || isSigningIn}
                     className={cn(
-                      "hidden md:inline-flex items-center gap-1.5 px-5 py-2 text-[12px] font-medium rounded-xl transition-all duration-300 min-h-[40px] group",
+                      "hidden md:inline-flex items-center gap-1.5 px-5 py-2 text-[15px] font-medium rounded-xl transition-all duration-300 min-h-[40px] group",
                       isLightMarketingNav
                         ? "bg-gradient-to-b from-[#8A68FF] to-[#754FF6] border border-[#7c3aed] text-white hover:bg-[#6d28d9] hover:border-[#6d28d9]"
                         : "bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] border border-white/25 text-white hover:bg-white/10 hover:border-white/40",

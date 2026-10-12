@@ -347,7 +347,7 @@ export default function AboutPage() {
 
                 {/* CONTENT */}
                 <div className="absolute bottom-10 left-7 right-7 z-20">
-                  <h2 className="mb-3 text-2xl font-semibold text-[#d6d6d6]">
+                  <h2 className="mb-3 text-2xl font-semibold text-[#C4C4C4]">
                     Set up your campaign
                   </h2>
 
@@ -422,7 +422,7 @@ export default function AboutPage() {
 
                 {/* Content */}
                 <div className="absolute bottom-8 left-7 right-7 z-10">
-                  <h3 className="mb-3 text-2xl font-semibold text-white">
+                  <h3 className="mb-3 text-2xl font-semibold text-[#C4C4C4]">
                     Creators discover & publish
                   </h3>
 
@@ -523,7 +523,7 @@ export default function AboutPage() {
 
                 {/* Content */}
                 <div className="absolute bottom-8 left-7 right-7 z-10">
-                  <h3 className="mb-3 text-2xl font-semibold text-white">
+                  <h3 className="mb-3 text-2xl font-semibold text-[#C4C4C4]">
                     Verified results. Rewards paid.
                   </h3>
 
@@ -538,17 +538,18 @@ export default function AboutPage() {
         </section>
 
           <section className="py-16 px-4 sm:px-8 lg:px-24 bg-black flex justify-center items-center">
-                <div className="relative w-full max-w-[1200px] min-h-[471px] py-16 px-6 sm:px-12 flex flex-col justify-center items-center overflow-hidden rounded-[28px] border border-[#3A3636] bg-[linear-gradient(360deg,#000000_0%,#353535_100%)] shadow-[inset_0px_0px_4px_rgba(255,255,255,0.25)]">
+                <div className="relative w-full max-w-[1200px] min-h-[471px] py-16 px-6 sm:px-12 flex flex-col justify-center items-center overflow-hidden rounded-[28px] bg-[linear-gradient(0deg,#000000_0%,#353535_175.16%)] shadow-[inset_0px_0px_4px_0px_#FFFFFF40]">
                   {/* Background Decorative Shapes */}
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    {/* <div className="w-[990px] h-[441px] absolute left-[27px] top-[335px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
-                    <div className="w-[990px] h-[441px] absolute left-[267px] top-[-202px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" /> */}
-                    {/* <div className="w-[990px] h-[441px] absolute left-[27px] top-[354px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
-                    <div className="w-[990px] h-[441px] absolute left-[267px] top-[-183px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
-                    <div className="w-[990px] h-[441px] absolute left-[27px] top-[308px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
-                    <div className="w-[990px] h-[441px] absolute left-[267px] top-[-230px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
-                    <div className="w-[990px] h-[441px] absolute left-[27px] top-[288px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
-                    <div className="w-[990px] h-[441px] absolute left-[267px] top-[-250px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" /> */}
+                    <div className="absolute inset-0" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-534px)] top-[400px] -rotate-[33deg] origin-top-left opacity-30  bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-294px)] top-[-137px] rotate-[33deg] origin-top-left opacity-30 bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-534px)] top-[419px] -rotate-[33deg] origin-top-left opacity-30 bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-294px)] top-[-118px] rotate-[33deg] origin-top-left opacity-30 bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-534px)] top-[373px] -rotate-[33deg] origin-top-left opacity-30 bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-294px)] top-[-165px] rotate-[33deg] origin-top-left opacity-30 bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-534px)] top-[353px] -rotate-[33deg] origin-top-left opacity-30 bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-294px)] top-[-185px] rotate-[33deg] origin-top-left opacity-30 bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
                   </div>
         
                   {/* Main Content Box */}

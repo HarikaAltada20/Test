@@ -1047,7 +1047,7 @@ export default function CreatorsClient({
                     onClick={handleStartEarningClick}
                     disabled={isCheckingStartEarning}
                     className={cn(
-                      "w-full sm:w-[210px] inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-[15px] font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
+                      "w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 h-auto text-[15px] font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
                       isLight
                         ? "bg-[#FF6A1A] text-white hover:bg-[#ff7a33] shadow-lg shadow-orange-500/25"
                         : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white hover:border-white/35 hover:bg-[#242424]",
@@ -1063,7 +1063,7 @@ export default function CreatorsClient({
                     onClick={handleViewMoreClick}
                     disabled={isNavigatingViewMore}
                     className={cn(
-                      "w-full sm:w-[210px] inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-[15px] font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
+                      "w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 h-auto text-[15px] font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
                       isLight
                         ? "border border-black/15 bg-white text-black hover:bg-[#f7f7f7]"
                         : "bg-[#DEDEDE] text-black hover:bg-white",
@@ -1136,9 +1136,13 @@ export default function CreatorsClient({
                     )}
                   >
                     <div className="mb-0.5 flex items-center gap-1.5 sm:mb-1 sm:gap-2">
-                      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-600 text-[9px] font-bold text-black shadow-sm sm:h-[20px] sm:w-[20px] sm:text-[11px]">
-                        $
-                      </span>
+                      <Image
+                        src="/images/dollar-badge.png"
+                        alt="Earnings"
+                        width={20}
+                        height={20}
+                        className="h-4 w-4 sm:h-[20px] sm:w-[20px] object-contain shrink-0"
+                      />
                       <span
                         className={cn(
                           "whitespace-nowrap text-[11px] sm:text-sm font-medium",
@@ -1150,7 +1154,7 @@ export default function CreatorsClient({
                     </div>
                     <p
                       className={cn(
-                        "pl-0.5 text-xl font-bold tracking-tight sm:text-3xl",
+                        "pl-0.5 text-xl font-[500] tracking-tight sm:text-3xl",
                         isLight ? "text-black" : "text-white",
                       )}
                     >
@@ -1188,32 +1192,33 @@ export default function CreatorsClient({
   border-[0.64px]
   border-[#FFFFFF40]
   backdrop-blur-[19.0909px]
-  shadow-[0px_10.18px_20.36px_-2.55px_#00000026] absolute left-[3%] top-[68%] z-20 w-[min(94%,290px)] rounded-2xl px-3.5 py-2.5 text-black sm:left-[14%] sm:top-[63%] sm:w-[340px] sm:px-5 sm:py-4"
+  shadow-[0px_10.18px_20.36px_-2.55px_#00000026] absolute left-[3%] top-[68%] z-20 w-[min(94%,290px)] rounded-2xl px-3.5 py-2 text-black sm:left-[22%] sm:top-[59%] sm:w-[330px] sm:px-4 sm:py-2.5"
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="relative mt-0.5 flex h-[44px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-white shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="relative flex h-[38px] w-[38px] sm:h-[42px] sm:w-[42px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-white shadow-sm">
                         <Image
-                          src="/images/Group.png"
+                          src="/images/Group (2)8909.png"
                           alt=""
-                          width={22}
-                          height={22}
-                          className="h-[22px] w-[22px] scale-[1.55] object-contain"
-                          sizes="22px"
+                          width={15}
+                          height={15}
+                          className="h-[15px] w-[15px] scale-[1.55] object-contain"
+                          sizes="15px"
                         />
                       </div>
-                      <div className="min-w-0 flex-1 pt-0.5">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
-                          <p className="text-[14px] leading-snug text-zinc-900 sm:text-[15px]">
-                            <span className="font-semibold">GOC</span>{" "}
-                            <span className="font-semibold">
+                          <p className="leading-tight">
+                            <span className="font-semibold text-[10px] text-[#1C1C1E]">GOC</span>{" "}
+                            <br/>
+                            <span className="font-semibold text-[12px] text-[#1C1C1E]">
                               $600 credited!
                             </span>
                           </p>
-                          <span className="shrink-0 pt-0.5 text-[11px] text-zinc-500 sm:text-xs">
+                          <span className="shrink-0 text-[11px] text-zinc-500">
                             now
                           </span>
                         </div>
-                        <p className="mt-0.5 text-[11px] leading-snug text-zinc-600 sm:text-xs">
+                        <p className="mt-0.5 text-[11px] leading-tight text-[#3A3A3C]">
                           from GlowNaturally Campaign 🪄
                         </p>
                       </div>

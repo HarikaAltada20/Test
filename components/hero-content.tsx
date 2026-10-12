@@ -2288,29 +2288,32 @@ export default function HeroContent() {
               {/* =================================================
                 PAYMENT POPUP - LEFT
             ================================================= */}
+              {/* =================================================
+                PAYMENT POPUP - LEFT
+            ================================================= */}
               <div
                 className={cn(
-                  "absolute left-1.5 top-[215px] z-30 flex w-[calc(50%-8px)] max-w-[225px] items-center justify-between rounded-[30px] border px-1.5 py-1.5 sm:left-[25px] sm:top-[275px] sm:w-[225px] sm:px-3 sm:py-2 min-[800px]:left-2 min-[800px]:top-[275px] min-[800px]:w-[calc(50%-10px)] min-[800px]:max-w-[172px] min-[800px]:px-1.5 min-[800px]:py-1.5 lg:left-[25px] lg:top-[275px] lg:w-[220px] lg:max-w-[230px] lg:px-3.5 rotate-[-3.78deg]",
+                  "absolute left-1.5 top-[215px] z-30 flex w-[calc(50%-8px)] max-w-[240px] items-center justify-between rounded-[30px] border px-2 py-2 sm:left-[25px] sm:top-[275px] sm:w-[245px] sm:max-w-[250px] sm:px-3 sm:py-2.5 min-[800px]:left-2 min-[800px]:top-[275px] min-[800px]:w-[calc(50%-10px)] min-[800px]:max-w-[200px] min-[800px]:px-2 min-[800px]:py-2 lg:left-[25px] lg:top-[275px] lg:w-[245px] lg:max-w-[255px] lg:px-3.5 rotate-[-3.78deg]",
                   isLight
                     ? "border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(20,16,40,0.12)]"
                     : "border-white/[0.08] bg-[#191919] shadow-[0_12px_35px_rgba(0,0,0,.45)]",
                 )}
               >
-                <div className="flex min-w-0 items-center gap-1 sm:gap-2 min-[800px]:gap-1 lg:gap-1.5 xl:gap-2">
-                  <div className="relative h-[25px] w-[25px] shrink-0 overflow-hidden rounded-full sm:h-[31px] sm:w-[31px] min-[800px]:h-[22px] min-[800px]:w-[22px] lg:h-[27px] lg:w-[27px] xl:h-[31px] xl:w-[31px]">
+                <div className="flex min-w-0 items-center gap-1.5 sm:gap-2.5 min-[800px]:gap-1.5 lg:gap-2 xl:gap-2.5">
+                  <div className="relative h-[26px] w-[26px] shrink-0 overflow-hidden rounded-full sm:h-[32px] sm:w-[32px] min-[800px]:h-[24px] min-[800px]:w-[24px] lg:h-[28px] lg:w-[28px] xl:h-[32px] xl:w-[32px]">
                     <Image
                       src="/images/Ellipse 2355 (1).avif"
                       alt=""
                       fill
                       className="object-cover"
-                      sizes="31px"
+                      sizes="32px"
                     />
                   </div>
 
                   <div className="min-w-0">
                     <div
                       className={cn(
-                        "truncate text-[9px] font-medium sm:text-[10px] min-[800px]:text-[8px] lg:text-[9.5px] xl:text-[10px]",
+                        "truncate font-semibold leading-tight text-[10px] sm:text-[11px] min-[800px]:text-[8.5px] lg:text-[10px] xl:text-[11px]",
                         isLight ? "text-black" : "text-white",
                       )}
                     >
@@ -2319,8 +2322,8 @@ export default function HeroContent() {
 
                     <div
                       className={cn(
-                        "text-[7px] leading-[9px] sm:text-[8px] sm:leading-[10px] min-[800px]:text-[7px] min-[800px]:leading-[9px] lg:text-[10px] lg:leading-[9px] xl:text-[10px] xl:leading-[10px]",
-                        isLight ? "text-black/40" : "text-[#8E8E93]",
+                        "mt-0.5 text-[8px] leading-[11px] sm:text-[9px] sm:leading-[12px] min-[800px]:text-[7px] min-[800px]:leading-[9.5px] lg:text-[8.5px] lg:leading-[11.5px] xl:text-[9.5px] xl:leading-[13px]",
+                        isLight ? "text-black/45" : "text-[#8E8E93]",
                       )}
                     >
                       You can withdraw your
@@ -2330,7 +2333,7 @@ export default function HeroContent() {
                   </div>
                 </div>
 
-                <span className="shrink-0 text-[9.5px] font-semibold text-[#43df3d] sm:text-[11px] sm:font-medium ml-0.5 min-[800px]:text-[8px] lg:text-[10px] xl:text-[11px]">
+                <span className="shrink-0 text-[10px] font-semibold text-[#43df3d] sm:text-[11px] min-[800px]:text-[8.5px] lg:text-[10.5px] xl:text-[11.5px] ml-1.5 sm:ml-2.5 whitespace-nowrap">
                   $44,090
                 </span>
               </div>
@@ -2340,27 +2343,27 @@ export default function HeroContent() {
             ================================================= */}
               <div
                 className={cn(
-                  "absolute right-1.5 top-[215px] z-30 flex w-[calc(50%-8px)] max-w-[220px] items-center justify-between rounded-[30px] border px-1.5 py-1.5 sm:right-[25px] sm:top-[275px] sm:w-[220px] sm:px-3 sm:py-2 min-[800px]:right-2 min-[800px]:top-[275px] min-[800px]:w-[calc(50%-10px)] min-[800px]:max-w-[172px] min-[800px]:px-1.5 min-[800px]:py-1.5 lg:right-[25px] lg:top-[275px] lg:w-[225px] lg:max-w-[230px] lg:px-3.5 rotate-[2.85deg]",
+                  "absolute right-1.5 top-[215px] z-30 flex w-[calc(50%-8px)] max-w-[240px] items-center justify-between rounded-[30px] border px-2 py-2 sm:right-[25px] sm:top-[275px] sm:w-[245px] sm:max-w-[250px] sm:px-3 sm:py-2.5 min-[800px]:right-2 min-[800px]:top-[275px] min-[800px]:w-[calc(50%-10px)] min-[800px]:max-w-[200px] min-[800px]:px-2 min-[800px]:py-2 lg:right-[25px] lg:top-[275px] lg:w-[245px] lg:max-w-[255px] lg:px-3.5 rotate-[2.85deg]",
                   isLight
                     ? "border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(20,16,40,0.12)]"
                     : "border-white/[0.08] bg-[#191919] shadow-[0_12px_35px_rgba(0,0,0,.45)]",
                 )}
               >
-                <div className="flex min-w-0 items-center gap-1 sm:gap-2 min-[800px]:gap-1 lg:gap-1.5 xl:gap-2">
-                  <div className="relative h-[25px] w-[25px] shrink-0 overflow-hidden rounded-full sm:h-[31px] sm:w-[31px] min-[800px]:h-[22px] min-[800px]:w-[22px] lg:h-[27px] lg:w-[27px] xl:h-[31px] xl:w-[31px]">
+                <div className="flex min-w-0 items-center gap-1.5 sm:gap-2.5 min-[800px]:gap-1.5 lg:gap-2 xl:gap-2.5">
+                  <div className="relative h-[26px] w-[26px] shrink-0 overflow-hidden rounded-full sm:h-[32px] sm:w-[32px] min-[800px]:h-[24px] min-[800px]:w-[24px] lg:h-[28px] lg:w-[28px] xl:h-[32px] xl:w-[32px]">
                     <Image
                       src="/images/Ellipse 2355 (3).avif"
                       alt=""
                       fill
                       className="object-cover"
-                      sizes="31px"
+                      sizes="32px"
                     />
                   </div>
 
                   <div className="min-w-0">
                     <div
                       className={cn(
-                        "truncate text-[9px] font-medium sm:text-[10px] min-[800px]:text-[8px] lg:text-[9.5px] xl:text-[10px]",
+                        "truncate font-semibold leading-tight text-[10px] sm:text-[11px] min-[800px]:text-[8.5px] lg:text-[10px] xl:text-[11px]",
                         isLight ? "text-black" : "text-white",
                       )}
                     >
@@ -2369,16 +2372,18 @@ export default function HeroContent() {
 
                     <div
                       className={cn(
-                        "text-[7px] leading-[9px] sm:text-[8px] sm:leading-[10px] min-[800px]:text-[7px] min-[800px]:leading-[7px] lg:text-[8px] lg:leading-[9px] xl:text-[10px] xl:leading-[10px]",
-                        isLight ? "text-black/40" : "text-[#8E8E93]",
+                        "mt-0.5 text-[8px] leading-[11px] sm:text-[9px] sm:leading-[12px] min-[800px]:text-[7px] min-[800px]:leading-[9.5px] lg:text-[8.5px] lg:leading-[11.5px] xl:text-[9.5px] xl:leading-[13px]",
+                        isLight ? "text-black/45" : "text-[#8E8E93]",
                       )}
                     >
-                      Your rank 1st in Leader board Campaign
+                      Your rank 1st in Leaderboard
+                      <br />
+                      Campaign
                     </div>
                   </div>
                 </div>
 
-                <span className="shrink-0 text-[9.5px] font-semibold text-[#43df3d] sm:text-[11px] sm:font-medium ml-0.5 min-[800px]:text-[8px] lg:text-[10px] xl:text-[11px]">
+                <span className="shrink-0 text-[10px] font-semibold text-[#43df3d] sm:text-[11px] min-[800px]:text-[8.5px] lg:text-[10.5px] xl:text-[11.5px] ml-1.5 sm:ml-2.5 whitespace-nowrap">
                   $490
                 </span>
               </div>

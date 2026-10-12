@@ -273,14 +273,14 @@ export default function CtcBanner() {
                   }}
                   disabled={isNavigating}
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-[15px] font-medium transition-colors disabled:opacity-70",
+                    "group inline-flex items-center gap-2 rounded-xl px-12 py-3 text-[15px] font-medium transition-colors disabled:opacity-70",
                     isLight
                       ? "bg-black text-white hover:bg-black/90"
                       : "border border-white/25 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white hover:bg-white/10",
                   )}
                 >
                   {isNavigating ? <ButtonLoadingSpinner /> : null}
-                  For Brands <ArrowRight className="h-4 w-4" />
+                  For Brands <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </button>
                 <button
                   type="button"
@@ -290,14 +290,14 @@ export default function CtcBanner() {
                   }}
                   disabled={isNavigating}
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-[15px] font-medium transition-colors disabled:opacity-70",
+                    "group inline-flex items-center gap-2 rounded-xl px-12 py-3 text-[15px] font-medium",
                     isLight
                       ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
-                      : "bg-[#F0E6F6] text-black hover:bg-zinc-100",
+                      : "bg-[#DEDEDE] text-[#26133d] shadow-[0_10px_35px_rgba(200,170,230,0.10)]"
                   )}
                 >
                   {isNavigating ? <ButtonLoadingSpinner /> : null}
-                  For Creators <ArrowRight className="h-4 w-4" />
+                  For Creators <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </button>
               </div>
             </div>
@@ -369,7 +369,7 @@ export default function CtcBanner() {
                     onClick={handleMainCtaClick}
                     disabled={isNavigating || isCheckingAccount}
                     className={cn(
-                      "inline-flex items-center gap-2 rounded-xl px-6 py-3 text-[15px] font-medium transition-colors disabled:opacity-70",
+                      "group inline-flex items-center gap-2 rounded-xl px-6 py-3 text-[15px] font-medium transition-colors disabled:opacity-70",
                       isLight
                         ? "bg-black text-white hover:bg-black/90"
                         : "border border-white/25 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)]  text-white hover:bg-white/10",
@@ -378,7 +378,7 @@ export default function CtcBanner() {
                     {isNavigating || isCheckingAccount ? (
                       <ButtonLoadingSpinner />
                     ) : null}
-                    Launch a Campaign <ArrowRight className="h-4 w-4" />
+                    Launch a Campaign <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                   </button>
                 ) : (
                   <button
@@ -386,7 +386,7 @@ export default function CtcBanner() {
                     onClick={handleMainCtaClick}
                     disabled={isNavigating || isCheckingAccount}
                    className={cn(
-                      "inline-flex items-center gap-2 rounded-xl px-6 py-3 text-[15px] font-medium transition-colors disabled:opacity-70",
+                      "group inline-flex items-center gap-2 rounded-xl px-6 py-3 text-[15px] font-medium transition-colors disabled:opacity-70",
                       isLight
                         ? "bg-black text-white hover:bg-black/90"
                         : "border border-white/25 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)]  text-white hover:bg-white/10",
@@ -395,7 +395,7 @@ export default function CtcBanner() {
                     {isNavigating || isCheckingAccount ? (
                       <ButtonLoadingSpinner />
                     ) : null}
-                    Browse Campaigns <ArrowRight className="h-4 w-4" />
+                    Browse Campaigns <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                   </button>
                 )}
                 <a
@@ -403,13 +403,13 @@ export default function CtcBanner() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-[15px] font-medium transition-colors",
+                    "group inline-flex items-center gap-2 rounded-xl px-12 py-3 text-[15px] font-medium",
                     isLight
                       ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
-                      : "bg-[#F0E6F6] text-black",
+                      : "bg-[#DEDEDE] text-black",
                   )}
                 >
-                  Talk to team <ArrowRight className="h-4 w-4" />
+                  Talk to team <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </a>
               </div>
             </div>

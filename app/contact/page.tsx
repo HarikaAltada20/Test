@@ -104,17 +104,18 @@ export default function ContactPage() {
 
 
          <section className="py-16 px-4 sm:px-8 lg:px-24 bg-black flex justify-center items-center">
-                <div className="relative w-full max-w-[1200px] min-h-[471px] py-16 px-6 sm:px-12 flex flex-col justify-center items-center overflow-hidden rounded-[28px] border border-[#3A3636] bg-[linear-gradient(360deg,#000000_0%,#353535_100%)] shadow-[inset_0px_0px_4px_rgba(255,255,255,0.25)]">
-                  {/* Background Decorative Shapes */}
-                  <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    {/* <div className="w-[990px] h-[441px] absolute left-[27px] top-[335px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
-                    <div className="w-[990px] h-[441px] absolute left-[267px] top-[-202px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" /> */}
-                    {/* <div className="w-[990px] h-[441px] absolute left-[27px] top-[354px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
-                    <div className="w-[990px] h-[441px] absolute left-[267px] top-[-183px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
-                    <div className="w-[990px] h-[441px] absolute left-[27px] top-[308px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
-                    <div className="w-[990px] h-[441px] absolute left-[267px] top-[-230px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
-                    <div className="w-[990px] h-[441px] absolute left-[27px] top-[288px] -rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" />
-                    <div className="w-[990px] h-[441px] absolute left-[267px] top-[-250px] rotate-[33deg] origin-top-left opacity-20 bg-[#2D2D2D] shadow-[0px_2px_0px_black] rounded-full border border-[#2D2D2D]" /> */}
+                <div className="relative w-full max-w-[1200px] min-h-[471px] py-16 px-6 sm:px-12 flex flex-col justify-center items-center overflow-hidden rounded-[28px] bg-[linear-gradient(0deg,#000000_0%,#353535_175.16%)] shadow-[inset_0px_0px_4px_0px_#FFFFFF40]">
+                 {/* Background Decorative Shapes */}
+                           <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                    <div className="absolute inset-0" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-534px)] top-[400px] -rotate-[33deg] origin-top-left opacity-30  bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-294px)] top-[-137px] rotate-[33deg] origin-top-left opacity-30 bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-534px)] top-[419px] -rotate-[33deg] origin-top-left opacity-30 bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-294px)] top-[-118px] rotate-[33deg] origin-top-left opacity-30 bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-534px)] top-[373px] -rotate-[33deg] origin-top-left opacity-30 bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-294px)] top-[-165px] rotate-[33deg] origin-top-left opacity-30 bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-534px)] top-[353px] -rotate-[33deg] origin-top-left opacity-30 bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
+                    <div className="w-[990px] h-[441px] absolute left-[calc(50%-294px)] top-[-185px] rotate-[33deg] origin-top-left opacity-30 bg-transparent rounded-full border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]" />
                   </div>
         
                   {/* Main Content Box */}
