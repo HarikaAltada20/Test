@@ -6,6 +6,7 @@ import {
   getAccessActor,
   getServiceClient,
   getSignedInClient,
+  loadApplicantVisibilityRaw,
   loadUserDisplay,
 } from "@/lib/campaign-access-server";
 import {
@@ -206,10 +207,11 @@ export async function GET(request: Request, { params }: Ctx) {
     ) as Record<ApplicationStatus, number>;
     const rows = Array.isArray(result.rows) ? result.rows : [];
     const userIds = rows.map((r) => r.user_id);
-    const [users, profiles, visibilityRow, contestRow] = await Promise.all([
+    const [users, profiles, visibilityRaw, contestRow] = await Promise.all([
       loadUserDisplay(admin, userIds),
       loadApplicantProfiles(admin, userIds),
-      admin.from("contests").select("applicant_visibility").eq("id", id).maybeSingle(),
+      // Throws on any error except a missing column, so hidden details stay hidden.
+      loadApplicantVisibilityRaw(admin, id),
       admin.from("contests").select(CONTEST_REVIEW_COLUMNS).eq("id", id).maybeSingle(),
     ]);
     if (contestRow.error) throw contestRow.error;
@@ -221,7 +223,7 @@ export async function GET(request: Request, { params }: Ctx) {
         : "none";
     // Missing column (migration not run yet) means everything is visible.
     const visibility = parseApplicantVisibility(
-      visibilityRow.error ? null : visibilityRow.data?.applicant_visibility,
+      visibilityRaw,
     );
     const hiddenFields = APPLICANT_FIELDS.filter((f) => !visibility[f]);
     // Brands get the filtered summary; admins see everything, marked with what's hidden.

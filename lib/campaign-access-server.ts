@@ -365,6 +365,37 @@ export async function loadUserDisplay(
   return out;
 }
 
+/** True only for "column does not exist", i.e. a migration hasn't been run yet. */
+export function isMissingColumnError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === "42703" ||
+    error.code === "PGRST204" ||
+    /column .* does not exist/i.test(error.message ?? "")
+  );
+}
+
+/**
+ * The campaign's applicant visibility. Only a missing column (migration not
+ * run) means "everything visible"; any other error is thrown, so a failed
+ * read never reveals details an admin has hidden.
+ */
+export async function loadApplicantVisibilityRaw(
+  admin: SupabaseClient,
+  contestId: string,
+): Promise<unknown> {
+  const { data, error } = await admin
+    .from("contests")
+    .select("applicant_visibility")
+    .eq("id", contestId)
+    .maybeSingle();
+  if (error) {
+    if (isMissingColumnError(error)) return null;
+    throw error;
+  }
+  return (data as { applicant_visibility?: unknown } | null)?.applicant_visibility ?? null;
+}
+
 /** True for "function does not exist" errors, i.e. a migration hasn't been run yet. */
 export function isMissingFunctionError(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;

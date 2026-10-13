@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import {
   APPLICATION_STATUSES,
   type ApplicationStatus,
+  applicationDisplayStatus,
   type MyApplicationListItem,
 } from "@/lib/campaign-access";
 import { myApplicationsApi, type MyApplicationsResponse } from "@/components/campaign-access/api";
@@ -33,6 +34,9 @@ const TABS: Tab[] = ["all", ...APPLICATION_STATUSES];
 
 function nextStep(app: MyApplicationListItem): string {
   if (app.campaign.has_ended) return "This campaign has ended.";
+  if (applicationDisplayStatus(app) === "access_removed") {
+    return "The brand approved you, then removed you from this campaign. Contact them if you think this was a mistake.";
+  }
   switch (app.status) {
     case "pending":
       return "The brand is reviewing your application. We'll notify you when they decide.";
@@ -47,6 +51,8 @@ function nextStep(app: MyApplicationListItem): string {
 
 function ApplicationCard({ app }: { app: MyApplicationListItem }) {
   const title = app.campaign.title || "Untitled campaign";
+  const display = applicationDisplayStatus(app);
+  const hasAccess = app.status === "approved" && app.on_access_list;
   return (
     <li className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-white/5 sm:flex-row sm:items-center">
       <div className="relative flex h-32 w-full shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-[#7F39EC]/20 to-[#4A00BE]/30 sm:h-20 sm:w-32">
@@ -60,7 +66,10 @@ function ApplicationCard({ app }: { app: MyApplicationListItem }) {
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="truncate font-semibold text-gray-900 dark:text-white">{title}</h2>
-          <ApplicationStatusBadge status={app.status} label={TAB_LABELS[app.status]} />
+          <ApplicationStatusBadge
+            status={display}
+            label={display === "access_removed" ? undefined : TAB_LABELS[app.status]}
+          />
         </div>
         {app.campaign.brand_name && (
           <p className="text-sm text-gray-600 dark:text-gray-300">by {app.campaign.brand_name}</p>
@@ -84,10 +93,10 @@ function ApplicationCard({ app }: { app: MyApplicationListItem }) {
       {app.campaign.is_published && (
         <Button
           asChild
-          variant={app.status === "approved" ? "default" : "outline"}
+          variant={hasAccess ? "default" : "outline"}
           className={cn(
             "w-full shrink-0 sm:w-auto",
-            app.status === "approved"
+            hasAccess
               ? "bg-[#7F39EC] text-white hover:bg-[#7F39EC]/90"
               : "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10",
           )}

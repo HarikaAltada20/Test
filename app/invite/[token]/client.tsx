@@ -171,11 +171,17 @@ export default function InviteLandingClient({ token, preview, viewerType }: Prop
   // Details are withheld for links that can't be used (expired, revoked, full, ended).
   const hasDetails = !!preview.contestId;
   const notFound = status === "not_found" || (!hasDetails && !isInviteRedeemResult(status));
-  const deadStatus: InviteRedeemResult | null = notFound
-    ? "not_found"
-    : status !== "active" && status !== "public" && isInviteRedeemResult(status) && DEAD_LINK[status]
-      ? status
-      : null;
+  // A creator who already joined keeps the campaign card and "Open campaign"
+  // even after the link expires, fills up or is revoked: their access is
+  // still valid (the preview returns details for members for this reason).
+  const memberWithAccess = viewerType === "creator" && isMember && hasDetails;
+  const deadStatus: InviteRedeemResult | null = memberWithAccess
+    ? null
+    : notFound
+      ? "not_found"
+      : status !== "active" && status !== "public" && isInviteRedeemResult(status) && DEAD_LINK[status]
+        ? status
+        : null;
 
   const browseButton = (
     <Button asChild variant="outline" className="w-full">

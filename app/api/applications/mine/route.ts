@@ -63,26 +63,40 @@ export async function GET(request: Request) {
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
     if (statusParam !== "all") listQuery = listQuery.eq("status", statusParam);
 
-    const [listRes, statusRes] = await Promise.all([
+    // One exact count per status (counted in the database, so no row limit applies).
+    const [listRes, ...countRes] = await Promise.all([
       listQuery,
-      admin.from("contest_applications").select("status").eq("user_id", userId),
+      ...APPLICATION_STATUSES.map((s) =>
+        admin
+          .from("contest_applications")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("status", s),
+      ),
     ]);
     if (listRes.error) throw listRes.error;
-    if (statusRes.error) throw statusRes.error;
-
-    const counts = Object.fromEntries(APPLICATION_STATUSES.map((s) => [s, 0])) as Record<
-      ApplicationStatus,
-      number
-    >;
-    for (const r of (statusRes.data ?? []) as { status: string }[]) {
-      if (isApplicationStatus(r.status)) counts[r.status] += 1;
-    }
+    const counts = {} as Record<ApplicationStatus, number>;
+    APPLICATION_STATUSES.forEach((s, i) => {
+      if (countRes[i].error) throw countRes[i].error;
+      counts[s] = countRes[i].count ?? 0;
+    });
 
     const rows = (listRes.data ?? []) as Row[];
     const contestIds = Array.from(new Set(rows.map((r) => r.contest_id)));
     const contests = new Map<string, ContestRow>();
     const brands = new Map<string, string>();
+    const onAccessList = new Set<string>();
     if (contestIds.length > 0) {
+      // Approved applications stay "approved" after a brand removes access,
+      // so current membership decides what the creator is told.
+      const { data: access, error: accessError } = await admin
+        .from("contest_access_list")
+        .select("contest_id")
+        .eq("user_id", userId)
+        .in("contest_id", contestIds);
+      if (accessError) throw accessError;
+      for (const a of (access ?? []) as { contest_id: string }[]) onAccessList.add(a.contest_id);
+
       const { data, error } = await admin
         .from("contests")
         .select("id, title, thumbnail_url, start_date, end_date, moderation_status, advertiser_id")
@@ -115,6 +129,7 @@ export async function GET(request: Request) {
         rejection_reason: r.rejection_reason,
         created_at: r.created_at,
         reviewed_at: r.reviewed_at,
+        on_access_list: onAccessList.has(r.contest_id),
         campaign: {
           title: c?.title ?? null,
           thumbnail_url: c?.thumbnail_url ?? null,

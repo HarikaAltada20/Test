@@ -961,11 +961,16 @@ BEGIN
     RETURN 'not_signed_in';
   END IF;
 
+  -- FOR SHARE serialises sign-up with reopening: an UPDATE of
+  -- applications_open waits for this sign-up to commit (so its trigger sees
+  -- the new row), and a sign-up that starts after a reopen waits for it and
+  -- then reads applications_open = true. Nobody signs up and misses it.
   SELECT c.access_mode, c.moderation_status::text AS moderation_status,
          c.applications_open, c.end_date, c.region
   INTO v_contest
   FROM public.contests c
-  WHERE c.id = p_contest_id;
+  WHERE c.id = p_contest_id
+  FOR SHARE;
 
   IF NOT FOUND
      OR v_contest.access_mode <> 'restricted'

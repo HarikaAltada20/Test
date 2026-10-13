@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   CampaignAccessError,
   assertCanManageCampaignAccess,
+  loadApplicantVisibilityRaw,
   type AccessActor,
 } from "@/lib/campaign-access-server";
 import {
@@ -75,7 +76,7 @@ export async function loadCampaignCreatorProfile(
 ): Promise<CampaignCreatorProfile> {
   const contest = await assertCanManageCampaignAccess(admin, actor, contestId);
 
-  const [applicationRes, accessRes, contestRes, visibilityRes] = await Promise.all([
+  const [applicationRes, accessRes, contestRes, visibilityRaw] = await Promise.all([
     admin
       .from("contest_applications")
       .select("status, answers, rejection_reason, created_at")
@@ -89,7 +90,8 @@ export async function loadCampaignCreatorProfile(
       .eq("user_id", userId)
       .maybeSingle(),
     admin.from("contests").select("title").eq("id", contestId).maybeSingle(),
-    admin.from("contests").select("applicant_visibility").eq("id", contestId).maybeSingle(),
+    // Throws on any error except a missing column, so hidden details stay hidden.
+    loadApplicantVisibilityRaw(admin, contestId),
   ]);
   if (applicationRes.error) throw applicationRes.error;
   if (accessRes.error) throw accessRes.error;
@@ -115,7 +117,7 @@ export async function loadCampaignCreatorProfile(
 
   // Missing column (migration not run) means everything is visible.
   const visibility = parseApplicantVisibility(
-    visibilityRes.error ? null : visibilityRes.data?.applicant_visibility,
+    visibilityRaw,
   );
   const hiddenFields = APPLICANT_FIELDS.filter((f) => !visibility[f]);
   const profileRow = (profileRes.data ?? null) as Record<string, unknown> | null;

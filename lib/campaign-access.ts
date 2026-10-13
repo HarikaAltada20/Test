@@ -470,6 +470,8 @@ export type MyApplicationListItem = {
   rejection_reason: string | null;
   created_at: string;
   reviewed_at: string | null;
+  /** False when an approved creator was later removed from the campaign. */
+  on_access_list: boolean;
   campaign: {
     title: string | null;
     thumbnail_url: string | null;

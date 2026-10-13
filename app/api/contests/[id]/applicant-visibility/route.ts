@@ -5,6 +5,7 @@ import {
   campaignAccessErrorResponse,
   getAccessActor,
   getServiceClient,
+  loadApplicantVisibilityRaw,
 } from "@/lib/campaign-access-server";
 import { isUuid } from "@/lib/campaign-access";
 import {
@@ -25,13 +26,9 @@ export async function GET(_request: Request, { params }: Ctx) {
     const admin = getServiceClient();
     await assertCanManageCampaignAccess(admin, actor, id);
 
-    const { data, error } = await admin
-      .from("contests")
-      .select("applicant_visibility")
-      .eq("id", id)
-      .maybeSingle();
-    // Before the migration runs the column doesn't exist; treat everything as visible.
-    const visibility = parseApplicantVisibility(error ? null : data?.applicant_visibility);
+    // Only a missing column (migration not run) reads as "everything visible";
+    // other errors fail the request instead of showing the wrong settings.
+    const visibility = parseApplicantVisibility(await loadApplicantVisibilityRaw(admin, id));
     return NextResponse.json({ visibility, canEdit: actor.isAdmin });
   } catch (err) {
     return campaignAccessErrorResponse(err);

@@ -8,6 +8,7 @@ import React, {
   useRef,
 } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { CampaignAccessPanel } from "@/components/campaign-access/CampaignAccessPanel";
 import { ApplicationsPanel } from "@/components/campaign-access/ApplicationsPanel";
@@ -1865,13 +1866,16 @@ export default function ContestDetailClient({
   const { activeTab, setActiveTab } = useTabState(tabs, {
     defaultTab: "overview",
   });
-  // Notifications can link straight to a tab, e.g. ?tab=applications.
-  const tabFromUrlApplied = useRef(false);
+  // Notifications can link straight to a tab, e.g. ?tab=applications. Applied
+  // whenever the requested tab changes, including when a notification for
+  // this same campaign is clicked while the page is already open.
+  const requestedTab = useSearchParams().get("tab");
+  const lastRequestedTab = useRef<string | null>(null);
   useEffect(() => {
-    if (tabFromUrlApplied.current || !contest) return;
-    tabFromUrlApplied.current = true;
-    const requested = new URLSearchParams(window.location.search).get("tab");
-    if (requested && tabs.some((t) => t.id === requested)) setActiveTab(requested);
+    if (!contest || !requestedTab || requestedTab === lastRequestedTab.current) return;
+    if (!tabs.some((t) => t.id === requestedTab)) return;
+    lastRequestedTab.current = requestedTab;
+    setActiveTab(requestedTab);
   });
   // Debug: Log current toasts state
   console.log("🔍 Current toasts state:", toasts);
