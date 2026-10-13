@@ -53,6 +53,9 @@ import {
 import { DeleteContestButton } from "@/components/delete-contest-button";
 import { formatLocalDateTime, cn } from "@/lib/utils";
 import { AccessModeBadge } from "@/components/campaign-access/AccessBadge";
+import { CampaignAccessInfo } from "@/components/campaign-access/CampaignAccessInfo";
+import { applicationsApi } from "@/components/campaign-access/api";
+import { createClient as createBrowserSupabase } from "@/utils/supabase/client";
 import { isModifiedLinkClick } from "@/lib/navigation-link-utils";
 import {
   KNOWN_POST_CONTEST_STATUSES,
@@ -124,6 +127,7 @@ type Contest = {
   id: string;
   title: string | null;
   access_mode?: string | null;
+  access_list_skips_requirements?: boolean | null;
   platform: string | null;
   contest_type: string | null;
   created_at: string;
@@ -751,6 +755,11 @@ export function ContestListClient({
   ]);
 
   const [contests, setContests] = useState<Contest[]>(initialContests);
+  // Applications open/closed and pending counts for Restricted cards on this page.
+  // Not part of the list response, so they're looked up per page.
+  const [restrictedInfo, setRestrictedInfo] = useState<
+    Record<string, { applicationsOpen?: boolean; pending?: number }>
+  >({});
   const isMountedRef = useRef(true);
 
   // Server-paginated list: filter ? sort (full set) ? page. Do not re-sort page rows.
@@ -1287,6 +1296,7 @@ export function ContestListClient({
                   size="compact"
                 />
               </div>
+              {renderAccessInfo(contest)}
             </CardHeader>
             <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
               <div
@@ -2040,6 +2050,7 @@ export function ContestListClient({
                     size="default"
                   />
                 </div>
+                {renderAccessInfo(contest)}
               </CardHeader>
               <CardContent className="p-0 pt-2 flex-1">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-resp">
@@ -2676,6 +2687,47 @@ export function ContestListClient({
   // Server already returned the sorted page ? do not re-sort or re-slice.
   const displayContests = contests;
   const paginatedContests = contests;
+
+  const restrictedIdsKey = contests
+    .filter((c) => c.access_mode === "restricted")
+    .map((c) => c.id)
+    .join(",");
+  useEffect(() => {
+    const ids = restrictedIdsKey ? restrictedIdsKey.split(",") : [];
+    if (ids.length === 0) return;
+    let cancelled = false;
+    const merge = (id: string, patch: { applicationsOpen?: boolean; pending?: number }) =>
+      !cancelled &&
+      setRestrictedInfo((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+    createBrowserSupabase()
+      .from("contests")
+      .select("id, applications_open")
+      .in("id", ids)
+      .then(({ data }) => {
+        for (const row of (data ?? []) as { id: string; applications_open: boolean | null }[]) {
+          merge(row.id, { applicationsOpen: row.applications_open !== false });
+        }
+      });
+    for (const id of ids) {
+      applicationsApi
+        .list(id, { status: "pending", limit: 1 })
+        .then((res) => merge(id, { pending: res.counts.pending }))
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [restrictedIdsKey]);
+
+  const renderAccessInfo = (contest: Contest) => (
+    <CampaignAccessInfo
+      accessMode={contest.access_mode}
+      applicationsOpen={restrictedInfo[contest.id]?.applicationsOpen ?? null}
+      pendingCount={restrictedInfo[contest.id]?.pending ?? null}
+      skipsRequirements={contest.access_list_skips_requirements}
+      isDark={isDark}
+    />
+  );
 
   useEffect(() => {
     if (!filtersHydrated) return;
