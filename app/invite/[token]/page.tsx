@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { createClient } from "@/utils/supabase/server";
 import { getSessionUser } from "@/utils/supabase/auth-server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { resolveContestPoolBudgetCents } from "@/lib/video-platform-campaigns";
 import InviteLandingClient, { type InvitePreview } from "./client";
 
@@ -14,6 +15,25 @@ function parsePlatformList(value: unknown): string[] {
         .map((p) => p.trim().toLowerCase())
         .filter(Boolean),
     ),
+  );
+}
+
+/**
+ * Prize pool for the invite card. The preview function only returns a
+ * contest id for live links (or members), and budget details stay on the
+ * server: only the final number is passed to the page.
+ */
+async function loadPrizeCents(contestId: string): Promise<number> {
+  const { data, error } = await createAdminClient()
+    .from("contests")
+    .select("contest_type, contest_based_details, platform")
+    .eq("id", contestId)
+    .maybeSingle();
+  if (error || !data) return 0;
+  return resolveContestPoolBudgetCents(
+    data.contest_type,
+    data.contest_based_details as Record<string, unknown> | null,
+    data.platform,
   );
 }
 
@@ -38,11 +58,7 @@ export default async function InvitePage({
   ]);
 
   const row = Array.isArray(previewRows) ? previewRows[0] : previewRows;
-  // Prize is worked out here so the campaign's budget details never reach the browser.
-  // Platform, dates and details are only returned for live links (20261020 migration).
-  const prizeCents = row?.contest_based_details
-    ? resolveContestPoolBudgetCents(row.contest_type, row.contest_based_details, row.platform)
-    : 0;
+  const prizeCents = row?.contest_id ? await loadPrizeCents(row.contest_id) : 0;
   const preview: InvitePreview = {
     contestId: row?.contest_id ?? null,
     title: row?.title ?? null,

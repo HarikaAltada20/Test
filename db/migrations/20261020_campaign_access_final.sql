@@ -4,7 +4,8 @@
 --   2. Access tab: when each saved list last added creators, and how many
 --      list members aren't on the campaign yet.
 --   3. Brand campaign list: pending application counts in one query.
---   4. Invite page: platform, dates and prize details for live links.
+--   4. Invite page: platform and dates for live links (prize is worked out
+--      on the server; budget details are not returned).
 --   5. Applications tab: sort (newest, oldest, most followers) and a
 --      "meets requirements" state and filter per applicant.
 --   6. Creator campaign list: access filter (open / apply / invited / applied).
@@ -132,9 +133,11 @@ REVOKE ALL ON FUNCTION public.contest_pending_application_counts(uuid[]) FROM PU
 GRANT EXECUTE ON FUNCTION public.contest_pending_application_counts(uuid[]) TO authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
--- 4. Invite preview: platform, dates and prize details
+-- 4. Invite preview: platform and dates
 --    (copied from 20261016_access_polish.sql; new columns at the end).
 --    The return type changes, so the old function is dropped first.
+--    Anyone with a link can call this, so budget details are NOT returned:
+--    the invite page works out the prize on the server from contest_id.
 -- ---------------------------------------------------------------------------
 
 DROP FUNCTION IF EXISTS public.get_contest_invite_preview(text);
@@ -151,8 +154,7 @@ RETURNS TABLE (
   platform              text,
   contest_type          text,
   start_date            timestamptz,
-  end_date              timestamptz,
-  contest_based_details jsonb
+  end_date              timestamptz
 )
 LANGUAGE plpgsql
 STABLE
@@ -173,7 +175,7 @@ BEGIN
   IF v_link_id IS NULL THEN
     RETURN QUERY SELECT NULL::uuid, NULL::text, NULL::text, NULL::text,
       false, 'not_found'::text, false,
-      NULL::text, NULL::text, NULL::timestamptz, NULL::timestamptz, NULL::jsonb;
+      NULL::text, NULL::text, NULL::timestamptz, NULL::timestamptz;
     RETURN;
   END IF;
 
@@ -187,7 +189,7 @@ BEGIN
   IF v_status NOT IN ('active', 'public') AND NOT v_member THEN
     RETURN QUERY SELECT NULL::uuid, NULL::text, NULL::text, NULL::text,
       false, v_status, false,
-      NULL::text, NULL::text, NULL::timestamptz, NULL::timestamptz, NULL::jsonb;
+      NULL::text, NULL::text, NULL::timestamptz, NULL::timestamptz;
     RETURN;
   END IF;
 
@@ -207,19 +209,7 @@ BEGIN
     c.platform::text,
     c.contest_type::text,
     c.start_date,
-    c.end_date,
-    -- Same trimming as the Restricted preview: no Twitter campaign internals.
-    CASE
-      WHEN c.contest_based_details ? 'twitter_campaign' THEN
-        (c.contest_based_details - 'twitter_campaign')
-        || jsonb_build_object(
-          'twitter_campaign',
-          jsonb_strip_nulls(jsonb_build_object(
-            'campaign_type', c.contest_based_details -> 'twitter_campaign' -> 'campaign_type'
-          ))
-        )
-      ELSE c.contest_based_details
-    END
+    c.end_date
   FROM public.contests c
   LEFT JOIN public.advertiser_profiles ap ON ap.id = c.advertiser_id
   LEFT JOIN public.users u ON u.id = c.advertiser_id
@@ -480,7 +470,11 @@ BEGIN
       a.rejection_reason,
       a.reviewed_at,
       a.created_at,
-      public.contest_application_requirement_state(v_contest, cp) AS requirement_state,
+      -- Worked out for every row only when filtering on it; otherwise just
+      -- for the page below, so big campaigns stay fast.
+      CASE
+        WHEN v_req IS NOT NULL THEN public.contest_application_requirement_state(v_contest, cp)
+      END AS requirement_state,
       CASE WHEN v_sort = 'followers' THEN public.creator_top_follower_count(cp) END AS top_followers
     FROM public.contest_applications a
     LEFT JOIN public.users u ON u.id = a.user_id
@@ -518,7 +512,13 @@ BEGIN
             'rejection_reason', f.rejection_reason,
             'reviewed_at', f.reviewed_at,
             'created_at', f.created_at,
-            'requirement_state', f.requirement_state,
+            'requirement_state', COALESCE(
+              f.requirement_state,
+              public.contest_application_requirement_state(
+                v_contest,
+                (SELECT p FROM public.creator_profiles p WHERE p.id = f.user_id)
+              )
+            ),
             'on_access_list', EXISTS (
               SELECT 1 FROM public.contest_access_list l
               WHERE l.contest_id = f.contest_id AND l.user_id = f.user_id
