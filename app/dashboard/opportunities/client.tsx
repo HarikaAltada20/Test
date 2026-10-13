@@ -1493,7 +1493,9 @@ export default function OpportunitiesPage({
       ) : (
         <Eye className={cn("h-4 w-4", options?.eyeClassName)} />
       )}
-      <span className={options?.textClassName}>View Details</span>
+      <span className={options?.textClassName}>
+        {isApplyCard(contest) ? "Apply" : "View Details"}
+      </span>
     </Link>
   );
   const resetFilters = () => {
@@ -1506,8 +1508,15 @@ export default function OpportunitiesPage({
   };
 
   const renderRestrictedBadge = (contest: any, small = false) => {
-    if (contest.access_mode !== "restricted") return null;
     const size = small ? "sm" : "md";
+    if (contest.access_mode === "private") {
+      return (
+        <span className={cn("inline-flex", isDark && "dark")}>
+          <AccessModeBadge mode="private" label="Invite only" size={size} />
+        </span>
+      );
+    }
+    if (contest.access_mode !== "restricted") return null;
     // The span lets the shared badge's dark: classes follow this page's isDark.
     return (
       <span className={cn("inline-flex", isDark && "dark")}>
@@ -1523,6 +1532,55 @@ export default function OpportunitiesPage({
       </span>
     );
   };
+
+  /** Restricted cards the creator can't open yet: a preview line and whether applications are open. */
+  const renderPreviewInfo = (contest: any) => {
+    const paused = contest.applications_open === false;
+    return (
+      <div className="space-y-1.5">
+        {contest.preview_description && (
+          <p
+            className={cn(
+              "line-clamp-2 text-sm",
+              isDark ? "text-gray-300" : "text-gray-600",
+            )}
+          >
+            {contest.preview_description}
+          </p>
+        )}
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 text-sm font-medium",
+            paused
+              ? isDark
+                ? "text-gray-400"
+                : "text-gray-500"
+              : isDark
+                ? "text-emerald-300"
+                : "text-emerald-700",
+          )}
+        >
+          <span
+            aria-hidden="true"
+            className={cn(
+              "h-2 w-2 rounded-full",
+              paused ? "bg-gray-400" : "bg-emerald-500",
+            )}
+          />
+          {paused ? "Applications paused" : "Applications open"}
+        </span>
+      </div>
+    );
+  };
+
+  /** True when the card's main action is applying to a Restricted campaign. */
+  const isApplyCard = (contest: any) =>
+    contest.is_preview &&
+    contest.access_mode === "restricted" &&
+    contest.applications_open !== false &&
+    !contest.has_ended &&
+    (!contest.my_application_status ||
+      contest.my_application_status === "withdrawn");
 
   // Render list view item for opportunities
   const renderOpportunityListItem = (contest: any) => {
@@ -1771,6 +1829,7 @@ export default function OpportunitiesPage({
                   </div>
                 )}
                 {/* For Twitter text_image contests, show participants instead of submissions */}
+                {contest.is_preview && renderPreviewInfo(contest)}
                 {!contest.is_preview && (() => {
                   const isTwitterTextImage =
                     (contest.platform?.toLowerCase() === "twitter" ||
@@ -2989,6 +3048,7 @@ export default function OpportunitiesPage({
                               </div>
                             )}
                             {/* For Twitter text_image contests, show participants instead of submissions */}
+                            {contest.is_preview && renderPreviewInfo(contest)}
                             {!contest.is_preview && (() => {
                               const isTwitterTextImage =
                                 (contest.platform?.toLowerCase() ===
