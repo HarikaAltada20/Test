@@ -2,10 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
-import { Check, ClipboardList, Inbox, Link2, Loader2, Search, SearchX, X } from "lucide-react";
+import { Check, ClipboardList, Filter, Inbox, Link2, Loader2, Search, SearchX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +35,10 @@ import { toast } from "@/hooks/use-toast";
 import { useDashboardDark } from "@/hooks/use-dashboard-dark";
 import { cn } from "@/lib/utils";
 import {
+  APPLICATION_REQUIREMENT_FILTERS,
+  APPLICATION_REQUIREMENT_FILTER_LABELS,
+  APPLICATION_SORTS,
+  APPLICATION_SORT_LABELS,
   APPLICATION_STATUSES,
   APPLICATION_STATUS_LABELS,
   MAX_BULK_REVIEW,
@@ -34,6 +46,8 @@ import {
   applicationDisplayStatus,
   clampPage,
   countsAfterReview,
+  type ApplicationRequirementFilter,
+  type ApplicationSort,
   type ApplicationStatus,
   type ContestApplication,
 } from "@/lib/campaign-access";
@@ -46,20 +60,27 @@ import { CreatorAvatar } from "./CreatorAvatar";
 import { EmptyState } from "./EmptyState";
 import { RejectApplicationsDialog } from "./RejectApplicationsDialog";
 import { RelativeTime } from "./RelativeTime";
+import { RequirementStateTag } from "./RequirementStateTag";
 import { ApplicationRowsSkeleton } from "./Skeletons";
 
 type Props = {
   contestId: string;
   /** Called with the pending count whenever it changes, e.g. for the tab label. */
   onPendingCountChange?: (count: number) => void;
+  /** Campaign page path for "View full profile" links, e.g. /dashboard/contests/:id. */
+  profileBasePath?: string;
 };
 
 const PAGE_SIZE = 50;
 const outlineDark = "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
 
-export function ApplicationsPanel({ contestId, onPendingCountChange }: Props) {
+export function ApplicationsPanel({ contestId, onPendingCountChange, profileBasePath }: Props) {
   const isDark = useDashboardDark();
   const [status, setStatus] = useState<ApplicationStatus>("pending");
+  const [sort, setSort] = useState<ApplicationSort>("newest");
+  const [requirements, setRequirements] = useState<ApplicationRequirementFilter>("all");
+  const [applicationsOpen, setApplicationsOpen] = useState<boolean | null>(null);
+  const [togglingOpen, setTogglingOpen] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -85,8 +106,11 @@ export function ApplicationsPanel({ contestId, onPendingCountChange }: Props) {
           search: search || undefined,
           page,
           limit: PAGE_SIZE,
+          sort,
+          requirements,
         });
         if (requestId !== latestRequest.current) return;
+        if (res.applicationsOpen !== undefined) setApplicationsOpen(res.applicationsOpen);
         // Reviews can shrink the results so this page no longer exists; the page change reloads.
         const validPage = clampPage(page, res.total, PAGE_SIZE);
         if (validPage !== page) {
@@ -107,7 +131,7 @@ export function ApplicationsPanel({ contestId, onPendingCountChange }: Props) {
         if (requestId === latestRequest.current && !movingPage) setLoading(false);
       }
     },
-    [contestId, status, search, page],
+    [contestId, status, search, page, sort, requirements],
   );
 
   useEffect(() => {
@@ -131,6 +155,29 @@ export function ApplicationsPanel({ contestId, onPendingCountChange }: Props) {
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hasAnyApplications = Object.values(data?.counts ?? {}).some((n) => n > 0);
+  const requirementsApply = data?.requirementsMode === "apply";
+
+  const toggleApplicationsOpen = async (open: boolean) => {
+    setTogglingOpen(true);
+    try {
+      await applicationsApi.setOpen(contestId, open);
+      setApplicationsOpen(open);
+      toast({
+        title: open ? "Applications are open" : "Applications paused",
+        description: open
+          ? "Creators can apply again. Anyone who asked to be notified gets a notification."
+          : "Creators can't apply until you turn this back on. Pending applications stay pending.",
+      });
+    } catch (e: unknown) {
+      toast({
+        title: "Could not change applications",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setTogglingOpen(false);
+    }
+  };
 
   // Keep the drawer on a real row after reviewed rows leave the list.
   useEffect(() => {
@@ -236,6 +283,8 @@ export function ApplicationsPanel({ contestId, onPendingCountChange }: Props) {
         search: search || undefined,
         page: 1,
         limit: MAX_BULK_REVIEW,
+        sort,
+        requirements,
       });
       setSelected(
         new Map(
@@ -302,14 +351,48 @@ export function ApplicationsPanel({ contestId, onPendingCountChange }: Props) {
 
   return (
     <div className={cn("space-y-5", isDark && "dark")}>
-      <div>
-        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
-          <ClipboardList className="h-4 w-4" aria-hidden="true" /> Applications
-        </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Approving a creator adds them to this campaign&apos;s access list so they can see the
-          full campaign and submit.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
+            <ClipboardList className="h-4 w-4" aria-hidden="true" /> Applications
+          </h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Approving a creator adds them to this campaign&apos;s access list so they can see the
+            full campaign and submit.
+          </p>
+        </div>
+        {applicationsOpen !== null && (
+          <label
+            className={cn(
+              "flex shrink-0 cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2",
+              applicationsOpen
+                ? "border-emerald-200 bg-emerald-50/60 dark:border-emerald-500/30 dark:bg-emerald-500/10"
+                : "border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/5",
+            )}
+          >
+            <span className="text-sm">
+              <span className="block font-medium text-gray-900 dark:text-gray-100">
+                Accepting applications
+              </span>
+              <span className="block text-xs text-gray-500 dark:text-gray-400">
+                {applicationsOpen ? "On: creators can apply" : "Off: applications are paused"}
+              </span>
+            </span>
+            <span className="flex items-center gap-2">
+              {togglingOpen && (
+                <Loader2 className="h-4 w-4 animate-spin text-gray-400" aria-hidden="true" />
+              )}
+              <Switch
+                variant="theme-aware"
+                theme={isDark ? "dark" : "light"}
+                checked={applicationsOpen}
+                disabled={togglingOpen}
+                aria-label="Accepting applications"
+                onCheckedChange={toggleApplicationsOpen}
+              />
+            </span>
+          </label>
+        )}
       </div>
 
       <TabsPrimitive.Root
@@ -371,6 +454,59 @@ export function ApplicationsPanel({ contestId, onPendingCountChange }: Props) {
           </div>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={sort}
+            onValueChange={(v) => {
+              setSort(v as ApplicationSort);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger aria-label="Sort applications" isDark={isDark} className="h-9 w-full sm:w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent isDark={isDark}>
+              {APPLICATION_SORTS.map((s) => (
+                <SelectItem key={s} value={s} isDark={isDark}>
+                  {APPLICATION_SORT_LABELS[s]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {(requirementsApply || requirements !== "all") && (
+            <Select
+              value={requirements}
+              onValueChange={(v) => {
+                setRequirements(v as ApplicationRequirementFilter);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger
+                aria-label="Filter by requirements"
+                isDark={isDark}
+                className="h-9 w-full sm:w-56"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Filter className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                  <SelectValue />
+                </span>
+              </SelectTrigger>
+              <SelectContent isDark={isDark}>
+                {APPLICATION_REQUIREMENT_FILTERS.map((r) => (
+                  <SelectItem key={r} value={r} isDark={isDark}>
+                    {APPLICATION_REQUIREMENT_FILTER_LABELS[r]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {data?.requirementsMode === "skipped" && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Approved creators skip this campaign&apos;s requirements.
+            </span>
+          )}
+        </div>
+
         <TabsPrimitive.Content value={status} className="focus-visible:outline-none">
           <div className="rounded-md border border-gray-200 dark:border-white/10">
             <div className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-gray-400">
@@ -417,7 +553,29 @@ export function ApplicationsPanel({ contestId, onPendingCountChange }: Props) {
             {loading ? (
               <ApplicationRowsSkeleton />
             ) : applications.length === 0 ? (
-              search ? (
+              requirements !== "all" && hasAnyApplications ? (
+                <EmptyState
+                  icon={SearchX}
+                  title={
+                    requirements === "meets"
+                      ? "Nobody here meets the requirements"
+                      : "Everyone here meets the requirements"
+                  }
+                  actions={
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={outlineDark}
+                      onClick={() => {
+                        setRequirements("all");
+                        setPage(1);
+                      }}
+                    >
+                      Show all applicants
+                    </Button>
+                  }
+                />
+              ) : search ? (
                 <EmptyState
                   icon={SearchX}
                   title="No applications match that username"
@@ -488,6 +646,9 @@ export function ApplicationsPanel({ contestId, onPendingCountChange }: Props) {
                             </span>
                             {renderPreview(a)}
                             <ApplicantReach profile={a.creator} />
+                            {requirementsApply && (
+                              <RequirementStateTag state={a.requirement_state} className="mt-1" />
+                            )}
                           </span>
                         </button>
                       </div>
@@ -497,6 +658,10 @@ export function ApplicationsPanel({ contestId, onPendingCountChange }: Props) {
                         </span>
                         <span className="sm:w-32">{renderStatus(a)}</span>
                       </div>
+                      {!canApprove(a) && !canReject(a) && (
+                        // Keeps the date and status under their column headings.
+                        <div className="hidden sm:block sm:w-48" aria-hidden="true" />
+                      )}
                       {(canApprove(a) || canReject(a)) && (
                         <div className="grid grid-cols-2 gap-2 pl-7 sm:flex sm:w-48 sm:justify-end sm:pl-0">
                           {canReject(a) && (
@@ -616,6 +781,10 @@ export function ApplicationsPanel({ contestId, onPendingCountChange }: Props) {
         busy={busy}
         shortcutsEnabled={!rejectTargets && !approveTargets}
         isDark={isDark}
+        requirementsApply={requirementsApply}
+        profileHref={
+          profileBasePath ? (app) => `${profileBasePath}/creators/${app.user_id}` : undefined
+        }
       />
 
       <RejectApplicationsDialog

@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { accessListApi, allowlistApi } from "./api";
 import { AddResultDetails } from "./AddResultDetails";
 import { CreatorAvatar } from "./CreatorAvatar";
+import { MemberAvatarStack } from "./MemberAvatarStack";
 import { RelativeTime } from "./RelativeTime";
 import { MemberRowsSkeleton, SavedListsSkeleton } from "./Skeletons";
 import { UsernameChipsInput } from "./UsernameChipsInput";
@@ -318,6 +319,11 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
                     />
                     <label htmlFor={checkboxId} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
                       <span className="flex-1 truncate text-sm text-gray-900 dark:text-gray-100">{list.name}</span>
+                      <MemberAvatarStack
+                        members={list.preview_members}
+                        total={list.member_count}
+                        className="hidden sm:inline-flex"
+                      />
                       <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                         <Users className="h-3 w-3" aria-hidden="true" />
                         <span className="sr-only">Members:</span>

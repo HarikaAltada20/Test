@@ -34334,6 +34334,11 @@ export default function ContestDetailClient({
               <ApplicationsPanel
                 contestId={contestId}
                 onPendingCountChange={setPendingApplications}
+                profileBasePath={
+                  isAdminView
+                    ? `/dashboard/admin/contests/${contestId}`
+                    : `/dashboard/contests/${contestId}`
+                }
               />
             </TabPanel>
           )}

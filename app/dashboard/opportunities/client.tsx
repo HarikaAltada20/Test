@@ -173,7 +173,10 @@ import {
   ApplicationStatusBadge,
 } from "@/components/campaign-access/AccessBadge";
 import {
+  OPPORTUNITY_ACCESS_FILTERS,
+  OPPORTUNITY_ACCESS_FILTER_LABELS,
   restrictedCardState,
+  type OpportunityAccessFilter,
   type RestrictedCardState,
 } from "@/lib/campaign-access";
 
@@ -400,6 +403,7 @@ export default function OpportunitiesPage({
   };
 
   const [mediaType, setMediaType] = useState("all");
+  const [accessFilter, setAccessFilter] = useState<OpportunityAccessFilter>("all");
 
   // New state variables for filters and sorting
   const [statusFilter, setStatusFilterState] = useState<StatusFilterType>(
@@ -469,6 +473,7 @@ export default function OpportunitiesPage({
       OPPORTUNITIES_LIST_FILTERS_KEY,
     );
     setMediaType(stored.mediaType);
+    setAccessFilter(stored.accessFilter);
     setEligibilityFilter(stored.eligibilityFilter);
     setPlatformFilter(
       normalizeCampaignPlatformFilter(
@@ -575,6 +580,7 @@ export default function OpportunitiesPage({
     if (!filtersHydrated) return;
     writeStoredOpportunitiesListFilters(OPPORTUNITIES_LIST_FILTERS_KEY, {
       mediaType: mediaType as OpportunitiesMediaTypeOption,
+      accessFilter,
       eligibilityFilter:
         eligibilityFilter as OpportunitiesEligibilityFilterOption,
       platformFilter,
@@ -586,6 +592,7 @@ export default function OpportunitiesPage({
   }, [
     filtersHydrated,
     mediaType,
+    accessFilter,
     eligibilityFilter,
     platformFilter,
     typeFilter,
@@ -1075,6 +1082,7 @@ export default function OpportunitiesPage({
         eligibleOnly:
           overrides?.eligibleOnly ??
           (eligibilityFilter === "eligible" && creatorStatsReady),
+        access: accessFilter,
       });
 
     const key = buildKey();
@@ -1193,6 +1201,7 @@ export default function OpportunitiesPage({
     userCountriesList,
     eligibilityFilter,
     creatorStatsReady,
+    accessFilter,
   ]);
 
   useEffect(() => {
@@ -1373,6 +1382,7 @@ export default function OpportunitiesPage({
     searchQuery,
     mediaType,
     eligibilityFilter,
+    accessFilter,
   ]);
 
   // Server already returned the sorted page — do not re-slice.
@@ -2753,6 +2763,35 @@ export default function OpportunitiesPage({
                   Search
                 </Button>
               )}
+            </div>
+
+            {/* How the creator can join: one chip at a time, filtered on the server. */}
+            <div
+              role="group"
+              aria-label="Show campaigns"
+              className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]"
+            >
+              {OPPORTUNITY_ACCESS_FILTERS.map((f) => {
+                const active = accessFilter === f;
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setAccessFilter(f)}
+                    className={cn(
+                      "shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] focus-visible:ring-offset-1",
+                      active
+                        ? "border-[#7F39EC] bg-[#7F39EC] text-white"
+                        : isDark
+                          ? "border-gray-600 text-gray-300 hover:border-violet-400/60 hover:text-white"
+                          : "border-gray-300 bg-white text-gray-700 hover:border-[#7F39EC]/60 hover:text-[#4A00BE]",
+                    )}
+                  >
+                    {OPPORTUNITY_ACCESS_FILTER_LABELS[f]}
+                  </button>
+                );
+              })}
             </div>
 
             <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:justify-between lg:gap-4">

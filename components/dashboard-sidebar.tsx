@@ -29,6 +29,7 @@ import {
   Newspaper,
   Star,
   Flame,
+  ClipboardList,
 } from "lucide-react";
 import Link from "next/link";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
@@ -267,6 +268,12 @@ export function DashboardSidebar({
       href: "/dashboard/submissions",
       icon: Video,
       description: "Content submissions",
+    },
+    {
+      name: "My Applications",
+      href: "/dashboard/my-applications",
+      icon: ClipboardList,
+      description: "Campaigns you applied to",
     },
 
     {

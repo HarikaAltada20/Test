@@ -74,6 +74,7 @@ import {
   type ContestAccessMember,
   type ContestAccessSource,
   type RosterSortKey,
+  type SavedListSyncStatus,
 } from "@/lib/campaign-access";
 import { accessListApi, allowlistApi, type AddResult } from "./api";
 import { AddResultDetails } from "./AddResultDetails";
@@ -117,6 +118,7 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
   const isDark = useDashboardDark();
   const [members, setMembers] = useState<ContestAccessMember[]>([]);
   const [lists, setLists] = useState<BrandAllowlist[]>([]);
+  const [listSync, setListSync] = useState<Map<string, SavedListSyncStatus>>(new Map());
   const [skipRequirements, setSkipRequirements] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -149,6 +151,7 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
     try {
       const res = await accessListApi.get(contestId);
       setMembers(res.members);
+      setListSync(new Map((res.listSync ?? []).map((s) => [s.allowlist_id, s])));
       setSkipRequirements(!!res.contest.access_list_skips_requirements);
       const listRes = await allowlistApi.list(advertiserId ?? res.contest.advertiser_id);
       setLists(listRes.allowlists);
@@ -514,7 +517,13 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
                       Adds creators who joined a list after you imported it. Nobody is removed.
                     </p>
                   </div>
-                  <Button size="sm" variant="outline" className={outlineDark} disabled={!!busy} onClick={syncAll}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className={outlineDark}
+                    disabled={!!busy || (listSync.size > 0 && usedLists.every((l) => listSync.get(l.id)?.new_members === 0))}
+                    onClick={syncAll}
+                  >
                     {busy === "sync" ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
@@ -523,32 +532,62 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
                     Sync all
                   </Button>
                 </div>
-                <ul className="flex flex-wrap gap-1">
-                  {usedLists.map((l) => (
-                    <li key={l.id}>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 dark:text-gray-200 dark:hover:bg-white/10"
-                        disabled={!!busy}
-                        onClick={() =>
-                          run(`sync:${l.id}`, async () => {
-                            const res = await accessListApi.syncList(contestId, l.id);
-                            return res.added === 0
-                              ? `"${l.name}" is already in sync`
-                              : recordResult(res, `Synced "${l.name}"`);
-                          })
-                        }
-                      >
-                        {busy === `sync:${l.id}` ? (
-                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                        )}
-                        {l.name} · {l.member_count}
-                      </Button>
-                    </li>
-                  ))}
+                <ul className="divide-y divide-gray-200 dark:divide-white/10">
+                  {usedLists.map((l) => {
+                    const sync = listSync.get(l.id);
+                    return (
+                      <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                        <div className="min-w-0 text-sm">
+                          <p className="truncate font-medium text-gray-900 dark:text-gray-100">
+                            {l.name}
+                            <span className="font-normal text-gray-500 dark:text-gray-400">
+                              {" "}
+                              · {l.member_count} creator{l.member_count === 1 ? "" : "s"}
+                            </span>
+                          </p>
+                          {sync && (
+                            <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-gray-500 dark:text-gray-400">
+                              {sync.last_added_at && (
+                                <RelativeTime value={sync.last_added_at} prefix="Last added creators" />
+                              )}
+                              {sync.last_added_at && <span aria-hidden="true">·</span>}
+                              <span
+                                className={cn(
+                                  sync.new_members > 0 && "font-medium text-amber-700 dark:text-amber-300",
+                                )}
+                              >
+                                {sync.new_members > 0
+                                  ? `${sync.new_members} new since then`
+                                  : "Up to date"}
+                              </span>
+                            </p>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 dark:text-gray-200 dark:hover:bg-white/10"
+                          disabled={!!busy || sync?.new_members === 0}
+                          aria-label={`Sync ${l.name}`}
+                          onClick={() =>
+                            run(`sync:${l.id}`, async () => {
+                              const res = await accessListApi.syncList(contestId, l.id);
+                              return res.added === 0
+                                ? `"${l.name}" is already in sync`
+                                : recordResult(res, `Synced "${l.name}"`);
+                            })
+                          }
+                        >
+                          {busy === `sync:${l.id}` ? (
+                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                          )}
+                          Sync
+                        </Button>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}

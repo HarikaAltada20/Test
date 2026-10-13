@@ -54,8 +54,6 @@ import { DeleteContestButton } from "@/components/delete-contest-button";
 import { formatLocalDateTime, cn } from "@/lib/utils";
 import { AccessModeBadge } from "@/components/campaign-access/AccessBadge";
 import { CampaignAccessInfo } from "@/components/campaign-access/CampaignAccessInfo";
-import { applicationsApi } from "@/components/campaign-access/api";
-import { createClient as createBrowserSupabase } from "@/utils/supabase/client";
 import { isModifiedLinkClick } from "@/lib/navigation-link-utils";
 import {
   KNOWN_POST_CONTEST_STATUSES,
@@ -128,6 +126,9 @@ type Contest = {
   title: string | null;
   access_mode?: string | null;
   access_list_skips_requirements?: boolean | null;
+  /** Restricted campaigns: added by the list API after its cache. */
+  applications_open?: boolean | null;
+  pending_applications?: number | null;
   platform: string | null;
   contest_type: string | null;
   created_at: string;
@@ -755,11 +756,6 @@ export function ContestListClient({
   ]);
 
   const [contests, setContests] = useState<Contest[]>(initialContests);
-  // Applications open/closed and pending counts for Restricted cards on this page.
-  // Not part of the list response, so they're looked up per page.
-  const [restrictedInfo, setRestrictedInfo] = useState<
-    Record<string, { applicationsOpen?: boolean; pending?: number }>
-  >({});
   const isMountedRef = useRef(true);
 
   // Server-paginated list: filter ? sort (full set) ? page. Do not re-sort page rows.
@@ -2688,42 +2684,11 @@ export function ContestListClient({
   const displayContests = contests;
   const paginatedContests = contests;
 
-  const restrictedIdsKey = contests
-    .filter((c) => c.access_mode === "restricted")
-    .map((c) => c.id)
-    .join(",");
-  useEffect(() => {
-    const ids = restrictedIdsKey ? restrictedIdsKey.split(",") : [];
-    if (ids.length === 0) return;
-    let cancelled = false;
-    const merge = (id: string, patch: { applicationsOpen?: boolean; pending?: number }) =>
-      !cancelled &&
-      setRestrictedInfo((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
-    createBrowserSupabase()
-      .from("contests")
-      .select("id, applications_open")
-      .in("id", ids)
-      .then(({ data }) => {
-        for (const row of (data ?? []) as { id: string; applications_open: boolean | null }[]) {
-          merge(row.id, { applicationsOpen: row.applications_open !== false });
-        }
-      });
-    for (const id of ids) {
-      applicationsApi
-        .list(id, { status: "pending", limit: 1 })
-        .then((res) => merge(id, { pending: res.counts.pending }))
-        .catch(() => {});
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [restrictedIdsKey]);
-
   const renderAccessInfo = (contest: Contest) => (
     <CampaignAccessInfo
       accessMode={contest.access_mode}
-      applicationsOpen={restrictedInfo[contest.id]?.applicationsOpen ?? null}
-      pendingCount={restrictedInfo[contest.id]?.pending ?? null}
+      applicationsOpen={contest.applications_open ?? null}
+      pendingCount={contest.pending_applications ?? null}
       skipsRequirements={contest.access_list_skips_requirements}
       isDark={isDark}
     />

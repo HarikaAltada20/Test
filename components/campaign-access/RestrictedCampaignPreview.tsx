@@ -62,6 +62,7 @@ import {
 import { applicationsApi } from "./api";
 import { AccessModeBadge } from "./AccessBadge";
 import { AnswersList, LinkChip } from "./ApplicationAnswers";
+import { NotifyWhenReopenButton } from "./NotifyWhenReopenButton";
 import { RelativeTime } from "./RelativeTime";
 
 type Props = {
@@ -518,10 +519,16 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
   } else if (!preview.applications_open) {
     statusBox = (
       <StatusBox tone="gray" icon={PauseCircle} title="Applications are paused">
-        <p>The brand isn&apos;t accepting applications right now. Check back later.</p>
-        <Button size="sm" variant="outline" className={outlineDark} onClick={browse}>
-          Browse open campaigns
-        </Button>
+        <p>
+          The brand isn&apos;t accepting applications right now.
+          {previewMode ? " Check back later." : " We can tell you when they reopen."}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          {!previewMode && <NotifyWhenReopenButton contestId={preview.id} />}
+          <Button size="sm" variant="outline" className={outlineDark} onClick={browse}>
+            Browse open campaigns
+          </Button>
+        </div>
       </StatusBox>
     );
   }

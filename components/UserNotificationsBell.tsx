@@ -6,6 +6,7 @@ import { formatDistanceToNow } from "date-fns";
 import { getContestDashboardPath } from "@/lib/admin-notifications/template";
 import {
   Bell,
+  BellRing,
   CheckCheck,
   ChevronDown,
   ChevronRight,
@@ -224,6 +225,11 @@ function NotificationIcon({
       icon: KeyRound,
       light: "bg-amber-100 text-amber-700",
       dark: "bg-amber-500/20 text-amber-300",
+    },
+    campaign_applications_reopened: {
+      icon: BellRing,
+      light: "bg-sky-100 text-sky-700",
+      dark: "bg-sky-500/20 text-sky-300",
     },
   };
   const accessStyle = access[type];
