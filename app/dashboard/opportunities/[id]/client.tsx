@@ -51,6 +51,9 @@ import {
   Lock,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { RestrictedCampaignPreview } from "@/components/campaign-access/RestrictedCampaignPreview";
+import { applicationsApi } from "@/components/campaign-access/api";
+import type { ContestPreview } from "@/lib/campaign-access";
 import {
   cn,
   formatLocalDateTime,
@@ -398,6 +401,9 @@ export function ContestClientPage({
   const [error, setError] = useState<string | null>(null);
   /** Campaign hidden by access rules, unpublished, or deleted — an expected state, not a failure. */
   const [isUnavailable, setIsUnavailable] = useState(false);
+  /** Set when the campaign is restricted and the creator isn't a member yet. */
+  const [restrictedPreview, setRestrictedPreview] =
+    useState<ContestPreview | null>(null);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -2937,9 +2943,21 @@ export function ContestClientPage({
           !fetchedContestData ||
           fetchedContestData.moderation_status !== "published"
         ) {
-          if (isMountedRef.current) setIsUnavailable(true);
+          const preview = !fetchedContestData
+            ? await applicationsApi
+                .preview(contestId)
+                .then((res) => res.preview)
+                .catch(() => null)
+            : null;
+          if (!isMountedRef.current) return;
+          if (preview && !preview.has_access) {
+            setRestrictedPreview(preview);
+          } else {
+            setIsUnavailable(true);
+          }
           return;
         }
+        if (isMountedRef.current) setRestrictedPreview(null);
 
         const { data: requirementFields, error: requirementError } =
           await supabase
@@ -3399,6 +3417,28 @@ export function ContestClientPage({
         </div> */}
 
         <PageLoadingSpinner mode="light" />
+      </div>
+    );
+  }
+
+  if (restrictedPreview) {
+    return (
+      <div className="px-4 py-6">
+        <RestrictedCampaignPreview
+          preview={restrictedPreview}
+          onChanged={async () => {
+            try {
+              const { preview } = await applicationsApi.preview(contestId);
+              if (preview.has_access) {
+                window.location.reload();
+                return;
+              }
+              setRestrictedPreview(preview);
+            } catch {
+              window.location.reload();
+            }
+          }}
+        />
       </div>
     );
   }

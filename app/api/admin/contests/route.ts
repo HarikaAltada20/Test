@@ -85,6 +85,16 @@ export async function POST(request: NextRequest) {
       access_mode: draftFields.access_mode ?? "public",
       access_list_skips_requirements:
         draftFields.access_list_skips_requirements ?? false,
+      // Omitted when not sent so drafts still save before these columns' migrations run.
+      ...(draftFields.preview_description !== undefined
+        ? { preview_description: draftFields.preview_description }
+        : {}),
+      ...(draftFields.applications_open !== undefined
+        ? { applications_open: draftFields.applications_open }
+        : {}),
+      ...(draftFields.list_only_to_eligible !== undefined
+        ? { list_only_to_eligible: draftFields.list_only_to_eligible }
+        : {}),
       title: draftFields.title || "No Title - Draft",
       brief_html: draftFields.brief_html ?? "",
       brief_json: draftFields.brief_json ?? null,

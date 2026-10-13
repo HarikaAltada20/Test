@@ -79,7 +79,7 @@ const STATS_EMBED =
   "contest_stats(not_rejected_views, verified_submission_count, pending_submission_count, rejected_submission_count)";
 
 const DEFAULT_SELECT =
-  "id, advertiser_id, title, platform, contest_type, contest_format, content_type, moderation_status, status, post_contest_status, start_date, end_date, created_at, live_submission_count, contest_based_details, last_metrics_updated, thumbnail_url, brief_html, resources, category, inspiration_links, tracking_links, updated_at, payment_details, views_locked_at, multiple_submissions_enabled, max_submissions_per_creator, bonus_details, max_earnings_per_creator, categories, subcategories, interests, region, published_at, submitted_for_approval_at, approved_at, rejection_reason, trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_quality_score, min_platform_earnings, min_platform_views";
+  "id, advertiser_id, title, platform, contest_type, contest_format, content_type, moderation_status, status, post_contest_status, start_date, end_date, created_at, live_submission_count, contest_based_details, last_metrics_updated, thumbnail_url, brief_html, resources, category, inspiration_links, tracking_links, updated_at, payment_details, views_locked_at, multiple_submissions_enabled, max_submissions_per_creator, bonus_details, max_earnings_per_creator, categories, subcategories, interests, region, published_at, submitted_for_approval_at, approved_at, rejection_reason, trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_quality_score, min_platform_earnings, min_platform_views, access_mode";
 
 const SELECT_WITH_STATS = `${DEFAULT_SELECT}, ${STATS_EMBED}`;
 const SELECT_WITH_ADVERTISER_STATS = `${DEFAULT_SELECT}, advertiser_profiles!advertiser_id(company_name), ${STATS_EMBED}`;
@@ -802,6 +802,23 @@ async function fetchFilteredPageSql(
   const byId = new Map(
     ((data || []) as LightweightContest[]).map((row) => [row.id, row]),
   );
+
+  // Restricted campaigns the caller can't open yet are hidden by RLS; show their previews.
+  const missing = ids.filter((id) => !byId.has(id));
+  if (params.scope === "opportunities" && missing.length > 0) {
+    const { data: previews, error: previewError } = await supabase.rpc(
+      "get_contest_previews",
+      { p_contest_ids: missing },
+    );
+    if (previewError) {
+      console.error("[contest-list-query] preview hydrate failed:", previewError.message);
+    } else {
+      for (const preview of (previews || []) as LightweightContest[]) {
+        if (preview?.id) byId.set(preview.id, preview);
+      }
+    }
+  }
+
   const rows = ids
     .map((id) => byId.get(id))
     .filter((row): row is LightweightContest => Boolean(row));

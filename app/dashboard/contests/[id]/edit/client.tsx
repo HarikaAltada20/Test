@@ -76,7 +76,15 @@ import { UserResponse } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 import { AccessModeSelector } from "@/components/campaign-access/AccessModeSelector";
 import { invalidateBrandCampaignListCachesAfterMutation } from "@/lib/invalidate-brand-campaign-list-cache";
-import type { AccessMode } from "@/lib/campaign-access";
+import { PreviewEditor } from "@/components/campaign-access/PreviewEditor";
+import { ApplicationQuestionsEditor } from "@/components/campaign-access/ApplicationQuestionsEditor";
+import { questionsApi } from "@/components/campaign-access/api";
+import {
+  applicationQuestionsToSave,
+  isAccessMode,
+  type AccessMode,
+  type ApplicationQuestion,
+} from "@/lib/campaign-access";
 import { reconcileLeaderboardPrizeAmounts } from "@/lib/contest-prize-utils";
 import { getChargeableBudgetCents } from "@/lib/contest-chargeable-budget";
 import { preserveExistingBudgetSpentFields } from "@/lib/contest-budget-spent-fields";
@@ -287,6 +295,9 @@ const parseStoredOptionalNumber = (value: unknown): number | null => {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 };
+
+const PAYMENT_QUESTIONS_FAILED =
+  "Payment received and campaign saved as a draft, but the application questions weren't saved";
 
 type CreatorRequirementFormState = {
   trustScoreEnabled: boolean;
@@ -811,16 +822,82 @@ export default function EditContestPage({
   const [accessListSkipsRequirements, setAccessListSkipsRequirements] =
     useState(false);
   const [savedSkipRequirements, setSavedSkipRequirements] = useState(false);
+  const [previewDescription, setPreviewDescription] = useState("");
+  const [applicationsOpen, setApplicationsOpen] = useState(true);
+  const [applicationQuestions, setApplicationQuestions] = useState<
+    ApplicationQuestion[]
+  >([]);
+  const [questionsDirty, setQuestionsDirty] = useState(false);
+  const [listOnlyToEligible, setListOnlyToEligible] = useState(false);
+  const [savedListOnlyToEligible, setSavedListOnlyToEligible] =
+    useState(false);
+  const effectiveListOnlyToEligible =
+    accessMode === "public" && listOnlyToEligible;
+  // Newer columns are only sent when in use (or being turned off), so saving
+  // still works before their migrations have run.
   const accessFields = {
     access_mode: accessMode,
     access_list_skips_requirements:
       accessMode !== "public" && accessListSkipsRequirements,
+    ...(accessMode === "restricted" || savedAccessMode === "restricted"
+      ? {
+          preview_description:
+            accessMode === "restricted" && previewDescription.trim()
+              ? previewDescription.trim()
+              : null,
+          applications_open: applicationsOpen,
+        }
+      : {}),
+    ...(effectiveListOnlyToEligible || savedListOnlyToEligible
+      ? { list_only_to_eligible: effectiveListOnlyToEligible }
+      : {}),
+  };
+  /** Validation error for unsaved application questions, checked before anything is saved. */
+  const getApplicationQuestionsError = (): string | null => {
+    const plan = applicationQuestionsToSave(
+      accessMode,
+      questionsDirty,
+      applicationQuestions,
+    );
+    return "error" in plan ? plan.error : null;
+  };
+  /**
+   * Saves changed application questions after the campaign itself was saved.
+   * False means they weren't saved; the edits stay in the editor so the user can retry.
+   */
+  const saveApplicationQuestions = async (
+    failureTitle = "Campaign details were saved, but the application questions weren't",
+  ): Promise<boolean> => {
+    const plan = applicationQuestionsToSave(
+      accessMode,
+      questionsDirty,
+      applicationQuestions,
+    );
+    if ("skip" in plan) return true;
+    try {
+      if ("error" in plan) throw new Error(plan.error);
+      const saved = await questionsApi.save(contestId, plan.questions);
+      setApplicationQuestions(saved.questions);
+      setQuestionsDirty(false);
+      return true;
+    } catch (err: any) {
+      const message = err?.message || "Please try again.";
+      toast({
+        title: failureTitle,
+        description: `${message} Your questions are still in the editor. Fix them and save again.`,
+        variant: "destructive",
+      });
+      setFormFeedback(`Application questions not saved: ${message}`);
+      setFormFeedbackType("error");
+      return false;
+    }
   };
   /** Call after a successful save that wrote accessFields. */
   const commitSavedAccessFields = (savedViaAdminApi: boolean) => {
     const changed =
       accessFields.access_mode !== savedAccessMode ||
-      accessFields.access_list_skips_requirements !== savedSkipRequirements;
+      accessFields.access_list_skips_requirements !== savedSkipRequirements ||
+      effectiveListOnlyToEligible !== savedListOnlyToEligible;
     if (!changed) return;
     // The admin update route clears list caches server-side.
     if (!savedViaAdminApi) {
@@ -830,6 +907,7 @@ export default function EditContestPage({
     }
     setSavedAccessMode(accessFields.access_mode);
     setSavedSkipRequirements(accessFields.access_list_skips_requirements);
+    setSavedListOnlyToEligible(effectiveListOnlyToEligible);
   };
   const [category, setCategory] = useState<string>("technology");
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
@@ -2326,10 +2404,26 @@ export default function EditContestPage({
             }
             setContentType(data.content_type || "other");
             setCategory(data.category || "technology");
-            const loadedAccessMode: AccessMode =
-              data.access_mode === "private" ? "private" : "public";
+            const loadedAccessMode: AccessMode = isAccessMode(
+              data.access_mode,
+            )
+              ? data.access_mode
+              : "public";
             setAccessMode(loadedAccessMode);
             setSavedAccessMode(loadedAccessMode);
+            setPreviewDescription(data.preview_description || "");
+            setApplicationsOpen(data.applications_open !== false);
+            setListOnlyToEligible(!!data.list_only_to_eligible);
+            setSavedListOnlyToEligible(
+              loadedAccessMode === "public" && !!data.list_only_to_eligible,
+            );
+            questionsApi
+              .get(contestId)
+              .then((res) => {
+                setApplicationQuestions(res.questions);
+                setQuestionsDirty(false);
+              })
+              .catch(() => {});
             setAccessListSkipsRequirements(
               !!data.access_list_skips_requirements,
             );
@@ -3407,6 +3501,15 @@ export default function EditContestPage({
         description: "Campaign data not loaded. Cannot save changes.",
         variant: "destructive",
       });
+      setIsSubmitting(false);
+      if (submitTimeoutId) clearTimeout(submitTimeoutId);
+      return;
+    }
+
+    // Check application questions before saving anything, so a bad question never leaves a half-saved campaign.
+    const questionsError = datesOnly ? null : getApplicationQuestionsError();
+    if (questionsError) {
+      showError(`Application questions: ${questionsError}`);
       setIsSubmitting(false);
       if (submitTimeoutId) clearTimeout(submitTimeoutId);
       return;
@@ -4516,6 +4619,7 @@ export default function EditContestPage({
 
       if (updatePayload.access_mode !== undefined) {
         commitSavedAccessFields(isAdmin);
+        if (!(await saveApplicationQuestions())) return;
       }
 
       // Sync Twitter campaign metrics if this is a Twitter contest and contest_based_details was updated
@@ -6047,6 +6151,7 @@ export default function EditContestPage({
     console.log("Payment successful:", paymentDetails);
     setIsSubmitting(true);
     setShowPayment(false);
+    let questionsSaved = true;
     try {
       // Handle budget changes - only increases (decreases are handled directly in main flow)
       if (budgetChanged && budgetDifference > 0) {
@@ -6578,6 +6683,7 @@ export default function EditContestPage({
           throw new Error(`Failed to update campaign: ${updateError.message}`);
         }
         commitSavedAccessFields(false);
+        questionsSaved = await saveApplicationQuestions(PAYMENT_QUESTIONS_FAILED);
 
         console.log(
           "✅ Complete contest data updated in database after payment",
@@ -7229,22 +7335,25 @@ export default function EditContestPage({
           throw new Error(`Failed to save campaign: ${updateError.message}`);
         }
         commitSavedAccessFields(false);
+        questionsSaved = await saveApplicationQuestions(PAYMENT_QUESTIONS_FAILED);
 
         console.log(
           "✅ Contest saved as draft with all form data after payment",
         );
       }
 
-      toast({
-        title: "Payment Successful",
-        description:
-          budgetChanged && budgetDifference > 0
-            ? "Additional payment processed, campaign saved as draft. Submitting for approval..."
-            : "Payment completed, campaign saved as draft. Submitting for approval...",
-        variant: "default",
-      });
+      if (questionsSaved) {
+        toast({
+          title: "Payment Successful",
+          description:
+            budgetChanged && budgetDifference > 0
+              ? "Additional payment processed, campaign saved as draft. Submitting for approval..."
+              : "Payment completed, campaign saved as draft. Submitting for approval...",
+          variant: "default",
+        });
+      }
 
-      // Reset budget change tracking; refreshContestData sets baseline from payment_details
+      // Reset budget change tracking (also when questions failed, so the brand isn't asked to pay again); refreshContestData sets baseline from payment_details
       setBudgetChanged(false);
       setBudgetDifference(0);
 
@@ -7267,6 +7376,11 @@ export default function EditContestPage({
           checkBudgetChange(undefined, totalBudget.toString());
         }
       }, 100);
+
+      if (!questionsSaved) {
+        setIsSubmitting(false);
+        return;
+      }
 
       // Submit for approval using the shared function
       await submitForApproval();
@@ -7458,7 +7572,7 @@ export default function EditContestPage({
 
   // Handle save as draft for rejected contests
   const handleSaveAsDraft = async () => {
-    await handleSubmitWithStatus("draft");
+    if (!(await handleSubmitWithStatus("draft"))) return;
     // Refresh contest data after saving to ensure UI is up to date
     await refreshContestData();
     checkBudgetChange();
@@ -7608,7 +7722,12 @@ export default function EditContestPage({
     if (needsRefund) {
       // Show refund preview modal instead of processing directly
       try {
-        await handleSubmitWithStatus("draft", true); // Save contest data first
+        if (!(await handleSubmitWithStatus("draft", true))) {
+          // Save contest data first; it already showed what went wrong.
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
+        }
 
         // Calculate refund details for preview
         const prizePoolDecrease = Math.abs(prizePoolDifference);
@@ -7717,9 +7836,11 @@ export default function EditContestPage({
 
     if (needsPayment) {
       try {
-        await handleSubmitWithStatus("draft", true); // Skip redirect since we're showing payment modal
-        setShowPayment(true);
-        setIsPaymentRequired(true);
+        // Skip redirect since we're showing payment modal
+        if (await handleSubmitWithStatus("draft", true)) {
+          setShowPayment(true);
+          setIsPaymentRequired(true);
+        }
       } catch (error) {
         console.error("Error saving campaign before payment:", error);
         toast({
@@ -7736,8 +7857,12 @@ export default function EditContestPage({
 
     // --- FIX: Handle the case where no payment/refund is required ---
     try {
-      // Save any pending edits as draft
-      await handleSubmitWithStatus("draft", true);
+      // Save any pending edits as draft; stop if that failed (it already showed why)
+      if (!(await handleSubmitWithStatus("draft", true))) {
+        setIsSubmitting(false);
+        if (submitTimeoutId) clearTimeout(submitTimeoutId);
+        return;
+      }
 
       // Submit for approval
       const response = await fetch(`/api/contests/${contestId}/moderation`, {
@@ -7772,11 +7897,13 @@ export default function EditContestPage({
     }
   };
 
-  // Modified submit function that accepts a moderation status and skipRedirect option
+  // Modified submit function that accepts a moderation status and skipRedirect option.
+  // Resolves true only when the campaign (and any changed application questions) saved;
+  // early validation exits resolve undefined, which callers treat as failure.
   const handleSubmitWithStatus = async (
     moderationStatus?: "draft" | "pending_approval",
     skipRedirect: boolean = false,
-  ) => {
+  ): Promise<boolean | undefined> => {
     const showError = (message: string) => {
       toast({
         title: "Form Validation Error",
@@ -7820,6 +7947,15 @@ export default function EditContestPage({
         description: "Campaign data not loaded. Cannot save changes.",
         variant: "destructive",
       });
+      setIsSubmitting(false);
+      if (submitTimeoutId) clearTimeout(submitTimeoutId);
+      return;
+    }
+
+    // Check application questions before saving anything, so a bad question never leaves a half-saved campaign.
+    const questionsError = datesOnly ? null : getApplicationQuestionsError();
+    if (questionsError) {
+      showError(`Application questions: ${questionsError}`);
       setIsSubmitting(false);
       if (submitTimeoutId) clearTimeout(submitTimeoutId);
       return;
@@ -9099,6 +9235,14 @@ export default function EditContestPage({
         }
       }
 
+      if (
+        updatePayload.access_mode !== undefined &&
+        !(await saveApplicationQuestions())
+      ) {
+        setIsSubmitting(false);
+        return false;
+      }
+
       // Show appropriate success message
       let successMessage = "Contest updated successfully.";
       if (moderationStatus === "draft") {
@@ -9124,6 +9268,7 @@ export default function EditContestPage({
           router.push(`/dashboard/contests/${contestId}`);
         }
       }
+      return true;
     } catch (err: any) {
       toast({
         title: "Update Failed",
@@ -9131,6 +9276,7 @@ export default function EditContestPage({
         variant: "destructive",
       });
       setIsSubmitting(false);
+      return false;
     } finally {
       if (submitTimeoutId) clearTimeout(submitTimeoutId);
     }
@@ -9755,7 +9901,8 @@ export default function EditContestPage({
                     )}
                   >
                     Manage which creators are on the access list from the
-                    campaign&apos;s Access tab.
+                    campaign&apos;s Access tab. Review applications to
+                    restricted campaigns from the Applications tab.
                   </p>
                 </div>
                 <AccessModeSelector
@@ -9778,7 +9925,55 @@ export default function EditContestPage({
                     setAccessMode(next);
                   }}
                 />
-                {accessMode === "private" && (
+                {accessMode === "public" &&
+                  isVideoContestFormat(contest?.contest_format) && (
+                    <div className="flex items-start gap-3 pt-2 border-t">
+                      <Checkbox
+                        id="listOnlyToEligible"
+                        checked={listOnlyToEligible}
+                        onCheckedChange={(checked: any) =>
+                          setListOnlyToEligible(Boolean(checked))
+                        }
+                        className={cn(
+                          "border h-5 w-5 mt-0.5",
+                          isDark ? "border-gray-300" : "border-gray-500",
+                        )}
+                      />
+                      <Label
+                        htmlFor="listOnlyToEligible"
+                        className="text-sm font-normal leading-snug"
+                      >
+                        Only show this campaign to creators who meet the
+                        requirements
+                        <span
+                          className={cn(
+                            "block text-xs",
+                            isDark ? "text-gray-400" : "text-gray-500",
+                          )}
+                        >
+                          Has no effect unless you set requirements below.
+                        </span>
+                      </Label>
+                    </div>
+                  )}
+                {accessMode === "restricted" && (
+                  <div className="space-y-4 pt-2 border-t">
+                    <PreviewEditor
+                      description={previewDescription}
+                      onDescriptionChange={setPreviewDescription}
+                      applicationsOpen={applicationsOpen}
+                      onApplicationsOpenChange={setApplicationsOpen}
+                    />
+                    <ApplicationQuestionsEditor
+                      questions={applicationQuestions}
+                      onChange={(next) => {
+                        setApplicationQuestions(next);
+                        setQuestionsDirty(true);
+                      }}
+                    />
+                  </div>
+                )}
+                {accessMode !== "public" && (
                   <div className="flex items-start gap-3 pt-2 border-t">
                     <Checkbox
                       id="accessListSkipsRequirements"

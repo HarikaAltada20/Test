@@ -32,6 +32,7 @@ import {
   X,
   Film,
   FileType,
+  Lock,
 } from "lucide-react";
 import { UserResponse } from "@supabase/supabase-js";
 import { formatLocalDateTime } from "@/lib/utils";
@@ -1501,6 +1502,31 @@ export default function OpportunitiesPage({
     setSearchQuery("");
   };
 
+  const renderRestrictedBadge = (contest: any, small = false) => {
+    if (contest.access_mode !== "restricted") return null;
+    const label = !contest.is_preview
+      ? "Restricted"
+      : contest.my_application_status === "pending"
+        ? "Applied"
+        : contest.my_application_status === "rejected"
+          ? "Not approved"
+          : "Apply to join";
+    return (
+      <Badge
+        className={cn(
+          "font-medium border flex items-center",
+          small ? "text-xs px-2 py-0.5" : "text-sm px-3 py-1",
+          isDark
+            ? "bg-amber-900/40 text-amber-200 border-amber-700/60"
+            : "bg-amber-50 text-amber-800 border-amber-200",
+        )}
+      >
+        <Lock className="h-3 w-3 mr-1" />
+        {label}
+      </Badge>
+    );
+  };
+
   // Render list view item for opportunities
   const renderOpportunityListItem = (contest: any) => {
     const opportunityBudgetTracker = getOpportunityBudgetTrackerMeta(contest);
@@ -1521,6 +1547,7 @@ export default function OpportunitiesPage({
             contest.status === "upcoming" ||
             contest.status === "ended") && (
             <div className="absolute top-3 right-3 z-10 flex flex-row gap-2">
+              {renderRestrictedBadge(contest)}
               <Badge
                 className={cn(
                   "text-sm px-3 py-1 font-medium border",
@@ -1747,7 +1774,7 @@ export default function OpportunitiesPage({
                   </div>
                 )}
                 {/* For Twitter text_image contests, show participants instead of submissions */}
-                {(() => {
+                {!contest.is_preview && (() => {
                   const isTwitterTextImage =
                     (contest.platform?.toLowerCase() === "twitter" ||
                       contest.platform?.toLowerCase() === "x") &&
@@ -2737,6 +2764,7 @@ export default function OpportunitiesPage({
                             <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
                           )}
                           <div className="absolute top-2 right-2 flex gap-2">
+                            {renderRestrictedBadge(contest)}
                             <Badge
                               className={cn(
                                 "text-sm px-3 py-1 font-medium border",
@@ -2964,7 +2992,7 @@ export default function OpportunitiesPage({
                               </div>
                             )}
                             {/* For Twitter text_image contests, show participants instead of submissions */}
-                            {(() => {
+                            {!contest.is_preview && (() => {
                               const isTwitterTextImage =
                                 (contest.platform?.toLowerCase() ===
                                   "twitter" ||

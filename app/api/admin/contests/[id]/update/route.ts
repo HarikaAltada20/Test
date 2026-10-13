@@ -79,6 +79,9 @@ export async function POST(
       "subscription_info_of_user",
       "access_mode",
       "access_list_skips_requirements",
+      "preview_description",
+      "applications_open",
+      "list_only_to_eligible",
     ]);
 
     const updateData: Record<string, any> = {};

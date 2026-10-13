@@ -1,20 +1,22 @@
 export const ACCESS_MODES = ["public", "restricted", "private"] as const;
 export type AccessMode = (typeof ACCESS_MODES)[number];
 
-/** Modes brands/admins may select today. `restricted` ships in a later phase. */
-export const SELECTABLE_ACCESS_MODES: readonly AccessMode[] = ["public", "private"];
+/** Modes brands/admins may select. */
+export const SELECTABLE_ACCESS_MODES: readonly AccessMode[] = ["public", "private", "restricted"];
 
 export type ContestAccessSource =
   | "saved_list"
   | "manual"
   | "existing_submitter"
-  | "invite_link";
+  | "invite_link"
+  | "application";
 
 export const ACCESS_SOURCE_LABELS: Record<ContestAccessSource, string> = {
   saved_list: "Saved list",
   manual: "Added manually",
   existing_submitter: "Existing submitter",
   invite_link: "Invite link",
+  application: "Approved application",
 };
 
 export type BrandAllowlist = {
@@ -164,6 +166,23 @@ export function validateCampaignAccessFields(data: Record<string, unknown>): str
   ) {
     return "access_list_skips_requirements must be a boolean";
   }
+  if (data.preview_description !== undefined && data.preview_description !== null) {
+    if (typeof data.preview_description !== "string") {
+      return "preview_description must be a string";
+    }
+    if (data.preview_description.length > MAX_PREVIEW_DESCRIPTION_LENGTH) {
+      return `preview_description must be ${MAX_PREVIEW_DESCRIPTION_LENGTH} characters or fewer`;
+    }
+  }
+  if (data.applications_open !== undefined && typeof data.applications_open !== "boolean") {
+    return "applications_open must be a boolean";
+  }
+  if (
+    data.list_only_to_eligible !== undefined &&
+    typeof data.list_only_to_eligible !== "boolean"
+  ) {
+    return "list_only_to_eligible must be a boolean";
+  }
   return null;
 }
 
@@ -248,4 +267,349 @@ export function buildInviteUrl(token: string, origin: string): string {
 
 export function isInviteRedeemResult(value: unknown): value is InviteRedeemResult {
   return typeof value === "string" && value in INVITE_RESULT_MESSAGES;
+}
+
+// ---------------------------------------------------------------------------
+// Restricted campaigns: preview + applications
+// ---------------------------------------------------------------------------
+
+export const MAX_PREVIEW_DESCRIPTION_LENGTH = 2000;
+export const MAX_APPLICATION_QUESTIONS = 10;
+export const MAX_QUESTION_PROMPT_LENGTH = 300;
+export const MAX_CHOICE_OPTIONS = 10;
+export const MIN_CHOICE_OPTIONS = 2;
+export const MAX_CHOICE_OPTION_LENGTH = 100;
+export const MAX_REJECTION_REASON_LENGTH = 500;
+
+export const APPLICATION_QUESTION_KINDS = [
+  "short_text",
+  "long_text",
+  "url",
+  "single_choice",
+  "yes_no",
+] as const;
+export type ApplicationQuestionKind = (typeof APPLICATION_QUESTION_KINDS)[number];
+
+export const APPLICATION_QUESTION_KIND_LABELS: Record<ApplicationQuestionKind, string> = {
+  short_text: "Short answer",
+  long_text: "Paragraph",
+  url: "Link",
+  single_choice: "Multiple choice",
+  yes_no: "Yes / No",
+};
+
+/** Mirrors the limits enforced by submit_contest_application. */
+export const ANSWER_MAX_LENGTH: Record<ApplicationQuestionKind, number> = {
+  short_text: 300,
+  long_text: 3000,
+  url: 500,
+  single_choice: MAX_CHOICE_OPTION_LENGTH,
+  yes_no: 3,
+};
+
+export type ApplicationQuestion = {
+  id?: string;
+  position?: number;
+  prompt: string;
+  kind: ApplicationQuestionKind;
+  options: string[] | null;
+  required: boolean;
+};
+
+export type ApplicationStatus = "pending" | "approved" | "rejected" | "withdrawn";
+export const APPLICATION_STATUSES: readonly ApplicationStatus[] = [
+  "pending",
+  "approved",
+  "rejected",
+  "withdrawn",
+];
+
+export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
+  pending: "Pending",
+  approved: "Approved",
+  rejected: "Rejected",
+  withdrawn: "Withdrawn",
+};
+
+export type ApplicationAnswer = {
+  question_id: string;
+  prompt: string;
+  kind: ApplicationQuestionKind;
+  answer: string;
+};
+
+export type ContestApplication = {
+  id: string;
+  contest_id: string;
+  user_id: string;
+  status: ApplicationStatus;
+  answers: ApplicationAnswer[];
+  rejection_reason: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  username: string | null;
+  full_name: string | null;
+  profile_picture_url: string | null;
+  on_access_list: boolean;
+};
+
+export type MyApplication = {
+  id: string;
+  status: ApplicationStatus;
+  rejection_reason: string | null;
+  answers: ApplicationAnswer[];
+  created_at: string;
+  reviewed_at: string | null;
+};
+
+/** Shape returned by get_contest_preview. */
+export type ContestPreview = {
+  id: string;
+  title: string | null;
+  brand_name: string | null;
+  thumbnail_url: string | null;
+  platform: string | null;
+  contest_type: string | null;
+  contest_format: string | null;
+  status: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  contest_based_details: Record<string, unknown> | null;
+  preview_description: string | null;
+  applications_open: boolean;
+  has_ended: boolean;
+  has_access: boolean;
+  questions: (ApplicationQuestion & { id: string })[];
+  my_application: MyApplication | null;
+  [key: string]: unknown;
+};
+
+export function isApplicationQuestionKind(value: unknown): value is ApplicationQuestionKind {
+  return (
+    typeof value === "string" &&
+    (APPLICATION_QUESTION_KINDS as readonly string[]).includes(value)
+  );
+}
+
+export function isApplicationStatus(value: unknown): value is ApplicationStatus {
+  return typeof value === "string" && (APPLICATION_STATUSES as readonly string[]).includes(value);
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_PATTERN.test(value);
+}
+
+const ANSWER_URL_PATTERN = /^https?:\/\/\S+$/i;
+
+/**
+ * Normalises a brand's question list (trimmed prompts and options, positions
+ * reassigned in order). Returns an error message for the first problem found.
+ */
+export function validateApplicationQuestions(
+  input: unknown,
+): { questions: ApplicationQuestion[] } | { error: string } {
+  if (!Array.isArray(input)) return { error: "questions must be a list" };
+  if (input.length > MAX_APPLICATION_QUESTIONS) {
+    return { error: `At most ${MAX_APPLICATION_QUESTIONS} questions` };
+  }
+
+  const questions: ApplicationQuestion[] = [];
+  const seenIds = new Set<string>();
+  for (let i = 0; i < input.length; i++) {
+    const raw = input[i] as Record<string, unknown> | null;
+    const label = `Question ${i + 1}`;
+    if (!raw || typeof raw !== "object") return { error: `${label} is invalid` };
+
+    let id: string | undefined;
+    if (raw.id !== undefined && raw.id !== null && raw.id !== "") {
+      if (typeof raw.id !== "string" || !UUID_PATTERN.test(raw.id) || seenIds.has(raw.id)) {
+        return { error: `${label} has an invalid id` };
+      }
+      id = raw.id;
+      seenIds.add(id);
+    }
+
+    const prompt = typeof raw.prompt === "string" ? raw.prompt.trim().replace(/\s+/g, " ") : "";
+    if (!prompt) return { error: `${label} needs a question` };
+    if (prompt.length > MAX_QUESTION_PROMPT_LENGTH) {
+      return { error: `${label} must be ${MAX_QUESTION_PROMPT_LENGTH} characters or fewer` };
+    }
+
+    if (!isApplicationQuestionKind(raw.kind)) return { error: `${label} has an unknown type` };
+    if (raw.required !== undefined && typeof raw.required !== "boolean") {
+      return { error: `${label}: required must be true or false` };
+    }
+
+    let options: string[] | null = null;
+    if (raw.kind === "single_choice") {
+      if (!Array.isArray(raw.options)) return { error: `${label} needs choices` };
+      const seen = new Set<string>();
+      options = [];
+      for (const opt of raw.options) {
+        const text = typeof opt === "string" ? opt.trim() : "";
+        if (!text) continue;
+        if (text.length > MAX_CHOICE_OPTION_LENGTH) {
+          return {
+            error: `${label}: choices must be ${MAX_CHOICE_OPTION_LENGTH} characters or fewer`,
+          };
+        }
+        const key = text.toLowerCase();
+        if (seen.has(key)) return { error: `${label} has duplicate choices` };
+        seen.add(key);
+        options.push(text);
+      }
+      if (options.length < MIN_CHOICE_OPTIONS || options.length > MAX_CHOICE_OPTIONS) {
+        return {
+          error: `${label} needs ${MIN_CHOICE_OPTIONS}–${MAX_CHOICE_OPTIONS} choices`,
+        };
+      }
+    }
+
+    questions.push({
+      ...(id ? { id } : {}),
+      position: i,
+      prompt,
+      kind: raw.kind,
+      options,
+      required: raw.required !== false,
+    });
+  }
+  return { questions };
+}
+
+/**
+ * What the campaign editor should do with its application questions on save:
+ * nothing (not restricted, or unchanged), save the validated questions, or stop with an error.
+ */
+export function applicationQuestionsToSave(
+  accessMode: AccessMode,
+  dirty: boolean,
+  questions: unknown,
+): { skip: true } | { questions: ApplicationQuestion[] } | { error: string } {
+  if (accessMode !== "restricted" || !dirty) return { skip: true };
+  return validateApplicationQuestions(questions);
+}
+
+/** Nearest page that exists for `total` results (1 when there are none). */
+export function clampPage(page: number, total: number, pageSize: number): number {
+  const lastPage = Math.max(1, Math.ceil(Math.max(0, total) / Math.max(1, pageSize)));
+  if (!Number.isFinite(page) || page < 1) return 1;
+  return Math.min(Math.floor(page), lastPage);
+}
+
+/** Error message for one answer, or null when it's acceptable. Mirrors the database check. */
+export function validateApplicationAnswer(
+  question: Pick<ApplicationQuestion, "kind" | "options" | "required">,
+  answer: string | null | undefined,
+): string | null {
+  const value = (answer ?? "").trim();
+  if (!value) return question.required ? "This question is required" : null;
+  if (value.length > ANSWER_MAX_LENGTH[question.kind]) {
+    return `Keep it to ${ANSWER_MAX_LENGTH[question.kind]} characters or fewer`;
+  }
+  switch (question.kind) {
+    case "url":
+      return ANSWER_URL_PATTERN.test(value) ? null : "Enter a link starting with http:// or https://";
+    case "single_choice":
+      return question.options?.includes(value) ? null : "Choose one of the options";
+    case "yes_no":
+      return value === "yes" || value === "no" ? null : "Choose yes or no";
+    default:
+      return null;
+  }
+}
+
+/** Errors keyed by question id; empty when every answer is acceptable. */
+export function validateApplicationAnswers(
+  questions: readonly (ApplicationQuestion & { id: string })[],
+  answers: Record<string, string | undefined>,
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  for (const q of questions) {
+    const error = validateApplicationAnswer(q, answers[q.id]);
+    if (error) errors[q.id] = error;
+  }
+  return errors;
+}
+
+/** Result codes from the application functions (submit / withdraw / review). */
+export type ApplicationResult =
+  | "submitted"
+  | "not_signed_in"
+  | "not_creator"
+  | "not_found"
+  | "ended"
+  | "closed"
+  | "already_member"
+  | "already_applied"
+  | "invalid_answers"
+  | "withdrawn"
+  | "not_pending"
+  | "approved"
+  | "already_approved"
+  | "rejected"
+  | "forbidden"
+  | "invalid_state"
+  | "invalid_decision";
+
+export const APPLICATION_RESULT_MESSAGES: Record<ApplicationResult, string> = {
+  submitted: "Application sent. The brand will review it.",
+  not_signed_in: "Sign in to apply.",
+  not_creator: "Only creator accounts can apply.",
+  not_found: "This campaign isn't accepting applications.",
+  ended: "This campaign has ended.",
+  closed: "This campaign isn't accepting applications right now.",
+  already_member: "You already have access to this campaign.",
+  already_applied: "You've already applied to this campaign.",
+  invalid_answers: "Please check your answers.",
+  withdrawn: "Application withdrawn.",
+  not_pending: "Only pending applications can be withdrawn.",
+  approved: "Application approved.",
+  already_approved: "Already approved.",
+  rejected: "Application rejected.",
+  forbidden: "You can't review applications for this campaign.",
+  invalid_state: "This application can't be changed in its current state.",
+  invalid_decision: "Choose approve or reject.",
+};
+
+export const APPLICATION_RESULT_HTTP_STATUS: Record<ApplicationResult, number> = {
+  submitted: 201,
+  not_signed_in: 401,
+  not_creator: 403,
+  not_found: 404,
+  ended: 409,
+  closed: 409,
+  already_member: 409,
+  already_applied: 409,
+  invalid_answers: 400,
+  withdrawn: 200,
+  not_pending: 409,
+  approved: 200,
+  already_approved: 200,
+  rejected: 200,
+  forbidden: 403,
+  invalid_state: 409,
+  invalid_decision: 400,
+};
+
+/** Values added to admin_notification_type_enum by 20261015_campaign_access_notification_types.sql. */
+export const CAMPAIGN_ACCESS_NOTIFICATION_TYPES = [
+  "campaign_application_approved",
+  "campaign_application_rejected",
+  "campaign_application_received",
+  "campaign_access_granted",
+] as const;
+export type CampaignAccessNotificationType =
+  (typeof CAMPAIGN_ACCESS_NOTIFICATION_TYPES)[number];
+
+export function isCampaignAccessNotificationType(
+  type: string,
+): type is CampaignAccessNotificationType {
+  return (CAMPAIGN_ACCESS_NOTIFICATION_TYPES as readonly string[]).includes(type);
+}
+
+export function isApplicationResult(value: unknown): value is ApplicationResult {
+  return typeof value === "string" && value in APPLICATION_RESULT_MESSAGES;
 }

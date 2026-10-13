@@ -1,7 +1,12 @@
 import type {
   AllowlistMember,
+  ApplicationQuestion,
+  ApplicationResult,
+  ApplicationStatus,
   BrandAllowlist,
   ContestAccessMember,
+  ContestApplication,
+  ContestPreview,
   InviteExpiryPreset,
   InviteLink,
   InviteRedeemResult,
@@ -93,6 +98,13 @@ export const accessListApi = {
       body: JSON.stringify({ allowlistId }),
     }),
 
+  /** Adds only the saved list's members who aren't on the campaign yet. */
+  syncList: (contestId: string, allowlistId: string) =>
+    request<AddResult>(`/api/contests/${contestId}/access-list`, {
+      method: "POST",
+      body: JSON.stringify({ syncList: allowlistId }),
+    }),
+
   saveAsList: (contestId: string, name: string) =>
     request<{ allowlist: BrandAllowlist }>(`/api/contests/${contestId}/access-list`, {
       method: "POST",
@@ -154,6 +166,85 @@ export const inviteLinkApi = {
     }
     return json as RedeemInviteResponse;
   },
+};
+
+export type ApplicationListResponse = {
+  applications: ContestApplication[];
+  total: number;
+  page: number;
+  limit: number;
+  counts: Record<ApplicationStatus, number>;
+};
+
+export type ApplyResponse = {
+  result: ApplicationResult;
+  message?: string;
+  error?: string;
+  applicationId?: string | null;
+  questionId?: string | null;
+};
+
+export const applicationsApi = {
+  list: (
+    contestId: string,
+    opts: { status?: ApplicationStatus | "all"; search?: string; page?: number; limit?: number } = {},
+  ) => {
+    const sp = new URLSearchParams();
+    if (opts.status) sp.set("status", opts.status);
+    if (opts.search) sp.set("search", opts.search);
+    if (opts.page) sp.set("page", String(opts.page));
+    if (opts.limit) sp.set("limit", String(opts.limit));
+    return request<ApplicationListResponse>(
+      `/api/contests/${contestId}/applications?${sp.toString()}`,
+    );
+  },
+
+  review: (contestId: string, appId: string, decision: "approve" | "reject", reason?: string) =>
+    request<{ result: ApplicationResult; message: string }>(
+      `/api/contests/${contestId}/applications/${appId}`,
+      { method: "PATCH", body: JSON.stringify({ decision, reason }) },
+    ),
+
+  bulkReview: (contestId: string, ids: string[], decision: "approve" | "reject", reason?: string) =>
+    request<{ updated: number; skipped: number }>(
+      `/api/contests/${contestId}/applications/bulk`,
+      { method: "POST", body: JSON.stringify({ ids, decision, reason }) },
+    ),
+
+  /** Resolves with the result code for expected outcomes; throws only on unexpected errors. */
+  apply: async (contestId: string, answers: Record<string, string>): Promise<ApplyResponse> => {
+    const res = await fetch(`/api/contests/${contestId}/applications`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ answers }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!json?.result) throw new Error(json?.error || `Request failed (${res.status})`);
+    return json as ApplyResponse;
+  },
+
+  withdraw: (contestId: string) =>
+    request<{ result: ApplicationResult; message: string }>(
+      `/api/contests/${contestId}/applications`,
+      { method: "DELETE" },
+    ),
+
+  preview: (contestId: string) =>
+    request<{ preview: ContestPreview }>(`/api/contests/${contestId}/preview`),
+};
+
+export const questionsApi = {
+  get: (contestId: string) =>
+    request<{ questions: ApplicationQuestion[] }>(
+      `/api/contests/${contestId}/application-questions`,
+    ),
+
+  save: (contestId: string, questions: ApplicationQuestion[]) =>
+    request<{ questions: ApplicationQuestion[] }>(
+      `/api/contests/${contestId}/application-questions`,
+      { method: "PUT", body: JSON.stringify({ questions }) },
+    ),
 };
 
 export function summarizeAddResult(result: AddResult): string {
