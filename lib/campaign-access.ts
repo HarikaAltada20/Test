@@ -751,3 +751,69 @@ export function parseApplicationDraft(
     return {};
   }
 }
+
+/**
+ * Usernames from an uploaded CSV or text file: the first cell of each row,
+ * skipping a header row such as "username" or "handle".
+ */
+export function parseUsernameCsv(text: string): string[] {
+  const rows = text.split(/\r?\n/);
+  const names: string[] = [];
+  rows.forEach((row, i) => {
+    const cell = row.split(/[,;\t]/)[0]?.trim().replace(/^"|"$/g, "").trim() ?? "";
+    if (!cell) return;
+    if (i === 0 && /^(user ?names?|handles?|creators?|@)$/i.test(cell)) return;
+    names.push(cell);
+  });
+  return names;
+}
+
+/** Key the Access tab filters by: a specific saved list or invite link, else the source. */
+export function accessMemberFilterKey(m: ContestAccessMember): string {
+  if (m.source === "saved_list" && m.source_allowlist_id) return `list:${m.source_allowlist_id}`;
+  if (m.source === "invite_link" && m.source_invite_link_id) return `invite:${m.source_invite_link_id}`;
+  return m.source;
+}
+
+/** Human label for where a creator on the access list came from. */
+export function accessMemberSourceLabel(m: ContestAccessMember): string {
+  if (m.source === "saved_list") return `List: ${m.source_allowlist_name ?? "deleted list"}`;
+  if (m.source === "invite_link" && m.source_invite_link_id) {
+    return `Invite link: ${m.source_invite_link_label ?? "Untitled link"}`;
+  }
+  return ACCESS_SOURCE_LABELS[m.source];
+}
+
+export type RosterSortKey = "creator" | "source" | "added";
+
+export function sortAccessMembers(
+  members: readonly ContestAccessMember[],
+  key: RosterSortKey,
+  direction: "asc" | "desc",
+): ContestAccessMember[] {
+  const value = (m: ContestAccessMember): string =>
+    key === "creator"
+      ? (m.username ?? "").toLowerCase()
+      : key === "source"
+        ? accessMemberSourceLabel(m).toLowerCase()
+        : m.added_at;
+  const sign = direction === "asc" ? 1 : -1;
+  return [...members].sort((a, b) => {
+    const va = value(a);
+    const vb = value(b);
+    return va < vb ? -sign : va > vb ? sign : 0;
+  });
+}
+
+function csvCell(value: string): string {
+  return /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+/** CSV of the access list for download. */
+export function accessMembersToCsv(members: readonly ContestAccessMember[]): string {
+  const rows = [
+    ["username", "full_name", "source", "added_at"],
+    ...members.map((m) => [m.username ?? "", m.full_name ?? "", accessMemberSourceLabel(m), m.added_at]),
+  ];
+  return rows.map((r) => r.map(csvCell).join(",")).join("\n");
+}

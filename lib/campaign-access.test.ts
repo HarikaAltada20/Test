@@ -29,6 +29,10 @@ import {
   countAnsweredQuestions,
   daysUntil,
   parseApplicationDraft,
+  accessMemberFilterKey,
+  accessMembersToCsv,
+  parseUsernameCsv,
+  sortAccessMembers,
 } from "./campaign-access";
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
@@ -525,5 +529,54 @@ describe("parseApplicationDraft", () => {
     assert.deepEqual(parseApplicationDraft(null, questions), {});
     assert.deepEqual(parseApplicationDraft("{oops", questions), {});
     assert.deepEqual(parseApplicationDraft("[1]", questions), {});
+  });
+});
+
+describe("parseUsernameCsv", () => {
+  it("takes the first cell of each row and skips a header", () => {
+    const csv = ["username,followers", "@alice,100", '"bob",5', "", "carol"].join("\r\n");
+    assert.deepEqual(parseUsernameCsv(csv), ["@alice", "bob", "carol"]);
+  });
+
+  it("keeps a first row that isn't a header", () => {
+    assert.deepEqual(parseUsernameCsv(["dave", "erin"].join("\n")), ["dave", "erin"]);
+  });
+});
+
+describe("access list helpers", () => {
+  const member = (over: Record<string, unknown>) => ({
+    user_id: "u",
+    username: "a",
+    full_name: null,
+    profile_picture_url: null,
+    added_at: "2026-10-01T00:00:00.000Z",
+    source: "manual" as const,
+    source_allowlist_id: null,
+    source_allowlist_name: null,
+    source_invite_link_id: null,
+    source_invite_link_label: null,
+    ...over,
+  });
+
+  it("filters by specific list or link, else by source", () => {
+    assert.equal(accessMemberFilterKey(member({ source: "saved_list", source_allowlist_id: "L1" })), "list:L1");
+    assert.equal(accessMemberFilterKey(member({ source: "invite_link", source_invite_link_id: "I1" })), "invite:I1");
+    assert.equal(accessMemberFilterKey(member({ source: "application" })), "application");
+  });
+
+  it("sorts by creator name and by date", () => {
+    const list = [member({ username: "b", added_at: "2026-10-02" }), member({ username: "A", added_at: "2026-10-03" })];
+    assert.deepEqual(sortAccessMembers(list, "creator", "asc").map((m) => m.username), ["A", "b"]);
+    assert.deepEqual(sortAccessMembers(list, "added", "desc").map((m) => m.username), ["A", "b"]);
+  });
+
+  it("escapes CSV cells", () => {
+    assert.equal(
+      accessMembersToCsv([member({ username: "x", full_name: 'Ann "Q", Jr' })]),
+      [
+        "username,full_name,source,added_at",
+        'x,"Ann ""Q"", Jr",Added manually,2026-10-01T00:00:00.000Z',
+      ].join("\n"),
+    );
   });
 });

@@ -92,9 +92,18 @@ type Props = {
   contestId: string;
   /** Opens the create dialog each time this number increases. */
   openCreateSignal?: number;
+  /** Shows the creators who joined through a link, e.g. by filtering the roster. */
+  onViewJoined?: (linkId: string) => void;
+  /** Drops the section's own border when it sits inside another card. */
+  embedded?: boolean;
 };
 
-export function InviteLinksSection({ contestId, openCreateSignal = 0 }: Props) {
+export function InviteLinksSection({
+  contestId,
+  openCreateSignal = 0,
+  onViewJoined,
+  embedded,
+}: Props) {
   const isDark = useDashboardDark();
   const [links, setLinks] = useState<InviteLink[]>([]);
   const [loading, setLoading] = useState(true);
@@ -194,6 +203,15 @@ export function InviteLinksSection({ contestId, openCreateSignal = 0 }: Props) {
           <div className="text-xs text-gray-500 dark:text-gray-400">
             {formatUses(link)} · {formatExpiry(link, now)}
           </div>
+          {onViewJoined && link.use_count > 0 && (
+            <button
+              type="button"
+              className="rounded-sm text-xs font-medium text-[#7F39EC] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:text-purple-300"
+              onClick={() => onViewJoined(link.id)}
+            >
+              View {link.use_count} creator{link.use_count === 1 ? "" : "s"} who joined via this link
+            </button>
+          )}
         </div>
         <div className="flex shrink-0 gap-2">
           <Button
@@ -226,7 +244,13 @@ export function InviteLinksSection({ contestId, openCreateSignal = 0 }: Props) {
   };
 
   return (
-    <div className={cn("space-y-3 rounded-md border border-gray-200 p-4 dark:border-white/10", isDark && "dark")}>
+    <div
+      className={cn(
+        "space-y-3",
+        !embedded && "rounded-md border border-gray-200 p-4 dark:border-white/10",
+        isDark && "dark",
+      )}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h4 className="flex items-center gap-2 font-medium text-gray-900 dark:text-white">
