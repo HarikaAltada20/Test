@@ -67,6 +67,8 @@ type Props = {
   preview: ContestPreview;
   /** Called after apply/withdraw or approval so the page can reload. */
   onChanged: () => void;
+  /** Brand-side preview from the campaign editor: nothing is sent or saved. */
+  previewMode?: boolean;
 };
 
 const fieldClass = "dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500";
@@ -284,7 +286,7 @@ function StatusBox({
   );
 }
 
-export function RestrictedCampaignPreview({ preview, onChanged }: Props) {
+export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: Props) {
   const router = useRouter();
   const isDark = useDashboardDark();
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -315,7 +317,7 @@ export function RestrictedCampaignPreview({ preview, onChanged }: Props) {
 
   // Restore unsent answers once per campaign.
   useEffect(() => {
-    if (!canApply) return;
+    if (!canApply || previewMode) return;
     const draft = readDraft(preview.id, questions);
     if (Object.keys(draft).length > 0) {
       setAnswers(draft);
@@ -327,7 +329,7 @@ export function RestrictedCampaignPreview({ preview, onChanged }: Props) {
   const setAnswer = (id: string, value: string) => {
     setAnswers((prev) => {
       const next = { ...prev, [id]: value };
-      writeDraft(preview.id, next);
+      if (!previewMode) writeDraft(preview.id, next);
       return next;
     });
     if (touched.has(id)) {
@@ -371,6 +373,10 @@ export function RestrictedCampaignPreview({ preview, onChanged }: Props) {
   };
 
   const submit = async () => {
+    if (previewMode) {
+      toast({ title: "This is a preview", description: "Nothing was sent." });
+      return;
+    }
     const found = validateApplicationAnswers(questions, answers);
     setErrors(found);
     if (Object.keys(found).length > 0) {
@@ -427,7 +433,9 @@ export function RestrictedCampaignPreview({ preview, onChanged }: Props) {
     }
   };
 
-  const browse = () => router.push("/dashboard/opportunities");
+  const browse = () => {
+    if (!previewMode) router.push("/dashboard/opportunities");
+  };
 
   let statusBox: ReactNode = null;
   if (app?.status === "pending") {

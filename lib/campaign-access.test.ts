@@ -33,6 +33,8 @@ import {
   accessMembersToCsv,
   parseUsernameCsv,
   sortAccessMembers,
+  accessModeSwitchNeedsConfirm,
+  accessModeSwitchNotes,
 } from "./campaign-access";
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
@@ -578,5 +580,28 @@ describe("access list helpers", () => {
         'x,"Ann ""Q"", Jr",Added manually,2026-10-01T00:00:00.000Z',
       ].join("\n"),
     );
+  });
+});
+
+describe("accessModeSwitchNotes", () => {
+  it("mentions submitters only when leaving Public with submissions", () => {
+    assert.equal(accessModeSwitchNotes("public", "private", 3).some((n) => n.includes("3 submissions")), true);
+    assert.equal(accessModeSwitchNotes("public", "private", 0).some((n) => n.includes("submission")), false);
+  });
+
+  it("warns that invite links are revoked when going Public", () => {
+    assert.equal(accessModeSwitchNotes("private", "public", null).some((n) => n.includes("invite links")), true);
+  });
+
+  it("explains pending applications when leaving Restricted", () => {
+    assert.equal(accessModeSwitchNotes("restricted", "private", null).some((n) => n.includes("Pending")), true);
+  });
+
+  it("asks for confirmation only when something more than the new mode changes", () => {
+    assert.equal(accessModeSwitchNeedsConfirm("public", "restricted", 0), false);
+    assert.equal(accessModeSwitchNeedsConfirm("public", "restricted", 2), true);
+    assert.equal(accessModeSwitchNeedsConfirm("private", "restricted", null), false);
+    assert.equal(accessModeSwitchNeedsConfirm("restricted", "public", null), true);
+    assert.equal(accessModeSwitchNeedsConfirm("public", "public", 5), false);
   });
 });

@@ -817,3 +817,46 @@ export function accessMembersToCsv(members: readonly ContestAccessMember[]): str
   ];
   return rows.map((r) => r.map(csvCell).join(",")).join("\n");
 }
+
+/**
+ * What happens when a saved campaign switches who can see it, for the confirm
+ * dialog. Mirrors the database: existing submitters are added to the access
+ * list, invite links are revoked when going Public, and only Restricted
+ * campaigns take applications.
+ */
+export function accessModeSwitchNotes(
+  from: AccessMode,
+  to: AccessMode,
+  submissions: number | null,
+): string[] {
+  if (from === to) return [];
+  const notes: string[] = [];
+  if (to === "public") notes.push("Anyone can see this campaign.");
+  if (to === "private") notes.push("Only creators on the access list can see it.");
+  if (to === "restricted") {
+    notes.push("Everyone sees a preview. Creators apply and you choose who joins.");
+  }
+  if (from === "public" && submissions && submissions > 0) {
+    notes.push(
+      `Creators who already submitted (${submissions} submission${submissions === 1 ? "" : "s"}) are added to the access list and keep access.`,
+    );
+  }
+  if (to === "public") notes.push("Active invite links will be revoked.");
+  if (from === "restricted") {
+    notes.push(
+      to === "public"
+        ? "Pending applications stay as they are, and the Applications tab is hidden."
+        : "Pending applications stay pending, and creators can't apply while it's Private. Switch back to Restricted to review them.",
+    );
+  }
+  return notes;
+}
+
+/** Whether switching needs a confirm: anything beyond a plain description of the new mode. */
+export function accessModeSwitchNeedsConfirm(
+  from: AccessMode,
+  to: AccessMode,
+  submissions: number | null,
+): boolean {
+  return accessModeSwitchNotes(from, to, submissions).length > 1;
+}

@@ -109,6 +109,9 @@ import {
   type AllowlistSelection,
 } from "@/components/campaign-access/AllowlistPicker";
 import { PreviewEditor } from "@/components/campaign-access/PreviewEditor";
+import { AccessStep } from "@/components/campaign-access/AccessStep";
+import { RestrictedPreviewDialog } from "@/components/campaign-access/RestrictedPreviewDialog";
+import { SkipRequirementsSwitch } from "@/components/campaign-access/SkipRequirementsSwitch";
 import { ApplicationQuestionsEditor } from "@/components/campaign-access/ApplicationQuestionsEditor";
 import { questionsApi } from "@/components/campaign-access/api";
 import {
@@ -531,6 +534,14 @@ export default function CreateContestPage({
     ApplicationQuestion[]
   >([]);
   const [listOnlyToEligible, setListOnlyToEligible] = useState(false);
+  const hasCreatorRequirement =
+    trustScoreEnabled ||
+    trustNumberEnabled ||
+    bestQualityEnabled ||
+    avgQualityEnabled ||
+    minQualityEnabled ||
+    minEarningsEnabled ||
+    minViewsEnabled;
   const [contentType, setContentType] = useState<
     "ugc" | "clipping" | "other" | "" | "raid" | "awareness"
   >("");
@@ -11724,93 +11735,121 @@ export default function CreateContestPage({
                   </p>
                 </div>
                 <AccessModeSelector value={accessMode} onChange={setAccessMode} />
-                {accessMode === "public" &&
-                  isVideoContestFormat(contestFormat) &&
-                  (trustScoreEnabled ||
-                    trustNumberEnabled ||
-                    bestQualityEnabled ||
-                    avgQualityEnabled ||
-                    minQualityEnabled ||
-                    minEarningsEnabled ||
-                    minViewsEnabled) && (
-                    <div className="flex items-start gap-3 pt-2 border-t">
-                      <Checkbox
-                        id="listOnlyToEligible"
-                        checked={listOnlyToEligible}
-                        onCheckedChange={(checked: any) =>
-                          setListOnlyToEligible(Boolean(checked))
-                        }
+                {accessMode === "public" && isVideoContestFormat(contestFormat) && (
+                  <div className="flex items-start gap-3 pt-2 border-t">
+                    <Checkbox
+                      id="listOnlyToEligible"
+                      checked={hasCreatorRequirement && listOnlyToEligible}
+                      disabled={!hasCreatorRequirement}
+                      onCheckedChange={(checked: any) =>
+                        setListOnlyToEligible(Boolean(checked))
+                      }
+                      className={cn(
+                        "border h-5 w-5 mt-0.5",
+                        isDark ? "border-gray-300" : "border-gray-500",
+                      )}
+                    />
+                    <Label
+                      htmlFor="listOnlyToEligible"
+                      className={cn(
+                        "text-sm font-normal leading-snug",
+                        !hasCreatorRequirement && "opacity-60",
+                      )}
+                    >
+                      Only show this campaign to creators who meet the
+                      requirements
+                      <span
                         className={cn(
-                          "border h-5 w-5 mt-0.5",
-                          isDark ? "border-gray-300" : "border-gray-500",
+                          "block text-xs",
+                          isDark ? "text-gray-400" : "text-gray-500",
                         )}
-                      />
-                      <Label
-                        htmlFor="listOnlyToEligible"
-                        className="text-sm font-normal leading-snug"
                       >
-                        Only show this campaign to creators who meet the
-                        requirements
-                        <span
-                          className={cn(
-                            "block text-xs",
-                            isDark ? "text-gray-400" : "text-gray-500",
-                          )}
-                        >
-                          Other creators won&apos;t see it in Opportunities.
-                        </span>
-                      </Label>
-                    </div>
-                  )}
-                {accessMode === "restricted" && (
-                  <div className="space-y-4 pt-2 border-t">
-                    <PreviewEditor
-                      description={previewDescription}
-                      onDescriptionChange={setPreviewDescription}
-                      applicationsOpen={applicationsOpen}
-                      onApplicationsOpenChange={setApplicationsOpen}
-                    />
-                    <ApplicationQuestionsEditor
-                      questions={applicationQuestions}
-                      onChange={setApplicationQuestions}
-                    />
+                        {hasCreatorRequirement
+                          ? "Other creators won't see it in Opportunities."
+                          : "Turn on a requirement below to use this."}
+                      </span>
+                    </Label>
                   </div>
                 )}
-                {accessMode !== "public" && (
-                  <div className="space-y-4 pt-2 border-t">
-                    <AllowlistPicker
-                      value={allowlistSelection}
-                      onChange={setAllowlistSelection}
-                      advertiserId={isAdmin ? effectiveAdvertiserId : null}
-                    />
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        id="accessListSkipsRequirements"
-                        checked={accessListSkipsRequirements}
-                        onCheckedChange={(checked: any) =>
-                          setAccessListSkipsRequirements(Boolean(checked))
-                        }
-                        className={cn(
-                          "border h-5 w-5 mt-0.5",
-                          isDark ? "border-gray-300" : "border-gray-500",
-                        )}
+                {accessMode === "restricted" && (
+                  <div className="space-y-6 pt-4 border-t">
+                    <AccessStep
+                      step={1}
+                      title="Preview creators see"
+                      description="What everyone sees before you approve them."
+                      action={
+                        <RestrictedPreviewDialog
+                          title={title}
+                          thumbnailUrl={thumbnailPreview}
+                          platform={platform}
+                          startDate={startDate}
+                          endDate={endDate}
+                          description={previewDescription}
+                          applicationsOpen={applicationsOpen}
+                          questions={applicationQuestions}
+                        />
+                      }
+                    >
+                      <PreviewEditor
+                        description={previewDescription}
+                        onDescriptionChange={setPreviewDescription}
+                        applicationsOpen={applicationsOpen}
+                        onApplicationsOpenChange={setApplicationsOpen}
                       />
-                      <Label
-                        htmlFor="accessListSkipsRequirements"
-                        className="text-sm font-normal leading-snug"
-                      >
-                        Creators on the access list skip requirements
-                        <span
-                          className={cn(
-                            "block text-xs",
-                            isDark ? "text-gray-400" : "text-gray-500",
-                          )}
-                        >
-                          You can add more creators later from the
-                          campaign&apos;s Access tab.
-                        </span>
-                      </Label>
-                    </div>
+                    </AccessStep>
+                    <AccessStep
+                      step={2}
+                      title="Application questions"
+                      description="Optional. Creators answer these when they apply."
+                    >
+                      <ApplicationQuestionsEditor
+                        questions={applicationQuestions}
+                        onChange={setApplicationQuestions}
+                      />
+                    </AccessStep>
+                    <AccessStep
+                      step={3}
+                      title="Invite creators directly (optional)"
+                      description="They get access without applying."
+                    >
+                      <div className="space-y-4">
+                        <AllowlistPicker
+                          value={allowlistSelection}
+                          onChange={setAllowlistSelection}
+                          advertiserId={isAdmin ? effectiveAdvertiserId : null}
+                        />
+                        <SkipRequirementsSwitch
+                          checked={accessListSkipsRequirements}
+                          onCheckedChange={setAccessListSkipsRequirements}
+                          note="You can add more creators later from the campaign's Access tab."
+                        />
+                      </div>
+                    </AccessStep>
+                  </div>
+                )}
+                {accessMode === "private" && (
+                  <div className="space-y-6 pt-4 border-t">
+                    <AccessStep
+                      step={1}
+                      title="Add creators"
+                      description="Only these creators will see the campaign. You can add more later from the Access tab."
+                    >
+                      <AllowlistPicker
+                        value={allowlistSelection}
+                        onChange={setAllowlistSelection}
+                        advertiserId={isAdmin ? effectiveAdvertiserId : null}
+                      />
+                    </AccessStep>
+                    <AccessStep
+                      step={2}
+                      title="Requirements"
+                      description="Set requirements in the sections below, then choose whether they apply to the creators you add."
+                    >
+                      <SkipRequirementsSwitch
+                        checked={accessListSkipsRequirements}
+                        onCheckedChange={setAccessListSkipsRequirements}
+                      />
+                    </AccessStep>
                   </div>
                 )}
               </div>
