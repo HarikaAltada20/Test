@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Copy, Link2, Loader2, Plus } from "lucide-react";
+import { Check, CircleCheck, Copy, Link2, Loader2, Plus, RotateCcw, Share2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,10 +49,13 @@ import {
 } from "@/lib/campaign-access";
 import { inviteLinkApi } from "./api";
 import { InviteLinkStatusBadge } from "./AccessBadge";
+import { RelativeTime } from "./RelativeTime";
 import { InviteLinksSkeleton } from "./Skeletons";
 
 const fieldClass = "dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500";
 const outlineDark = "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
+
+const LABEL_SUGGESTIONS = ["Instagram bio", "Instagram story", "Email", "Discord"];
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 
@@ -67,10 +70,10 @@ function formatExpiry(link: InviteLink, now: Date): string {
   return `Expires in ${days} day${days === 1 ? "" : "s"}`;
 }
 
-function formatUses(link: InviteLink): string {
+function whoCanJoin(link: Pick<InviteLink, "max_uses">): string {
   return link.max_uses != null
-    ? `${link.use_count} / ${link.max_uses} joined`
-    : `${link.use_count} joined`;
+    ? `First ${link.max_uses.toLocaleString()} creator${link.max_uses === 1 ? "" : "s"}`
+    : "Anyone with the link";
 }
 
 /** Local end-of-day for a yyyy-mm-dd input value. */
@@ -87,6 +90,20 @@ async function copyText(text: string): Promise<boolean> {
     return false;
   }
 }
+
+function canShare(): boolean {
+  return typeof navigator !== "undefined" && typeof navigator.share === "function";
+}
+
+async function shareLink(url: string, label: string | null) {
+  try {
+    await navigator.share({ title: label || "Campaign invite", url });
+  } catch {
+    // Closing the share sheet rejects too; nothing to report.
+  }
+}
+
+type CreateTemplate = { label: string; maxUses: number | null };
 
 type Props = {
   contestId: string;
@@ -109,12 +126,17 @@ export function InviteLinksSection({
   const [loading, setLoading] = useState(true);
   const [showInactive, setShowInactive] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [template, setTemplate] = useState<CreateTemplate | null>(null);
+  const [created, setCreated] = useState<{ link: InviteLink; copied: boolean } | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<InviteLink | null>(null);
   const [revoking, setRevoking] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [shareSupported, setShareSupported] = useState(false);
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const now = new Date();
+
+  useEffect(() => setShareSupported(canShare()), []);
 
   const load = useCallback(async () => {
     try {
@@ -131,8 +153,13 @@ export function InviteLinksSection({
     load();
   }, [load]);
 
+  const openCreate = (from: CreateTemplate | null = null) => {
+    setTemplate(from);
+    setCreateOpen(true);
+  };
+
   useEffect(() => {
-    if (openCreateSignal > 0) setCreateOpen(true);
+    if (openCreateSignal > 0) openCreate();
   }, [openCreateSignal]);
 
   const { active, inactive } = useMemo(() => {
@@ -155,11 +182,8 @@ export function InviteLinksSection({
 
   const handleCreated = async (link: InviteLink) => {
     setLinks((prev) => [link, ...prev]);
-    const ok = await copyText(buildInviteUrl(link.token, origin));
-    toast({
-      title: ok ? "Invite link created and copied" : "Invite link created",
-      description: ok ? "Paste it anywhere to share." : "Use the Copy button to share it.",
-    });
+    const copied = await copyText(buildInviteUrl(link.token, origin));
+    setCreated({ link, copied });
   };
 
   const handleRevoke = async () => {
@@ -181,67 +205,127 @@ export function InviteLinksSection({
     }
   };
 
-  const renderRow = (link: InviteLink) => {
+  const renderCard = (link: InviteLink) => {
     const status = getInviteLinkStatus(link, now);
+    const isActive = status === "active";
     const url = buildInviteUrl(link.token, origin);
+    const name = link.label || "Untitled link";
+    const pct =
+      link.max_uses != null && link.max_uses > 0
+        ? Math.min(100, Math.round((link.use_count / link.max_uses) * 100))
+        : null;
     return (
       <li
         key={link.id}
         className={cn(
-          "flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between",
-          status !== "active" && "opacity-70",
+          "space-y-3 rounded-lg border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-white/5",
+          !isActive && "bg-gray-50 opacity-70 dark:bg-transparent",
         )}
       >
-        <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium text-gray-900 dark:text-white">{link.label || "Untitled link"}</span>
-            <InviteLinkStatusBadge status={status} />
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 space-y-0.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate font-medium text-gray-900 dark:text-white">{name}</span>
+              <InviteLinkStatusBadge status={status} />
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Created <RelativeTime value={link.created_at} /> · {formatExpiry(link, now)}
+            </p>
           </div>
-          <div className="truncate font-mono text-xs text-gray-500 dark:text-gray-400" title={url}>
+        </div>
+
+        <div className="flex items-center gap-2 rounded-md bg-gray-50 px-3 py-2 dark:bg-black/20">
+          <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-600 dark:text-gray-300" title={url}>
             {url}
+          </span>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+            <span className="flex items-center gap-1.5">
+              <Users className="h-3.5 w-3.5" aria-hidden="true" />
+              {link.max_uses != null
+                ? `${link.use_count} / ${link.max_uses.toLocaleString()} joined`
+                : `${link.use_count} joined`}
+            </span>
+            <span>{whoCanJoin(link)}</span>
           </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            {formatUses(link)} · {formatExpiry(link, now)}
-          </div>
+          {pct !== null && (
+            <div
+              className="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-white/10"
+              role="progressbar"
+              aria-label={`${name}: ${link.use_count} of ${link.max_uses} places used`}
+              aria-valuemin={0}
+              aria-valuemax={link.max_uses ?? 0}
+              aria-valuenow={link.use_count}
+            >
+              <div className="h-full rounded-full bg-[#7F39EC]" style={{ width: `${pct}%` }} />
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {isActive ? (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className={outlineDark}
+                aria-label={`Copy link ${name}`}
+                onClick={() => handleCopy(link)}
+              >
+                {copiedId === link.id ? (
+                  <Check className="mr-1.5 h-4 w-4 text-emerald-600" />
+                ) : (
+                  <Copy className="mr-1.5 h-4 w-4" />
+                )}
+                Copy
+              </Button>
+              {shareSupported && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className={outlineDark}
+                  aria-label={`Share link ${name}`}
+                  onClick={() => shareLink(url, link.label)}
+                >
+                  <Share2 className="mr-1.5 h-4 w-4" /> Share
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10"
+                onClick={() => setRevokeTarget(link)}
+              >
+                Revoke
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className={outlineDark}
+              onClick={() => openCreate({ label: link.label ?? "", maxUses: link.max_uses })}
+            >
+              <RotateCcw className="mr-1.5 h-4 w-4" /> Create a new link like this
+            </Button>
+          )}
           {onViewJoined && link.use_count > 0 && (
             <button
               type="button"
-              className="rounded-sm text-xs font-medium text-[#7F39EC] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:text-purple-300"
+              className="ml-auto rounded-sm text-xs font-medium text-[#7F39EC] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:text-purple-300"
               onClick={() => onViewJoined(link.id)}
             >
-              View {link.use_count} creator{link.use_count === 1 ? "" : "s"} who joined via this link
+              View {link.use_count} creator{link.use_count === 1 ? "" : "s"} who joined
             </button>
-          )}
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className={outlineDark}
-            aria-label={`Copy link ${link.label || "Untitled link"}`}
-            onClick={() => handleCopy(link)}
-          >
-            {copiedId === link.id ? (
-              <Check className="mr-1.5 h-4 w-4 text-emerald-600" />
-            ) : (
-              <Copy className="mr-1.5 h-4 w-4" />
-            )}
-            Copy
-          </Button>
-          {status === "active" && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10"
-              onClick={() => setRevokeTarget(link)}
-            >
-              Revoke
-            </Button>
           )}
         </div>
       </li>
     );
   };
+
+  const createdUrl = created ? buildInviteUrl(created.link.token, origin) : "";
 
   return (
     <div
@@ -260,19 +344,21 @@ export function InviteLinksSection({
             Share a link so creators can add themselves to this campaign.
           </p>
         </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
+        <Button size="sm" onClick={() => openCreate()}>
           <Plus className="mr-1.5 h-4 w-4" /> Create invite link
         </Button>
       </div>
 
       {loading ? (
         <InviteLinksSkeleton />
-      ) : links.length === 0 ? null : (
+      ) : links.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-500 dark:border-white/15 dark:text-gray-400">
+          No invite links yet. Create one for your bio, a story, an email or Discord.
+        </p>
+      ) : (
         <>
           {active.length > 0 ? (
-            <ul className="divide-y divide-gray-200 rounded-md border border-gray-200 dark:divide-white/10 dark:border-white/10">
-              {active.map(renderRow)}
-            </ul>
+            <ul className="grid gap-3 lg:grid-cols-2">{active.map(renderCard)}</ul>
           ) : (
             <p className="text-sm text-gray-500 dark:text-gray-400">No active links.</p>
           )}
@@ -284,15 +370,9 @@ export function InviteLinksSection({
                 className="rounded-sm text-sm font-medium text-[#7F39EC] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:text-purple-300"
                 onClick={() => setShowInactive((v) => !v)}
               >
-                {showInactive
-                  ? "Hide inactive links"
-                  : `Show ${inactive.length} inactive link${inactive.length === 1 ? "" : "s"}`}
+                {showInactive ? "Hide inactive links" : `Show inactive (${inactive.length})`}
               </button>
-              {showInactive && (
-                <ul className="divide-y divide-gray-200 rounded-md border border-gray-200 dark:divide-white/10 dark:border-white/10">
-                  {inactive.map(renderRow)}
-                </ul>
-              )}
+              {showInactive && <ul className="grid gap-3 lg:grid-cols-2">{inactive.map(renderCard)}</ul>}
             </div>
           )}
         </>
@@ -301,10 +381,57 @@ export function InviteLinksSection({
       <CreateInviteLinkDialog
         contestId={contestId}
         open={createOpen}
+        template={template}
         onOpenChange={setCreateOpen}
         onCreated={handleCreated}
         isDark={isDark}
       />
+
+      <Dialog isdark={isDark} open={!!created} onOpenChange={(o) => !o && setCreated(null)}>
+        <DialogContent className={cn("sm:max-w-md", isDark && "dark text-white")}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CircleCheck className="h-5 w-5 text-emerald-500" aria-hidden="true" /> Invite link ready
+            </DialogTitle>
+            <DialogDescription>
+              {created?.copied ? "It's copied to your clipboard. " : ""}Share it wherever your
+              creators are.
+            </DialogDescription>
+          </DialogHeader>
+          {created && (
+            <div className="space-y-3">
+              <Label htmlFor="created-invite-url" className="sr-only">
+                Invite link
+              </Label>
+              <Input
+                id="created-invite-url"
+                readOnly
+                autoFocus
+                value={createdUrl}
+                onFocus={(e) => e.currentTarget.select()}
+                className={cn("font-mono text-xs", fieldClass)}
+              />
+              <p className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:bg-white/5 dark:text-gray-300">
+                {whoCanJoin(created.link)} · {formatExpiry(created.link, new Date())}
+              </p>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            {shareSupported && created && (
+              <Button variant="outline" className={outlineDark} onClick={() => shareLink(createdUrl, created.link.label)}>
+                <Share2 className="mr-1.5 h-4 w-4" /> Share
+              </Button>
+            )}
+            <Button
+              onClick={async () => {
+                if (created && (await copyText(createdUrl))) toast({ title: "Link copied" });
+              }}
+            >
+              <Copy className="mr-1.5 h-4 w-4" /> Copy link
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!revokeTarget} onOpenChange={(open) => !open && setRevokeTarget(null)}>
         <AlertDialogContent className={cn(isDark && "dark border-white/10 bg-[#06021D] text-white")}>
@@ -340,12 +467,21 @@ export function InviteLinksSection({
 type DialogProps = {
   contestId: string;
   open: boolean;
+  /** Prefills the form, e.g. from "Create a new link like this". */
+  template: CreateTemplate | null;
   onOpenChange: (open: boolean) => void;
   onCreated: (link: InviteLink) => void;
   isDark: boolean;
 };
 
-function CreateInviteLinkDialog({ contestId, open, onOpenChange, onCreated, isDark }: DialogProps) {
+function CreateInviteLinkDialog({
+  contestId,
+  open,
+  template,
+  onOpenChange,
+  onCreated,
+  isDark,
+}: DialogProps) {
   const [label, setLabel] = useState("");
   const [expiry, setExpiry] = useState<InviteExpiryPreset>(DEFAULT_INVITE_EXPIRY);
   const [customDate, setCustomDate] = useState("");
@@ -355,13 +491,13 @@ function CreateInviteLinkDialog({ contestId, open, onOpenChange, onCreated, isDa
 
   useEffect(() => {
     if (open) {
-      setLabel("");
+      setLabel(template?.label ?? "");
       setExpiry(DEFAULT_INVITE_EXPIRY);
       setCustomDate("");
-      setLimitMode("unlimited");
-      setMaxUses("50");
+      setLimitMode(template?.maxUses != null ? "limited" : "unlimited");
+      setMaxUses(template?.maxUses != null ? String(template.maxUses) : "50");
     }
-  }, [open]);
+  }, [open, template]);
 
   const maxUsesNumber = Number(maxUses);
   const maxUsesValid =
@@ -421,7 +557,7 @@ function CreateInviteLinkDialog({ contestId, open, onOpenChange, onCreated, isDa
     <Dialog open={open} onOpenChange={onOpenChange} isdark={isDark}>
       <DialogContent className={cn("sm:max-w-md", isDark && "dark text-white")}>
         <DialogHeader>
-          <DialogTitle>Create invite link</DialogTitle>
+          <DialogTitle>{template ? "Create a new link like this" : "Create invite link"}</DialogTitle>
           <DialogDescription>
             Creators who open this link and sign in are added to the access list.
           </DialogDescription>
@@ -435,11 +571,29 @@ function CreateInviteLinkDialog({ contestId, open, onOpenChange, onCreated, isDa
             <Input
               id="invite-label"
               className={fieldClass}
-              placeholder="e.g. Instagram story"
+              placeholder="Where you'll share it"
               maxLength={MAX_INVITE_LABEL_LENGTH}
               value={label}
               onChange={(e) => setLabel(e.target.value)}
             />
+            <div role="group" aria-label="Suggested labels" className="flex flex-wrap gap-1.5">
+              {LABEL_SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  aria-pressed={label === s}
+                  onClick={() => setLabel(s)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-0.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]",
+                    label === s
+                      ? "border-[#7F39EC] bg-[#7F39EC] text-white"
+                      : "border-gray-200 text-gray-600 hover:border-[#7F39EC]/60 dark:border-white/15 dark:text-gray-300",
+                  )}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="space-y-1.5">
