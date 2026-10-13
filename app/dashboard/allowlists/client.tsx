@@ -397,6 +397,8 @@ export default function AllowlistsClient() {
       <Sheet open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>
         <SheetContent
           side="right"
+          // Focus the panel, not the first date, so its tooltip doesn't pop open.
+          onOpenAutoFocus={(e) => e.preventDefault()}
           className={cn("flex w-full flex-col gap-0 p-0 sm:max-w-lg", isDark && "dark border-white/10 bg-[#06021D] text-white")}
         >
           {selected && (

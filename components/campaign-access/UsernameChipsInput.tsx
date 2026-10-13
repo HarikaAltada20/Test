@@ -59,12 +59,9 @@ export function UsernameChipsInput({
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" || e.key === "," || e.key === " " || e.key === ";") {
-      if (draft.trim()) {
-        e.preventDefault();
-        commit(draft);
-      } else if (e.key !== "Enter") {
-        e.preventDefault();
-      }
+      // Never let Enter submit a surrounding form (e.g. the campaign editor).
+      e.preventDefault();
+      if (draft.trim()) commit(draft);
     } else if (e.key === "Backspace" && !draft && value.length > 0) {
       onChange(value.slice(0, -1));
     }
