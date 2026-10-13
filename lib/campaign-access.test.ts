@@ -20,6 +20,9 @@ import {
   parseUsernames,
   resolveInviteExpiry,
   validateCampaignAccessFields,
+  applicationDisplayStatus,
+  creatorInitials,
+  formatAddResultSummary,
 } from "./campaign-access";
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
@@ -379,5 +382,52 @@ describe("isUuid", () => {
     assert.equal(isUuid(" 6f1c2b9e-1d2a-4c3b-9e8f-0a1b2c3d4e5f"), false);
     assert.equal(isUuid(null), false);
     assert.equal(isUuid(42), false);
+  });
+});
+
+describe("formatAddResultSummary", () => {
+  it("keeps the line short and counts failures instead of listing them", () => {
+    assert.equal(
+      formatAddResultSummary({ added: 12, alreadyOnList: 2, notFound: ["a", "b", "c"], invalid: ["!x"] }),
+      "Added 12 creators · 2 already had access · 3 not found · 1 invalid",
+    );
+  });
+
+  it("uses the singular and skips empty parts", () => {
+    assert.equal(formatAddResultSummary({ added: 1, alreadyOnList: 0, notFound: [] }), "Added 1 creator");
+  });
+
+  it("accepts a custom label for creators already present", () => {
+    assert.equal(
+      formatAddResultSummary({ added: 0, alreadyOnList: 3 }, "already on the list"),
+      "Added 0 creators · 3 already on the list",
+    );
+  });
+});
+
+describe("creatorInitials", () => {
+  it("uses first and last name initials", () => {
+    assert.equal(creatorInitials("Vishesh Kumar Gupta", "vish"), "VG");
+  });
+
+  it("uses two letters of a single name", () => {
+    assert.equal(creatorInitials("Madonna", null), "MA");
+  });
+
+  it("falls back to the username, then a question mark", () => {
+    assert.equal(creatorInitials(null, "@creator_one"), "CR");
+    assert.equal(creatorInitials("  ", ""), "?");
+  });
+});
+
+describe("applicationDisplayStatus", () => {
+  it("marks approved creators who left the access list as access removed", () => {
+    assert.equal(applicationDisplayStatus({ status: "approved", on_access_list: false }), "access_removed");
+  });
+
+  it("keeps other statuses as they are", () => {
+    assert.equal(applicationDisplayStatus({ status: "approved", on_access_list: true }), "approved");
+    assert.equal(applicationDisplayStatus({ status: "approved" }), "approved");
+    assert.equal(applicationDisplayStatus({ status: "rejected", on_access_list: false }), "rejected");
   });
 });

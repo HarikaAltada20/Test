@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Copy, Link2, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -33,6 +32,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
+import { useDashboardDark } from "@/hooks/use-dashboard-dark";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_INVITE_EXPIRY,
@@ -46,16 +46,13 @@ import {
   type InviteCustomExpiry,
   type InviteExpiryPreset,
   type InviteLink,
-  type InviteLinkStatus,
 } from "@/lib/campaign-access";
 import { inviteLinkApi } from "./api";
+import { InviteLinkStatusBadge } from "./AccessBadge";
+import { InviteLinksSkeleton } from "./Skeletons";
 
-const STATUS_STYLES: Record<InviteLinkStatus, { label: string; className: string }> = {
-  active: { label: "Active", className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
-  full: { label: "Full", className: "border-gray-200 bg-gray-100 text-gray-600" },
-  expired: { label: "Expired", className: "border-gray-200 bg-gray-100 text-gray-600" },
-  revoked: { label: "Revoked", className: "border-gray-200 bg-gray-100 text-gray-600" },
-};
+const fieldClass = "dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500";
+const outlineDark = "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 
@@ -91,9 +88,14 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-type Props = { contestId: string };
+type Props = {
+  contestId: string;
+  /** Opens the create dialog each time this number increases. */
+  openCreateSignal?: number;
+};
 
-export function InviteLinksSection({ contestId }: Props) {
+export function InviteLinksSection({ contestId, openCreateSignal = 0 }: Props) {
+  const isDark = useDashboardDark();
   const [links, setLinks] = useState<InviteLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInactive, setShowInactive] = useState(false);
@@ -119,6 +121,10 @@ export function InviteLinksSection({ contestId }: Props) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (openCreateSignal > 0) setCreateOpen(true);
+  }, [openCreateSignal]);
 
   const { active, inactive } = useMemo(() => {
     const a: InviteLink[] = [];
@@ -168,7 +174,6 @@ export function InviteLinksSection({ contestId }: Props) {
 
   const renderRow = (link: InviteLink) => {
     const status = getInviteLinkStatus(link, now);
-    const style = STATUS_STYLES[status];
     const url = buildInviteUrl(link.token, origin);
     return (
       <li
@@ -180,20 +185,24 @@ export function InviteLinksSection({ contestId }: Props) {
       >
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium text-gray-900">{link.label || "Untitled link"}</span>
-            <Badge variant="outline" className={cn("text-xs", style.className)}>
-              {style.label}
-            </Badge>
+            <span className="font-medium text-gray-900 dark:text-white">{link.label || "Untitled link"}</span>
+            <InviteLinkStatusBadge status={status} />
           </div>
-          <div className="truncate font-mono text-xs text-gray-500" title={url}>
+          <div className="truncate font-mono text-xs text-gray-500 dark:text-gray-400" title={url}>
             {url}
           </div>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-gray-500 dark:text-gray-400">
             {formatUses(link)} · {formatExpiry(link, now)}
           </div>
         </div>
         <div className="flex shrink-0 gap-2">
-          <Button size="sm" variant="outline" onClick={() => handleCopy(link)}>
+          <Button
+            size="sm"
+            variant="outline"
+            className={outlineDark}
+            aria-label={`Copy link ${link.label || "Untitled link"}`}
+            onClick={() => handleCopy(link)}
+          >
             {copiedId === link.id ? (
               <Check className="mr-1.5 h-4 w-4 text-emerald-600" />
             ) : (
@@ -205,7 +214,7 @@ export function InviteLinksSection({ contestId }: Props) {
             <Button
               size="sm"
               variant="ghost"
-              className="text-red-600 hover:bg-red-50 hover:text-red-700"
+              className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10"
               onClick={() => setRevokeTarget(link)}
             >
               Revoke
@@ -217,13 +226,13 @@ export function InviteLinksSection({ contestId }: Props) {
   };
 
   return (
-    <div className="space-y-3 rounded-md border border-gray-200 p-4">
+    <div className={cn("space-y-3 rounded-md border border-gray-200 p-4 dark:border-white/10", isDark && "dark")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h4 className="flex items-center gap-2 font-medium text-gray-900">
-            <Link2 className="h-4 w-4" /> Invite links
+          <h4 className="flex items-center gap-2 font-medium text-gray-900 dark:text-white">
+            <Link2 className="h-4 w-4" aria-hidden="true" /> Invite links
           </h4>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             Share a link so creators can add themselves to this campaign.
           </p>
         </div>
@@ -233,23 +242,22 @@ export function InviteLinksSection({ contestId }: Props) {
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 py-2 text-sm text-gray-500">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading links…
-        </div>
+        <InviteLinksSkeleton />
       ) : links.length === 0 ? null : (
         <>
           {active.length > 0 ? (
-            <ul className="divide-y divide-gray-200 rounded-md border border-gray-200">
+            <ul className="divide-y divide-gray-200 rounded-md border border-gray-200 dark:divide-white/10 dark:border-white/10">
               {active.map(renderRow)}
             </ul>
           ) : (
-            <p className="text-sm text-gray-500">No active links.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">No active links.</p>
           )}
           {inactive.length > 0 && (
             <div className="space-y-2">
               <button
                 type="button"
-                className="text-sm font-medium text-[#7F39EC] hover:underline"
+                aria-expanded={showInactive}
+                className="rounded-sm text-sm font-medium text-[#7F39EC] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:text-purple-300"
                 onClick={() => setShowInactive((v) => !v)}
               >
                 {showInactive
@@ -257,7 +265,7 @@ export function InviteLinksSection({ contestId }: Props) {
                   : `Show ${inactive.length} inactive link${inactive.length === 1 ? "" : "s"}`}
               </button>
               {showInactive && (
-                <ul className="divide-y divide-gray-200 rounded-md border border-gray-200">
+                <ul className="divide-y divide-gray-200 rounded-md border border-gray-200 dark:divide-white/10 dark:border-white/10">
                   {inactive.map(renderRow)}
                 </ul>
               )}
@@ -271,10 +279,11 @@ export function InviteLinksSection({ contestId }: Props) {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={handleCreated}
+        isDark={isDark}
       />
 
       <AlertDialog open={!!revokeTarget} onOpenChange={(open) => !open && setRevokeTarget(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className={cn(isDark && "dark border-white/10 bg-[#06021D] text-white")}>
           <AlertDialogHeader>
             <AlertDialogTitle>Revoke this invite link?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -283,7 +292,9 @@ export function InviteLinksSection({ contestId }: Props) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={revoking}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={revoking} className={outlineDark}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               disabled={revoking}
               className="bg-red-600 hover:bg-red-700"
@@ -307,9 +318,10 @@ type DialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (link: InviteLink) => void;
+  isDark: boolean;
 };
 
-function CreateInviteLinkDialog({ contestId, open, onOpenChange, onCreated }: DialogProps) {
+function CreateInviteLinkDialog({ contestId, open, onOpenChange, onCreated, isDark }: DialogProps) {
   const [label, setLabel] = useState("");
   const [expiry, setExpiry] = useState<InviteExpiryPreset>(DEFAULT_INVITE_EXPIRY);
   const [customDate, setCustomDate] = useState("");
@@ -382,8 +394,8 @@ function CreateInviteLinkDialog({ contestId, open, onOpenChange, onCreated }: Di
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={onOpenChange} isdark={isDark}>
+      <DialogContent className={cn("sm:max-w-md", isDark && "dark text-white")}>
         <DialogHeader>
           <DialogTitle>Create invite link</DialogTitle>
           <DialogDescription>
@@ -394,10 +406,11 @@ function CreateInviteLinkDialog({ contestId, open, onOpenChange, onCreated }: Di
         <div className="space-y-5">
           <div className="space-y-1.5">
             <Label htmlFor="invite-label">
-              Label <span className="font-normal text-gray-400">(optional)</span>
+              Label <span className="font-normal text-gray-400 dark:text-gray-500">(optional)</span>
             </Label>
             <Input
               id="invite-label"
+              className={fieldClass}
               placeholder="e.g. Instagram story"
               maxLength={MAX_INVITE_LABEL_LENGTH}
               value={label}
@@ -406,14 +419,14 @@ function CreateInviteLinkDialog({ contestId, open, onOpenChange, onCreated }: Di
           </div>
 
           <div className="space-y-1.5">
-            <Label>Expires</Label>
+            <Label htmlFor="invite-expiry">Expires</Label>
             <Select value={expiry} onValueChange={(v) => setExpiry(v as InviteExpiryPreset)}>
-              <SelectTrigger>
+              <SelectTrigger id="invite-expiry" isDark={isDark}>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent isDark={isDark}>
                 {INVITE_EXPIRY_PRESETS.map((p) => (
-                  <SelectItem key={p.value} value={p.value}>
+                  <SelectItem key={p.value} value={p.value} isDark={isDark}>
                     {p.label}
                   </SelectItem>
                 ))}
@@ -423,12 +436,13 @@ function CreateInviteLinkDialog({ contestId, open, onOpenChange, onCreated }: Di
               <Input
                 type="date"
                 aria-label="Expiry date"
+                className={fieldClass}
                 min={earliestInviteExpiryDate()}
                 value={customDate}
                 onChange={(e) => setCustomDate(e.target.value)}
               />
             )}
-            {expiryError && <p className="text-xs text-red-600">{expiryError}</p>}
+            {expiryError && <p className="text-xs text-red-600 dark:text-red-400">{expiryError}</p>}
           </div>
 
           <div className="space-y-2">
@@ -450,7 +464,7 @@ function CreateInviteLinkDialog({ contestId, open, onOpenChange, onCreated }: Di
                   inputMode="numeric"
                   min={1}
                   max={MAX_INVITE_USES}
-                  className="h-8 w-24"
+                  className={cn("h-8 w-24", fieldClass)}
                   value={maxUses}
                   onFocus={() => setLimitMode("limited")}
                   onChange={(e) => setMaxUses(e.target.value)}
@@ -460,17 +474,22 @@ function CreateInviteLinkDialog({ contestId, open, onOpenChange, onCreated }: Di
               </label>
             </RadioGroup>
             {!maxUsesValid && (
-              <p className="text-xs text-red-600">
+              <p className="text-xs text-red-600 dark:text-red-400">
                 Enter a whole number between 1 and {MAX_INVITE_USES.toLocaleString()}.
               </p>
             )}
           </div>
 
-          <p className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-600">{summary}</p>
+          <p className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:bg-white/5 dark:text-gray-300">{summary}</p>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+          <Button
+            variant="outline"
+            className={outlineDark}
+            onClick={() => onOpenChange(false)}
+            disabled={submitting}
+          >
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={!canSubmit}>

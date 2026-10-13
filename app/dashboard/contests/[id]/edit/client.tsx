@@ -75,6 +75,16 @@ import { createClient } from "@/utils/supabase/client";
 import { UserResponse } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 import { AccessModeSelector } from "@/components/campaign-access/AccessModeSelector";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { invalidateBrandCampaignListCachesAfterMutation } from "@/lib/invalidate-brand-campaign-list-cache";
 import { PreviewEditor } from "@/components/campaign-access/PreviewEditor";
 import { ApplicationQuestionsEditor } from "@/components/campaign-access/ApplicationQuestionsEditor";
@@ -819,6 +829,11 @@ export default function EditContestPage({
   >("other");
   const [accessMode, setAccessMode] = useState<AccessMode>("public");
   const [savedAccessMode, setSavedAccessMode] = useState<AccessMode>("public");
+  // Mode switch waiting for the brand to confirm, with the campaign's submission count.
+  const [pendingAccessMode, setPendingAccessMode] = useState<{
+    mode: AccessMode;
+    submissions: number;
+  } | null>(null);
   const [accessListSkipsRequirements, setAccessListSkipsRequirements] =
     useState(false);
   const [savedSkipRequirements, setSavedSkipRequirements] = useState(false);
@@ -9913,18 +9928,78 @@ export default function EditContestPage({
                         .from("submissions")
                         .select("id", { count: "exact", head: true })
                         .eq("contest_id", contestId);
-                      if (
-                        (count ?? 0) > 0 &&
-                        !window.confirm(
-                          `This campaign has ${count} submission${count === 1 ? "" : "s"}. Creators who already submitted will be added to the access list and keep access. Continue?`,
-                        )
-                      ) {
+                      if ((count ?? 0) > 0) {
+                        setPendingAccessMode({ mode: next, submissions: count ?? 0 });
                         return;
                       }
                     }
                     setAccessMode(next);
                   }}
                 />
+                <AlertDialog
+                  open={!!pendingAccessMode}
+                  onOpenChange={(open) => !open && setPendingAccessMode(null)}
+                >
+                  <AlertDialogContent
+                    className={cn(
+                      isDark && "border-white/10 bg-[#06021D] text-white",
+                    )}
+                  >
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        Make this campaign{" "}
+                        {pendingAccessMode?.mode === "restricted"
+                          ? "Restricted"
+                          : "Private"}
+                        ?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription asChild>
+                        <div
+                          className={cn(
+                            "space-y-2 text-sm",
+                            isDark ? "text-gray-300" : "text-gray-600",
+                          )}
+                        >
+                          <p>
+                            {pendingAccessMode?.mode === "restricted"
+                              ? "Everyone will see a preview. New creators apply and you choose who joins."
+                              : "Only creators on the access list will see this campaign."}
+                          </p>
+                          <p>
+                            This campaign has {pendingAccessMode?.submissions}{" "}
+                            submission
+                            {pendingAccessMode?.submissions === 1 ? "" : "s"}.
+                            Creators who already submitted are added to the
+                            access list and keep access.
+                          </p>
+                          <p>The change applies when you save the campaign.</p>
+                        </div>
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel
+                        className={cn(
+                          isDark &&
+                            "border-white/15 bg-transparent text-gray-200 hover:bg-white/10",
+                        )}
+                      >
+                        Keep Public
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-[#7F39EC] text-white hover:bg-[#7F39EC]/90"
+                        onClick={() => {
+                          if (pendingAccessMode) setAccessMode(pendingAccessMode.mode);
+                          setPendingAccessMode(null);
+                        }}
+                      >
+                        Switch to{" "}
+                        {pendingAccessMode?.mode === "restricted"
+                          ? "Restricted"
+                          : "Private"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
                 {accessMode === "public" &&
                   isVideoContestFormat(contest?.contest_format) && (
                     <div className="flex items-start gap-3 pt-2 border-t">

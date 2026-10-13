@@ -613,3 +613,50 @@ export function isCampaignAccessNotificationType(
 export function isApplicationResult(value: unknown): value is ApplicationResult {
   return typeof value === "string" && value in APPLICATION_RESULT_MESSAGES;
 }
+
+// ---------------------------------------------------------------------------
+// Shared UI helpers
+// ---------------------------------------------------------------------------
+
+/** Status shown for an application; "access_removed" is approved but no longer on the list. */
+export type ApplicationDisplayStatus = ApplicationStatus | "access_removed";
+
+export function applicationDisplayStatus(app: {
+  status: ApplicationStatus;
+  on_access_list?: boolean;
+}): ApplicationDisplayStatus {
+  return app.status === "approved" && app.on_access_list === false ? "access_removed" : app.status;
+}
+
+export const APPLICATION_DISPLAY_STATUS_LABELS: Record<ApplicationDisplayStatus, string> = {
+  ...APPLICATION_STATUS_LABELS,
+  access_removed: "Access removed",
+};
+
+/** Up to two initials from a full name, falling back to the username. */
+export function creatorInitials(fullName?: string | null, username?: string | null): string {
+  const words = (fullName ?? "").trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  const handle = (username ?? "").replace(/^@/, "").trim();
+  return handle ? handle.slice(0, 2).toUpperCase() : "?";
+}
+
+function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * One-line result of adding usernames, e.g. "Added 12 creators · 2 already had access · 3 not found".
+ * Failed names are listed separately in the UI, not in this line.
+ */
+export function formatAddResultSummary(
+  result: { added: number; alreadyOnList?: number; notFound?: string[]; invalid?: string[] },
+  alreadyLabel = "already had access",
+): string {
+  const parts = [`Added ${plural(result.added, "creator")}`];
+  if (result.alreadyOnList) parts.push(`${result.alreadyOnList} ${alreadyLabel}`);
+  if (result.notFound?.length) parts.push(`${result.notFound.length} not found`);
+  if (result.invalid?.length) parts.push(`${result.invalid.length} invalid`);
+  return parts.join(" · ");
+}

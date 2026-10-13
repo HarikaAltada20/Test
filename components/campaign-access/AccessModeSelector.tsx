@@ -5,6 +5,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { SELECTABLE_ACCESS_MODES, type AccessMode } from "@/lib/campaign-access";
+import { useDashboardDark } from "@/hooks/use-dashboard-dark";
 
 const OPTIONS: {
   value: AccessMode;
@@ -39,11 +40,13 @@ type Props = {
 };
 
 export function AccessModeSelector({ value, onChange, disabled }: Props) {
+  const isDark = useDashboardDark();
   return (
     <RadioGroup
       value={value}
       onValueChange={(v) => onChange(v as AccessMode)}
-      className="grid gap-3 md:grid-cols-3"
+      aria-label="Who can see this campaign"
+      className={cn("grid gap-3 md:grid-cols-3", isDark && "dark")}
       disabled={disabled}
     >
       {OPTIONS.map((opt) => {
@@ -55,10 +58,10 @@ export function AccessModeSelector({ value, onChange, disabled }: Props) {
             key={opt.value}
             htmlFor={id}
             className={cn(
-              "flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
+              "flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors focus-within:ring-2 focus-within:ring-[#7F39EC] focus-within:ring-offset-1 dark:focus-within:ring-offset-transparent",
               value === opt.value
-                ? "border-[#7F39EC] bg-purple-50/60"
-                : "border-gray-200 hover:border-purple-300",
+                ? "border-[#7F39EC] bg-purple-50/60 dark:bg-[#7F39EC]/20"
+                : "border-gray-200 hover:border-purple-300 dark:border-white/10 dark:hover:border-[#7F39EC]/60",
               (!selectable || disabled) && "cursor-not-allowed opacity-60",
             )}
           >
@@ -69,11 +72,11 @@ export function AccessModeSelector({ value, onChange, disabled }: Props) {
               className="mt-0.5 shrink-0"
             />
             <div className="space-y-1">
-              <div className="flex items-center gap-2 font-medium text-gray-900">
-                <Icon className="h-4 w-4" />
+              <div className="flex items-center gap-2 font-medium text-gray-900 dark:text-white">
+                <Icon className="h-4 w-4" aria-hidden="true" />
                 {opt.title}
               </div>
-              <p className="text-xs font-normal leading-snug text-gray-500">
+              <p className="text-xs font-normal leading-snug text-gray-500 dark:text-gray-400">
                 {opt.description}
               </p>
             </div>

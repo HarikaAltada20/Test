@@ -1,7 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, ClipboardList, Loader2, Search, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ClipboardList,
+  Inbox,
+  Link2,
+  Loader2,
+  Search,
+  SearchX,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -15,27 +26,27 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
+import { useDashboardDark } from "@/hooks/use-dashboard-dark";
 import { cn } from "@/lib/utils";
 import {
   APPLICATION_STATUSES,
   APPLICATION_STATUS_LABELS,
   MAX_REJECTION_REASON_LENGTH,
+  applicationDisplayStatus,
   clampPage,
   type ApplicationStatus,
   type ContestApplication,
 } from "@/lib/campaign-access";
 import { applicationsApi, type ApplicationListResponse } from "./api";
+import { ApplicationStatusBadge } from "./AccessBadge";
+import { CreatorAvatar } from "./CreatorAvatar";
+import { EmptyState } from "./EmptyState";
+import { RelativeTime } from "./RelativeTime";
+import { ApplicationRowsSkeleton } from "./Skeletons";
 
 type Props = { contestId: string };
 
 const PAGE_SIZE = 50;
-
-const STATUS_BADGE: Record<ApplicationStatus, string> = {
-  pending: "bg-amber-50 text-amber-700 border-amber-200",
-  approved: "bg-green-50 text-green-700 border-green-200",
-  rejected: "bg-red-50 text-red-700 border-red-200",
-  withdrawn: "bg-gray-100 text-gray-600 border-gray-200",
-};
 
 function AnswerValue({ kind, answer }: { kind: string; answer: string }) {
   if (kind === "url") {
@@ -44,7 +55,7 @@ function AnswerValue({ kind, answer }: { kind: string; answer: string }) {
         href={answer}
         target="_blank"
         rel="noopener noreferrer nofollow"
-        className="break-all text-[#7F39EC] underline"
+        className="break-all text-[#7F39EC] underline dark:text-purple-300"
       >
         {answer}
       </a>
@@ -55,6 +66,7 @@ function AnswerValue({ kind, answer }: { kind: string; answer: string }) {
 }
 
 export function ApplicationsPanel({ contestId }: Props) {
+  const isDark = useDashboardDark();
   const [status, setStatus] = useState<ApplicationStatus>("pending");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -143,9 +155,21 @@ export function ApplicationsPanel({ contestId }: Props) {
     }
   };
 
+  const copyCampaignLink = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        `${window.location.origin}/dashboard/opportunities/${contestId}`,
+      );
+      toast({ title: "Campaign link copied" });
+    } catch {
+      toast({ title: "Couldn't copy the link", variant: "destructive" });
+    }
+  };
+
   const applications = data?.applications ?? [];
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const hasAnyApplications = Object.values(data?.counts ?? {}).some((n) => n > 0);
   const needsReapprove = (a: ContestApplication) => a.status === "approved" && !a.on_access_list;
   const canApprove = (a: ContestApplication) =>
     a.status === "pending" || a.status === "rejected" || needsReapprove(a);
@@ -161,27 +185,32 @@ export function ApplicationsPanel({ contestId }: Props) {
     return next;
   };
 
+  const outlineDark = "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
+
   return (
-    <div className="space-y-5">
+    <div className={cn("space-y-5", isDark && "dark")}>
       <div>
-        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-          <ClipboardList className="h-4 w-4" /> Applications
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
+          <ClipboardList className="h-4 w-4" aria-hidden="true" /> Applications
         </h3>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-gray-500 dark:text-gray-400">
           Approving a creator adds them to this campaign&apos;s access list so they can see the
           full campaign and submit.
         </p>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
           {APPLICATION_STATUSES.map((s) => (
             <Button
               key={s}
               type="button"
               size="sm"
               variant={status === s ? "default" : "outline"}
-              className={cn(status === s && "bg-[#7F39EC] hover:bg-[#7F39EC]/90")}
+              aria-pressed={status === s}
+              className={cn(
+                status === s ? "bg-[#7F39EC] hover:bg-[#7F39EC]/90" : outlineDark,
+              )}
               onClick={() => {
                 setStatus(s);
                 setPage(1);
@@ -191,11 +220,15 @@ export function ApplicationsPanel({ contestId }: Props) {
             </Button>
           ))}
         </div>
-        <div className="relative w-64">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+        <div className="relative w-full sm:w-64">
+          <Search
+            className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+            aria-hidden="true"
+          />
           <Input
-            className="pl-8"
+            className="h-10 pl-8 dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
             placeholder="Search username"
+            aria-label="Search applications by username"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
           />
@@ -203,7 +236,7 @@ export function ApplicationsPanel({ contestId }: Props) {
       </div>
 
       {selectedApps.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-purple-200 bg-purple-50/60 p-3 text-sm">
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-purple-200 bg-purple-50/60 p-3 text-sm dark:border-[#7F39EC]/40 dark:bg-[#7F39EC]/15 dark:text-gray-100">
           <span className="font-medium">{selectedApps.length} selected</span>
           <Button
             size="sm"
@@ -215,6 +248,7 @@ export function ApplicationsPanel({ contestId }: Props) {
           <Button
             size="sm"
             variant="outline"
+            className={outlineDark}
             disabled={!!busy || !selectedApps.some(canReject)}
             onClick={() => setRejectIds(selectedApps.filter(canReject).map((a) => a.id))}
           >
@@ -223,8 +257,8 @@ export function ApplicationsPanel({ contestId }: Props) {
         </div>
       )}
 
-      <div className="divide-y rounded-md border border-gray-200">
-        <div className="flex items-center gap-3 bg-gray-50 px-4 py-2 text-xs font-medium text-gray-500">
+      <div className="divide-y divide-gray-200 rounded-md border border-gray-200 dark:divide-white/10 dark:border-white/10">
+        <div className="flex items-center gap-3 bg-gray-50 px-4 py-2 text-xs font-medium text-gray-500 dark:bg-white/5 dark:text-gray-400">
           <Checkbox
             aria-label="Select all"
             checked={allSelected}
@@ -234,24 +268,45 @@ export function ApplicationsPanel({ contestId }: Props) {
             }
           />
           <span className="flex-1">Creator</span>
-          <span className="w-28">Applied</span>
-          <span className="w-24">Status</span>
-          <span className="w-44 text-right">Actions</span>
+          <span className="hidden w-28 sm:block">Applied</span>
+          <span className="hidden w-28 sm:block">Status</span>
+          <span className="w-auto text-right sm:w-44">Actions</span>
         </div>
 
         {loading ? (
-          <div className="flex items-center gap-2 p-6 text-sm text-gray-500">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading applications…
-          </div>
+          <ApplicationRowsSkeleton />
         ) : applications.length === 0 ? (
-          <div className="p-8 text-center text-sm text-gray-500">
-            {search
-              ? "No applications match that username."
-              : `No ${APPLICATION_STATUS_LABELS[status].toLowerCase()} applications.`}
-          </div>
+          search ? (
+            <EmptyState
+              icon={SearchX}
+              title="No applications match that username"
+              actions={
+                <Button size="sm" variant="outline" className={outlineDark} onClick={() => setSearchInput("")}>
+                  Clear search
+                </Button>
+              }
+            />
+          ) : !hasAnyApplications ? (
+            <EmptyState
+              icon={Inbox}
+              title="No applications yet"
+              description="Share the campaign link so creators can find it and apply."
+              actions={
+                <Button size="sm" onClick={copyCampaignLink}>
+                  <Link2 className="mr-1.5 h-4 w-4" /> Copy campaign link
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              icon={Inbox}
+              title={`No ${APPLICATION_STATUS_LABELS[status].toLowerCase()} applications`}
+            />
+          )
         ) : (
           applications.map((a) => {
             const isOpen = expanded.has(a.id);
+            const panelId = `application-${a.id}-answers`;
             return (
               <div key={a.id} className="px-4 py-3">
                 <div className="flex items-center gap-3">
@@ -263,51 +318,42 @@ export function ApplicationsPanel({ contestId }: Props) {
                   />
                   <button
                     type="button"
-                    className="flex flex-1 items-center gap-2 text-left"
+                    aria-expanded={isOpen}
+                    aria-controls={panelId}
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]"
                     onClick={() => setExpanded((s) => toggle(s, a.id))}
                   >
                     {isOpen ? (
-                      <ChevronDown className="h-4 w-4 text-gray-400" />
+                      <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
                     ) : (
-                      <ChevronRight className="h-4 w-4 text-gray-400" />
+                      <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
                     )}
-                    {a.profile_picture_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={a.profile_picture_url}
-                        alt=""
-                        className="h-8 w-8 rounded-full object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-100 text-xs font-semibold text-purple-700">
-                        {(a.username ?? "?").slice(0, 1).toUpperCase()}
+                    <CreatorAvatar
+                      username={a.username}
+                      fullName={a.full_name}
+                      src={a.profile_picture_url}
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium text-gray-900 dark:text-white">
+                        @{a.username ?? "unknown"}
                       </span>
-                    )}
-                    <span>
-                      <span className="block font-medium">@{a.username ?? "unknown"}</span>
                       {a.full_name && (
-                        <span className="block text-xs text-gray-500">{a.full_name}</span>
+                        <span className="block truncate text-xs text-gray-500 dark:text-gray-400">
+                          {a.full_name}
+                        </span>
                       )}
+                      <span className="mt-1 flex items-center gap-2 sm:hidden">
+                        <ApplicationStatusBadge status={applicationDisplayStatus(a)} />
+                      </span>
                     </span>
                   </button>
-                  <span className="w-28 text-sm text-gray-600">
-                    {new Date(a.created_at).toLocaleDateString()}
+                  <span className="hidden w-28 text-sm text-gray-600 dark:text-gray-300 sm:block">
+                    <RelativeTime value={a.created_at} />
                   </span>
-                  <span className="w-24">
-                    <span
-                      className={cn(
-                        "inline-block rounded-full border px-2 py-0.5 text-xs font-medium",
-                        STATUS_BADGE[a.status],
-                      )}
-                    >
-                      {APPLICATION_STATUS_LABELS[a.status]}
-                    </span>
-                    {needsReapprove(a) && (
-                      <span className="mt-1 block text-[11px] text-gray-500">Access removed</span>
-                    )}
+                  <span className="hidden w-28 sm:block">
+                    <ApplicationStatusBadge status={applicationDisplayStatus(a)} />
                   </span>
-                  <span className="flex w-44 justify-end gap-2">
+                  <span className="flex shrink-0 flex-col justify-end gap-2 sm:w-44 sm:flex-row">
                     {canApprove(a) && (
                       <Button
                         size="sm"
@@ -327,6 +373,7 @@ export function ApplicationsPanel({ contestId }: Props) {
                       <Button
                         size="sm"
                         variant="outline"
+                        className={outlineDark}
                         disabled={!!busy}
                         onClick={() => setRejectIds([a.id])}
                       >
@@ -337,21 +384,29 @@ export function ApplicationsPanel({ contestId }: Props) {
                 </div>
 
                 {isOpen && (
-                  <div className="mt-3 space-y-3 rounded-md bg-gray-50 p-3 pl-12 text-sm">
+                  <div
+                    id={panelId}
+                    className="mt-3 space-y-3 rounded-md bg-gray-50 p-3 text-sm sm:pl-12 dark:bg-white/5"
+                  >
+                    <p className="text-xs text-gray-500 dark:text-gray-400 sm:hidden">
+                      <RelativeTime value={a.created_at} prefix="Applied" />
+                    </p>
                     {a.answers.length === 0 ? (
-                      <p className="text-gray-500">No answers (this campaign had no questions).</p>
+                      <p className="text-gray-500 dark:text-gray-400">
+                        No answers (this campaign had no questions).
+                      </p>
                     ) : (
                       a.answers.map((ans) => (
                         <div key={ans.question_id}>
-                          <p className="font-medium text-gray-800">{ans.prompt}</p>
-                          <div className="text-gray-700">
+                          <p className="font-medium text-gray-800 dark:text-gray-100">{ans.prompt}</p>
+                          <div className="text-gray-700 dark:text-gray-300">
                             <AnswerValue kind={ans.kind} answer={ans.answer} />
                           </div>
                         </div>
                       ))
                     )}
                     {a.status === "rejected" && a.rejection_reason && (
-                      <p className="text-gray-600">
+                      <p className="text-gray-600 dark:text-gray-300">
                         <span className="font-medium">Rejection reason:</span>{" "}
                         {a.rejection_reason}
                       </p>
@@ -369,17 +424,19 @@ export function ApplicationsPanel({ contestId }: Props) {
           <Button
             size="sm"
             variant="outline"
+            className={outlineDark}
             disabled={page <= 1 || loading}
             onClick={() => setPage((p) => p - 1)}
           >
             Previous
           </Button>
-          <span className="text-gray-600">
+          <span className="text-gray-600 dark:text-gray-300">
             Page {page} of {pageCount}
           </span>
           <Button
             size="sm"
             variant="outline"
+            className={outlineDark}
             disabled={page >= pageCount || loading}
             onClick={() => setPage((p) => p + 1)}
           >
@@ -389,6 +446,7 @@ export function ApplicationsPanel({ contestId }: Props) {
       )}
 
       <Dialog
+        isdark={isDark}
         open={rejectIds !== null}
         onOpenChange={(open) => {
           if (!open) {
@@ -397,7 +455,7 @@ export function ApplicationsPanel({ contestId }: Props) {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className={cn(isDark && "dark text-white")}>
           <DialogHeader>
             <DialogTitle>
               Reject {rejectIds && rejectIds.length > 1 ? `${rejectIds.length} applications` : "application"}
@@ -409,12 +467,13 @@ export function ApplicationsPanel({ contestId }: Props) {
               id="reject-reason"
               rows={3}
               maxLength={MAX_REJECTION_REASON_LENGTH}
+              className="dark:border-white/15 dark:bg-white/5 dark:text-white"
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectIds(null)}>
+            <Button variant="outline" className={outlineDark} onClick={() => setRejectIds(null)}>
               Cancel
             </Button>
             <Button

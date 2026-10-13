@@ -22,6 +22,10 @@ import {
   type ApplicationQuestion,
   type ApplicationQuestionKind,
 } from "@/lib/campaign-access";
+import { useDashboardDark } from "@/hooks/use-dashboard-dark";
+import { cn } from "@/lib/utils";
+
+const fieldClass = "bg-white dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500";
 
 type Props = {
   questions: ApplicationQuestion[];
@@ -30,6 +34,7 @@ type Props = {
 };
 
 export function ApplicationQuestionsEditor({ questions, onChange, disabled }: Props) {
+  const isDark = useDashboardDark();
   const update = (index: number, patch: Partial<ApplicationQuestion>) =>
     onChange(questions.map((q, i) => (i === index ? { ...q, ...patch } : q)));
 
@@ -59,22 +64,28 @@ export function ApplicationQuestionsEditor({ questions, onChange, disabled }: Pr
     });
 
   return (
-    <div className="space-y-3 rounded-lg border border-gray-200 p-4">
+    <div className={cn("space-y-3 rounded-lg border border-gray-200 p-4 dark:border-white/10", isDark && "dark")}>
       <div>
-        <Label className="font-medium">Application questions</Label>
-        <p className="text-xs text-gray-500">
+        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Application questions</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
           Optional. Creators answer these when they apply. Up to {MAX_APPLICATION_QUESTIONS}{" "}
           questions.
         </p>
       </div>
 
       {questions.map((q, i) => (
-        <div key={q.id ?? `new-${i}`} className="space-y-3 rounded-md border border-gray-100 bg-gray-50/60 p-3">
+        <div
+          key={q.id ?? `new-${i}`}
+          className="space-y-3 rounded-md border border-gray-100 bg-gray-50/60 p-3 dark:border-white/10 dark:bg-white/5"
+        >
           <div className="flex items-start gap-2">
-            <span className="mt-2 text-xs font-semibold text-gray-400">{i + 1}.</span>
+            <span className="mt-2 text-xs font-semibold text-gray-400 dark:text-gray-500" aria-hidden="true">
+              {i + 1}.
+            </span>
             <Input
-              className="flex-1 bg-white"
+              className={cn("flex-1", fieldClass)}
               placeholder="Question"
+              aria-label={`Question ${i + 1}`}
               maxLength={MAX_QUESTION_PROMPT_LENGTH}
               value={q.prompt}
               disabled={disabled}
@@ -84,7 +95,8 @@ export function ApplicationQuestionsEditor({ questions, onChange, disabled }: Pr
               type="button"
               size="icon"
               variant="ghost"
-              aria-label="Move up"
+              aria-label={`Move question ${i + 1} up`}
+              className="dark:text-gray-300 dark:hover:bg-white/10"
               disabled={disabled || i === 0}
               onClick={() => move(i, -1)}
             >
@@ -94,7 +106,8 @@ export function ApplicationQuestionsEditor({ questions, onChange, disabled }: Pr
               type="button"
               size="icon"
               variant="ghost"
-              aria-label="Move down"
+              aria-label={`Move question ${i + 1} down`}
+              className="dark:text-gray-300 dark:hover:bg-white/10"
               disabled={disabled || i === questions.length - 1}
               onClick={() => move(i, 1)}
             >
@@ -104,7 +117,8 @@ export function ApplicationQuestionsEditor({ questions, onChange, disabled }: Pr
               type="button"
               size="icon"
               variant="ghost"
-              aria-label="Remove question"
+              aria-label={`Remove question ${i + 1}`}
+              className="dark:hover:bg-red-500/10"
               disabled={disabled}
               onClick={() => onChange(questions.filter((_, idx) => idx !== i))}
             >
@@ -119,20 +133,26 @@ export function ApplicationQuestionsEditor({ questions, onChange, disabled }: Pr
                 disabled={disabled}
                 onValueChange={(v) => setKind(i, v as ApplicationQuestionKind)}
               >
-                <SelectTrigger className="bg-white">
+                <SelectTrigger
+                  className={isDark ? undefined : "bg-white"}
+                  isDark={isDark}
+                  aria-label={`Answer type for question ${i + 1}`}
+                >
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent isDark={isDark}>
                   {APPLICATION_QUESTION_KINDS.map((kind) => (
-                    <SelectItem key={kind} value={kind}>
+                    <SelectItem key={kind} value={kind} isDark={isDark}>
                       {APPLICATION_QUESTION_KIND_LABELS[kind]}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200">
               <Switch
+                variant="theme-aware"
+                theme={isDark ? "dark" : "light"}
                 checked={q.required}
                 disabled={disabled}
                 onCheckedChange={(v) => update(i, { required: v })}
@@ -146,8 +166,9 @@ export function ApplicationQuestionsEditor({ questions, onChange, disabled }: Pr
               {(q.options ?? []).map((opt, oi) => (
                 <div key={oi} className="flex items-center gap-2">
                   <Input
-                    className="bg-white"
+                    className={fieldClass}
                     placeholder={`Choice ${oi + 1}`}
+                    aria-label={`Question ${i + 1}, choice ${oi + 1}`}
                     maxLength={MAX_CHOICE_OPTION_LENGTH}
                     value={opt}
                     disabled={disabled}
@@ -157,7 +178,8 @@ export function ApplicationQuestionsEditor({ questions, onChange, disabled }: Pr
                     type="button"
                     size="icon"
                     variant="ghost"
-                    aria-label="Remove choice"
+                    aria-label={`Remove choice ${oi + 1}`}
+                    className="dark:text-gray-300 dark:hover:bg-white/10"
                     disabled={disabled || (q.options ?? []).length <= 2}
                     onClick={() => removeOption(i, oi)}
                   >
@@ -169,6 +191,7 @@ export function ApplicationQuestionsEditor({ questions, onChange, disabled }: Pr
                 type="button"
                 size="sm"
                 variant="outline"
+                className="dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10"
                 disabled={disabled || (q.options ?? []).length >= MAX_CHOICE_OPTIONS}
                 onClick={() => update(i, { options: [...(q.options ?? []), ""] })}
               >
@@ -183,6 +206,7 @@ export function ApplicationQuestionsEditor({ questions, onChange, disabled }: Pr
         type="button"
         size="sm"
         variant="outline"
+        className="dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10"
         disabled={disabled || questions.length >= MAX_APPLICATION_QUESTIONS}
         onClick={() =>
           onChange([...questions, { prompt: "", kind: "short_text", options: null, required: true }])

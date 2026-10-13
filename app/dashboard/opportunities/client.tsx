@@ -32,7 +32,6 @@ import {
   X,
   Film,
   FileType,
-  Lock,
 } from "lucide-react";
 import { UserResponse } from "@supabase/supabase-js";
 import { formatLocalDateTime } from "@/lib/utils";
@@ -162,6 +161,10 @@ import {
   normalizeCampaignPlatformFilter,
 } from "@/lib/campaign-platform-filter";
 import { buildOpportunitiesListQueryKey } from "@/lib/opportunities-list-query";
+import {
+  AccessModeBadge,
+  ApplicationStatusBadge,
+} from "@/components/campaign-access/AccessBadge";
 
 // Define types for filters and sorting
 type StatusFilterType = "all" | "live" | "upcoming" | "ended";
@@ -1504,26 +1507,20 @@ export default function OpportunitiesPage({
 
   const renderRestrictedBadge = (contest: any, small = false) => {
     if (contest.access_mode !== "restricted") return null;
-    const label = !contest.is_preview
-      ? "Restricted"
-      : contest.my_application_status === "pending"
-        ? "Applied"
-        : contest.my_application_status === "rejected"
-          ? "Not approved"
-          : "Apply to join";
+    const size = small ? "sm" : "md";
+    // The span lets the shared badge's dark: classes follow this page's isDark.
     return (
-      <Badge
-        className={cn(
-          "font-medium border flex items-center",
-          small ? "text-xs px-2 py-0.5" : "text-sm px-3 py-1",
-          isDark
-            ? "bg-amber-900/40 text-amber-200 border-amber-700/60"
-            : "bg-amber-50 text-amber-800 border-amber-200",
+      <span className={cn("inline-flex", isDark && "dark")}>
+        {!contest.is_preview ? (
+          <AccessModeBadge mode="restricted" size={size} />
+        ) : contest.my_application_status === "pending" ? (
+          <ApplicationStatusBadge status="pending" label="Applied" size={size} />
+        ) : contest.my_application_status === "rejected" ? (
+          <ApplicationStatusBadge status="rejected" label="Not approved" size={size} />
+        ) : (
+          <AccessModeBadge mode="restricted" label="Apply to join" size={size} />
         )}
-      >
-        <Lock className="h-3 w-3 mr-1" />
-        {label}
-      </Badge>
+      </span>
     );
   };
 

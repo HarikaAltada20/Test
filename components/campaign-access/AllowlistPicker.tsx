@@ -2,13 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { parseUsernames, type BrandAllowlist } from "@/lib/campaign-access";
+import { useDashboardDark } from "@/hooks/use-dashboard-dark";
+import { cn } from "@/lib/utils";
 import { accessListApi, allowlistApi } from "./api";
+import { SavedListsSkeleton } from "./Skeletons";
+
+const fieldClass = "dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500";
 
 export type AllowlistSelection = {
   allowlistIds: string[];
@@ -102,6 +107,7 @@ type Props = {
 };
 
 export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Props) {
+  const isDark = useDashboardDark();
   const [lists, setLists] = useState<BrandAllowlist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -137,39 +143,41 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
   const { valid, invalid } = parseUsernames(value.usernames);
 
   return (
-    <div className="space-y-5">
+    <div className={cn("space-y-5", isDark && "dark")}>
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label className="text-sm font-medium">Import saved allowlists</Label>
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Import saved allowlists</p>
           {!advertiserId && (
-            <Link href="/dashboard/allowlists" className="text-xs text-[#7F39EC] hover:underline">
+            <Link
+              href="/dashboard/allowlists"
+              className="text-xs text-[#7F39EC] hover:underline dark:text-purple-300"
+            >
               Manage saved lists
             </Link>
           )}
         </div>
         {loading ? (
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading lists…
-          </div>
+          <SavedListsSkeleton rows={2} />
         ) : error ? (
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
         ) : lists.length === 0 ? (
-          <p className="text-sm text-gray-500">No saved lists yet. Add usernames below and name the list to save it.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">No saved lists yet. Add usernames below and name the list to save it.</p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">
             {lists.map((list) => (
               <label
                 key={list.id}
-                className="flex cursor-pointer items-center gap-3 rounded-md border border-gray-200 px-3 py-2 hover:border-purple-300"
+                className="flex cursor-pointer items-center gap-3 rounded-md border border-gray-200 px-3 py-2 hover:border-purple-300 dark:border-white/10 dark:hover:border-[#7F39EC]/60"
               >
                 <Checkbox
                   checked={value.allowlistIds.includes(list.id)}
                   onCheckedChange={(c) => toggleList(list.id, c === true)}
                   disabled={disabled}
                 />
-                <span className="flex-1 truncate text-sm">{list.name}</span>
-                <span className="flex items-center gap-1 text-xs text-gray-500">
-                  <Users className="h-3 w-3" />
+                <span className="flex-1 truncate text-sm text-gray-900 dark:text-gray-100">{list.name}</span>
+                <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                  <Users className="h-3 w-3" aria-hidden="true" />
+                  <span className="sr-only">Members:</span>
                   {list.member_count}
                 </span>
               </label>
@@ -179,33 +187,36 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="allowlist-usernames" className="text-sm font-medium">
+        <Label htmlFor="allowlist-usernames" className="text-sm font-medium text-gray-900 dark:text-gray-100">
           Add creator usernames
         </Label>
         <Textarea
           id="allowlist-usernames"
           rows={3}
           placeholder="creator_one, creator_two or one per line"
+          className={fieldClass}
+          aria-describedby="allowlist-usernames-count"
           value={value.usernames}
           onChange={(e) => onChange({ ...value, usernames: e.target.value })}
           disabled={disabled}
         />
-        <p className="text-xs text-gray-500">
+        <p id="allowlist-usernames-count" className="text-xs text-gray-500 dark:text-gray-400" aria-live="polite">
           {valid.length} username{valid.length === 1 ? "" : "s"}
           {invalid.length > 0 && (
-            <span className="text-red-600"> · invalid: {invalid.join(", ")}</span>
+            <span className="text-red-600 dark:text-red-400"> · invalid: {invalid.join(", ")}</span>
           )}
         </p>
       </div>
 
       {valid.length > 0 && (
         <div className="space-y-2">
-          <Label htmlFor="allowlist-new-name" className="text-sm font-medium">
+          <Label htmlFor="allowlist-new-name" className="text-sm font-medium text-gray-900 dark:text-gray-100">
             Save these usernames as a list (optional)
           </Label>
           <Input
             id="allowlist-new-name"
             placeholder="e.g. Top 10 editors"
+            className={fieldClass}
             maxLength={100}
             value={value.newListName}
             onChange={(e) => onChange({ ...value, newListName: e.target.value })}
