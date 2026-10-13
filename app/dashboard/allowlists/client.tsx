@@ -64,6 +64,7 @@ import {
 import { AddResultDetails } from "@/components/campaign-access/AddResultDetails";
 import { CreatorAvatar } from "@/components/campaign-access/CreatorAvatar";
 import { EmptyState } from "@/components/campaign-access/EmptyState";
+import { MemberAvatarStack } from "@/components/campaign-access/MemberAvatarStack";
 import { RelativeTime } from "@/components/campaign-access/RelativeTime";
 import { MemberRowsSkeleton } from "@/components/campaign-access/Skeletons";
 import { UsernameChipsInput } from "@/components/campaign-access/UsernameChipsInput";
@@ -379,12 +380,27 @@ export default function AllowlistsClient() {
                   onClick={() => setSelectedId(list.id)}
                 >
                   <span className="truncate font-semibold text-gray-900 dark:text-white">{list.name}</span>
-                  <span className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300">
-                    <Users className="h-4 w-4" aria-hidden="true" />
-                    {list.member_count} creator{list.member_count === 1 ? "" : "s"}
+                  <span className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                    <MemberAvatarStack members={list.preview_members} total={list.member_count} />
+                    <span className="flex items-center gap-1.5">
+                      {!list.preview_members?.length && <Users className="h-4 w-4" aria-hidden="true" />}
+                      {list.member_count} creator{list.member_count === 1 ? "" : "s"}
+                    </span>
                   </span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    Updated <RelativeTime value={list.updated_at} />
+                  <span className="flex flex-wrap items-center gap-x-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    {typeof list.campaign_count === "number" && (
+                      <>
+                        <span>
+                          {list.campaign_count === 0
+                            ? "Not used in a campaign yet"
+                            : `Used in ${list.campaign_count} campaign${list.campaign_count === 1 ? "" : "s"}`}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                      </>
+                    )}
+                    <span>
+                      Updated <RelativeTime value={list.updated_at} />
+                    </span>
                   </span>
                 </button>
                 <div className="absolute right-2 top-2">{listMenu(list)}</div>

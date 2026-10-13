@@ -15,6 +15,7 @@ import {
 } from "@/lib/campaign-list-filters-storage";
 import type { ContestListCardStats } from "@/lib/contest-list-card-stats";
 import type { CreatorRequirementsSnapshot } from "@/lib/creator-requirements";
+import type { OpportunityAccessFilter } from "@/lib/campaign-access";
 import { sortCampaignsForList } from "@/lib/contest-list-sort";
 import {
   expandAvailableCampaignPlatforms,
@@ -131,7 +132,17 @@ export type ListCampaignsParams = {
    */
   eligibleOnly?: boolean;
   creatorEligibilitySnapshot?: CreatorRequirementsSnapshot;
+  /**
+   * Opportunities only: open | apply | invited | applied (see
+   * OPPORTUNITY_ACCESS_FILTERS). Filtered in campaign_list_page_ids
+   * (20261020_campaign_access_final.sql), so it needs that RPC.
+   */
+  access?: OpportunityAccessFilter;
 };
+
+function hasAccessFilter(params: ListCampaignsParams): boolean {
+  return params.scope === "opportunities" && !!params.access && params.access !== "all";
+}
 
 export type ListCampaignsResult = {
   contests: Array<
@@ -710,6 +721,9 @@ async function fetchFilteredPageSql(
         "eligibleOnly requires campaign_list_page_ids with eligibility params",
       );
     }
+    if (hasAccessFilter(params)) {
+      throwPageIdsRpcMissing("access filter requires campaign_list_page_ids with p_access");
+    }
     if (!allowCampaignListPostgrestFallback()) {
       throwPageIdsRpcMissing("previously detected missing RPC");
     }
@@ -745,6 +759,8 @@ async function fetchFilteredPageSql(
       p_creator_views: snapshot?.totalViews ?? null,
       p_creator_verified_reels: snapshot?.verifiedReels ?? null,
       p_creator_has_explicit_quality: snapshot?.hasExplicitQualityScores ?? null,
+      // Only sent when used, so lists keep working before the migration adds it.
+      ...(hasAccessFilter(params) ? { p_access: params.access } : {}),
     },
   );
 
@@ -757,14 +773,22 @@ async function fetchFilteredPageSql(
       throw new Error(pageError?.message || "Forbidden");
     }
     if (isCampaignListRpcMissingError(pageError)) {
-      if (params.eligibleOnly || !allowCampaignListPostgrestFallback()) {
+      if (
+        params.eligibleOnly ||
+        hasAccessFilter(params) ||
+        !allowCampaignListPostgrestFallback()
+      ) {
         throwPageIdsRpcMissing(pageError?.message || "unknown");
       }
       markPageIdsRpcMissing(pageError?.message || "unknown");
       return fetchFilteredPageViaPostgrest(supabase, params, offset, limit);
     }
     // Transient / unexpected RPC errors: never silently degrade sort/totals in prod.
-    if (params.eligibleOnly || !allowCampaignListPostgrestFallback()) {
+    if (
+      params.eligibleOnly ||
+      hasAccessFilter(params) ||
+      !allowCampaignListPostgrestFallback()
+    ) {
       throwPageIdsRpcFailed(pageError?.message || "empty payload");
     }
     console.warn(

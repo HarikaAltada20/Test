@@ -28,6 +28,24 @@ export type BrandAllowlist = {
   member_count: number;
   created_at: string;
   updated_at: string;
+  /** Campaigns with creators imported from this list (missing before the 20261020 migration). */
+  campaign_count?: number | null;
+  /** The first few members, for avatars on list cards. */
+  preview_members?: AllowlistPreviewMember[];
+};
+
+export type AllowlistPreviewMember = {
+  user_id: string;
+  username: string | null;
+  full_name: string | null;
+  profile_picture_url: string | null;
+};
+
+/** Per saved list on a campaign: when it last added creators and how many a sync would add. */
+export type SavedListSyncStatus = {
+  allowlist_id: string;
+  last_added_at: string | null;
+  new_members: number;
 };
 
 export type AllowlistMember = {
@@ -355,7 +373,85 @@ export type ContestApplication = {
   on_access_list: boolean;
   /** Connected accounts, scores and basics for the brand reviewing the application. */
   creator?: ApplicantProfile | null;
+  /** Whether the creator meets the campaign's requirements (missing before the 20261020 migration). */
+  requirement_state?: RequirementState | null;
 };
+
+/**
+ * An applicant against the campaign's creator requirements:
+ * skipped (approved creators skip them), none (no requirements), meets, below.
+ */
+export const REQUIREMENT_STATES = ["skipped", "none", "meets", "below"] as const;
+export type RequirementState = (typeof REQUIREMENT_STATES)[number];
+
+export function isRequirementState(value: unknown): value is RequirementState {
+  return typeof value === "string" && (REQUIREMENT_STATES as readonly string[]).includes(value);
+}
+
+/** How the applications list is ordered. */
+export const APPLICATION_SORTS = ["newest", "oldest", "followers"] as const;
+export type ApplicationSort = (typeof APPLICATION_SORTS)[number];
+export const APPLICATION_SORT_LABELS: Record<ApplicationSort, string> = {
+  newest: "Newest first",
+  oldest: "Oldest first",
+  followers: "Most followers",
+};
+
+/** Filter on the applicant's requirement state. "meets" includes skipped and none. */
+export const APPLICATION_REQUIREMENT_FILTERS = ["all", "meets", "below"] as const;
+export type ApplicationRequirementFilter = (typeof APPLICATION_REQUIREMENT_FILTERS)[number];
+export const APPLICATION_REQUIREMENT_FILTER_LABELS: Record<ApplicationRequirementFilter, string> = {
+  all: "All applicants",
+  meets: "Meets requirements",
+  below: "Below requirements",
+};
+
+export function isOneOfValues<T extends string>(values: readonly T[], value: unknown): value is T {
+  return typeof value === "string" && (values as readonly string[]).includes(value);
+}
+
+/**
+ * Whether a campaign's requirements matter for applicants:
+ * skipped (approval lets them skip), none (no requirements set), apply.
+ */
+export type CampaignRequirementsMode = "skipped" | "none" | "apply";
+
+/**
+ * Creator campaign list filter on how a creator can join:
+ * open (Public), apply (Restricted, not joined or applied yet),
+ * invited (on the access list), applied (any application).
+ */
+export const OPPORTUNITY_ACCESS_FILTERS = ["all", "open", "apply", "invited", "applied"] as const;
+export type OpportunityAccessFilter = (typeof OPPORTUNITY_ACCESS_FILTERS)[number];
+export const OPPORTUNITY_ACCESS_FILTER_LABELS: Record<OpportunityAccessFilter, string> = {
+  all: "All",
+  open: "Open to everyone",
+  apply: "Apply to join",
+  invited: "Invited",
+  applied: "My applications",
+};
+
+export function parseOpportunityAccessFilter(value: unknown): OpportunityAccessFilter {
+  return isOneOfValues(OPPORTUNITY_ACCESS_FILTERS, value) ? value : "all";
+}
+
+/** Results of join_application_waitlist / leave_application_waitlist. */
+export const WAITLIST_RESULT_MESSAGES = {
+  joined: "We'll notify you when applications reopen",
+  already_joined: "You're already on the list",
+  left: "You won't be notified",
+  not_signed_in: "Sign in to get notified",
+  not_found: "This campaign isn't available",
+  applications_open: "Applications are open, so you can apply now",
+  ended: "This campaign has ended",
+  has_access: "You already have access to this campaign",
+  already_applied: "You've already applied",
+} as const;
+export type WaitlistResult = keyof typeof WAITLIST_RESULT_MESSAGES;
+
+export function isWaitlistResult(value: unknown): value is WaitlistResult {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(WAITLIST_RESULT_MESSAGES, value);
+}
 
 export type MyApplication = {
   id: string;
@@ -364,6 +460,27 @@ export type MyApplication = {
   answers: ApplicationAnswer[];
   created_at: string;
   reviewed_at: string | null;
+};
+
+/** One of the signed-in creator's applications, for the My applications page. */
+export type MyApplicationListItem = {
+  id: string;
+  contest_id: string;
+  status: ApplicationStatus;
+  rejection_reason: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  /** False when an approved creator was later removed from the campaign. */
+  on_access_list: boolean;
+  campaign: {
+    title: string | null;
+    thumbnail_url: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    brand_name: string | null;
+    has_ended: boolean;
+    is_published: boolean;
+  };
 };
 
 /** Shape returned by get_contest_preview. */
@@ -604,6 +721,8 @@ export const CAMPAIGN_ACCESS_NOTIFICATION_TYPES = [
   "campaign_application_rejected",
   "campaign_application_received",
   "campaign_access_granted",
+  // 20261019_applications_reopened_notification_type.sql; sent by a database trigger.
+  "campaign_applications_reopened",
 ] as const;
 export type CampaignAccessNotificationType =
   (typeof CAMPAIGN_ACCESS_NOTIFICATION_TYPES)[number];

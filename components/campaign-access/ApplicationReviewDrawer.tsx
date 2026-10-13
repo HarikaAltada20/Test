@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Check, ChevronLeft, ChevronRight, Loader2, X } from "lucide-react";
+import Link from "next/link";
+import { Check, ChevronLeft, ChevronRight, ExternalLink, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -17,6 +18,7 @@ import { AnswersList } from "./ApplicationAnswers";
 import { ApplicantProfileSummary } from "./ApplicantProfileSummary";
 import { CreatorAvatar } from "./CreatorAvatar";
 import { RelativeTime } from "./RelativeTime";
+import { RequirementStateTag } from "./RequirementStateTag";
 
 type Props = {
   applications: ContestApplication[];
@@ -31,6 +33,10 @@ type Props = {
   /** Off while another dialog (e.g. reject) is open, so its typing isn't taken as shortcuts. */
   shortcutsEnabled: boolean;
   isDark: boolean;
+  /** Show whether the applicant meets the campaign's requirements. */
+  requirementsApply?: boolean;
+  /** Link to the creator's full profile page, when there is one. */
+  profileHref?: (app: ContestApplication) => string;
 };
 
 const outlineDark = "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
@@ -54,6 +60,8 @@ export function ApplicationReviewDrawer({
   busy,
   shortcutsEnabled,
   isDark,
+  requirementsApply = false,
+  profileHref,
 }: Props) {
   const titleRef = useRef<HTMLHeadingElement>(null);
   const app = index !== null ? applications[index] : undefined;
@@ -120,9 +128,22 @@ export function ApplicationReviewDrawer({
               <SheetDescription asChild>
                 <div className="flex flex-wrap items-center gap-2 pt-2 text-xs text-gray-500 dark:text-gray-400">
                   <ApplicationStatusBadge status={applicationDisplayStatus(app)} />
+                  {requirementsApply && <RequirementStateTag state={app.requirement_state} />}
                   <RelativeTime value={app.created_at} prefix="Applied" />
                 </div>
               </SheetDescription>
+              {profileHref && (
+                <Link
+                  href={profileHref(app)}
+                  target="_blank"
+                  rel="noopener"
+                  className="inline-flex w-fit items-center gap-1 rounded-sm pt-1 text-sm font-medium text-[#7F39EC] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:text-purple-300"
+                >
+                  View full profile
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span className="sr-only">(opens in a new tab)</span>
+                </Link>
+              )}
             </SheetHeader>
 
             <div className="flex-1 space-y-5 overflow-y-auto p-5">

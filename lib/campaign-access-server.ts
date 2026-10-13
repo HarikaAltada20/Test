@@ -8,7 +8,9 @@ import {
   MAX_USERNAMES_PER_REQUEST,
   parseUsernames,
   type AccessMode,
+  type AllowlistPreviewMember,
   type ContestPreview,
+  type SavedListSyncStatus,
   type UsernameResolution,
 } from "@/lib/campaign-access";
 
@@ -359,6 +361,182 @@ export async function loadUserDisplay(
       .in("id", chunk);
     if (error) throw error;
     for (const row of data || []) out.set(row.id, row as MemberUserRow);
+  }
+  return out;
+}
+
+/** True only for "column does not exist", i.e. a migration hasn't been run yet. */
+export function isMissingColumnError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === "42703" ||
+    error.code === "PGRST204" ||
+    /column .* does not exist/i.test(error.message ?? "")
+  );
+}
+
+/**
+ * The campaign's applicant visibility. Only a missing column (migration not
+ * run) means "everything visible"; any other error is thrown, so a failed
+ * read never reveals details an admin has hidden.
+ */
+export async function loadApplicantVisibilityRaw(
+  admin: SupabaseClient,
+  contestId: string,
+): Promise<unknown> {
+  const { data, error } = await admin
+    .from("contests")
+    .select("applicant_visibility")
+    .eq("id", contestId)
+    .maybeSingle();
+  if (error) {
+    if (isMissingColumnError(error)) return null;
+    throw error;
+  }
+  return (data as { applicant_visibility?: unknown } | null)?.applicant_visibility ?? null;
+}
+
+/** True for "function does not exist" errors, i.e. a migration hasn't been run yet. */
+export function isMissingFunctionError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === "PGRST202" ||
+    error.code === "42883" ||
+    /could not find the function|does not exist/i.test(error.message ?? "")
+  );
+}
+
+const loggedMissing = new Set<string>();
+/** Logs a missing optional database function once per server process. */
+function warnMissingOnce(name: string, error: { message?: string }) {
+  if (loggedMissing.has(name)) return;
+  loggedMissing.add(name);
+  console.warn(`[campaign-access] ${name} unavailable (run db/migrations/20261020_campaign_access_final.sql):`, error.message);
+}
+
+export type AllowlistSummary = {
+  campaign_count: number;
+  preview_members: AllowlistPreviewMember[];
+};
+
+/**
+ * "Used in N campaigns" and the first members of each saved list, in one query.
+ * Optional extras: an empty map (lists still load) when the function is missing or fails.
+ */
+export async function loadAllowlistSummaries(
+  admin: SupabaseClient,
+  allowlistIds: string[],
+): Promise<Map<string, AllowlistSummary>> {
+  const out = new Map<string, AllowlistSummary>();
+  if (allowlistIds.length === 0) return out;
+  const { data, error } = await admin.rpc("brand_allowlist_summaries", {
+    p_allowlist_ids: allowlistIds,
+  });
+  if (error) {
+    if (isMissingFunctionError(error)) warnMissingOnce("brand_allowlist_summaries", error);
+    else console.error("[campaign-access] allowlist summaries:", error.message);
+    return out;
+  }
+  for (const row of (data ?? []) as {
+    allowlist_id: string;
+    campaign_count: number | string | null;
+    preview: AllowlistPreviewMember[] | null;
+  }[]) {
+    out.set(row.allowlist_id, {
+      campaign_count: Number(row.campaign_count ?? 0),
+      preview_members: Array.isArray(row.preview) ? row.preview : [],
+    });
+  }
+  return out;
+}
+
+/** Per saved list on a campaign: last time it added creators, and how many a sync would add. */
+export async function loadSavedListSyncStatus(
+  admin: SupabaseClient,
+  contestId: string,
+): Promise<SavedListSyncStatus[]> {
+  const { data, error } = await admin.rpc("contest_saved_list_sync_status", {
+    p_contest_id: contestId,
+  });
+  if (error) {
+    if (isMissingFunctionError(error)) warnMissingOnce("contest_saved_list_sync_status", error);
+    else console.error("[campaign-access] saved list sync status:", error.message);
+    return [];
+  }
+  return ((data ?? []) as {
+    allowlist_id: string;
+    last_added_at: string | null;
+    new_members: number | string | null;
+  }[]).map((r) => ({
+    allowlist_id: r.allowlist_id,
+    last_added_at: r.last_added_at,
+    new_members: Number(r.new_members ?? 0),
+  }));
+}
+
+/**
+ * Adds applications_open and pending_applications to the Restricted campaigns
+ * of a brand or admin list response. Runs after the list cache so pending
+ * counts are always current. Leaves the list unchanged if the lookup fails.
+ */
+export async function withRestrictedSummaries<
+  T extends { contests: Array<{ id: string; access_mode?: unknown }> },
+>(supabase: SupabaseClient, list: T): Promise<T> {
+  const ids = list.contests.filter((c) => c.access_mode === "restricted").map((c) => c.id);
+  if (ids.length === 0) return list;
+  try {
+    const summaries = await loadRestrictedListSummaries(supabase, ids);
+    return {
+      ...list,
+      contests: list.contests.map((c) => {
+        const s = summaries.get(c.id);
+        return s ? { ...c, ...s } : c;
+      }),
+    };
+  } catch (err) {
+    console.error("[campaign-access] restricted list summaries:", err);
+    return list;
+  }
+}
+
+/**
+ * Applications switch and pending count for each Restricted campaign on a
+ * brand or admin list page. `supabase` is the caller's client: pending counts
+ * run under row-level security, so callers only count campaigns they may review.
+ */
+export async function loadRestrictedListSummaries(
+  supabase: SupabaseClient,
+  contestIds: string[],
+): Promise<Map<string, { applications_open: boolean; pending_applications: number | null }>> {
+  const out = new Map<string, { applications_open: boolean; pending_applications: number | null }>();
+  if (contestIds.length === 0) return out;
+
+  const [openRes, pendingRes] = await Promise.all([
+    supabase.from("contests").select("id, applications_open").in("id", contestIds),
+    supabase.rpc("contest_pending_application_counts", { p_contest_ids: contestIds }),
+  ]);
+  if (openRes.error) {
+    console.error("[campaign-access] applications_open lookup:", openRes.error.message);
+    return out;
+  }
+  const pending = new Map<string, number>();
+  const pendingKnown = !pendingRes.error;
+  if (pendingRes.error) {
+    if (isMissingFunctionError(pendingRes.error)) {
+      warnMissingOnce("contest_pending_application_counts", pendingRes.error);
+    } else {
+      console.error("[campaign-access] pending counts:", pendingRes.error.message);
+    }
+  } else {
+    for (const r of (pendingRes.data ?? []) as { contest_id: string; pending: number | string }[]) {
+      pending.set(r.contest_id, Number(r.pending) || 0);
+    }
+  }
+  for (const r of (openRes.data ?? []) as { id: string; applications_open: boolean | null }[]) {
+    out.set(r.id, {
+      applications_open: r.applications_open !== false,
+      pending_applications: pendingKnown ? pending.get(r.id) ?? 0 : null,
+    });
   }
   return out;
 }

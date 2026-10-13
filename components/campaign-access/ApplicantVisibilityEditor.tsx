@@ -57,8 +57,10 @@ export function ApplicantVisibilityEditor(props: Props) {
 
   const visibility = saved ? loaded : props.value;
 
+  // Each save sends the whole object, so one save runs at a time: two
+  // overlapping saves could finish out of order and undo each other.
   const toggle = async (field: ApplicantField, on: boolean) => {
-    if (!visibility) return;
+    if (!visibility || savingField) return;
     const next = { ...visibility, [field]: on };
     if (!props.contestId) {
       props.onChange?.(next);
@@ -138,7 +140,7 @@ export function ApplicantVisibilityEditor(props: Props) {
                     variant="theme-aware"
                     theme={isDark ? "dark" : "light"}
                     checked={on}
-                    disabled={savingField === field}
+                    disabled={savingField !== null}
                     onCheckedChange={(v) => toggle(field, v)}
                     aria-describedby={`${id}-hint`}
                   />
@@ -155,7 +157,9 @@ export function ApplicantVisibilityEditor(props: Props) {
               );
             })}
           </ul>
-          <p className="text-xs text-gray-500 dark:text-gray-400" aria-live="polite">
+          <p className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400" aria-live="polite">
+            {savingField && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+            {savingField ? "Saving… " : null}
             {hiddenCount === 0
               ? "The brand sees all applicant details."
               : `${hiddenCount} detail${hiddenCount === 1 ? " is" : "s are"} hidden from the brand.`}

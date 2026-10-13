@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  CalendarDays,
   CalendarX,
   CheckCircle2,
   Clock,
@@ -13,10 +14,13 @@ import {
   Lock,
   LogIn,
   PartyPopper,
+  Sparkles,
+  Trophy,
   UserCheck,
   UserX,
   Users,
 } from "lucide-react";
+import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { createClient } from "@/utils/supabase/client";
@@ -38,7 +42,64 @@ export type InvitePreview = {
   isPublished: boolean;
   linkStatus: string;
   alreadyMember: boolean;
+  /** Total prize pool; null when unknown or zero. */
+  prizeCents?: number | null;
+  platforms?: string[];
+  startDate?: string | null;
+  endDate?: string | null;
 };
+
+const PLATFORM_NAMES: Record<string, string> = {
+  youtube: "YouTube",
+  instagram: "Instagram",
+  tiktok: "TikTok",
+  twitter: "X",
+  x: "X",
+};
+
+function formatInviteDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime())
+    ? null
+    : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+/** Prize, dates and platforms under the invite card's title. */
+function InviteFacts({ preview }: { preview: InvitePreview }) {
+  const start = formatInviteDate(preview.startDate);
+  const end = formatInviteDate(preview.endDate);
+  const platforms = (preview.platforms ?? []).map(
+    (p) => PLATFORM_NAMES[p] ?? p.charAt(0).toUpperCase() + p.slice(1),
+  );
+  const facts: { icon: typeof Clock; label: string; value: string }[] = [];
+  if (preview.prizeCents) {
+    facts.push({ icon: Trophy, label: "Prize pool", value: formatCurrencyFromCents(preview.prizeCents) });
+  }
+  if (start || end) {
+    facts.push({ icon: CalendarDays, label: "Dates", value: `${start ?? "?"} – ${end ?? "?"}` });
+  }
+  if (platforms.length > 0) {
+    facts.push({ icon: Sparkles, label: platforms.length > 1 ? "Platforms" : "Platform", value: platforms.join(", ") });
+  }
+  if (facts.length === 0) return null;
+  return (
+    <dl className="grid gap-2 rounded-xl border border-gray-200 bg-gray-50/60 p-3 text-sm sm:grid-cols-3">
+      {facts.map((f) => (
+        <div key={f.label} className="flex items-start gap-2">
+          <f.icon className="mt-0.5 h-4 w-4 shrink-0 text-[#7F39EC]" aria-hidden="true" />
+          <div className="min-w-0">
+            <dt className="text-xs text-gray-500">{f.label}</dt>
+            {/* Dates use the viewer's locale and time zone. */}
+            <dd className="font-medium text-gray-900" suppressHydrationWarning>
+              {f.value}
+            </dd>
+          </div>
+        </div>
+      ))}
+    </dl>
+  );
+}
 
 type Props = {
   token: string;
@@ -110,11 +171,17 @@ export default function InviteLandingClient({ token, preview, viewerType }: Prop
   // Details are withheld for links that can't be used (expired, revoked, full, ended).
   const hasDetails = !!preview.contestId;
   const notFound = status === "not_found" || (!hasDetails && !isInviteRedeemResult(status));
-  const deadStatus: InviteRedeemResult | null = notFound
-    ? "not_found"
-    : status !== "active" && status !== "public" && isInviteRedeemResult(status) && DEAD_LINK[status]
-      ? status
-      : null;
+  // A creator who already joined keeps the campaign card and "Open campaign"
+  // even after the link expires, fills up or is revoked: their access is
+  // still valid (the preview returns details for members for this reason).
+  const memberWithAccess = viewerType === "creator" && isMember && hasDetails;
+  const deadStatus: InviteRedeemResult | null = memberWithAccess
+    ? null
+    : notFound
+      ? "not_found"
+      : status !== "active" && status !== "public" && isInviteRedeemResult(status) && DEAD_LINK[status]
+        ? status
+        : null;
 
   const browseButton = (
     <Button asChild variant="outline" className="w-full">
@@ -262,6 +329,7 @@ export default function InviteLandingClient({ token, preview, viewerType }: Prop
                 You&apos;ve been invited to join this campaign.
               </p>
             )}
+            {hasDetails && !deadStatus && <InviteFacts preview={preview} />}
             {body}
             {notLiveNote}
             {/* On phones the actions stay pinned to the bottom of the screen. */}
