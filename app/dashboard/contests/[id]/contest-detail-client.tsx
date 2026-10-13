@@ -11,6 +11,7 @@ import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import { CampaignAccessPanel } from "@/components/campaign-access/CampaignAccessPanel";
 import { ApplicationsPanel } from "@/components/campaign-access/ApplicationsPanel";
+import { applicationsApi } from "@/components/campaign-access/api";
 import {
   isPrivateLikeAccessMode,
   type AccessMode,
@@ -4194,6 +4195,20 @@ export default function ContestDetailClient({
     return ordered.length > 0 ? ordered.join(", ") : "All Quality Scores";
   }, [analyticsQualityScoreFilters]);
 
+  // Pending applications for the tab label; the panel keeps it current after reviews.
+  const [pendingApplications, setPendingApplications] = useState<number | null>(null);
+  useEffect(() => {
+    if (contest?.access_mode !== "restricted") return;
+    let cancelled = false;
+    applicationsApi
+      .list(contestId, { status: "pending", limit: 1 })
+      .then((res) => !cancelled && setPendingApplications(res.counts.pending))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [contestId, contest?.access_mode]);
+
   const displayTabs = useMemo(
     () => [
       { id: "overview", label: "Overview" },
@@ -4206,13 +4221,20 @@ export default function ContestDetailClient({
         : []),
       { id: "analytics", label: "Analytics" },
       ...(contest?.access_mode === "restricted"
-        ? [{ id: "applications", label: "Applications" }]
+        ? [
+            {
+              id: "applications",
+              label: pendingApplications
+                ? `Applications (${pendingApplications})`
+                : "Applications",
+            },
+          ]
         : []),
       ...(isPrivateLikeAccessMode(contest?.access_mode)
         ? [{ id: "access", label: "Access" }]
         : []),
     ],
-    [submissionTotalCount, contest?.platform, contest?.access_mode],
+    [submissionTotalCount, contest?.platform, contest?.access_mode, pendingApplications],
   );
 
   // Filter + sort (memoized so virtualizer isn't fed a new array every render).
@@ -34278,7 +34300,10 @@ export default function ContestDetailClient({
           </TabPanel>
           {contest?.access_mode === "restricted" && (
             <TabPanel value="applications" activeTab={activeTab}>
-              <ApplicationsPanel contestId={contestId} />
+              <ApplicationsPanel
+                contestId={contestId}
+                onPendingCountChange={setPendingApplications}
+              />
             </TabPanel>
           )}
           {isPrivateLikeAccessMode(contest?.access_mode) && (

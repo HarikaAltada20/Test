@@ -660,3 +660,52 @@ export function formatAddResultSummary(
   if (result.invalid?.length) parts.push(`${result.invalid.length} invalid`);
   return parts.join(" · ");
 }
+
+/** Most applications a brand can review in one bulk request (matches the bulk API). */
+export const MAX_BULK_REVIEW = 200;
+
+/** One-tap reasons in the reject dialog. "Other" leaves the text for the brand to write. */
+export const REJECTION_REASON_PRESETS = [
+  "Audience doesn't match",
+  "Portfolio doesn't fit",
+  "Campaign is full",
+] as const;
+
+/** The first answered question, for a one-line preview in the applications list. */
+export function applicationAnswerPreview(
+  answers: readonly ApplicationAnswer[],
+): { prompt: string; text: string; isLink: boolean } | null {
+  const first = answers.find((a) => a.answer.trim() !== "");
+  if (!first) return null;
+  const text =
+    first.kind === "yes_no" ? (first.answer === "yes" ? "Yes" : "No") : first.answer.trim();
+  return { prompt: first.prompt, text, isLink: first.kind === "url" };
+}
+
+/** Host name of a link answer, e.g. "instagram.com", or the raw text if it isn't a URL. */
+export function linkLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Per-status counts after a review succeeds, so the tabs update without a reload.
+ * Re-approving an approved creator whose access was removed leaves the counts unchanged.
+ */
+export function countsAfterReview(
+  counts: Record<ApplicationStatus, number>,
+  reviewed: readonly Pick<ContestApplication, "status">[],
+  decision: "approve" | "reject",
+): Record<ApplicationStatus, number> {
+  const next = { ...counts };
+  const target: ApplicationStatus = decision === "approve" ? "approved" : "rejected";
+  for (const app of reviewed) {
+    if (app.status === target) continue;
+    next[app.status] = Math.max(0, next[app.status] - 1);
+    next[target] += 1;
+  }
+  return next;
+}

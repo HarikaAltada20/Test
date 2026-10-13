@@ -23,6 +23,9 @@ import {
   applicationDisplayStatus,
   creatorInitials,
   formatAddResultSummary,
+  applicationAnswerPreview,
+  countsAfterReview,
+  linkLabel,
 } from "./campaign-access";
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
@@ -429,5 +432,63 @@ describe("applicationDisplayStatus", () => {
     assert.equal(applicationDisplayStatus({ status: "approved", on_access_list: true }), "approved");
     assert.equal(applicationDisplayStatus({ status: "approved" }), "approved");
     assert.equal(applicationDisplayStatus({ status: "rejected", on_access_list: false }), "rejected");
+  });
+});
+
+describe("applicationAnswerPreview", () => {
+  const answer = (kind: "short_text" | "url" | "yes_no", value: string, prompt = "Q") => ({
+    question_id: prompt,
+    prompt,
+    kind,
+    answer: value,
+  });
+
+  it("uses the first non-empty answer", () => {
+    assert.deepEqual(
+      applicationAnswerPreview([answer("short_text", "  ", "Empty"), answer("short_text", " Hi ", "Name")]),
+      { prompt: "Name", text: "Hi", isLink: false },
+    );
+  });
+
+  it("marks links and spells out yes/no", () => {
+    assert.equal(applicationAnswerPreview([answer("url", "https://x.com/a")])?.isLink, true);
+    assert.equal(applicationAnswerPreview([answer("yes_no", "no")])?.text, "No");
+  });
+
+  it("returns null when nothing was answered", () => {
+    assert.equal(applicationAnswerPreview([]), null);
+  });
+});
+
+describe("linkLabel", () => {
+  it("shows the host without www", () => {
+    assert.equal(linkLabel("https://www.instagram.com/someone"), "instagram.com");
+  });
+
+  it("falls back to the text when it isn't a URL", () => {
+    assert.equal(linkLabel("not a url"), "not a url");
+  });
+});
+
+describe("countsAfterReview", () => {
+  const counts = { pending: 5, approved: 2, rejected: 1, withdrawn: 0 };
+
+  it("moves approved and rejected applications between statuses", () => {
+    assert.deepEqual(countsAfterReview(counts, [{ status: "pending" }, { status: "rejected" }], "approve"), {
+      pending: 4,
+      approved: 4,
+      rejected: 0,
+      withdrawn: 0,
+    });
+    assert.deepEqual(countsAfterReview(counts, [{ status: "pending" }], "reject"), {
+      pending: 4,
+      approved: 2,
+      rejected: 2,
+      withdrawn: 0,
+    });
+  });
+
+  it("leaves counts alone when re-approving", () => {
+    assert.deepEqual(countsAfterReview(counts, [{ status: "approved" }], "approve"), counts);
   });
 });

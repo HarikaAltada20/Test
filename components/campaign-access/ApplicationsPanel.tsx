@@ -1,71 +1,61 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  ClipboardList,
-  Inbox,
-  Link2,
-  Loader2,
-  Search,
-  SearchX,
-  X,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as TabsPrimitive from "@radix-ui/react-tabs";
+import { Check, ClipboardList, Inbox, Link2, Loader2, Search, SearchX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "@/hooks/use-toast";
 import { useDashboardDark } from "@/hooks/use-dashboard-dark";
 import { cn } from "@/lib/utils";
 import {
   APPLICATION_STATUSES,
   APPLICATION_STATUS_LABELS,
-  MAX_REJECTION_REASON_LENGTH,
+  MAX_BULK_REVIEW,
+  applicationAnswerPreview,
   applicationDisplayStatus,
   clampPage,
+  countsAfterReview,
   type ApplicationStatus,
   type ContestApplication,
 } from "@/lib/campaign-access";
 import { applicationsApi, type ApplicationListResponse } from "./api";
 import { ApplicationStatusBadge } from "./AccessBadge";
+import { LinkChip } from "./ApplicationAnswers";
+import { ApplicationReviewDrawer } from "./ApplicationReviewDrawer";
 import { CreatorAvatar } from "./CreatorAvatar";
 import { EmptyState } from "./EmptyState";
+import { RejectApplicationsDialog } from "./RejectApplicationsDialog";
 import { RelativeTime } from "./RelativeTime";
 import { ApplicationRowsSkeleton } from "./Skeletons";
 
-type Props = { contestId: string };
+type Props = {
+  contestId: string;
+  /** Called with the pending count whenever it changes, e.g. for the tab label. */
+  onPendingCountChange?: (count: number) => void;
+};
 
 const PAGE_SIZE = 50;
+const outlineDark = "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
 
-function AnswerValue({ kind, answer }: { kind: string; answer: string }) {
-  if (kind === "url") {
-    return (
-      <a
-        href={answer}
-        target="_blank"
-        rel="noopener noreferrer nofollow"
-        className="break-all text-[#7F39EC] underline dark:text-purple-300"
-      >
-        {answer}
-      </a>
-    );
-  }
-  if (kind === "yes_no") return <span>{answer === "yes" ? "Yes" : "No"}</span>;
-  return <span className="whitespace-pre-wrap break-words">{answer}</span>;
-}
-
-export function ApplicationsPanel({ contestId }: Props) {
+export function ApplicationsPanel({ contestId, onPendingCountChange }: Props) {
   const isDark = useDashboardDark();
   const [status, setStatus] = useState<ApplicationStatus>("pending");
   const [searchInput, setSearchInput] = useState("");
@@ -73,45 +63,50 @@ export function ApplicationsPanel({ contestId }: Props) {
   const [page, setPage] = useState(1);
   const [data, setData] = useState<ApplicationListResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [rejectIds, setRejectIds] = useState<string[] | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [selected, setSelected] = useState<Map<string, ContestApplication>>(new Map());
+  const [inFlight, setInFlight] = useState<Set<string>>(new Set());
+  const [reviewIndex, setReviewIndex] = useState<number | null>(null);
+  const [rejectTargets, setRejectTargets] = useState<ContestApplication[] | null>(null);
+  const [approveTargets, setApproveTargets] = useState<ContestApplication[] | null>(null);
+  const [selectingAll, setSelectingAll] = useState(false);
   const latestRequest = useRef(0);
 
-  const load = useCallback(async () => {
-    const requestId = ++latestRequest.current;
-    let movingPage = false;
-    setLoading(true);
-    try {
-      const res = await applicationsApi.list(contestId, {
-        status,
-        search: search || undefined,
-        page,
-        limit: PAGE_SIZE,
-      });
-      if (requestId !== latestRequest.current) return;
-      // Reviews can shrink the results so this page no longer exists; the page change reloads.
-      const validPage = clampPage(page, res.total, PAGE_SIZE);
-      if (validPage !== page) {
-        movingPage = true;
-        setPage(validPage);
-        return;
+  const load = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      const requestId = ++latestRequest.current;
+      let movingPage = false;
+      if (!silent) setLoading(true);
+      try {
+        const res = await applicationsApi.list(contestId, {
+          status,
+          search: search || undefined,
+          page,
+          limit: PAGE_SIZE,
+        });
+        if (requestId !== latestRequest.current) return;
+        // Reviews can shrink the results so this page no longer exists; the page change reloads.
+        const validPage = clampPage(page, res.total, PAGE_SIZE);
+        if (validPage !== page) {
+          movingPage = true;
+          setPage(validPage);
+          return;
+        }
+        setData(res);
+        if (!silent) setSelected(new Map());
+      } catch (e: unknown) {
+        if (requestId !== latestRequest.current) return;
+        toast({
+          title: "Could not load applications",
+          description: e instanceof Error ? e.message : undefined,
+          variant: "destructive",
+        });
+      } finally {
+        if (requestId === latestRequest.current && !movingPage) setLoading(false);
       }
-      setData(res);
-      setSelected(new Set());
-    } catch (e: unknown) {
-      if (requestId !== latestRequest.current) return;
-      toast({
-        title: "Could not load applications",
-        description: e instanceof Error ? e.message : undefined,
-        variant: "destructive",
-      });
-    } finally {
-      if (requestId === latestRequest.current && !movingPage) setLoading(false);
-    }
-  }, [contestId, status, search, page]);
+    },
+    [contestId, status, search, page],
+  );
 
   useEffect(() => {
     load();
@@ -125,15 +120,64 @@ export function ApplicationsPanel({ contestId }: Props) {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  const review = async (ids: string[], decision: "approve" | "reject", reason?: string) => {
-    const key = `${decision}:${ids.join(",")}`;
-    setBusy(key);
+  const pendingCount = data?.counts?.pending;
+  useEffect(() => {
+    if (pendingCount !== undefined) onPendingCountChange?.(pendingCount);
+  }, [pendingCount, onPendingCountChange]);
+
+  const applications = useMemo(() => data?.applications ?? [], [data]);
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const hasAnyApplications = Object.values(data?.counts ?? {}).some((n) => n > 0);
+
+  // Keep the drawer on a real row after reviewed rows leave the list.
+  useEffect(() => {
+    if (reviewIndex === null) return;
+    if (applications.length === 0) setReviewIndex(null);
+    else if (reviewIndex >= applications.length) setReviewIndex(applications.length - 1);
+  }, [applications.length, reviewIndex]);
+
+  const needsReapprove = (a: ContestApplication) => a.status === "approved" && !a.on_access_list;
+  const canApprove = useCallback(
+    (a: ContestApplication) =>
+      a.status === "pending" || a.status === "rejected" || (a.status === "approved" && !a.on_access_list),
+    [],
+  );
+  const canReject = useCallback((a: ContestApplication) => a.status === "pending", []);
+  const selectable = applications.filter((a) => canApprove(a) || canReject(a));
+  const allOnPageSelected = selectable.length > 0 && selectable.every((a) => selected.has(a.id));
+  const selectedApps = Array.from(selected.values());
+  const matchingCount = Math.min(total, MAX_BULK_REVIEW);
+
+  const toggleSelected = (app: ContestApplication) =>
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (next.has(app.id)) next.delete(app.id);
+      else next.set(app.id, app);
+      return next;
+    });
+
+  /**
+   * Reviews optimistically: rows fade while the request runs and leave the list
+   * when it succeeds; on failure they come back. A quiet reload then syncs the
+   * page, including moving to a page that still exists.
+   */
+  const review = async (
+    apps: ContestApplication[],
+    decision: "approve" | "reject",
+    reason?: string,
+  ): Promise<boolean> => {
+    if (apps.length === 0) return false;
+    const ids = apps.map((a) => a.id);
+    const target: ApplicationStatus = decision === "approve" ? "approved" : "rejected";
+    setBusy(true);
+    setInFlight((prev) => new Set([...prev, ...ids]));
     try {
-      if (ids.length === 1) {
-        const res = await applicationsApi.review(contestId, ids[0], decision, reason);
+      if (apps.length === 1) {
+        const res = await applicationsApi.review(contestId, ids[0], decision, reason || undefined);
         toast({ title: res.message });
       } else {
-        const res = await applicationsApi.bulkReview(contestId, ids, decision, reason);
+        const res = await applicationsApi.bulkReview(contestId, ids, decision, reason || undefined);
         toast({
           title: `${res.updated} application${res.updated === 1 ? "" : "s"} ${
             decision === "approve" ? "approved" : "rejected"
@@ -141,17 +185,69 @@ export function ApplicationsPanel({ contestId }: Props) {
           description: res.skipped ? `${res.skipped} skipped` : undefined,
         });
       }
-      setRejectIds(null);
-      setRejectReason("");
-      await load();
+      const idSet = new Set(ids);
+      setData((d) =>
+        d && {
+          ...d,
+          applications: d.applications
+            .filter((a) => !idSet.has(a.id) || status === target)
+            .map((a) => (idSet.has(a.id) ? { ...a, status: target, on_access_list: decision === "approve" } : a)),
+          total: status === target ? d.total : Math.max(0, d.total - apps.filter((a) => a.status === status).length),
+          counts: countsAfterReview(d.counts, apps, decision),
+        },
+      );
+      setSelected((prev) => {
+        const next = new Map(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+      void load({ silent: true });
+      return true;
     } catch (e: unknown) {
       toast({
         title: "Something went wrong",
         description: e instanceof Error ? e.message : undefined,
         variant: "destructive",
       });
+      return false;
     } finally {
-      setBusy(null);
+      setInFlight((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+      setBusy(false);
+    }
+  };
+
+  const approveSelected = () => {
+    const apps = selectedApps.filter(canApprove);
+    if (apps.length > 1) setApproveTargets(apps);
+    else review(apps, "approve");
+  };
+
+  const selectAllMatching = async () => {
+    setSelectingAll(true);
+    try {
+      const res = await applicationsApi.list(contestId, {
+        status,
+        search: search || undefined,
+        page: 1,
+        limit: MAX_BULK_REVIEW,
+      });
+      setSelected(
+        new Map(
+          res.applications.filter((a) => canApprove(a) || canReject(a)).map((a) => [a.id, a]),
+        ),
+      );
+    } catch (e: unknown) {
+      toast({
+        title: "Could not select all",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setSelectingAll(false);
     }
   };
 
@@ -166,26 +262,39 @@ export function ApplicationsPanel({ contestId }: Props) {
     }
   };
 
-  const applications = data?.applications ?? [];
-  const total = data?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const hasAnyApplications = Object.values(data?.counts ?? {}).some((n) => n > 0);
-  const needsReapprove = (a: ContestApplication) => a.status === "approved" && !a.on_access_list;
-  const canApprove = (a: ContestApplication) =>
-    a.status === "pending" || a.status === "rejected" || needsReapprove(a);
-  const canReject = (a: ContestApplication) => a.status === "pending";
-  const selectable = applications.filter((a) => canApprove(a) || canReject(a));
-  const allSelected = selectable.length > 0 && selectable.every((a) => selected.has(a.id));
-  const selectedApps = applications.filter((a) => selected.has(a.id));
-
-  const toggle = (set: Set<string>, id: string) => {
-    const next = new Set(set);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    return next;
+  const renderStatus = (a: ContestApplication) => {
+    const display = applicationDisplayStatus(a);
+    if (display !== "access_removed") return <ApplicationStatusBadge status={display} />;
+    return (
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]"
+            >
+              <ApplicationStatusBadge status={display} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-60 border-gray-200 bg-white text-xs text-gray-900">
+            Approved, then removed from the access list. Re-approve to give access back.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
   };
 
-  const outlineDark = "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
+  const renderPreview = (a: ContestApplication) => {
+    const preview = applicationAnswerPreview(a.answers);
+    if (!preview) return null;
+    if (preview.isLink) return <LinkChip url={preview.text} />;
+    return (
+      <span className="block truncate text-xs text-gray-500 dark:text-gray-400">
+        <span className="font-medium text-gray-600 dark:text-gray-300">{preview.prompt}:</span>{" "}
+        {preview.text}
+      </span>
+    );
+  };
 
   return (
     <div className={cn("space-y-5", isDark && "dark")}>
@@ -199,225 +308,232 @@ export function ApplicationsPanel({ contestId }: Props) {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
-          {APPLICATION_STATUSES.map((s) => (
-            <Button
-              key={s}
-              type="button"
-              size="sm"
-              variant={status === s ? "default" : "outline"}
-              aria-pressed={status === s}
-              className={cn(
-                status === s ? "bg-[#7F39EC] hover:bg-[#7F39EC]/90" : outlineDark,
-              )}
-              onClick={() => {
-                setStatus(s);
-                setPage(1);
-              }}
-            >
-              {APPLICATION_STATUS_LABELS[s]} ({data?.counts?.[s] ?? 0})
-            </Button>
-          ))}
-        </div>
-        <div className="relative w-full sm:w-64">
-          <Search
-            className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-            aria-hidden="true"
-          />
-          <Input
-            className="h-10 pl-8 dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
-            placeholder="Search username"
-            aria-label="Search applications by username"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-          />
-        </div>
-      </div>
-
-      {selectedApps.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-purple-200 bg-purple-50/60 p-3 text-sm dark:border-[#7F39EC]/40 dark:bg-[#7F39EC]/15 dark:text-gray-100">
-          <span className="font-medium">{selectedApps.length} selected</span>
-          <Button
-            size="sm"
-            disabled={!!busy || !selectedApps.some(canApprove)}
-            onClick={() => review(selectedApps.filter(canApprove).map((a) => a.id), "approve")}
+      <TabsPrimitive.Root
+        value={status}
+        onValueChange={(v) => {
+          setStatus(v as ApplicationStatus);
+          setPage(1);
+          setReviewIndex(null);
+        }}
+        className="space-y-4"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <TabsPrimitive.List
+            aria-label="Application status"
+            className="flex max-w-full overflow-x-auto rounded-lg bg-gray-100 p-1 dark:bg-white/5"
           >
-            <Check className="mr-1 h-4 w-4" /> Approve
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className={outlineDark}
-            disabled={!!busy || !selectedApps.some(canReject)}
-            onClick={() => setRejectIds(selectedApps.filter(canReject).map((a) => a.id))}
-          >
-            <X className="mr-1 h-4 w-4" /> Reject
-          </Button>
+            {APPLICATION_STATUSES.map((s) => (
+              <TabsPrimitive.Trigger
+                key={s}
+                value={s}
+                className="flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] data-[state=active]:bg-white data-[state=active]:text-[#4A00BE] data-[state=active]:shadow-sm dark:text-gray-300 dark:hover:text-white dark:data-[state=active]:bg-[#7F39EC] dark:data-[state=active]:text-white"
+              >
+                {APPLICATION_STATUS_LABELS[s]}
+                <span
+                  className={cn(
+                    "min-w-[1.25rem] rounded-full px-1.5 text-center text-xs",
+                    s === "pending" && (data?.counts?.pending ?? 0) > 0
+                      ? "bg-amber-100 text-amber-800 dark:bg-amber-500/25 dark:text-amber-200"
+                      : "bg-gray-200/80 text-gray-600 dark:bg-white/10 dark:text-gray-300",
+                  )}
+                >
+                  {data?.counts?.[s] ?? 0}
+                </span>
+              </TabsPrimitive.Trigger>
+            ))}
+          </TabsPrimitive.List>
+          <div className="relative w-full sm:w-64">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+              aria-hidden="true"
+            />
+            <Input
+              className="h-10 pl-8 pr-9 dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500"
+              placeholder="Search username"
+              aria-label="Search applications by username"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
+            {searchInput && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:hover:bg-white/10 dark:hover:text-white"
+                onClick={() => setSearchInput("")}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </div>
-      )}
 
-      <div className="divide-y divide-gray-200 rounded-md border border-gray-200 dark:divide-white/10 dark:border-white/10">
-        <div className="flex items-center gap-3 bg-gray-50 px-4 py-2 text-xs font-medium text-gray-500 dark:bg-white/5 dark:text-gray-400">
-          <Checkbox
-            aria-label="Select all"
-            checked={allSelected}
-            disabled={selectable.length === 0}
-            onCheckedChange={(v) =>
-              setSelected(v ? new Set(selectable.map((a) => a.id)) : new Set())
-            }
-          />
-          <span className="flex-1">Creator</span>
-          <span className="hidden w-28 sm:block">Applied</span>
-          <span className="hidden w-28 sm:block">Status</span>
-          <span className="w-auto text-right sm:w-44">Actions</span>
-        </div>
+        <TabsPrimitive.Content value={status} className="focus-visible:outline-none">
+          <div className="rounded-md border border-gray-200 dark:border-white/10">
+            <div className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-gray-400">
+              <Checkbox
+                aria-label="Select all on this page"
+                checked={allOnPageSelected}
+                disabled={selectable.length === 0}
+                onCheckedChange={(v) =>
+                  setSelected((prev) => {
+                    const next = new Map(prev);
+                    selectable.forEach((a) => (v ? next.set(a.id, a) : next.delete(a.id)));
+                    return next;
+                  })
+                }
+              />
+              <span className="flex-1">
+                Creator<span className="sm:hidden"> · select all on this page</span>
+              </span>
+              <span className="hidden w-28 sm:block">Applied</span>
+              <span className="hidden w-32 sm:block">Status</span>
+              <span className="hidden w-48 text-right sm:block">Actions</span>
+            </div>
 
-        {loading ? (
-          <ApplicationRowsSkeleton />
-        ) : applications.length === 0 ? (
-          search ? (
-            <EmptyState
-              icon={SearchX}
-              title="No applications match that username"
-              actions={
-                <Button size="sm" variant="outline" className={outlineDark} onClick={() => setSearchInput("")}>
-                  Clear search
-                </Button>
-              }
-            />
-          ) : !hasAnyApplications ? (
-            <EmptyState
-              icon={Inbox}
-              title="No applications yet"
-              description="Share the campaign link so creators can find it and apply."
-              actions={
-                <Button size="sm" onClick={copyCampaignLink}>
-                  <Link2 className="mr-1.5 h-4 w-4" /> Copy campaign link
-                </Button>
-              }
-            />
-          ) : (
-            <EmptyState
-              icon={Inbox}
-              title={`No ${APPLICATION_STATUS_LABELS[status].toLowerCase()} applications`}
-            />
-          )
-        ) : (
-          applications.map((a) => {
-            const isOpen = expanded.has(a.id);
-            const panelId = `application-${a.id}-answers`;
-            return (
-              <div key={a.id} className="px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <Checkbox
-                    aria-label={`Select ${a.username ?? "creator"}`}
-                    checked={selected.has(a.id)}
-                    disabled={!canApprove(a) && !canReject(a)}
-                    onCheckedChange={() => setSelected((s) => toggle(s, a.id))}
-                  />
-                  <button
-                    type="button"
-                    aria-expanded={isOpen}
-                    aria-controls={panelId}
-                    className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]"
-                    onClick={() => setExpanded((s) => toggle(s, a.id))}
-                  >
-                    {isOpen ? (
-                      <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
-                    )}
-                    <CreatorAvatar
-                      username={a.username}
-                      fullName={a.full_name}
-                      src={a.profile_picture_url}
-                    />
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium text-gray-900 dark:text-white">
-                        @{a.username ?? "unknown"}
-                      </span>
-                      {a.full_name && (
-                        <span className="block truncate text-xs text-gray-500 dark:text-gray-400">
-                          {a.full_name}
-                        </span>
-                      )}
-                      <span className="mt-1 flex items-center gap-2 sm:hidden">
-                        <ApplicationStatusBadge status={applicationDisplayStatus(a)} />
-                      </span>
-                    </span>
-                  </button>
-                  <span className="hidden w-28 text-sm text-gray-600 dark:text-gray-300 sm:block">
-                    <RelativeTime value={a.created_at} />
+            {allOnPageSelected && total > selectable.length && selected.size < matchingCount && (
+              <div className="flex flex-wrap items-center justify-center gap-2 border-b border-gray-200 bg-purple-50/60 px-4 py-2 text-sm text-gray-700 dark:border-white/10 dark:bg-[#7F39EC]/10 dark:text-gray-200">
+                All {selectable.length} on this page are selected.
+                <button
+                  type="button"
+                  className="rounded-sm font-medium text-[#7F39EC] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:text-purple-300"
+                  disabled={selectingAll}
+                  onClick={selectAllMatching}
+                >
+                  {selectingAll && <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" />}
+                  Select all {matchingCount} matching
+                </button>
+                {total > MAX_BULK_REVIEW && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    (up to {MAX_BULK_REVIEW} at a time)
                   </span>
-                  <span className="hidden w-28 sm:block">
-                    <ApplicationStatusBadge status={applicationDisplayStatus(a)} />
-                  </span>
-                  <span className="flex shrink-0 flex-col justify-end gap-2 sm:w-44 sm:flex-row">
-                    {canApprove(a) && (
-                      <Button
-                        size="sm"
-                        disabled={!!busy}
-                        onClick={() => review([a.id], "approve")}
-                      >
-                        {busy === `approve:${a.id}` ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : needsReapprove(a) ? (
-                          "Re-approve"
-                        ) : (
-                          "Approve"
-                        )}
-                      </Button>
-                    )}
-                    {canReject(a) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className={outlineDark}
-                        disabled={!!busy}
-                        onClick={() => setRejectIds([a.id])}
-                      >
-                        Reject
-                      </Button>
-                    )}
-                  </span>
-                </div>
-
-                {isOpen && (
-                  <div
-                    id={panelId}
-                    className="mt-3 space-y-3 rounded-md bg-gray-50 p-3 text-sm sm:pl-12 dark:bg-white/5"
-                  >
-                    <p className="text-xs text-gray-500 dark:text-gray-400 sm:hidden">
-                      <RelativeTime value={a.created_at} prefix="Applied" />
-                    </p>
-                    {a.answers.length === 0 ? (
-                      <p className="text-gray-500 dark:text-gray-400">
-                        No answers (this campaign had no questions).
-                      </p>
-                    ) : (
-                      a.answers.map((ans) => (
-                        <div key={ans.question_id}>
-                          <p className="font-medium text-gray-800 dark:text-gray-100">{ans.prompt}</p>
-                          <div className="text-gray-700 dark:text-gray-300">
-                            <AnswerValue kind={ans.kind} answer={ans.answer} />
-                          </div>
-                        </div>
-                      ))
-                    )}
-                    {a.status === "rejected" && a.rejection_reason && (
-                      <p className="text-gray-600 dark:text-gray-300">
-                        <span className="font-medium">Rejection reason:</span>{" "}
-                        {a.rejection_reason}
-                      </p>
-                    )}
-                  </div>
                 )}
               </div>
-            );
-          })
-        )}
-      </div>
+            )}
+
+            {loading ? (
+              <ApplicationRowsSkeleton />
+            ) : applications.length === 0 ? (
+              search ? (
+                <EmptyState
+                  icon={SearchX}
+                  title="No applications match that username"
+                  actions={
+                    <Button size="sm" variant="outline" className={outlineDark} onClick={() => setSearchInput("")}>
+                      Clear search
+                    </Button>
+                  }
+                />
+              ) : !hasAnyApplications ? (
+                <EmptyState
+                  icon={Inbox}
+                  title="No applications yet"
+                  description="Share the campaign link so creators can find it and apply."
+                  actions={
+                    <Button size="sm" onClick={copyCampaignLink}>
+                      <Link2 className="mr-1.5 h-4 w-4" /> Copy campaign link
+                    </Button>
+                  }
+                />
+              ) : (
+                <EmptyState
+                  icon={Inbox}
+                  title={`No ${APPLICATION_STATUS_LABELS[status].toLowerCase()} applications`}
+                />
+              )
+            ) : (
+              <ul className="divide-y divide-gray-200 dark:divide-white/10">
+                {applications.map((a, i) => {
+                  const pending = inFlight.has(a.id);
+                  return (
+                    <li
+                      key={a.id}
+                      aria-busy={pending}
+                      className={cn(
+                        "flex flex-col gap-3 px-4 py-3 transition-opacity duration-300 sm:flex-row sm:items-center",
+                        pending && "pointer-events-none opacity-40",
+                      )}
+                    >
+                      <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
+                        <Checkbox
+                          className="mt-2.5 sm:mt-0"
+                          aria-label={`Select @${a.username ?? "creator"}`}
+                          checked={selected.has(a.id)}
+                          disabled={!canApprove(a) && !canReject(a)}
+                          onCheckedChange={() => toggleSelected(a)}
+                        />
+                        <button
+                          type="button"
+                          aria-label={`Review @${a.username ?? "creator"}'s application`}
+                          className="flex min-w-0 flex-1 items-start gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] sm:items-center"
+                          onClick={() => setReviewIndex(i)}
+                        >
+                          <CreatorAvatar
+                            username={a.username}
+                            fullName={a.full_name}
+                            src={a.profile_picture_url}
+                          />
+                          <span className="min-w-0 flex-1 space-y-0.5">
+                            <span className="block truncate font-medium text-gray-900 hover:text-[#7F39EC] dark:text-white dark:hover:text-purple-300">
+                              @{a.username ?? "unknown"}
+                              {a.full_name && (
+                                <span className="font-normal text-gray-500 dark:text-gray-400">
+                                  {" "}
+                                  · {a.full_name}
+                                </span>
+                              )}
+                            </span>
+                            {renderPreview(a)}
+                          </span>
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 pl-7 sm:contents">
+                        <span className="text-xs text-gray-500 dark:text-gray-400 sm:w-28 sm:text-sm sm:text-gray-600 sm:dark:text-gray-300">
+                          <RelativeTime value={a.created_at} />
+                        </span>
+                        <span className="sm:w-32">{renderStatus(a)}</span>
+                      </div>
+                      {(canApprove(a) || canReject(a)) && (
+                        <div className="grid grid-cols-2 gap-2 pl-7 sm:flex sm:w-48 sm:justify-end sm:pl-0">
+                          {canReject(a) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className={outlineDark}
+                              disabled={busy}
+                              onClick={() => setRejectTargets([a])}
+                            >
+                              Reject
+                            </Button>
+                          )}
+                          {canApprove(a) && (
+                            <Button
+                              size="sm"
+                              variant={needsReapprove(a) ? "outline" : "default"}
+                              className={cn(
+                                needsReapprove(a) ? cn("col-span-2", outlineDark) : "bg-[#7F39EC] hover:bg-[#7F39EC]/90",
+                              )}
+                              disabled={busy}
+                              onClick={() => review([a], "approve")}
+                            >
+                              {pending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : needsReapprove(a) ? (
+                                "Re-approve"
+                              ) : (
+                                "Approve"
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </TabsPrimitive.Content>
+      </TabsPrimitive.Root>
 
       {pageCount > 1 && (
         <div className="flex items-center justify-end gap-2 text-sm">
@@ -445,48 +561,96 @@ export function ApplicationsPanel({ contestId }: Props) {
         </div>
       )}
 
-      <Dialog
-        isdark={isDark}
-        open={rejectIds !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setRejectIds(null);
-            setRejectReason("");
-          }
-        }}
-      >
-        <DialogContent className={cn(isDark && "dark text-white")}>
-          <DialogHeader>
-            <DialogTitle>
-              Reject {rejectIds && rejectIds.length > 1 ? `${rejectIds.length} applications` : "application"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="reject-reason">Reason (optional, shown to the creator)</Label>
-            <Textarea
-              id="reject-reason"
-              rows={3}
-              maxLength={MAX_REJECTION_REASON_LENGTH}
-              className="dark:border-white/15 dark:bg-white/5 dark:text-white"
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" className={outlineDark} onClick={() => setRejectIds(null)}>
-              Cancel
+      {selectedApps.length > 0 && (
+        <div
+          role="region"
+          aria-label="Bulk actions"
+          className="sticky bottom-4 z-30 flex flex-wrap items-center gap-2 rounded-lg border border-purple-200 bg-white p-3 text-sm shadow-lg dark:border-[#7F39EC]/40 dark:bg-[#170337] dark:text-gray-100"
+        >
+          <span className="font-medium">{selectedApps.length} selected</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="dark:text-gray-300 dark:hover:bg-white/10"
+            onClick={() => setSelected(new Map())}
+          >
+            Clear
+          </Button>
+          <div className="ml-auto flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className={outlineDark}
+              disabled={busy || !selectedApps.some(canReject)}
+              onClick={() => setRejectTargets(selectedApps.filter(canReject))}
+            >
+              <X className="mr-1 h-4 w-4" /> Reject
             </Button>
             <Button
-              variant="destructive"
-              disabled={!!busy}
-              onClick={() => rejectIds && review(rejectIds, "reject", rejectReason)}
+              size="sm"
+              className="bg-[#7F39EC] hover:bg-[#7F39EC]/90"
+              disabled={busy || !selectedApps.some(canApprove)}
+              onClick={approveSelected}
             >
-              {busy?.startsWith("reject:") && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Reject
+              <Check className="mr-1 h-4 w-4" /> Approve
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </div>
+      )}
+
+      <ApplicationReviewDrawer
+        applications={applications}
+        index={reviewIndex}
+        onIndexChange={setReviewIndex}
+        canApprove={canApprove}
+        canReject={canReject}
+        onApprove={(app) => {
+          review([app], "approve");
+        }}
+        onReject={(app) => setRejectTargets([app])}
+        busy={busy}
+        shortcutsEnabled={!rejectTargets && !approveTargets}
+        isDark={isDark}
+      />
+
+      <RejectApplicationsDialog
+        count={rejectTargets?.length ?? 0}
+        name={rejectTargets?.length === 1 ? `@${rejectTargets[0].username ?? "creator"}` : undefined}
+        busy={busy}
+        isDark={isDark}
+        onCancel={() => setRejectTargets(null)}
+        onConfirm={async (reason) => {
+          if (rejectTargets && (await review(rejectTargets, "reject", reason))) setRejectTargets(null);
+        }}
+      />
+
+      <AlertDialog open={!!approveTargets} onOpenChange={(o) => !o && setApproveTargets(null)}>
+        <AlertDialogContent className={cn(isDark && "dark border-white/10 bg-[#06021D] text-white")}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Approve {approveTargets?.length} creators?</AlertDialogTitle>
+            <AlertDialogDescription>
+              They&apos;re added to the access list, can see the full campaign and submit, and each
+              gets a notification.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className={outlineDark} disabled={busy}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[#7F39EC] hover:bg-[#7F39EC]/90"
+              disabled={busy}
+              onClick={async (e) => {
+                e.preventDefault();
+                if (approveTargets && (await review(approveTargets, "approve"))) setApproveTargets(null);
+              }}
+            >
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Approve {approveTargets?.length}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
