@@ -352,7 +352,7 @@ export default function AboutPage() {
                   </h2>
 
                   <p className="text-[15px] leading-[1.45] text-[#a8a8a8]">
-                    Define your campaign brief and rules, set your budget, choose your campaign type, and select the platforms where you want creators to promote your brand.
+                   Define your campaign brief, rules, budget. Choose your campaign type and platforms where creators promote your brand.
                   </p>
                 </div>
               </div>

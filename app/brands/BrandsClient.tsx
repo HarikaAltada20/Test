@@ -2120,7 +2120,7 @@ export default function BrandsClient({
                       isLight ? "text-black/50" : "text-[#8E8E8E]",
                     )}
                   >
-                   Define your campaign brief and rules, set your budget, choose your campaign type, and select the platforms where you want creators to promote your brand.
+                  Define your campaign brief, rules, budget. Choose your campaign type and platforms where creators promote your brand.
                   </p>
                 </div>
               </div>
