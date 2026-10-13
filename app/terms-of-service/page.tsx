@@ -128,7 +128,7 @@ export default function TermsOfServicePage() {
                   <span>Email:</span> support@gameofcreators.com
                 </p>
                 <p>
-                  <span>Address:</span> 8435 Wilshire Dr, Los Angeles, California 90016, US
+                  <span>Address:</span> 8435 Wilshire Dr, San Francisco, California 90016, US
                 </p>
               </div>
             </section>

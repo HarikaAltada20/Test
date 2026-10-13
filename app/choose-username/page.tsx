@@ -1365,8 +1365,8 @@ export default function ChooseUsernamePage() {
                         </p>
                       )}
                       {userType === "creator" && (
-                        <div className="mt-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">
-                          <p className="text-emerald-400 text-sm">
+                        <div className="mt-2 bg-[#171717] shadow-[inset_0px_0px_4px_0px_#FFFFFF40] rounded-xl p-3">
+                          <p className="text-white text-sm">
                             Use a valid referral code to get $0.50 cash bonus
                             (50 cents) added to your withdrawable balance.
                           </p>

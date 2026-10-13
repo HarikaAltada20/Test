@@ -874,6 +874,7 @@ const brandImages: string[] = [
   "/images/7e659d660283b02da97f42ede238f8b03b35cb37.png",
   "/images/image 276.png",
   "/images/Frame 2147243949.png",
+  "/images/beer-muscles-logo.png",
   "/images/0046b3171bb1d05ed8f26833e71c449ca7073d81.png",
 ];
 // const features = [
@@ -2208,7 +2209,7 @@ export default function HeroContent() {
               >
                 Set your budget and brief. Your campaign runs across a network{" "}
                 <br className="hidden xl:block" />
-                of 15,700+ creators, and you pay for verified content and{" "}
+                of 21,000+ creators, and you pay for verified content and{" "}
                 <br className="hidden xl:block" />
                 performance.
               </p>

@@ -138,7 +138,7 @@ export default function PrivacyPolicyPage() {
             <div className="pl-4 text-lg">
               <p>Email: support@gameofcreators.com</p>
               <p>
-                Address: 4647 Wildomar Dr, Los Angeles, California 90068, US
+                Address: 4647 Wildomar Dr, San Francisco, California 90068, US
               </p>
             </div>
           </section>

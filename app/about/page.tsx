@@ -352,8 +352,7 @@ export default function AboutPage() {
                   </h2>
 
                   <p className="text-[15px] leading-[1.45] text-[#a8a8a8]">
-                    Define your brief, content requirements, rules, platforms
-                    and budget to tailor your campaign strategy.
+                    Define your campaign brief and rules, set your budget, choose your campaign type, and select the platforms where you want creators to promote your brand.
                   </p>
                 </div>
               </div>
@@ -427,7 +426,7 @@ export default function AboutPage() {
                   </h3>
 
                   <p className="text-[15px] leading-[1.5] text-[#8E8E8E]">
-                    Creators create content based on your brief, gets reviewed and goes live after your approval
+                    Creators discover your campaign, create content that follows your brief, and publish it across selected platforms.
                   </p>
                 </div>
               </div>
@@ -528,8 +527,8 @@ export default function AboutPage() {
                   </h3>
 
                   <p className="text-[15px] leading-[1.5] text-[#8E8E8E]">
-                    We track performance so creators get paid on results and you
-                    see where your budget went.
+                    Campaign performance is tracked to ensure creators are rewarded based on payout rules.
+Gain clear insights into results and budget usage.
                   </p>
                 </div>
               </div>

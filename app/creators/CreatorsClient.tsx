@@ -209,11 +209,12 @@ function CreatorsRollingNumber({ isLight }: { isLight: boolean }) {
 //   },
 // ];
 const brandImages: string[] = [
-  "/images/ba54cd16167abac1d45d63109c16d6999d67e552.png",
+   "/images/ba54cd16167abac1d45d63109c16d6999d67e552.png",
   "/images/image 277.png",
   "/images/7e659d660283b02da97f42ede238f8b03b35cb37.png",
   "/images/image 276.png",
   "/images/Frame 2147243949.png",
+  "/images/beer-muscles-logo.png",
   "/images/0046b3171bb1d05ed8f26833e71c449ca7073d81.png",
 ];
 const creatorsteps = [

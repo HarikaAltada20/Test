@@ -269,11 +269,11 @@ export function Footer() {
         {/* Watermark */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center overflow-hidden select-none"
+          className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center overflow-hidden select-none px-4"
         >
           <span
             className={cn(
-              "text-[48px] sm:text-[72px] md:text-[96px] lg:text-[112px] font-bold tracking-tight leading-none whitespace-nowrap translate-y-[28%]",
+              "text-[clamp(1.4rem,7.8vw,112px)] font-bold tracking-tight leading-none whitespace-nowrap translate-y-[12%]",
               isLight ? "text-black/[0.06]" : "text-white/[0.04]",
             )}
           >

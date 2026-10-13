@@ -22,6 +22,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import logo from "@/public/images/Primary Logo white 1.png";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 export default function VerifyOTPPage() {
   const [email, setEmail] = useState("");
@@ -134,17 +135,8 @@ export default function VerifyOTPPage() {
 
   if (!email) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
-        <div className="text-center">
-          {/* Loader */}
-          <div className="p-8 bg-slate-900 rounded-full inline-block">
-            <Loader2 className="h-12 w-12 animate-spin text-violet-400" />
-          </div>
-          {/* Text below loader */}
-          <p className="mt-6 text-slate-300 font-medium">
-            Initializing verification portal...
-          </p>
-        </div>
+      <div className="min-h-screen bg-black flex items-center justify-center p-4">
+        <PageLoadingSpinner mode="dark" />
       </div>
     );
   }
