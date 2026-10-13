@@ -112,6 +112,7 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [listQuery, setListQuery] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -163,8 +164,24 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
         ) : lists.length === 0 ? (
           <p className="text-sm text-gray-500 dark:text-gray-400">No saved lists yet. Add usernames below and name the list to save it.</p>
         ) : (
+          <div className="space-y-2">
+          {lists.length > 6 && (
+            <Input
+              className={cn("h-10", fieldClass)}
+              placeholder="Search saved lists"
+              aria-label="Search saved lists"
+              value={listQuery}
+              onChange={(e) => setListQuery(e.target.value)}
+            />
+          )}
           <div className="grid gap-2 sm:grid-cols-2">
-            {lists.map((list) => (
+            {lists
+              .filter(
+                (list) =>
+                  value.allowlistIds.includes(list.id) ||
+                  list.name.toLowerCase().includes(listQuery.trim().toLowerCase()),
+              )
+              .map((list) => (
               <label
                 key={list.id}
                 className="flex cursor-pointer items-center gap-3 rounded-md border border-gray-200 px-3 py-2 hover:border-purple-300 dark:border-white/10 dark:hover:border-[#7F39EC]/60"
@@ -182,6 +199,7 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
                 </span>
               </label>
             ))}
+          </div>
           </div>
         )}
       </div>
