@@ -13,9 +13,11 @@ import { CampaignAccessPanel } from "@/components/campaign-access/CampaignAccess
 import { ApplicationsPanel } from "@/components/campaign-access/ApplicationsPanel";
 import { applicationsApi } from "@/components/campaign-access/api";
 import {
+  isAccessMode,
   isPrivateLikeAccessMode,
   type AccessMode,
 } from "@/lib/campaign-access";
+import { AccessModeBadge } from "@/components/campaign-access/AccessBadge";
 import {
   CONTEST_VIRTUAL_BODY_CLASS,
   CONTEST_VIRTUAL_ROW_CLASS,
@@ -15871,6 +15873,27 @@ export default function ContestDetailClient({
                           : "Leaderboard"}
                   </Badge>
                 )}
+                {isAccessMode(contest?.access_mode) && (
+                  <span className={cn("inline-flex", isDark && "dark")}>
+                    <AccessModeBadge mode={contest.access_mode} size="md" />
+                  </span>
+                )}
+                {contest?.access_mode === "restricted" &&
+                  (pendingApplications ?? 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("applications")}
+                      className={cn(
+                        "rounded-full px-3 py-1 text-xs font-semibold underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] sm:text-sm",
+                        isDark
+                          ? "bg-amber-500/15 text-amber-200"
+                          : "bg-amber-50 text-amber-800",
+                      )}
+                    >
+                      {pendingApplications} pending application
+                      {pendingApplications === 1 ? "" : "s"}
+                    </button>
+                  )}
               </div>
             </div>
           </div>

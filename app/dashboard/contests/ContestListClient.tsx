@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { DeleteContestButton } from "@/components/delete-contest-button";
 import { formatLocalDateTime, cn } from "@/lib/utils";
+import { AccessModeBadge } from "@/components/campaign-access/AccessBadge";
 import { isModifiedLinkClick } from "@/lib/navigation-link-utils";
 import {
   KNOWN_POST_CONTEST_STATUSES,
@@ -122,6 +123,7 @@ import {
 type Contest = {
   id: string;
   title: string | null;
+  access_mode?: string | null;
   platform: string | null;
   contest_type: string | null;
   created_at: string;
@@ -1127,7 +1129,13 @@ export function ContestListClient({
               ) : (
                 <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
               )}
-              <div className="absolute top-2 right-2">
+              <div className="absolute top-2 right-2 flex flex-wrap justify-end gap-1.5">
+                {(contest.access_mode === "private" ||
+                  contest.access_mode === "restricted") && (
+                  <span className={cn("inline-flex", isDark && "dark")}>
+                    <AccessModeBadge mode={contest.access_mode} size="md" />
+                  </span>
+                )}
                 <Badge
                   className={cn(
                     "text-sm px-3 py-1 font-medium border",
