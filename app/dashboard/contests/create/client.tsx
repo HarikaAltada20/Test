@@ -11805,6 +11805,8 @@ export default function CreateContestPage({
                       <ApplicationQuestionsEditor
                         questions={applicationQuestions}
                         onChange={setApplicationQuestions}
+                        showHeading={false}
+                        endDate={endDate}
                       />
                     </AccessStep>
                     <AccessStep

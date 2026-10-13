@@ -86,7 +86,7 @@ import { useUnsavedChangesWarning } from "@/hooks/use-unsaved-changes-warning";
 import { invalidateBrandCampaignListCachesAfterMutation } from "@/lib/invalidate-brand-campaign-list-cache";
 import { PreviewEditor } from "@/components/campaign-access/PreviewEditor";
 import { ApplicationQuestionsEditor } from "@/components/campaign-access/ApplicationQuestionsEditor";
-import { questionsApi } from "@/components/campaign-access/api";
+import { applicationsApi, questionsApi } from "@/components/campaign-access/api";
 import {
   accessModeSwitchNeedsConfirm,
   applicationQuestionsToSave,
@@ -833,6 +833,19 @@ export default function EditContestPage({
     useState<PendingAccessModeSwitch | null>(null);
   // Preview description or the applications switch changed since the last save.
   const [previewDirty, setPreviewDirty] = useState(false);
+  // Whether anyone has applied, so the questions editor can say edits don't change sent answers.
+  const [hasApplications, setHasApplications] = useState(false);
+  useEffect(() => {
+    if (savedAccessMode !== "restricted") return;
+    let cancelled = false;
+    applicationsApi
+      .list(contestId, { status: "all", limit: 1 })
+      .then((res) => !cancelled && setHasApplications(res.total > 0))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [contestId, savedAccessMode]);
   const [accessListSkipsRequirements, setAccessListSkipsRequirements] =
     useState(false);
   const [savedSkipRequirements, setSavedSkipRequirements] = useState(false);
@@ -10046,6 +10059,9 @@ export default function EditContestPage({
                           setApplicationQuestions(next);
                           setQuestionsDirty(true);
                         }}
+                        showHeading={false}
+                        endDate={endDate}
+                        hasApplications={hasApplications}
                       />
                     </AccessStep>
                     <AccessStep

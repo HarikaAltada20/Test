@@ -35,6 +35,8 @@ import {
   sortAccessMembers,
   accessModeSwitchNeedsConfirm,
   accessModeSwitchNotes,
+  applicationQuestionTemplates,
+  questionFieldErrors,
 } from "./campaign-access";
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
@@ -603,5 +605,37 @@ describe("accessModeSwitchNotes", () => {
     assert.equal(accessModeSwitchNeedsConfirm("private", "restricted", null), false);
     assert.equal(accessModeSwitchNeedsConfirm("restricted", "public", null), true);
     assert.equal(accessModeSwitchNeedsConfirm("public", "public", 5), false);
+  });
+});
+
+describe("questionFieldErrors", () => {
+  it("flags an empty prompt", () => {
+    assert.equal(questionFieldErrors({ prompt: "  ", kind: "short_text", options: null }).prompt, "Write the question");
+  });
+
+  it("needs two filled choices and flags duplicates", () => {
+    const res = questionFieldErrors({ prompt: "Pick", kind: "single_choice", options: ["A", " a ", ""] });
+    assert.equal(res.options, "Add at least 2 choices");
+    assert.deepEqual(res.optionErrors, [null, "This choice is already listed", null]);
+  });
+
+  it("passes a valid choice question", () => {
+    const res = questionFieldErrors({ prompt: "Pick", kind: "single_choice", options: ["A", "B"] });
+    assert.equal(res.prompt, null);
+    assert.equal(res.options, null);
+  });
+});
+
+describe("applicationQuestionTemplates", () => {
+  it("passes the editor's own validation", () => {
+    for (const t of applicationQuestionTemplates("2026-10-30T00:00:00.000Z")) {
+      const res = questionFieldErrors(t);
+      assert.equal(res.prompt, null);
+      assert.equal(res.options, null);
+    }
+  });
+
+  it("falls back to a generic date", () => {
+    assert.equal(applicationQuestionTemplates(null)[3].prompt, "Can you post by the end date?");
   });
 });

@@ -860,3 +860,57 @@ export function accessModeSwitchNeedsConfirm(
 ): boolean {
   return accessModeSwitchNotes(from, to, submissions).length > 1;
 }
+
+/**
+ * Field-level problems with one question, matching validateApplicationQuestions,
+ * so the editor can show them while the brand types.
+ */
+export function questionFieldErrors(q: Pick<ApplicationQuestion, "prompt" | "kind" | "options">): {
+  prompt: string | null;
+  options: string | null;
+  optionErrors: (string | null)[];
+} {
+  const prompt = q.prompt.trim();
+  const promptError = !prompt
+    ? "Write the question"
+    : prompt.length > MAX_QUESTION_PROMPT_LENGTH
+      ? `Keep it to ${MAX_QUESTION_PROMPT_LENGTH} characters or fewer`
+      : null;
+  if (q.kind !== "single_choice") return { prompt: promptError, options: null, optionErrors: [] };
+
+  const seen = new Set<string>();
+  const optionErrors = (q.options ?? []).map((raw) => {
+    const text = raw.trim();
+    if (!text) return null;
+    if (text.length > MAX_CHOICE_OPTION_LENGTH) return `Keep it to ${MAX_CHOICE_OPTION_LENGTH} characters or fewer`;
+    const key = text.toLowerCase();
+    if (seen.has(key)) return "This choice is already listed";
+    seen.add(key);
+    return null;
+  });
+  const options = seen.size < MIN_CHOICE_OPTIONS ? `Add at least ${MIN_CHOICE_OPTIONS} choices` : null;
+  return { prompt: promptError, options, optionErrors };
+}
+
+/** One-click starter questions for the editor. */
+export function applicationQuestionTemplates(endDate?: string | null): (ApplicationQuestion & {
+  label: string;
+})[] {
+  const d = endDate ? new Date(endDate) : null;
+  const by =
+    d && !Number.isNaN(d.getTime())
+      ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+      : "the end date";
+  return [
+    { label: "Link to your best work", prompt: "Link to your best work", kind: "url", options: null, required: true },
+    { label: "Why are you a good fit?", prompt: "Why are you a good fit for this campaign?", kind: "long_text", options: null, required: true },
+    {
+      label: "Follower count range",
+      prompt: "How many followers do you have on your main platform?",
+      kind: "single_choice",
+      options: ["Under 1K", "1K–10K", "10K–100K", "100K+"],
+      required: true,
+    },
+    { label: "Can you post in time?", prompt: `Can you post by ${by}?`, kind: "yes_no", options: null, required: true },
+  ];
+}
