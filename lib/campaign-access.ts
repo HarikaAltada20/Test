@@ -709,3 +709,45 @@ export function countsAfterReview(
   }
   return next;
 }
+
+/** Whole days until a date (rounded up), or null when there's no date or it has passed. */
+export function daysUntil(date: string | null | undefined, now: Date = new Date()): number | null {
+  if (!date) return null;
+  const end = new Date(date).getTime();
+  if (Number.isNaN(end)) return null;
+  const diff = end - now.getTime();
+  return diff > 0 ? Math.ceil(diff / 86_400_000) : null;
+}
+
+/** How many questions have a non-empty answer. */
+export function countAnsweredQuestions(
+  questions: readonly { id: string }[],
+  answers: Record<string, string | undefined>,
+): number {
+  return questions.filter((q) => (answers[q.id] ?? "").trim() !== "").length;
+}
+
+/** localStorage key for a creator's unsent answers to one campaign. */
+export function applicationDraftKey(contestId: string): string {
+  return `goc:application-draft:${contestId}`;
+}
+
+/** Restores a saved draft, keeping only string answers to questions that still exist. */
+export function parseApplicationDraft(
+  raw: string | null,
+  questions: readonly { id: string }[],
+): Record<string, string> {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    const ids = new Set(questions.map((q) => q.id));
+    const draft: Record<string, string> = {};
+    for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (ids.has(id) && typeof value === "string") draft[id] = value;
+    }
+    return draft;
+  } catch {
+    return {};
+  }
+}

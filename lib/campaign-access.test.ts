@@ -26,6 +26,9 @@ import {
   applicationAnswerPreview,
   countsAfterReview,
   linkLabel,
+  countAnsweredQuestions,
+  daysUntil,
+  parseApplicationDraft,
 } from "./campaign-access";
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
@@ -490,5 +493,37 @@ describe("countsAfterReview", () => {
 
   it("leaves counts alone when re-approving", () => {
     assert.deepEqual(countsAfterReview(counts, [{ status: "approved" }], "approve"), counts);
+  });
+});
+
+describe("daysUntil", () => {
+  it("rounds up partial days", () => {
+    assert.equal(daysUntil("2026-10-13T11:00:00.000Z", NOW), 2);
+  });
+
+  it("returns null for past, missing or invalid dates", () => {
+    assert.equal(daysUntil("2026-10-10T00:00:00.000Z", NOW), null);
+    assert.equal(daysUntil(null, NOW), null);
+    assert.equal(daysUntil("nope", NOW), null);
+  });
+});
+
+describe("countAnsweredQuestions", () => {
+  it("ignores blank answers", () => {
+    assert.equal(countAnsweredQuestions([{ id: "a" }, { id: "b" }, { id: "c" }], { a: "x", b: "  " }), 1);
+  });
+});
+
+describe("parseApplicationDraft", () => {
+  const questions = [{ id: "a" }, { id: "b" }];
+
+  it("keeps string answers to current questions", () => {
+    assert.deepEqual(parseApplicationDraft(JSON.stringify({ a: "hi", b: 3, gone: "x" }), questions), { a: "hi" });
+  });
+
+  it("returns an empty draft for missing or broken data", () => {
+    assert.deepEqual(parseApplicationDraft(null, questions), {});
+    assert.deepEqual(parseApplicationDraft("{oops", questions), {});
+    assert.deepEqual(parseApplicationDraft("[1]", questions), {});
   });
 });
