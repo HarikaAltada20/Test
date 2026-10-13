@@ -37,6 +37,7 @@ import {
   accessModeSwitchNotes,
   applicationQuestionTemplates,
   questionFieldErrors,
+  restrictedCardState,
 } from "./campaign-access";
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
@@ -637,5 +638,29 @@ describe("applicationQuestionTemplates", () => {
 
   it("falls back to a generic date", () => {
     assert.equal(applicationQuestionTemplates(null)[3].prompt, "Can you post by the end date?");
+  });
+});
+
+describe("restrictedCardState", () => {
+  it("treats a creator with access as approved", () => {
+    assert.equal(restrictedCardState({ is_preview: false }), "approved");
+  });
+
+  it("shows ended before the application status", () => {
+    assert.equal(restrictedCardState({ is_preview: true, has_ended: true, my_application_status: "pending" }), "ended");
+  });
+
+  it("follows the application status", () => {
+    assert.equal(restrictedCardState({ is_preview: true, my_application_status: "pending" }), "pending");
+    assert.equal(restrictedCardState({ is_preview: true, my_application_status: "rejected" }), "rejected");
+  });
+
+  it("is paused when applications are closed and the creator hasn't applied", () => {
+    assert.equal(restrictedCardState({ is_preview: true, applications_open: false }), "paused");
+  });
+
+  it("invites the creator to apply otherwise, including after withdrawing", () => {
+    assert.equal(restrictedCardState({ is_preview: true, applications_open: true }), "apply");
+    assert.equal(restrictedCardState({ is_preview: true, my_application_status: "withdrawn" }), "apply");
   });
 });

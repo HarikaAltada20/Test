@@ -32,6 +32,13 @@ import {
   X,
   Film,
   FileType,
+  ArrowRight,
+  CalendarX,
+  CircleCheck,
+  ClipboardList,
+  Hourglass,
+  PauseCircle,
+  XCircle,
 } from "lucide-react";
 import { UserResponse } from "@supabase/supabase-js";
 import { formatLocalDateTime } from "@/lib/utils";
@@ -165,6 +172,10 @@ import {
   AccessModeBadge,
   ApplicationStatusBadge,
 } from "@/components/campaign-access/AccessBadge";
+import {
+  restrictedCardState,
+  type RestrictedCardState,
+} from "@/lib/campaign-access";
 
 // Define types for filters and sorting
 type StatusFilterType = "all" | "live" | "upcoming" | "ended";
@@ -1494,7 +1505,7 @@ export default function OpportunitiesPage({
         <Eye className={cn("h-4 w-4", options?.eyeClassName)} />
       )}
       <span className={options?.textClassName}>
-        {isApplyCard(contest) ? "Apply" : "View Details"}
+        View Details
       </span>
     </Link>
   );
@@ -1533,57 +1544,333 @@ export default function OpportunitiesPage({
     );
   };
 
-  /** Restricted cards the creator can't open yet: a preview line and whether applications are open. */
-  const renderPreviewInfo = (contest: any) => {
-    const paused = contest.applications_open === false;
+  /** Status strip and button for each creator state on a Restricted card. */
+  const RESTRICTED_CARD_COPY: Record<
+    RestrictedCardState,
+    {
+      icon: typeof Clock;
+      title: string;
+      detail: string;
+      cta: string;
+      primary: boolean;
+      tone: "green" | "amber" | "red" | "gray" | "purple";
+    }
+  > = {
+    approved: {
+      icon: CircleCheck,
+      title: "Approved. You can submit.",
+      detail: "The full brief is open to you.",
+      cta: "Open campaign",
+      primary: true,
+      tone: "green",
+    },
+    pending: {
+      icon: Hourglass,
+      title: "Application under review",
+      detail: "We'll notify you when the brand decides.",
+      cta: "View application",
+      primary: false,
+      tone: "amber",
+    },
+    rejected: {
+      icon: XCircle,
+      title: "Not selected this time",
+      detail: "See the brand's note on the campaign page.",
+      cta: "View details",
+      primary: false,
+      tone: "red",
+    },
+    ended: {
+      icon: CalendarX,
+      title: "This campaign has ended",
+      detail: "Applications are closed.",
+      cta: "View details",
+      primary: false,
+      tone: "gray",
+    },
+    paused: {
+      icon: PauseCircle,
+      title: "Applications are paused",
+      detail: "The brand isn't taking new applications right now.",
+      cta: "View details",
+      primary: false,
+      tone: "gray",
+    },
+    apply: {
+      icon: ClipboardList,
+      title: "Apply to join",
+      detail: "The brand reviews every application.",
+      cta: "Apply to join",
+      primary: true,
+      tone: "purple",
+    },
+  };
+
+  const RESTRICTED_TONE_CLASSES: Record<
+    "green" | "amber" | "red" | "gray" | "purple",
+    { light: string; dark: string }
+  > = {
+    green: {
+      light: "bg-green-50 text-green-900 border-green-200",
+      dark: "bg-emerald-500/10 text-emerald-100 border-emerald-500/30",
+    },
+    amber: {
+      light: "bg-amber-50 text-amber-900 border-amber-200",
+      dark: "bg-amber-500/10 text-amber-100 border-amber-500/30",
+    },
+    red: {
+      light: "bg-red-50 text-red-900 border-red-200",
+      dark: "bg-red-500/10 text-red-100 border-red-500/30",
+    },
+    gray: {
+      light: "bg-slate-50 text-slate-800 border-slate-200",
+      dark: "bg-white/5 text-slate-200 border-white/10",
+    },
+    purple: {
+      light: "bg-purple-50 text-[#4A00BE] border-purple-200",
+      dark: "bg-[#7F39EC]/15 text-purple-100 border-[#7F39EC]/40",
+    },
+  };
+
+  /** Budget shown on a Restricted card: the prize pool for leaderboards, otherwise the pool budget. */
+  const getRestrictedCardBudgetCents = (contest: any): number => {
+    const prize = contest.contest_based_details?.leaderboard_contest?.total_prize;
+    if (contest.contest_type === "leaderboard" && typeof prize === "number" && prize > 0) {
+      return prize;
+    }
+    return getContestListPoolBudgetCents(contest);
+  };
+
+  const getContestTypeLabel = (type: string | null | undefined): string =>
+    type === "cpm"
+      ? "CPM Based"
+      : type === "leaderboard"
+        ? "Leaderboard"
+        : type === "milestone"
+          ? "Milestone"
+          : type === "dual_rewards"
+            ? "Dual Rewards"
+            : type
+              ? type.charAt(0).toUpperCase() + type.slice(1)
+              : "N/A";
+
+  /**
+   * Card for Restricted campaigns: says clearly that it's Restricted, where the
+   * creator stands, and what to do next. No budget tracker or counts.
+   */
+  const renderRestrictedOpportunityCard = (
+    contest: any,
+    layout: "grid" | "list",
+  ) => {
+    const state = restrictedCardState(contest);
+    const copy = RESTRICTED_CARD_COPY[state];
+    const tone = RESTRICTED_TONE_CLASSES[copy.tone];
+    const StateIcon = copy.icon;
+    const showApplicationsPill = state !== "approved" && state !== "ended";
+    const applicationsOpen = contest.applications_open !== false;
+    const budgetCents = getRestrictedCardBudgetCents(contest);
+    const isList = layout === "list";
+    const muted = isDark ? "text-slate-300" : "text-slate-600";
+    const strong = isDark ? "text-white" : "text-slate-800";
+    const dateFormat = {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    } as const;
+
+    const statusBadge = (
+      <Badge
+        className={cn(
+          "text-xs px-2.5 py-0.5 font-medium border shadow-sm",
+          contest.status === "ended"
+            ? `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`
+            : "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
+        )}
+      >
+        {contest.status === "active"
+          ? "Live"
+          : contest.status === "upcoming"
+            ? "Upcoming"
+            : contest.status === "ended"
+              ? getEndedOpportunityPhaseLabel(contest.post_contest_status)
+              : contest.status}
+      </Badge>
+    );
+
+    const facts: { icon: typeof Clock; label: string; value: React.ReactNode }[] = [
+      {
+        icon: Info,
+        label: "Type",
+        value: getContestTypeLabel(contest.contest_type),
+      },
+      ...(budgetCents > 0
+        ? [
+            {
+              icon: DollarSign,
+              label: contest.contest_type === "leaderboard" ? "Prize pool" : "Budget",
+              value: formatMoney(budgetCents),
+            },
+          ]
+        : []),
+      ...(contest.start_date
+        ? [
+            {
+              icon: Clock,
+              label: "Starts",
+              value: formatLocalDateTime(contest.start_date, dateFormat),
+            },
+          ]
+        : []),
+      ...(contest.end_date
+        ? [
+            {
+              icon: Calendar,
+              label: "Ends",
+              value: formatLocalDateTime(contest.end_date, dateFormat),
+            },
+          ]
+        : []),
+    ];
+
     return (
-      <div className="space-y-1.5">
-        {contest.preview_description && (
-          <p
+      <Card
+        key={contest.id}
+        className={cn(
+          "relative flex w-full cursor-pointer overflow-hidden rounded-xl border shadow-lg transition-all duration-300 ease-in-out hover:shadow-2xl group",
+          isList ? "flex-col sm:flex-row" : "flex-col",
+          isDark ? "bg-[#06021D] border-[#7F39EC]/40" : "bg-white border-purple-200",
+        )}
+      >
+        {renderOpportunityCardLink(contest)}
+        <div className={cn("pointer-events-none flex flex-1", isList ? "flex-col sm:flex-row" : "flex-col")}>
+          <div
             className={cn(
-              "line-clamp-2 text-sm",
-              isDark ? "text-gray-300" : "text-gray-600",
+              "relative flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#7F39EC]/30 to-[#4A00BE]/40",
+              isList ? "aspect-[16/10] sm:aspect-auto sm:w-72 sm:shrink-0" : "aspect-[16/10]",
             )}
           >
-            {contest.preview_description}
-          </p>
-        )}
-        <span
-          className={cn(
-            "inline-flex items-center gap-1.5 text-sm font-medium",
-            paused
-              ? isDark
-                ? "text-gray-400"
-                : "text-gray-500"
-              : isDark
-                ? "text-emerald-300"
-                : "text-emerald-700",
-          )}
-        >
-          <span
-            aria-hidden="true"
-            className={cn(
-              "h-2 w-2 rounded-full",
-              paused ? "bg-gray-400" : "bg-emerald-500",
+            {contest.thumbnail_url ? (
+              <img
+                src={contest.thumbnail_url}
+                alt=""
+                className="h-full w-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+              />
+            ) : (
+              <Trophy className="h-14 w-14 text-white/60" aria-hidden="true" />
             )}
-          />
-          {paused ? "Applications paused" : "Applications open"}
-        </span>
-      </div>
+            <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/50 to-transparent" />
+            <div className="absolute left-2 top-2">
+              <span className={cn("inline-flex", isDark && "dark")}>
+                <AccessModeBadge mode="restricted" size="sm" className="shadow-sm" />
+              </span>
+            </div>
+            <div className="absolute right-2 top-2">{statusBadge}</div>
+          </div>
+
+          <div className="flex flex-1 flex-col gap-3 p-4">
+            {showApplicationsPill && (
+              <div className="flex justify-end">
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                    applicationsOpen
+                      ? isDark
+                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                        : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : isDark
+                        ? "border-white/10 bg-white/5 text-slate-300"
+                        : "border-slate-200 bg-slate-50 text-slate-600",
+                  )}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full",
+                      applicationsOpen ? "bg-emerald-500" : "bg-slate-400",
+                    )}
+                  />
+                  {applicationsOpen ? "Applications open" : "Applications paused"}
+                </span>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <h3 className={cn("text-lg font-bold leading-tight", strong)}>{contest.title}</h3>
+              {contest.preview_description && (
+                <p className={cn("line-clamp-2 text-sm", muted)}>{contest.preview_description}</p>
+              )}
+            </div>
+
+            <div className={cn("flex items-center gap-2 text-sm", muted)}>
+              <span className="flex-shrink-0">{getContestPlatformIcons(contest.platform, "sm")}</span>
+              <span>
+                Platform:{" "}
+                <span className={cn("font-medium capitalize", strong)}>
+                  {contest.platform || "N/A"}
+                </span>
+              </span>
+            </div>
+
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+              {facts.map((f) => (
+                <div key={f.label} className="min-w-0">
+                  <dt className={cn("flex items-center gap-1 text-xs", muted)}>
+                    <f.icon className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+                    {f.label}
+                  </dt>
+                  <dd className={cn("truncate font-medium", strong)}>{f.value}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <div className="mt-auto space-y-3 pt-1">
+              <div
+                role="status"
+                className={cn(
+                  "flex items-start gap-2.5 rounded-lg border px-3 py-2.5",
+                  isDark ? tone.dark : tone.light,
+                )}
+              >
+                <StateIcon className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{copy.title}</p>
+                  <p className="text-xs opacity-80">{copy.detail}</p>
+                </div>
+              </div>
+              <Link
+                href={getOpportunityDetailHref(contest.id)}
+                prefetch={false}
+                aria-label={`${copy.cta}: ${contest.title || "campaign"}`}
+                className={cn(
+                  "pointer-events-auto relative z-[2] flex w-full items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] focus-visible:ring-offset-2",
+                  copy.primary
+                    ? "bg-[#7F39EC] text-white hover:bg-[#6a2bd1]"
+                    : isDark
+                      ? "border border-white/20 text-white hover:bg-white/10"
+                      : "border border-purple-200 bg-white text-[#4A00BE] hover:bg-purple-50",
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleOpportunityLinkClick(contest.id, e);
+                }}
+              >
+                {loadingButtons[contest.id]?.view ? <ButtonLoadingSpinner /> : null}
+                {copy.cta}
+                {copy.primary && <ArrowRight className="h-4 w-4" aria-hidden="true" />}
+              </Link>
+            </div>
+          </div>
+        </div>
+      </Card>
     );
   };
 
-  /** True when the card's main action is applying to a Restricted campaign. */
-  const isApplyCard = (contest: any) =>
-    contest.is_preview &&
-    contest.access_mode === "restricted" &&
-    contest.applications_open !== false &&
-    !contest.has_ended &&
-    (!contest.my_application_status ||
-      contest.my_application_status === "withdrawn");
-
   // Render list view item for opportunities
   const renderOpportunityListItem = (contest: any) => {
+    if (contest.access_mode === "restricted") {
+      return renderRestrictedOpportunityCard(contest, "list");
+    }
     const opportunityBudgetTracker = getOpportunityBudgetTrackerMeta(contest);
     return (
       <Card
@@ -1829,7 +2116,6 @@ export default function OpportunitiesPage({
                   </div>
                 )}
                 {/* For Twitter text_image contests, show participants instead of submissions */}
-                {contest.is_preview && renderPreviewInfo(contest)}
                 {!contest.is_preview && (() => {
                   const isTwitterTextImage =
                     (contest.platform?.toLowerCase() === "twitter" ||
@@ -2796,6 +3082,9 @@ export default function OpportunitiesPage({
                 </div>
               ) : paginatedContests && paginatedContests.length > 0 ? (
                 paginatedContests.map((contest) => {
+                  if (contest.access_mode === "restricted") {
+                    return renderRestrictedOpportunityCard(contest, "grid");
+                  }
                   const opportunityBudgetTracker = getOpportunityBudgetTrackerMeta(contest);
                   return (
                     <Card
@@ -3048,7 +3337,6 @@ export default function OpportunitiesPage({
                               </div>
                             )}
                             {/* For Twitter text_image contests, show participants instead of submissions */}
-                            {contest.is_preview && renderPreviewInfo(contest)}
                             {!contest.is_preview && (() => {
                               const isTwitterTextImage =
                                 (contest.platform?.toLowerCase() ===

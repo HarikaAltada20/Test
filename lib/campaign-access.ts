@@ -914,3 +914,24 @@ export function applicationQuestionTemplates(endDate?: string | null): (Applicat
     { label: "Can you post in time?", prompt: `Can you post by ${by}?`, kind: "yes_no", options: null, required: true },
   ];
 }
+
+export type RestrictedCardState = "approved" | "ended" | "pending" | "rejected" | "paused" | "apply";
+
+/**
+ * Where a creator stands on a Restricted campaign card, for its status strip
+ * and button. An approved creator gets the full campaign (not a preview).
+ */
+export function restrictedCardState(contest: {
+  is_preview?: boolean | null;
+  my_application_status?: string | null;
+  applications_open?: boolean | null;
+  has_ended?: boolean | null;
+  status?: string | null;
+}): RestrictedCardState {
+  if (!contest.is_preview) return "approved";
+  if (contest.has_ended || contest.status === "ended") return "ended";
+  if (contest.my_application_status === "pending") return "pending";
+  if (contest.my_application_status === "rejected") return "rejected";
+  if (contest.applications_open === false) return "paused";
+  return "apply";
+}
