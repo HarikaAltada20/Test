@@ -11,6 +11,8 @@ import type {
   InviteLink,
   InviteRedeemResult,
 } from "@/lib/campaign-access";
+import { formatAddResultSummary } from "@/lib/campaign-access";
+import type { ApplicantVisibility } from "@/lib/campaign-applicant-profile";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -247,10 +249,21 @@ export const questionsApi = {
     ),
 };
 
-export function summarizeAddResult(result: AddResult): string {
-  const parts = [`${result.added} added`];
-  if (result.alreadyOnList > 0) parts.push(`${result.alreadyOnList} already on the list`);
-  if (result.notFound?.length) parts.push(`not found: ${result.notFound.join(", ")}`);
-  if (result.invalid?.length) parts.push(`invalid: ${result.invalid.join(", ")}`);
-  return parts.join(" · ");
+/** Short toast line; failed usernames are listed with AddResultDetails instead. */
+export function summarizeAddResult(result: AddResult, alreadyLabel?: string): string {
+  return formatAddResultSummary(result, alreadyLabel);
 }
+
+export const applicantVisibilityApi = {
+  get: (contestId: string) =>
+    request<{ visibility: ApplicantVisibility; canEdit: boolean }>(
+      `/api/contests/${contestId}/applicant-visibility`,
+    ),
+
+  /** Admins only. */
+  save: (contestId: string, visibility: ApplicantVisibility) =>
+    request<{ visibility: ApplicantVisibility; canEdit: boolean }>(
+      `/api/contests/${contestId}/applicant-visibility`,
+      { method: "PUT", body: JSON.stringify({ visibility }) },
+    ),
+};

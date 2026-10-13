@@ -1,3 +1,5 @@
+import type { ApplicantProfile } from "@/lib/campaign-applicant-profile";
+
 export const ACCESS_MODES = ["public", "restricted", "private"] as const;
 export type AccessMode = (typeof ACCESS_MODES)[number];
 
@@ -351,6 +353,8 @@ export type ContestApplication = {
   full_name: string | null;
   profile_picture_url: string | null;
   on_access_list: boolean;
+  /** Connected accounts, scores and basics for the brand reviewing the application. */
+  creator?: ApplicantProfile | null;
 };
 
 export type MyApplication = {
@@ -612,4 +616,326 @@ export function isCampaignAccessNotificationType(
 
 export function isApplicationResult(value: unknown): value is ApplicationResult {
   return typeof value === "string" && value in APPLICATION_RESULT_MESSAGES;
+}
+
+// ---------------------------------------------------------------------------
+// Shared UI helpers
+// ---------------------------------------------------------------------------
+
+/** Status shown for an application; "access_removed" is approved but no longer on the list. */
+export type ApplicationDisplayStatus = ApplicationStatus | "access_removed";
+
+export function applicationDisplayStatus(app: {
+  status: ApplicationStatus;
+  on_access_list?: boolean;
+}): ApplicationDisplayStatus {
+  return app.status === "approved" && app.on_access_list === false ? "access_removed" : app.status;
+}
+
+export const APPLICATION_DISPLAY_STATUS_LABELS: Record<ApplicationDisplayStatus, string> = {
+  ...APPLICATION_STATUS_LABELS,
+  access_removed: "Access removed",
+};
+
+/** Up to two initials from a full name, falling back to the username. */
+export function creatorInitials(fullName?: string | null, username?: string | null): string {
+  const words = (fullName ?? "").trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  const handle = (username ?? "").replace(/^@/, "").trim();
+  return handle ? handle.slice(0, 2).toUpperCase() : "?";
+}
+
+function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * One-line result of adding usernames, e.g. "Added 12 creators · 2 already had access · 3 not found".
+ * Failed names are listed separately in the UI, not in this line.
+ */
+export function formatAddResultSummary(
+  result: { added: number; alreadyOnList?: number; notFound?: string[]; invalid?: string[] },
+  alreadyLabel = "already had access",
+): string {
+  const parts = [`Added ${plural(result.added, "creator")}`];
+  if (result.alreadyOnList) parts.push(`${result.alreadyOnList} ${alreadyLabel}`);
+  if (result.notFound?.length) parts.push(`${result.notFound.length} not found`);
+  if (result.invalid?.length) parts.push(`${result.invalid.length} invalid`);
+  return parts.join(" · ");
+}
+
+/** Most applications a brand can review in one bulk request (matches the bulk API). */
+export const MAX_BULK_REVIEW = 200;
+
+/** One-tap reasons in the reject dialog. "Other" leaves the text for the brand to write. */
+export const REJECTION_REASON_PRESETS = [
+  "Audience doesn't match",
+  "Portfolio doesn't fit",
+  "Campaign is full",
+] as const;
+
+/** The first answered question, for a one-line preview in the applications list. */
+export function applicationAnswerPreview(
+  answers: readonly ApplicationAnswer[],
+): { prompt: string; text: string; isLink: boolean } | null {
+  const first = answers.find((a) => a.answer.trim() !== "");
+  if (!first) return null;
+  const text =
+    first.kind === "yes_no" ? (first.answer === "yes" ? "Yes" : "No") : first.answer.trim();
+  return { prompt: first.prompt, text, isLink: first.kind === "url" };
+}
+
+/** Host name of a link answer, e.g. "instagram.com", or the raw text if it isn't a URL. */
+export function linkLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Per-status counts after a review succeeds, so the tabs update without a reload.
+ * Re-approving an approved creator whose access was removed leaves the counts unchanged.
+ */
+export function countsAfterReview(
+  counts: Record<ApplicationStatus, number>,
+  reviewed: readonly Pick<ContestApplication, "status">[],
+  decision: "approve" | "reject",
+): Record<ApplicationStatus, number> {
+  const next = { ...counts };
+  const target: ApplicationStatus = decision === "approve" ? "approved" : "rejected";
+  for (const app of reviewed) {
+    if (app.status === target) continue;
+    next[app.status] = Math.max(0, next[app.status] - 1);
+    next[target] += 1;
+  }
+  return next;
+}
+
+/** Whole days until a date (rounded up), or null when there's no date or it has passed. */
+export function daysUntil(date: string | null | undefined, now: Date = new Date()): number | null {
+  if (!date) return null;
+  const end = new Date(date).getTime();
+  if (Number.isNaN(end)) return null;
+  const diff = end - now.getTime();
+  return diff > 0 ? Math.ceil(diff / 86_400_000) : null;
+}
+
+/** How many questions have a non-empty answer. */
+export function countAnsweredQuestions(
+  questions: readonly { id: string }[],
+  answers: Record<string, string | undefined>,
+): number {
+  return questions.filter((q) => (answers[q.id] ?? "").trim() !== "").length;
+}
+
+/** localStorage key for a creator's unsent answers to one campaign. */
+export function applicationDraftKey(contestId: string): string {
+  return `goc:application-draft:${contestId}`;
+}
+
+/** Restores a saved draft, keeping only string answers to questions that still exist. */
+export function parseApplicationDraft(
+  raw: string | null,
+  questions: readonly { id: string }[],
+): Record<string, string> {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    const ids = new Set(questions.map((q) => q.id));
+    const draft: Record<string, string> = {};
+    for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (ids.has(id) && typeof value === "string") draft[id] = value;
+    }
+    return draft;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Usernames from an uploaded CSV or text file: the first cell of each row,
+ * skipping a header row such as "username" or "handle".
+ */
+export function parseUsernameCsv(text: string): string[] {
+  const rows = text.split(/\r?\n/);
+  const names: string[] = [];
+  rows.forEach((row, i) => {
+    const cell = row.split(/[,;\t]/)[0]?.trim().replace(/^"|"$/g, "").trim() ?? "";
+    if (!cell) return;
+    if (i === 0 && /^(user ?names?|handles?|creators?|@)$/i.test(cell)) return;
+    names.push(cell);
+  });
+  return names;
+}
+
+/** Key the Access tab filters by: a specific saved list or invite link, else the source. */
+export function accessMemberFilterKey(m: ContestAccessMember): string {
+  if (m.source === "saved_list" && m.source_allowlist_id) return `list:${m.source_allowlist_id}`;
+  if (m.source === "invite_link" && m.source_invite_link_id) return `invite:${m.source_invite_link_id}`;
+  return m.source;
+}
+
+/** Human label for where a creator on the access list came from. */
+export function accessMemberSourceLabel(m: ContestAccessMember): string {
+  if (m.source === "saved_list") return `List: ${m.source_allowlist_name ?? "deleted list"}`;
+  if (m.source === "invite_link" && m.source_invite_link_id) {
+    return `Invite link: ${m.source_invite_link_label ?? "Untitled link"}`;
+  }
+  return ACCESS_SOURCE_LABELS[m.source];
+}
+
+export type RosterSortKey = "creator" | "source" | "added";
+
+export function sortAccessMembers(
+  members: readonly ContestAccessMember[],
+  key: RosterSortKey,
+  direction: "asc" | "desc",
+): ContestAccessMember[] {
+  const value = (m: ContestAccessMember): string =>
+    key === "creator"
+      ? (m.username ?? "").toLowerCase()
+      : key === "source"
+        ? accessMemberSourceLabel(m).toLowerCase()
+        : m.added_at;
+  const sign = direction === "asc" ? 1 : -1;
+  return [...members].sort((a, b) => {
+    const va = value(a);
+    const vb = value(b);
+    return va < vb ? -sign : va > vb ? sign : 0;
+  });
+}
+
+function csvCell(value: string): string {
+  return /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+/** CSV of the access list for download. */
+export function accessMembersToCsv(members: readonly ContestAccessMember[]): string {
+  const rows = [
+    ["username", "full_name", "source", "added_at"],
+    ...members.map((m) => [m.username ?? "", m.full_name ?? "", accessMemberSourceLabel(m), m.added_at]),
+  ];
+  return rows.map((r) => r.map(csvCell).join(",")).join("\n");
+}
+
+/**
+ * What happens when a saved campaign switches who can see it, for the confirm
+ * dialog. Mirrors the database: existing submitters are added to the access
+ * list, invite links are revoked when going Public, and only Restricted
+ * campaigns take applications.
+ */
+export function accessModeSwitchNotes(
+  from: AccessMode,
+  to: AccessMode,
+  submissions: number | null,
+): string[] {
+  if (from === to) return [];
+  const notes: string[] = [];
+  if (to === "public") notes.push("Anyone can see this campaign.");
+  if (to === "private") notes.push("Only creators on the access list can see it.");
+  if (to === "restricted") {
+    notes.push("Everyone sees a preview. Creators apply and you choose who joins.");
+  }
+  if (from === "public" && submissions && submissions > 0) {
+    notes.push(
+      `Creators who already submitted (${submissions} submission${submissions === 1 ? "" : "s"}) are added to the access list and keep access.`,
+    );
+  }
+  if (to === "public") notes.push("Active invite links will be revoked.");
+  if (from === "restricted") {
+    notes.push(
+      to === "public"
+        ? "Pending applications stay as they are, and the Applications tab is hidden."
+        : "Pending applications stay pending, and creators can't apply while it's Private. Switch back to Restricted to review them.",
+    );
+  }
+  return notes;
+}
+
+/** Whether switching needs a confirm: anything beyond a plain description of the new mode. */
+export function accessModeSwitchNeedsConfirm(
+  from: AccessMode,
+  to: AccessMode,
+  submissions: number | null,
+): boolean {
+  return accessModeSwitchNotes(from, to, submissions).length > 1;
+}
+
+/**
+ * Field-level problems with one question, matching validateApplicationQuestions,
+ * so the editor can show them while the brand types.
+ */
+export function questionFieldErrors(q: Pick<ApplicationQuestion, "prompt" | "kind" | "options">): {
+  prompt: string | null;
+  options: string | null;
+  optionErrors: (string | null)[];
+} {
+  const prompt = q.prompt.trim();
+  const promptError = !prompt
+    ? "Write the question"
+    : prompt.length > MAX_QUESTION_PROMPT_LENGTH
+      ? `Keep it to ${MAX_QUESTION_PROMPT_LENGTH} characters or fewer`
+      : null;
+  if (q.kind !== "single_choice") return { prompt: promptError, options: null, optionErrors: [] };
+
+  const seen = new Set<string>();
+  const optionErrors = (q.options ?? []).map((raw) => {
+    const text = raw.trim();
+    if (!text) return null;
+    if (text.length > MAX_CHOICE_OPTION_LENGTH) return `Keep it to ${MAX_CHOICE_OPTION_LENGTH} characters or fewer`;
+    const key = text.toLowerCase();
+    if (seen.has(key)) return "This choice is already listed";
+    seen.add(key);
+    return null;
+  });
+  const options = seen.size < MIN_CHOICE_OPTIONS ? `Add at least ${MIN_CHOICE_OPTIONS} choices` : null;
+  return { prompt: promptError, options, optionErrors };
+}
+
+/** One-click starter questions for the editor. */
+export function applicationQuestionTemplates(endDate?: string | null): (ApplicationQuestion & {
+  label: string;
+})[] {
+  const d = endDate ? new Date(endDate) : null;
+  const by =
+    d && !Number.isNaN(d.getTime())
+      ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+      : "the end date";
+  return [
+    { label: "Link to your best work", prompt: "Link to your best work", kind: "url", options: null, required: true },
+    { label: "Why are you a good fit?", prompt: "Why are you a good fit for this campaign?", kind: "long_text", options: null, required: true },
+    {
+      label: "Follower count range",
+      prompt: "How many followers do you have on your main platform?",
+      kind: "single_choice",
+      options: ["Under 1K", "1K–10K", "10K–100K", "100K+"],
+      required: true,
+    },
+    { label: "Can you post in time?", prompt: `Can you post by ${by}?`, kind: "yes_no", options: null, required: true },
+  ];
+}
+
+export type RestrictedCardState = "approved" | "ended" | "pending" | "rejected" | "paused" | "apply";
+
+/**
+ * Where a creator stands on a Restricted campaign card, for its status strip
+ * and button. An approved creator gets the full campaign (not a preview).
+ */
+export function restrictedCardState(contest: {
+  is_preview?: boolean | null;
+  my_application_status?: string | null;
+  applications_open?: boolean | null;
+  has_ended?: boolean | null;
+  status?: string | null;
+}): RestrictedCardState {
+  if (!contest.is_preview) return "approved";
+  if (contest.has_ended || contest.status === "ended") return "ended";
+  if (contest.my_application_status === "pending") return "pending";
+  if (contest.my_application_status === "rejected") return "rejected";
+  if (contest.applications_open === false) return "paused";
+  return "apply";
 }

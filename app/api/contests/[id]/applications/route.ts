@@ -19,6 +19,13 @@ import {
 import { applicationResultResponse } from "@/lib/campaign-applications-server";
 import { invalidateOpportunitiesListCacheForUser } from "@/lib/campaign-list-cache";
 import { notifyApplicationReceived } from "@/lib/campaign-access-notifications";
+import {
+  APPLICANT_FIELDS,
+  APPLICANT_PROFILE_COLUMNS,
+  applyApplicantVisibility,
+  buildApplicantProfile,
+  parseApplicantVisibility,
+} from "@/lib/campaign-applicant-profile";
 
 export const dynamic = "force-dynamic";
 
@@ -112,6 +119,30 @@ export async function DELETE(_request: Request, { params }: Ctx) {
 }
 
 /**
+ * Brand-safe creator summaries (connected accounts, scores, basics) for the
+ * applicants on this page. Missing profiles or a failed read just leave them out.
+ */
+async function loadApplicantProfiles(
+  admin: ReturnType<typeof getServiceClient>,
+  userIds: string[],
+) {
+  const map = new Map<string, ReturnType<typeof buildApplicantProfile>>();
+  if (userIds.length === 0) return map;
+  const { data, error } = await admin
+    .from("creator_profiles")
+    .select(APPLICANT_PROFILE_COLUMNS)
+    .in("id", userIds);
+  if (error) {
+    console.error("[applications] creator profiles:", error.message);
+    return map;
+  }
+  for (const row of (data ?? []) as unknown as Record<string, unknown>[]) {
+    map.set(String(row.id), buildApplicantProfile(row));
+  }
+  return map;
+}
+
+/**
  * GET /api/contests/:id/applications?status=pending|approved|rejected|withdrawn|all&search=&page=&limit=
  * Brand or admin only. Returns one page plus per-status counts.
  */
@@ -149,10 +180,23 @@ export async function GET(request: Request, { params }: Ctx) {
       APPLICATION_STATUSES.map((s) => [s, Number(result.counts?.[s] ?? 0)]),
     ) as Record<ApplicationStatus, number>;
     const rows = Array.isArray(result.rows) ? result.rows : [];
-    const users = await loadUserDisplay(
-      admin,
-      rows.map((r) => r.user_id),
+    const userIds = rows.map((r) => r.user_id);
+    const [users, profiles, visibilityRow] = await Promise.all([
+      loadUserDisplay(admin, userIds),
+      loadApplicantProfiles(admin, userIds),
+      admin.from("contests").select("applicant_visibility").eq("id", id).maybeSingle(),
+    ]);
+    // Missing column (migration not run yet) means everything is visible.
+    const visibility = parseApplicantVisibility(
+      visibilityRow.error ? null : visibilityRow.data?.applicant_visibility,
     );
+    const hiddenFields = APPLICANT_FIELDS.filter((f) => !visibility[f]);
+    // Brands get the filtered summary; admins see everything, marked with what's hidden.
+    const creatorFor = (userId: string) => {
+      const profile = profiles.get(userId) ?? null;
+      if (!actor.isAdmin) return applyApplicantVisibility(profile, visibility);
+      return profile && hiddenFields.length ? { ...profile, hiddenFields } : profile;
+    };
 
     const applications: ContestApplication[] = rows.map((r) => {
       const u = users.get(r.user_id);
@@ -163,6 +207,7 @@ export async function GET(request: Request, { params }: Ctx) {
         full_name: u?.full_name ?? null,
         profile_picture_url: u?.profile_picture_url ?? null,
         on_access_list: !!r.on_access_list,
+        creator: creatorFor(r.user_id),
       };
     });
 

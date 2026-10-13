@@ -75,11 +75,21 @@ import { createClient } from "@/utils/supabase/client";
 import { UserResponse } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 import { AccessModeSelector } from "@/components/campaign-access/AccessModeSelector";
+import {
+  AccessModeSwitchDialog,
+  type PendingAccessModeSwitch,
+} from "@/components/campaign-access/AccessModeSwitchDialog";
+import { AccessStep } from "@/components/campaign-access/AccessStep";
+import { ApplicantVisibilityEditor } from "@/components/campaign-access/ApplicantVisibilityEditor";
+import { RestrictedPreviewDialog } from "@/components/campaign-access/RestrictedPreviewDialog";
+import { SkipRequirementsSwitch } from "@/components/campaign-access/SkipRequirementsSwitch";
+import { useUnsavedChangesWarning } from "@/hooks/use-unsaved-changes-warning";
 import { invalidateBrandCampaignListCachesAfterMutation } from "@/lib/invalidate-brand-campaign-list-cache";
 import { PreviewEditor } from "@/components/campaign-access/PreviewEditor";
 import { ApplicationQuestionsEditor } from "@/components/campaign-access/ApplicationQuestionsEditor";
-import { questionsApi } from "@/components/campaign-access/api";
+import { applicationsApi, questionsApi } from "@/components/campaign-access/api";
 import {
+  accessModeSwitchNeedsConfirm,
   applicationQuestionsToSave,
   isAccessMode,
   type AccessMode,
@@ -819,6 +829,24 @@ export default function EditContestPage({
   >("other");
   const [accessMode, setAccessMode] = useState<AccessMode>("public");
   const [savedAccessMode, setSavedAccessMode] = useState<AccessMode>("public");
+  // Mode switch waiting for the brand to confirm what it changes.
+  const [pendingAccessMode, setPendingAccessMode] =
+    useState<PendingAccessModeSwitch | null>(null);
+  // Preview description or the applications switch changed since the last save.
+  const [previewDirty, setPreviewDirty] = useState(false);
+  // Whether anyone has applied, so the questions editor can say edits don't change sent answers.
+  const [hasApplications, setHasApplications] = useState(false);
+  useEffect(() => {
+    if (savedAccessMode !== "restricted") return;
+    let cancelled = false;
+    applicationsApi
+      .list(contestId, { status: "all", limit: 1 })
+      .then((res) => !cancelled && setHasApplications(res.total > 0))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [contestId, savedAccessMode]);
   const [accessListSkipsRequirements, setAccessListSkipsRequirements] =
     useState(false);
   const [savedSkipRequirements, setSavedSkipRequirements] = useState(false);
@@ -894,6 +922,7 @@ export default function EditContestPage({
   };
   /** Call after a successful save that wrote accessFields. */
   const commitSavedAccessFields = (savedViaAdminApi: boolean) => {
+    setPreviewDirty(false);
     const changed =
       accessFields.access_mode !== savedAccessMode ||
       accessFields.access_list_skips_requirements !== savedSkipRequirements ||
@@ -909,6 +938,13 @@ export default function EditContestPage({
     setSavedSkipRequirements(accessFields.access_list_skips_requirements);
     setSavedListOnlyToEligible(effectiveListOnlyToEligible);
   };
+  const accessDirty =
+    accessMode !== savedAccessMode ||
+    (accessMode !== "public" &&
+      accessListSkipsRequirements !== savedSkipRequirements) ||
+    effectiveListOnlyToEligible !== savedListOnlyToEligible ||
+    (accessMode === "restricted" && (previewDirty || questionsDirty));
+  useUnsavedChangesWarning(accessDirty);
   const [category, setCategory] = useState<string>("technology");
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
   const [flatFeeBonusCap, setFlatFeeBonusCap] = useState<number | string>(""); // In dollars - for CPM campaigns only
@@ -9890,39 +9926,64 @@ export default function EditContestPage({
                     : "bg-gray-50",
                 )}
               >
-                <div>
-                  <Label className="text-base font-semibold">
-                    Who can see this campaign
-                  </Label>
-                  <p
-                    className={cn(
-                      "text-sm mt-1",
-                      isDark ? "text-gray-300" : "text-gray-600",
-                    )}
-                  >
-                    Manage which creators are on the access list from the
-                    campaign&apos;s Access tab. Review applications to
-                    restricted campaigns from the Applications tab.
-                  </p>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <Label className="text-base font-semibold">
+                      Who can see this campaign
+                    </Label>
+                    <p
+                      className={cn(
+                        "text-sm mt-1",
+                        isDark ? "text-gray-300" : "text-gray-600",
+                      )}
+                    >
+                      Manage which creators are on the access list from the
+                      campaign&apos;s Access tab. Review applications to
+                      restricted campaigns from the Applications tab.
+                    </p>
+                  </div>
+                  {accessDirty && (
+                    <span
+                      role="status"
+                      className={cn(
+                        "rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                        isDark
+                          ? "border-amber-500/30 bg-amber-500/15 text-amber-200"
+                          : "border-amber-200 bg-amber-50 text-amber-800",
+                      )}
+                    >
+                      Unsaved access changes
+                    </span>
+                  )}
                 </div>
                 <AccessModeSelector
                   value={accessMode}
                   onChange={async (next) => {
-                    if (savedAccessMode === "public" && next !== "public") {
+                    if (next === savedAccessMode) {
+                      setAccessMode(next);
+                      return;
+                    }
+                    let submissions: number | null = null;
+                    if (savedAccessMode === "public") {
                       const { count } = await supabase
                         .from("submissions")
                         .select("id", { count: "exact", head: true })
                         .eq("contest_id", contestId);
-                      if (
-                        (count ?? 0) > 0 &&
-                        !window.confirm(
-                          `This campaign has ${count} submission${count === 1 ? "" : "s"}. Creators who already submitted will be added to the access list and keep access. Continue?`,
-                        )
-                      ) {
-                        return;
-                      }
+                      submissions = count ?? 0;
+                    }
+                    if (accessModeSwitchNeedsConfirm(savedAccessMode, next, submissions)) {
+                      setPendingAccessMode({ from: savedAccessMode, to: next, submissions });
+                      return;
                     }
                     setAccessMode(next);
+                  }}
+                />
+                <AccessModeSwitchDialog
+                  pending={pendingAccessMode}
+                  onCancel={() => setPendingAccessMode(null)}
+                  onConfirm={(mode) => {
+                    setAccessMode(mode);
+                    setPendingAccessMode(null);
                   }}
                 />
                 {accessMode === "public" &&
@@ -9957,41 +10018,85 @@ export default function EditContestPage({
                     </div>
                   )}
                 {accessMode === "restricted" && (
-                  <div className="space-y-4 pt-2 border-t">
-                    <PreviewEditor
-                      description={previewDescription}
-                      onDescriptionChange={setPreviewDescription}
-                      applicationsOpen={applicationsOpen}
-                      onApplicationsOpenChange={setApplicationsOpen}
-                    />
-                    <ApplicationQuestionsEditor
-                      questions={applicationQuestions}
-                      onChange={(next) => {
-                        setApplicationQuestions(next);
-                        setQuestionsDirty(true);
-                      }}
-                    />
+                  <div className="space-y-6 pt-4 border-t">
+                    <AccessStep
+                      step={1}
+                      title="Preview creators see"
+                      description="What everyone sees before you approve them."
+                      action={
+                        <RestrictedPreviewDialog
+                          title={title}
+                          thumbnailUrl={thumbnailPreview}
+                          platform={platform}
+                          startDate={startDate}
+                          endDate={endDate}
+                          description={previewDescription}
+                          applicationsOpen={applicationsOpen}
+                          questions={applicationQuestions}
+                        />
+                      }
+                    >
+                      <PreviewEditor
+                        description={previewDescription}
+                        onDescriptionChange={(value) => {
+                          setPreviewDescription(value);
+                          setPreviewDirty(true);
+                        }}
+                        applicationsOpen={applicationsOpen}
+                        onApplicationsOpenChange={(value) => {
+                          setApplicationsOpen(value);
+                          setPreviewDirty(true);
+                        }}
+                      />
+                    </AccessStep>
+                    <AccessStep
+                      step={2}
+                      title="Application questions"
+                      description="Optional. Creators answer these when they apply."
+                    >
+                      <ApplicationQuestionsEditor
+                        questions={applicationQuestions}
+                        onChange={(next) => {
+                          setApplicationQuestions(next);
+                          setQuestionsDirty(true);
+                        }}
+                        showHeading={false}
+                        endDate={endDate}
+                        hasApplications={hasApplications}
+                      />
+                    </AccessStep>
+                    <AccessStep
+                      step={3}
+                      title="Requirements"
+                      description="Invite creators directly from the Access tab."
+                    >
+                      <SkipRequirementsSwitch
+                        checked={accessListSkipsRequirements}
+                        onCheckedChange={setAccessListSkipsRequirements}
+                      />
+                    </AccessStep>
+                    {isAdmin && savedAccessMode === "restricted" && (
+                      <ApplicantVisibilityEditor contestId={contestId} />
+                    )}
                   </div>
                 )}
-                {accessMode !== "public" && (
-                  <div className="flex items-start gap-3 pt-2 border-t">
-                    <Checkbox
-                      id="accessListSkipsRequirements"
-                      checked={accessListSkipsRequirements}
-                      onCheckedChange={(checked: any) =>
-                        setAccessListSkipsRequirements(Boolean(checked))
-                      }
-                      className={cn(
-                        "border h-5 w-5 mt-0.5",
-                        isDark ? "border-gray-300" : "border-gray-500",
-                      )}
+                {accessMode === "private" && (
+                  <div className="space-y-6 pt-4 border-t">
+                    <AccessStep
+                      step={1}
+                      title="Add creators"
+                      description="Add creators, import saved lists or share invite links from the campaign's Access tab."
                     />
-                    <Label
-                      htmlFor="accessListSkipsRequirements"
-                      className="text-sm font-normal leading-snug"
+                    <AccessStep
+                      step={2}
+                      title="Requirements"
+                      description="Set requirements in the sections below, then choose whether they apply to the creators you add."
                     >
-                      Creators on the access list skip requirements
-                    </Label>
+                      <SkipRequirementsSwitch
+                        checked={accessListSkipsRequirements}
+                        onCheckedChange={setAccessListSkipsRequirements}
+                      />
+                    </AccessStep>
                   </div>
                 )}
               </div>

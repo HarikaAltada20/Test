@@ -20,6 +20,24 @@ import {
   parseUsernames,
   resolveInviteExpiry,
   validateCampaignAccessFields,
+  applicationDisplayStatus,
+  creatorInitials,
+  formatAddResultSummary,
+  applicationAnswerPreview,
+  countsAfterReview,
+  linkLabel,
+  countAnsweredQuestions,
+  daysUntil,
+  parseApplicationDraft,
+  accessMemberFilterKey,
+  accessMembersToCsv,
+  parseUsernameCsv,
+  sortAccessMembers,
+  accessModeSwitchNeedsConfirm,
+  accessModeSwitchNotes,
+  applicationQuestionTemplates,
+  questionFieldErrors,
+  restrictedCardState,
 } from "./campaign-access";
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
@@ -379,5 +397,270 @@ describe("isUuid", () => {
     assert.equal(isUuid(" 6f1c2b9e-1d2a-4c3b-9e8f-0a1b2c3d4e5f"), false);
     assert.equal(isUuid(null), false);
     assert.equal(isUuid(42), false);
+  });
+});
+
+describe("formatAddResultSummary", () => {
+  it("keeps the line short and counts failures instead of listing them", () => {
+    assert.equal(
+      formatAddResultSummary({ added: 12, alreadyOnList: 2, notFound: ["a", "b", "c"], invalid: ["!x"] }),
+      "Added 12 creators · 2 already had access · 3 not found · 1 invalid",
+    );
+  });
+
+  it("uses the singular and skips empty parts", () => {
+    assert.equal(formatAddResultSummary({ added: 1, alreadyOnList: 0, notFound: [] }), "Added 1 creator");
+  });
+
+  it("accepts a custom label for creators already present", () => {
+    assert.equal(
+      formatAddResultSummary({ added: 0, alreadyOnList: 3 }, "already on the list"),
+      "Added 0 creators · 3 already on the list",
+    );
+  });
+});
+
+describe("creatorInitials", () => {
+  it("uses first and last name initials", () => {
+    assert.equal(creatorInitials("Vishesh Kumar Gupta", "vish"), "VG");
+  });
+
+  it("uses two letters of a single name", () => {
+    assert.equal(creatorInitials("Madonna", null), "MA");
+  });
+
+  it("falls back to the username, then a question mark", () => {
+    assert.equal(creatorInitials(null, "@creator_one"), "CR");
+    assert.equal(creatorInitials("  ", ""), "?");
+  });
+});
+
+describe("applicationDisplayStatus", () => {
+  it("marks approved creators who left the access list as access removed", () => {
+    assert.equal(applicationDisplayStatus({ status: "approved", on_access_list: false }), "access_removed");
+  });
+
+  it("keeps other statuses as they are", () => {
+    assert.equal(applicationDisplayStatus({ status: "approved", on_access_list: true }), "approved");
+    assert.equal(applicationDisplayStatus({ status: "approved" }), "approved");
+    assert.equal(applicationDisplayStatus({ status: "rejected", on_access_list: false }), "rejected");
+  });
+});
+
+describe("applicationAnswerPreview", () => {
+  const answer = (kind: "short_text" | "url" | "yes_no", value: string, prompt = "Q") => ({
+    question_id: prompt,
+    prompt,
+    kind,
+    answer: value,
+  });
+
+  it("uses the first non-empty answer", () => {
+    assert.deepEqual(
+      applicationAnswerPreview([answer("short_text", "  ", "Empty"), answer("short_text", " Hi ", "Name")]),
+      { prompt: "Name", text: "Hi", isLink: false },
+    );
+  });
+
+  it("marks links and spells out yes/no", () => {
+    assert.equal(applicationAnswerPreview([answer("url", "https://x.com/a")])?.isLink, true);
+    assert.equal(applicationAnswerPreview([answer("yes_no", "no")])?.text, "No");
+  });
+
+  it("returns null when nothing was answered", () => {
+    assert.equal(applicationAnswerPreview([]), null);
+  });
+});
+
+describe("linkLabel", () => {
+  it("shows the host without www", () => {
+    assert.equal(linkLabel("https://www.instagram.com/someone"), "instagram.com");
+  });
+
+  it("falls back to the text when it isn't a URL", () => {
+    assert.equal(linkLabel("not a url"), "not a url");
+  });
+});
+
+describe("countsAfterReview", () => {
+  const counts = { pending: 5, approved: 2, rejected: 1, withdrawn: 0 };
+
+  it("moves approved and rejected applications between statuses", () => {
+    assert.deepEqual(countsAfterReview(counts, [{ status: "pending" }, { status: "rejected" }], "approve"), {
+      pending: 4,
+      approved: 4,
+      rejected: 0,
+      withdrawn: 0,
+    });
+    assert.deepEqual(countsAfterReview(counts, [{ status: "pending" }], "reject"), {
+      pending: 4,
+      approved: 2,
+      rejected: 2,
+      withdrawn: 0,
+    });
+  });
+
+  it("leaves counts alone when re-approving", () => {
+    assert.deepEqual(countsAfterReview(counts, [{ status: "approved" }], "approve"), counts);
+  });
+});
+
+describe("daysUntil", () => {
+  it("rounds up partial days", () => {
+    assert.equal(daysUntil("2026-10-13T11:00:00.000Z", NOW), 2);
+  });
+
+  it("returns null for past, missing or invalid dates", () => {
+    assert.equal(daysUntil("2026-10-10T00:00:00.000Z", NOW), null);
+    assert.equal(daysUntil(null, NOW), null);
+    assert.equal(daysUntil("nope", NOW), null);
+  });
+});
+
+describe("countAnsweredQuestions", () => {
+  it("ignores blank answers", () => {
+    assert.equal(countAnsweredQuestions([{ id: "a" }, { id: "b" }, { id: "c" }], { a: "x", b: "  " }), 1);
+  });
+});
+
+describe("parseApplicationDraft", () => {
+  const questions = [{ id: "a" }, { id: "b" }];
+
+  it("keeps string answers to current questions", () => {
+    assert.deepEqual(parseApplicationDraft(JSON.stringify({ a: "hi", b: 3, gone: "x" }), questions), { a: "hi" });
+  });
+
+  it("returns an empty draft for missing or broken data", () => {
+    assert.deepEqual(parseApplicationDraft(null, questions), {});
+    assert.deepEqual(parseApplicationDraft("{oops", questions), {});
+    assert.deepEqual(parseApplicationDraft("[1]", questions), {});
+  });
+});
+
+describe("parseUsernameCsv", () => {
+  it("takes the first cell of each row and skips a header", () => {
+    const csv = ["username,followers", "@alice,100", '"bob",5', "", "carol"].join("\r\n");
+    assert.deepEqual(parseUsernameCsv(csv), ["@alice", "bob", "carol"]);
+  });
+
+  it("keeps a first row that isn't a header", () => {
+    assert.deepEqual(parseUsernameCsv(["dave", "erin"].join("\n")), ["dave", "erin"]);
+  });
+});
+
+describe("access list helpers", () => {
+  const member = (over: Record<string, unknown>) => ({
+    user_id: "u",
+    username: "a",
+    full_name: null,
+    profile_picture_url: null,
+    added_at: "2026-10-01T00:00:00.000Z",
+    source: "manual" as const,
+    source_allowlist_id: null,
+    source_allowlist_name: null,
+    source_invite_link_id: null,
+    source_invite_link_label: null,
+    ...over,
+  });
+
+  it("filters by specific list or link, else by source", () => {
+    assert.equal(accessMemberFilterKey(member({ source: "saved_list", source_allowlist_id: "L1" })), "list:L1");
+    assert.equal(accessMemberFilterKey(member({ source: "invite_link", source_invite_link_id: "I1" })), "invite:I1");
+    assert.equal(accessMemberFilterKey(member({ source: "application" })), "application");
+  });
+
+  it("sorts by creator name and by date", () => {
+    const list = [member({ username: "b", added_at: "2026-10-02" }), member({ username: "A", added_at: "2026-10-03" })];
+    assert.deepEqual(sortAccessMembers(list, "creator", "asc").map((m) => m.username), ["A", "b"]);
+    assert.deepEqual(sortAccessMembers(list, "added", "desc").map((m) => m.username), ["A", "b"]);
+  });
+
+  it("escapes CSV cells", () => {
+    assert.equal(
+      accessMembersToCsv([member({ username: "x", full_name: 'Ann "Q", Jr' })]),
+      [
+        "username,full_name,source,added_at",
+        'x,"Ann ""Q"", Jr",Added manually,2026-10-01T00:00:00.000Z',
+      ].join("\n"),
+    );
+  });
+});
+
+describe("accessModeSwitchNotes", () => {
+  it("mentions submitters only when leaving Public with submissions", () => {
+    assert.equal(accessModeSwitchNotes("public", "private", 3).some((n) => n.includes("3 submissions")), true);
+    assert.equal(accessModeSwitchNotes("public", "private", 0).some((n) => n.includes("submission")), false);
+  });
+
+  it("warns that invite links are revoked when going Public", () => {
+    assert.equal(accessModeSwitchNotes("private", "public", null).some((n) => n.includes("invite links")), true);
+  });
+
+  it("explains pending applications when leaving Restricted", () => {
+    assert.equal(accessModeSwitchNotes("restricted", "private", null).some((n) => n.includes("Pending")), true);
+  });
+
+  it("asks for confirmation only when something more than the new mode changes", () => {
+    assert.equal(accessModeSwitchNeedsConfirm("public", "restricted", 0), false);
+    assert.equal(accessModeSwitchNeedsConfirm("public", "restricted", 2), true);
+    assert.equal(accessModeSwitchNeedsConfirm("private", "restricted", null), false);
+    assert.equal(accessModeSwitchNeedsConfirm("restricted", "public", null), true);
+    assert.equal(accessModeSwitchNeedsConfirm("public", "public", 5), false);
+  });
+});
+
+describe("questionFieldErrors", () => {
+  it("flags an empty prompt", () => {
+    assert.equal(questionFieldErrors({ prompt: "  ", kind: "short_text", options: null }).prompt, "Write the question");
+  });
+
+  it("needs two filled choices and flags duplicates", () => {
+    const res = questionFieldErrors({ prompt: "Pick", kind: "single_choice", options: ["A", " a ", ""] });
+    assert.equal(res.options, "Add at least 2 choices");
+    assert.deepEqual(res.optionErrors, [null, "This choice is already listed", null]);
+  });
+
+  it("passes a valid choice question", () => {
+    const res = questionFieldErrors({ prompt: "Pick", kind: "single_choice", options: ["A", "B"] });
+    assert.equal(res.prompt, null);
+    assert.equal(res.options, null);
+  });
+});
+
+describe("applicationQuestionTemplates", () => {
+  it("passes the editor's own validation", () => {
+    for (const t of applicationQuestionTemplates("2026-10-30T00:00:00.000Z")) {
+      const res = questionFieldErrors(t);
+      assert.equal(res.prompt, null);
+      assert.equal(res.options, null);
+    }
+  });
+
+  it("falls back to a generic date", () => {
+    assert.equal(applicationQuestionTemplates(null)[3].prompt, "Can you post by the end date?");
+  });
+});
+
+describe("restrictedCardState", () => {
+  it("treats a creator with access as approved", () => {
+    assert.equal(restrictedCardState({ is_preview: false }), "approved");
+  });
+
+  it("shows ended before the application status", () => {
+    assert.equal(restrictedCardState({ is_preview: true, has_ended: true, my_application_status: "pending" }), "ended");
+  });
+
+  it("follows the application status", () => {
+    assert.equal(restrictedCardState({ is_preview: true, my_application_status: "pending" }), "pending");
+    assert.equal(restrictedCardState({ is_preview: true, my_application_status: "rejected" }), "rejected");
+  });
+
+  it("is paused when applications are closed and the creator hasn't applied", () => {
+    assert.equal(restrictedCardState({ is_preview: true, applications_open: false }), "paused");
+  });
+
+  it("invites the creator to apply otherwise, including after withdrawing", () => {
+    assert.equal(restrictedCardState({ is_preview: true, applications_open: true }), "apply");
+    assert.equal(restrictedCardState({ is_preview: true, my_application_status: "withdrawn" }), "apply");
   });
 });
