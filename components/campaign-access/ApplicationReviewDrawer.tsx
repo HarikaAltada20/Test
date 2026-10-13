@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { applicationDisplayStatus, type ContestApplication } from "@/lib/campaign-access";
 import { ApplicationStatusBadge } from "./AccessBadge";
 import { AnswersList } from "./ApplicationAnswers";
+import { ApplicantProfileSummary } from "./ApplicantProfileSummary";
 import { CreatorAvatar } from "./CreatorAvatar";
 import { RelativeTime } from "./RelativeTime";
 
@@ -66,8 +67,8 @@ export function ApplicationReviewDrawer({
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
       const key = e.key.toLowerCase();
-      if (key === "j" && hasNext) onIndexChange(index! + 1);
-      else if (key === "k" && hasPrev) onIndexChange(index! - 1);
+      if (key === "arrowright" && hasNext) onIndexChange(index! + 1);
+      else if (key === "arrowleft" && hasPrev) onIndexChange(index! - 1);
       else if (key === "a" && !busy && canApprove(app)) onApprove(app);
       else if (key === "r" && !busy && canReject(app)) onReject(app);
       else return;
@@ -125,6 +126,7 @@ export function ApplicationReviewDrawer({
             </SheetHeader>
 
             <div className="flex-1 space-y-5 overflow-y-auto p-5">
+              <ApplicantProfileSummary profile={app.creator} />
               <section aria-labelledby="review-answers-heading" className="space-y-3">
                 <h3
                   id="review-answers-heading"
@@ -200,8 +202,8 @@ export function ApplicationReviewDrawer({
               <p className="hidden text-center text-xs text-gray-400 dark:text-gray-500 sm:block">
                 Shortcuts: <kbd className="font-sans font-semibold">A</kbd> approve ·{" "}
                 <kbd className="font-sans font-semibold">R</kbd> reject ·{" "}
-                <kbd className="font-sans font-semibold">J</kbd>/<kbd className="font-sans font-semibold">K</kbd>{" "}
-                next/previous
+                <kbd className="font-sans font-semibold">←</kbd>/<kbd className="font-sans font-semibold">→</kbd>{" "}
+                previous/next
               </p>
             </div>
           </>

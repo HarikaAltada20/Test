@@ -80,6 +80,7 @@ import {
   type PendingAccessModeSwitch,
 } from "@/components/campaign-access/AccessModeSwitchDialog";
 import { AccessStep } from "@/components/campaign-access/AccessStep";
+import { ApplicantVisibilityEditor } from "@/components/campaign-access/ApplicantVisibilityEditor";
 import { RestrictedPreviewDialog } from "@/components/campaign-access/RestrictedPreviewDialog";
 import { SkipRequirementsSwitch } from "@/components/campaign-access/SkipRequirementsSwitch";
 import { useUnsavedChangesWarning } from "@/hooks/use-unsaved-changes-warning";
@@ -10074,6 +10075,9 @@ export default function EditContestPage({
                         onCheckedChange={setAccessListSkipsRequirements}
                       />
                     </AccessStep>
+                    {isAdmin && savedAccessMode === "restricted" && (
+                      <ApplicantVisibilityEditor contestId={contestId} />
+                    )}
                   </div>
                 )}
                 {accessMode === "private" && (

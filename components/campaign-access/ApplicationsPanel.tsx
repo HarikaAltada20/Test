@@ -41,6 +41,7 @@ import { applicationsApi, type ApplicationListResponse } from "./api";
 import { ApplicationStatusBadge } from "./AccessBadge";
 import { LinkChip } from "./ApplicationAnswers";
 import { ApplicationReviewDrawer } from "./ApplicationReviewDrawer";
+import { ApplicantReach } from "./ApplicantProfileSummary";
 import { CreatorAvatar } from "./CreatorAvatar";
 import { EmptyState } from "./EmptyState";
 import { RejectApplicationsDialog } from "./RejectApplicationsDialog";
@@ -486,6 +487,7 @@ export function ApplicationsPanel({ contestId, onPendingCountChange }: Props) {
                               )}
                             </span>
                             {renderPreview(a)}
+                            <ApplicantReach profile={a.creator} />
                           </span>
                         </button>
                       </div>

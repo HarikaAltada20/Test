@@ -1,3 +1,5 @@
+import type { ApplicantProfile } from "@/lib/campaign-applicant-profile";
+
 export const ACCESS_MODES = ["public", "restricted", "private"] as const;
 export type AccessMode = (typeof ACCESS_MODES)[number];
 
@@ -351,6 +353,8 @@ export type ContestApplication = {
   full_name: string | null;
   profile_picture_url: string | null;
   on_access_list: boolean;
+  /** Connected accounts, scores and basics for the brand reviewing the application. */
+  creator?: ApplicantProfile | null;
 };
 
 export type MyApplication = {

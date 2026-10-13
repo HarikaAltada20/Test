@@ -110,6 +110,12 @@ import {
 } from "@/components/campaign-access/AllowlistPicker";
 import { PreviewEditor } from "@/components/campaign-access/PreviewEditor";
 import { AccessStep } from "@/components/campaign-access/AccessStep";
+import {
+  ApplicantVisibilityEditor,
+  DEFAULT_APPLICANT_VISIBILITY,
+} from "@/components/campaign-access/ApplicantVisibilityEditor";
+import { applicantVisibilityApi } from "@/components/campaign-access/api";
+import type { ApplicantVisibility } from "@/lib/campaign-applicant-profile";
 import { RestrictedPreviewDialog } from "@/components/campaign-access/RestrictedPreviewDialog";
 import { SkipRequirementsSwitch } from "@/components/campaign-access/SkipRequirementsSwitch";
 import { ApplicationQuestionsEditor } from "@/components/campaign-access/ApplicationQuestionsEditor";
@@ -534,6 +540,10 @@ export default function CreateContestPage({
     ApplicationQuestion[]
   >([]);
   const [listOnlyToEligible, setListOnlyToEligible] = useState(false);
+  // Admin-only: applicant details hidden from the brand (all visible by default).
+  const [applicantVisibility, setApplicantVisibility] = useState<ApplicantVisibility>(
+    DEFAULT_APPLICANT_VISIBILITY,
+  );
   const hasCreatorRequirement =
     trustScoreEnabled ||
     trustNumberEnabled ||
@@ -4466,6 +4476,18 @@ export default function CreateContestPage({
             if ("error" in parsed) throw new Error(parsed.error);
             const saved = await questionsApi.save(newContestId, parsed.questions);
             setApplicationQuestions(saved.questions);
+            if (isAdmin && Object.values(applicantVisibility).some((v) => !v)) {
+              // A failure here doesn't block the campaign; it can be changed later on the edit page.
+              await applicantVisibilityApi
+                .save(newContestId, applicantVisibility)
+                .catch((err: any) =>
+                  toast({
+                    title: "Couldn't save what the brand sees about applicants",
+                    description: `${err?.message || "Please try again"} You can change it on the edit page.`,
+                    variant: "destructive",
+                  }),
+                );
+            }
           } catch (questionsError: any) {
             if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
             toast({
@@ -11827,6 +11849,12 @@ export default function CreateContestPage({
                         />
                       </div>
                     </AccessStep>
+                    {isAdmin && (
+                      <ApplicantVisibilityEditor
+                        value={applicantVisibility}
+                        onChange={setApplicantVisibility}
+                      />
+                    )}
                   </div>
                 )}
                 {accessMode === "private" && (
