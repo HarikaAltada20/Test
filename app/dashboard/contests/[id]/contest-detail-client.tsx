@@ -1863,6 +1863,14 @@ export default function ContestDetailClient({
   const { activeTab, setActiveTab } = useTabState(tabs, {
     defaultTab: "overview",
   });
+  // Notifications can link straight to a tab, e.g. ?tab=applications.
+  const tabFromUrlApplied = useRef(false);
+  useEffect(() => {
+    if (tabFromUrlApplied.current || !contest) return;
+    tabFromUrlApplied.current = true;
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    if (requested && tabs.some((t) => t.id === requested)) setActiveTab(requested);
+  });
   // Debug: Log current toasts state
   console.log("🔍 Current toasts state:", toasts);
   // const [currentSubmissions, setCurrentSubmissions] = useState<Submission[]>(
