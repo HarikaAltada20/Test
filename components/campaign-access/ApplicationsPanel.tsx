@@ -22,6 +22,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Portal as TooltipPortal } from "@radix-ui/react-tooltip";
 import { toast } from "@/hooks/use-toast";
 import { useDashboardDark } from "@/hooks/use-dashboard-dark";
 import { cn } from "@/lib/utils";
@@ -276,9 +277,11 @@ export function ApplicationsPanel({ contestId, onPendingCountChange }: Props) {
               <ApplicationStatusBadge status={display} />
             </button>
           </TooltipTrigger>
+          <TooltipPortal>
           <TooltipContent className="max-w-60 border-gray-200 bg-white text-xs text-gray-900">
             Approved, then removed from the access list. Re-approve to give access back.
           </TooltipContent>
+          </TooltipPortal>
         </Tooltip>
       </TooltipProvider>
     );

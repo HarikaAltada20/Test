@@ -41,6 +41,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Portal as TooltipPortal } from "@radix-ui/react-tooltip";
 import { toast } from "@/hooks/use-toast";
 import { useDashboardDark } from "@/hooks/use-dashboard-dark";
 import { cn } from "@/lib/utils";
@@ -560,9 +561,11 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
                     <Info className="h-4 w-4 text-white/80" aria-hidden="true" />
                   </button>
                 </TooltipTrigger>
+                <TooltipPortal>
                 <TooltipContent className="max-w-64 border-gray-200 bg-white text-xs text-gray-900">
                   The brand reviews applications. You&apos;ll see the full brief once approved.
                 </TooltipContent>
+                </TooltipPortal>
               </Tooltip>
             </TooltipProvider>
             <h1 className="text-2xl font-bold text-white drop-shadow sm:text-3xl">

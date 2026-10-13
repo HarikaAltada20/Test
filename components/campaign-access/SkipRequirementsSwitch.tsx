@@ -8,6 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Portal as TooltipPortal } from "@radix-ui/react-tooltip";
 import { useDashboardDark } from "@/hooks/use-dashboard-dark";
 import { cn } from "@/lib/utils";
 
@@ -55,9 +56,11 @@ export function SkipRequirementsSwitch({ checked, onCheckedChange, disabled, not
                   <Info className="h-4 w-4" />
                 </button>
               </TooltipTrigger>
+              <TooltipPortal>
               <TooltipContent className="max-w-64 border-gray-200 bg-white text-xs text-gray-900">
                 {EXAMPLE}
               </TooltipContent>
+              </TooltipPortal>
             </Tooltip>
           </TooltipProvider>
         </div>

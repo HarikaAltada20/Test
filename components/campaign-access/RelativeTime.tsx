@@ -7,6 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Portal as TooltipPortal } from "@radix-ui/react-tooltip";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -40,9 +41,11 @@ export function RelativeTime({ value, prefix, className }: Props) {
             <span className="sr-only"> ({exact})</span>
           </time>
         </TooltipTrigger>
+        <TooltipPortal>
         <TooltipContent className="border-gray-200 bg-white text-xs text-gray-900">
           {exact}
         </TooltipContent>
+        </TooltipPortal>
       </Tooltip>
     </TooltipProvider>
   );
