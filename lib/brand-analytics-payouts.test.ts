@@ -50,6 +50,9 @@ describe("fetchTwitterEarningsCentsByCreator", () => {
             gte: () => ({
               lte: () => ({
                 range: async () => ({ data: rows, error: null }),
+                order: () => ({
+                  range: async () => ({ data: rows, error: null }),
+                }),
               }),
             }),
           }),
@@ -102,6 +105,9 @@ describe("fetchTwitterPayoutsCentsFromTweets", () => {
             gte: () => ({
               lte: () => ({
                 range: async () => ({ data: rows, error: null }),
+                order: () => ({
+                  range: async () => ({ data: rows, error: null }),
+                }),
               }),
             }),
           }),
@@ -140,6 +146,9 @@ describe("fetchTwitterPayoutsCentsFromTweets", () => {
                   statusFilter = status;
                   return {
                     range: async () => ({ data: rows, error: null }),
+                    order: () => ({
+                      range: async () => ({ data: rows, error: null }),
+                    }),
                   };
                 },
               }),

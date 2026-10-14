@@ -104,7 +104,9 @@ export async function fetchTwitterEarningsCentsByCreator(
     query = query.eq("creator_id", creatorId);
   }
 
-  query = applyTwitterModerationStatusFilter(query, statusFilter);
+  query = applyTwitterModerationStatusFilter(query, statusFilter).order("id", {
+    ascending: true,
+  });
 
   const CHUNK = 1000;
   let rangeFrom = 0;
@@ -221,6 +223,7 @@ export async function fetchBrandTotalPayoutsCents(
             .in("contest_id", contestIdChunk)
             .gte("created_at", dateFrom.toISOString())
             .lte("created_at", dateTo.toISOString())
+            .order("id", { ascending: true })
             .range(rangeFrom, rangeFrom + CHUNK - 1);
 
           if (error) throw new Error(error.message);

@@ -1,5 +1,11 @@
-/** IDs must match CSV column keys in GET /api/admin/withdrawals/export */
+/** IDs must match CSV column keys in /api/admin/withdrawals/export */
 export const WITHDRAWAL_EXPORT_COLUMN_IDS = [
+  "payee_email",
+  "payout_currency",
+  "payout_amount",
+  "description",
+  "request_count",
+  "usernames",
   "id",
   "created_at",
   "processed_at",
@@ -33,6 +39,12 @@ export const WITHDRAWAL_EXPORT_COLUMN_LABELS: Record<
   WithdrawalExportColumnId,
   string
 > = {
+  payee_email: "Payee (Skydo email / destination)",
+  payout_currency: "Payout currency",
+  payout_amount: "Payout amount (converted)",
+  description: "Description",
+  request_count: "Request count",
+  usernames: "Usernames",
   id: "ID",
   created_at: "Created at",
   processed_at: "Processed at",
@@ -58,3 +70,26 @@ export const WITHDRAWAL_EXPORT_COLUMN_LABELS: Record<
   payment_proof_storage_path: "Payment proof file path",
   payout_details_json: "Payout details (JSON)",
 };
+
+export type WithdrawalExportColumnSpec = {
+  id: WithdrawalExportColumnId;
+  header: string;
+};
+
+export const SKYDO_EXPORT_PRESET: WithdrawalExportColumnSpec[] = [
+  { id: "payee_email", header: "Email" },
+  { id: "payout_currency", header: "Currency" },
+  { id: "payout_amount", header: "Amount" },
+  { id: "description", header: "Description" },
+];
+
+export const EXPORT_CURRENCY_OPTIONS = [
+  "USD",
+  "INR",
+  "EUR",
+  "GBP",
+  "AED",
+  "CAD",
+  "AUD",
+  "SGD",
+] as const;

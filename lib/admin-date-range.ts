@@ -149,6 +149,24 @@ export function getMonthsAgoRange(
   return dayRangeFromKeys(fromKey, todayKey, tz);
 }
 
+/** First day of platform data; start of the "All Time" admin preset. */
+export const PLATFORM_LAUNCH_DATE_KEY = "2025-08-15";
+
+/** Inclusive day range from platform launch through today. */
+export function getAllTimeRange(
+  tz: AdminGrowthTimezone = ADMIN_GROWTH_TIMEZONE,
+): { from: Date; to: Date } {
+  const todayKey = getGrowthDayKey(new Date(), tz);
+  return dayRangeFromKeys(PLATFORM_LAUNCH_DATE_KEY, todayKey, tz);
+}
+
+/** Whole calendar days covered by the All Time preset (launch day and today included). */
+export function getAllTimeSpanDays(): number {
+  const launch = utcDateFromDayKey(PLATFORM_LAUNCH_DATE_KEY).getTime();
+  const today = utcDateFromDayKey(getGrowthDayKey(new Date(), "utc")).getTime();
+  return Math.floor((today - launch) / (24 * 60 * 60 * 1000)) + 1;
+}
+
 /** @deprecated Use getMonthsAgoRange(months, "utc") */
 export function getUtcMonthsAgoRange(months: number): { from: Date; to: Date } {
   return getMonthsAgoRange(months, "utc");
