@@ -36,6 +36,7 @@ import type {
 import { MISSING_PAYEE_LABEL } from "@/lib/admin-withdrawals-list";
 import { PayoutHistoryChart } from "./payout-history-chart";
 import { PayoutMethodSettingsCard } from "./payout-method-settings-card";
+import { WithdrawalFeeRevenueSection } from "../WithdrawalFeeRevenueSection";
 import {
   Dialog,
   DialogContent,
@@ -263,6 +264,8 @@ export default function WithdrawalsClient({
     forfeited: number;
     failed: number;
   } | null>(null);
+  /** Processing fees inside each status total; null until the API returns them. */
+  const [feesFromApi, setFeesFromApi] = useState<Record<string, number> | null>(null);
   const [statusCountsFromApi, setStatusCountsFromApi] = useState<{
     all: number;
     pending: number;
@@ -462,6 +465,7 @@ export default function WithdrawalsClient({
 
       setTotalCount(nextTotal);
       setTotalsFromApi(json.totals ?? null);
+      setFeesFromApi(json.fees ?? null);
       setStatusCountsFromApi(json.statusCounts ?? null);
 
       if (json.payoutSeriesIncluded && Array.isArray(json.payoutSeries)) {
@@ -2226,6 +2230,15 @@ export default function WithdrawalsClient({
     }
   };
 
+  /** "Sent $90.00 after $10.00 fees" when the bucket includes processing fees. */
+  const afterFees = (key: string, verb: string, fallback: string) => {
+    const fee = feesFromApi?.[key] ?? 0;
+    const amount = (totals as Record<string, number>)[key] ?? 0;
+    return fee > 0
+      ? `${verb} ${formatCurrencyFromCents(amount - fee)} after ${formatCurrencyFromCents(fee)} fees`
+      : fallback;
+  };
+
   const statusSummaryCards: {
     key: string;
     label: string;
@@ -2238,21 +2251,21 @@ export default function WithdrawalsClient({
         key: "pending",
         label: "Pending",
         amount: totals.pending,
-        description: "New requests",
+        description: afterFees("pending", "To send", "New requests"),
         accent: isDark ? "bg-amber-400" : "bg-amber-500",
       },
       {
         key: "approved",
         label: "Approved",
         amount: totals.approved,
-        description: "Approved for payment",
+        description: afterFees("approved", "To send", "Approved for payment"),
         accent: isDark ? "bg-blue-400" : "bg-blue-500",
       },
       {
         key: "paid",
         label: "Paid",
         amount: totals.paid,
-        description: "Successfully processed",
+        description: afterFees("paid", "Sent", "Successfully processed"),
         accent: isDark ? "bg-emerald-400" : "bg-emerald-500",
       },
       {
@@ -2428,6 +2441,13 @@ export default function WithdrawalsClient({
         </div>
 
         <PayoutMethodSettingsCard isDark={isDark} />
+
+        <WithdrawalFeeRevenueSection
+          from={filterRange.from}
+          to={filterRange.to}
+          periodLabel={filterPresetLabel || "the selected period"}
+          isDark={isDark}
+        />
 
         {/* Toolbar: date range + payout method + grouping + export */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

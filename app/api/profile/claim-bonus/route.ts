@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,12 +54,36 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Credit the $0.50 bonus using the same RPC as survey bonus
+    // Balance and claim flags can only be changed with the server-only client.
+    const admin = createAdminClient();
     const cashCredited = 50; // $0.50 in cents
     const description = `Profile update bonus credited`;
     const remarks = "profile_update_bonus";
 
-    const { data: creditRes, error: rpcErr } = await supabase.rpc(
+    // Mark the reward claimed first, only if it is still unclaimed, so two
+    // requests at the same time cannot both credit the bonus.
+    const { data: claimed, error: claimErr } = await admin
+      .from("creator_profiles")
+      .update({
+        has_claimed_profile_reward: true,
+        profile_reward_claimed_at: new Date().toISOString(),
+      })
+      .eq("id", user.id)
+      .or("has_claimed_profile_reward.is.null,has_claimed_profile_reward.eq.false")
+      .select("id");
+
+    if (claimErr) {
+      return NextResponse.json({ error: "Failed to claim profile update bonus" }, { status: 500 });
+    }
+    if (!claimed || claimed.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: "Profile update bonus already claimed",
+        already_claimed: true,
+      });
+    }
+
+    const { data: creditRes, error: rpcErr } = await admin.rpc(
       "credit_creator_cash_atomic",
       {
         p_user_id: user.id,
@@ -69,6 +94,11 @@ export async function POST(request: NextRequest) {
     );
 
     if (rpcErr || !creditRes) {
+      // Release the claim so the user can try again.
+      await admin
+        .from("creator_profiles")
+        .update({ has_claimed_profile_reward: false, profile_reward_claimed_at: null })
+        .eq("id", user.id);
       return NextResponse.json(
         {
           error:
@@ -80,7 +110,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Also increment other_earnings in users table
-    const { error: otherEarningsErr } = await supabase
+    const { error: otherEarningsErr } = await admin
       .from("users")
       .update({
         other_earnings: ((userRow as any).other_earnings || 0) + cashCredited,
@@ -92,20 +122,6 @@ export async function POST(request: NextRequest) {
         "Failed to update other_earnings:",
         otherEarningsErr.message
       );
-      // Don't fail the request since bonus was already credited
-    }
-
-    // Mark reward as claimed with timestamp
-    const { error: updateErr } = await supabase
-      .from("creator_profiles")
-      .update({
-        has_claimed_profile_reward: true,
-        profile_reward_claimed_at: new Date().toISOString(),
-      })
-      .eq("id", user.id);
-
-    if (updateErr) {
-      console.error("Failed to update has_claimed_profile_reward:", updateErr);
       // Don't fail the request since bonus was already credited
     }
 

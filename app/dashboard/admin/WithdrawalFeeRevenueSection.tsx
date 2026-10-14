@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Clock, Percent, Receipt, Wallet } from "lucide-react";
+import { Clock, EyeOff, Percent, Receipt, Wallet } from "lucide-react";
+import { CollapsibleAdminSection } from "@/components/admin/CollapsibleAdminSection";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { cn } from "@/lib/utils";
 import type { FeeRevenueRow } from "@/app/api/admin/withdrawals/fee-revenue/route";
@@ -37,8 +38,38 @@ function effectiveRate(t: Totals): string {
   return `${Number(((t.paidFeeCents / t.paidGrossCents) * 100).toFixed(2))}%`;
 }
 
-/** Processing fees from creator and brand withdrawals, for the dashboard's date range. */
+/**
+ * Processing fees from creator and brand withdrawals for a date range.
+ * Always starts collapsed and loads nothing until opened, so revenue is never
+ * on screen unless an admin opens it.
+ */
 export function WithdrawalFeeRevenueSection({
+  from,
+  to,
+  periodLabel,
+  isDark,
+  className,
+}: {
+  from: Date;
+  to: Date;
+  periodLabel: string;
+  isDark: boolean | null;
+  className?: string;
+}) {
+  return (
+    <CollapsibleAdminSection
+      title="Withdrawal fee revenue"
+      description="Private. Opens on click and is hidden again when you leave the page."
+      icon={EyeOff}
+      isDark={isDark}
+      className={className}
+    >
+      <FeeRevenueBody from={from} to={to} periodLabel={periodLabel} isDark={isDark} />
+    </CollapsibleAdminSection>
+  );
+}
+
+function FeeRevenueBody({
   from,
   to,
   periodLabel,
@@ -93,7 +124,7 @@ export function WithdrawalFeeRevenueSection({
       .sort((a, b) => b.total.paidFeeCents - a.total.paidFeeCents);
   }, [rows]);
 
-  const card = cn("rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-5", isDark ? "bg-[#170337] text-white" : "bg-white text-black");
+  const card = cn("rounded-xl border p-4", isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50/60");
   const muted = isDark ? "text-gray-300" : "text-gray-600";
   const iconWrap = cn(
     "w-10 h-10 flex items-center justify-center rounded-full",
@@ -128,20 +159,17 @@ export function WithdrawalFeeRevenueSection({
   ];
 
   return (
-    <div className="mt-8 space-y-4 w-full min-w-0">
-      <div>
-        <h2 className={cn("text-xl font-bold", isDark ? "text-white" : "text-gray-900")}>Withdrawal fee revenue</h2>
-        <p className={cn("text-sm mt-1", muted)}>
-          Processing fees from paid withdrawals in {periodLabel}. Expected fees are on withdrawals still pending,
-          in review or approved; rejected or cancelled ones are refunded in full.
-        </p>
-      </div>
+    <div className="w-full min-w-0 space-y-4">
+      <p className={cn("text-sm", muted)}>
+        Fees from withdrawals paid in {periodLabel}. Expected fees are on withdrawals still pending, in review or
+        approved. Rejected or cancelled withdrawals are refunded in full, so they earn nothing.
+      </p>
 
       {error ? (
         <p className="text-sm text-red-500">{error}</p>
       ) : (
         <>
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {tiles.map((tile) => (
               <div key={tile.title} className={card}>
                 <div className="flex items-center justify-between">
