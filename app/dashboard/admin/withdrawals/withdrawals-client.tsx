@@ -823,17 +823,20 @@ export default function WithdrawalsClient({
       }
       const nextLink = linkTrim.length ? linkTrim : null;
       setMetadataDirty(false);
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.id === active.id
-            ? {
-              ...r,
-              admin_notes: adminNotes,
-              transaction_reference: txRef,
-              payment_proof_link: nextLink,
-            }
-            : r,
-        ),
+      const withSavedMetadata = <T extends Request>(r: T): T =>
+        r.id === active.id
+          ? {
+            ...r,
+            admin_notes: adminNotes,
+            transaction_reference: txRef,
+            payment_proof_link: nextLink,
+          }
+          : r;
+      setRequests((prev) => prev.map(withSavedMetadata));
+      // Grouped view renders from payeeGroups; keep it in sync so reopening
+      // a request doesn't show (and later re-save) the old values.
+      setPayeeGroups((prev) =>
+        prev.map((g) => ({ ...g, requests: g.requests.map(withSavedMetadata) })),
       );
       setActive((prev) =>
         prev && prev.id === active.id
@@ -2114,6 +2117,12 @@ export default function WithdrawalsClient({
     if (methodFilter !== "skydo") {
       setPage(1);
       setMethodFilter("skydo");
+    }
+    // Only approved requests are ready to pay; other tabs would add paid or
+    // rejected amounts to the payout.
+    if (selectedTab !== "approved") {
+      setPage(1);
+      setSelectedTab("approved");
     }
   };
 

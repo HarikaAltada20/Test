@@ -254,10 +254,24 @@ export async function POST(req: NextRequest) {
   }
 
   const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+  const tab = parseWithdrawalsTab(str(body.tab));
+  const groupByPayee = body.groupByPayee === true;
+
+  // Summing a payee's requests across every status would add already-paid and
+  // rejected amounts to the payout total.
+  if (groupByPayee && tab === "all") {
+    return NextResponse.json(
+      {
+        error:
+          "Pick a status tab (e.g. Approved) before exporting grouped by payee.",
+      },
+      { status: 400 },
+    );
+  }
 
   return buildCsv({
     filters: {
-      tab: parseWithdrawalsTab(str(body.tab)),
+      tab,
       method: parsePayoutMethod(str(body.method)),
       createdFrom: str(body.createdFrom) ?? undefined,
       createdTo: str(body.createdTo) ?? undefined,
@@ -266,6 +280,6 @@ export async function POST(req: NextRequest) {
     order: parseOrder(str(body.order)),
     columns: normaliseColumns(body.columns),
     currency,
-    groupByPayee: body.groupByPayee === true,
+    groupByPayee,
   });
 }

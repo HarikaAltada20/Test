@@ -37,5 +37,5 @@ $$;
 COMMENT ON FUNCTION public.admin_withdrawal_status_summary(text) IS
   'Admin: per-status withdrawal request counts and cash amount totals (cents), optionally filtered by payout method type.';
 
-REVOKE ALL ON FUNCTION public.admin_withdrawal_status_summary(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.admin_withdrawal_status_summary(text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_withdrawal_status_summary(text) TO service_role;

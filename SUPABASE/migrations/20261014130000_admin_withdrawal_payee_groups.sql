@@ -141,5 +141,5 @@ $$;
 COMMENT ON FUNCTION public.admin_withdrawal_payee_groups(text, text, timestamptz, timestamptz, integer, integer) IS
   'Admin: withdrawal requests grouped by payout destination (method + normalised destination + currency + amount type), paginated by group.';
 
-REVOKE ALL ON FUNCTION public.admin_withdrawal_payee_groups(text, text, timestamptz, timestamptz, integer, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.admin_withdrawal_payee_groups(text, text, timestamptz, timestamptz, integer, integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_withdrawal_payee_groups(text, text, timestamptz, timestamptz, integer, integer) TO service_role;
