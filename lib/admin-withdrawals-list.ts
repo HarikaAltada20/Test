@@ -216,6 +216,8 @@ type StatusSummaryRow = {
   status: string;
   request_count: number | string;
   cash_amount_cents: number | string;
+  /** Absent before 20261015130000_balance_guards_and_net_totals.sql. */
+  cash_fee_cents?: number | string | null;
 };
 
 /** Per-tab counts and cash totals, optionally limited to one payout method. */
@@ -225,6 +227,8 @@ export async function fetchWithdrawalStatusSummary(
 ): Promise<{
   error: string | null;
   totals: WithdrawalStatusBuckets;
+  /** Processing fees inside `totals`; amount sent = totals - fees. */
+  fees: WithdrawalStatusBuckets;
   statusCounts: WithdrawalStatusBuckets;
 }> {
   let res =
@@ -247,12 +251,13 @@ export async function fetchWithdrawalStatusSummary(
       {
         count: toFiniteNumber(row.request_count),
         cash: toFiniteNumber(row.cash_amount_cents),
+        fee: toFiniteNumber(row.cash_fee_cents ?? 0),
       },
     ]),
   );
-  const sum = (field: "count" | "cash", ...statuses: string[]) =>
+  const sum = (field: "count" | "cash" | "fee", ...statuses: string[]) =>
     statuses.reduce((s, st) => s + (byStatus.get(st)?.[field] ?? 0), 0);
-  const buckets = (field: "count" | "cash"): WithdrawalStatusBuckets => ({
+  const buckets = (field: "count" | "cash" | "fee"): WithdrawalStatusBuckets => ({
     all: sum(
       field,
       "pending",
@@ -276,6 +281,7 @@ export async function fetchWithdrawalStatusSummary(
   return {
     error: res.error ? res.error.message || "Failed to load withdrawal totals" : null,
     totals: buckets("cash"),
+    fees: buckets("fee"),
     statusCounts: buckets("count"),
   };
 }
@@ -842,7 +848,7 @@ export async function fetchWithdrawalPayoutSeries(
   for (;;) {
     let q = supabase
       .from("admin_withdrawal_requests_list")
-      .select("amount, amount_type, processed_at")
+      .select("amount, net_amount_cents, amount_type, processed_at")
       .eq("status", "processed")
       .not("processed_at", "is", null)
       .order("processed_at", { ascending: true })
@@ -868,7 +874,7 @@ export async function fetchWithdrawalPayoutSeries(
       const amountType = (row.amount_type as string | null) || "cash";
       if (amountType !== "cash") continue;
       const day = new Date(processedAt).toISOString().slice(0, 10);
-      const amount = Number(row.amount ?? 0);
+      const amount = Number(row.net_amount_cents ?? row.amount ?? 0);
       if (!Number.isFinite(amount)) continue;
       const prev = daily.get(day) ?? { amountCents: 0, count: 0 };
       prev.amountCents += amount;

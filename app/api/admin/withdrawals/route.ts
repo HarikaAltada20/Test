@@ -97,6 +97,7 @@ export async function GET(req: NextRequest) {
     page,
     pageSize,
     totals: summaryRes.totals,
+    fees: summaryRes.fees,
     statusCounts: summaryRes.statusCounts,
     payoutSeriesIncluded: !seriesSkipped,
     payoutSeries: seriesSkipped ? null : payoutSeries,

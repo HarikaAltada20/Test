@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 type CouponReward = {
   cash_cents?: number; // credit money wallet in cents
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
       const description = `Coupon ${normalized} credited`;
       const remarks = config.remarks || `coupon:${normalized}`;
       if (userRow.user_type === "creator") {
-        const { data: creditRes, error: rpcErr } = await supabase.rpc(
+        const { data: creditRes, error: rpcErr } = await createAdminClient().rpc(
           "credit_creator_cash_atomic",
           {
             p_user_id: user.id,
@@ -117,7 +118,7 @@ export async function POST(request: NextRequest) {
             { status: 500 }
           );
       } else {
-        const { data: creditRes, error: rpcErr } = await supabase.rpc(
+        const { data: creditRes, error: rpcErr } = await createAdminClient().rpc(
           "credit_advertiser_cash_atomic",
           {
             p_user_id: user.id,

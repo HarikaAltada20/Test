@@ -1127,6 +1127,7 @@ export default function AdminDashboardClient({
         to={dateRange.to}
         periodLabel={overviewPeriodLabel}
         isDark={isDark}
+        className="mt-8"
       />
 
       {/* Platform Growth Chart */}
