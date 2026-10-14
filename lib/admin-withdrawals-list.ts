@@ -385,6 +385,12 @@ export type WithdrawalPayeeGroup = {
   currency: string;
   amountType: string;
   totalCents: number;
+  /** Processing fees in the group, cents. */
+  feeCents: number;
+  /** Amount to send after fees, cents (USD). */
+  netCents: number;
+  /** Amount to send in INR paise; null unless every request in the group has one. */
+  netLocalMinor: number | null;
   count: number;
   usernames: string[];
   names: string[];
@@ -415,6 +421,9 @@ export function groupWithdrawalsByPayee(
         currency,
         amountType,
         totalCents: 0,
+        feeCents: 0,
+        netCents: 0,
+        netLocalMinor: 0,
         count: 0,
         usernames: [],
         names: [],
@@ -426,6 +435,15 @@ export function groupWithdrawalsByPayee(
     }
     const amount = Number(row.amount ?? 0);
     g.totalCents += Number.isFinite(amount) ? amount : 0;
+    const fee = Number(row.fee_cents ?? 0);
+    g.feeCents += Number.isFinite(fee) ? fee : 0;
+    const net = Number(row.net_amount_cents ?? amount - fee);
+    g.netCents += Number.isFinite(net) ? net : 0;
+    const local = row.net_amount_local_minor;
+    g.netLocalMinor =
+      g.netLocalMinor === null || local === null || local === undefined || !Number.isFinite(Number(local))
+        ? null
+        : g.netLocalMinor + Number(local);
     g.count += 1;
     const users = row.users as
       | { username?: string | null; full_name?: string | null }
@@ -465,6 +483,9 @@ type RpcPayeeGroupRow = {
   request_ids: string[] | null;
   total_groups: number | string;
   total_requests: number | string;
+  fee_cents?: number | string | null;
+  net_cents?: number | string | null;
+  net_local_minor?: number | string | null;
 };
 
 /**
@@ -547,6 +568,9 @@ export async function fetchWithdrawalPayeeGroupsPage(
     currency: r.currency,
     amountType: r.amount_type,
     totalCents: toFiniteNumber(r.total_cents),
+    feeCents: toFiniteNumber(r.fee_cents),
+    netCents: r.net_cents == null ? toFiniteNumber(r.total_cents) : toFiniteNumber(r.net_cents),
+    netLocalMinor: r.net_local_minor == null ? null : toFiniteNumber(r.net_local_minor),
     count: toFiniteNumber(r.request_count),
     usernames: r.usernames ?? [],
     names: r.names ?? [],

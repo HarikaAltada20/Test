@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { canRemoveSkydo, getSkydoStatus } from "@/lib/skydo-payout";
 import { SkydoStatusBadge } from "@/components/payouts/SkydoStatusBadge";
 import type { PayoutMethod } from "@/types/earnings";
+import { formatFeePercent } from "@/lib/payout-fees";
 import { describeSavedMethod, getPayoutMethodMeta } from "./methodMeta";
 import { payoutDialogTheme } from "./theme";
 
@@ -25,6 +26,7 @@ export function SavedMethodsView({
   isDark,
   busyId,
   pausedMethodTypes,
+  feeBpsByMethod = {},
   onEdit,
   onDelete,
   onSetDefault,
@@ -34,6 +36,7 @@ export function SavedMethodsView({
   /** Id of the method with an action in flight. */
   busyId: string | null;
   pausedMethodTypes: string[];
+  feeBpsByMethod?: Record<string, number>;
   onEdit: (method: PayoutMethod) => void;
   onDelete: (method: PayoutMethod) => void;
   onSetDefault: (method: PayoutMethod) => void;
@@ -91,6 +94,18 @@ export function SavedMethodsView({
                         )}
                       >
                         Permanent
+                      </span>
+                    )}
+                    {!pausedMethodTypes.includes(method.method_type) && (
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                          isDark ? "bg-white/10 text-gray-300" : "bg-gray-100 text-gray-600"
+                        )}
+                      >
+                        {(feeBpsByMethod[method.method_type] ?? 0) > 0
+                          ? `${formatFeePercent(feeBpsByMethod[method.method_type])} fee`
+                          : "No fee"}
                       </span>
                     )}
                     {pausedMethodTypes.includes(method.method_type) && (

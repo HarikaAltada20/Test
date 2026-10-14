@@ -21,6 +21,12 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import {
+  formatFeePercent,
+  formatInrFromPaise,
+  formatUsdInrRate,
+  withdrawalPayout,
+} from "@/lib/payout-fees";
 import type {
   WithdrawalPayeeGroup,
   WithdrawalPayoutSeriesGranularity,
@@ -29,6 +35,7 @@ import type {
 } from "@/lib/admin-withdrawals-list";
 import { MISSING_PAYEE_LABEL } from "@/lib/admin-withdrawals-list";
 import { PayoutHistoryChart } from "./payout-history-chart";
+import { PayoutMethodSettingsCard } from "./payout-method-settings-card";
 import {
   Dialog,
   DialogContent,
@@ -61,7 +68,6 @@ import {
   CreditCard,
   Settings,
   Wallet,
-  PauseCircle,
   ShieldOff,
   RotateCcw,
   MoreVertical,
@@ -133,7 +139,55 @@ type Request = {
   payment_proof_link?: string | null;
   payment_proof_storage_path?: string | null;
   payment_proof_file_size_bytes?: number | null;
+  fee_bps?: number | null;
+  fee_cents?: number | null;
+  net_amount_cents?: number | null;
+  payout_currency?: string | null;
+  fx_rate_snapshot?: number | string | null;
+  net_amount_local_minor?: number | null;
 };
+
+/** "Send ₹8,100.00 · fee $10.00 (10%)" for requests with a fee or an INR payout. */
+function PayoutSendLine({ request, className }: { request: Request; className?: string }) {
+  if (request.amount_type !== "cash") return null;
+  const p = withdrawalPayout(request);
+  if (p.feeCents <= 0 && p.currency === "USD") return null;
+  return (
+    <div className={cn("text-xs text-muted-foreground", className)}>
+      Send <span className="font-semibold text-foreground">{p.receiveLabel}</span>
+      {p.feeCents > 0 && ` · fee ${formatCurrencyFromCents(p.feeCents)} (${formatFeePercent(p.feeBps)})`}
+    </div>
+  );
+}
+
+/** Fee and amount to send, in the request details drawer. */
+function PayoutBreakdown({ request }: { request: Request }) {
+  const p = withdrawalPayout(request);
+  return (
+    <dl className="mt-2 space-y-0.5 text-xs">
+      <div className="flex justify-between gap-3">
+        <dt className="text-muted-foreground">
+          Processing fee{p.feeBps > 0 ? ` (${formatFeePercent(p.feeBps)})` : ""}
+        </dt>
+        <dd className="tabular-nums">
+          {p.feeCents > 0 ? `−${formatCurrencyFromCents(p.feeCents)}` : "None"}
+        </dd>
+      </div>
+      <div className="flex justify-between gap-3 font-semibold">
+        <dt>To send</dt>
+        <dd className="tabular-nums">
+          {p.receiveLabel}
+          {p.currency === "USD" ? " USD" : ""}
+        </dd>
+      </div>
+      {p.currency === "INR" && p.usdInrRate !== null && (
+        <div className="text-muted-foreground">
+          {formatCurrencyFromCents(p.netCents)} at {formatUsdInrRate(p.usdInrRate)} per $1
+        </div>
+      )}
+    </dl>
+  );
+}
 
 type PayeeGroup = Omit<WithdrawalPayeeGroup, "requests"> & {
   requests: Request[];
@@ -245,9 +299,6 @@ export default function WithdrawalsClient({
   const [inReviewDialogOpen, setInReviewDialogOpen] = useState<boolean>(false);
   const [inReviewRequest, setInReviewRequest] = useState<Request | null>(null);
   const [inReviewReason, setInReviewReason] = useState<string>("");
-  const [payoutMethodSettings, setPayoutMethodSettings] = useState<{ method_type: string; is_paused: boolean }[]>([]);
-  const [loadingPayoutSettings, setLoadingPayoutSettings] = useState<boolean>(true);
-  const [updatingPayoutMethod, setUpdatingPayoutMethod] = useState<string | null>(null);
   const [filterRange, setFilterRange] = useState(defaultFilterRange);
   const [filterPresetLabel, setFilterPresetLabel] = useState("Last 30 Days");
   const [sortKey, setSortKey] = useState<WithdrawalsSortKey>("created_at");
@@ -596,55 +647,12 @@ export default function WithdrawalsClient({
     return () => observer.disconnect();
   }, [isDark]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoadingPayoutSettings(true);
-      try {
-        const res = await fetch("/api/admin/payout-method-settings");
-        if (!res.ok || cancelled) return;
-        const json = await res.json();
-        if (cancelled) return;
-        setPayoutMethodSettings(json.settings || []);
-      } catch {
-        if (!cancelled) setPayoutMethodSettings([]);
-      } finally {
-        if (!cancelled) setLoadingPayoutSettings(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
   const PAYOUT_METHOD_LABELS: Record<string, string> = {
     crypto: "Crypto",
     upi: "UPI",
     bank_transfer: "Bank transfer",
     phantom: "Phantom",
     skydo: "Skydo",
-  };
-  const DEFAULT_METHOD_TYPES = ["crypto", "upi", "bank_transfer", "skydo"];
-
-  const setPayoutMethodPaused = async (methodType: string, isPaused: boolean) => {
-    setUpdatingPayoutMethod(methodType);
-    try {
-      const res = await fetch("/api/admin/payout-method-settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ method_type: methodType, is_paused: isPaused }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      setPayoutMethodSettings((prev) => {
-        const next = prev.filter((s) => s.method_type !== methodType);
-        next.push({ method_type: methodType, is_paused: isPaused });
-        next.sort((a, b) => a.method_type.localeCompare(b.method_type));
-        return next;
-      });
-    } catch (e) {
-      console.error("Failed to update payout method setting", e);
-      alert("Failed to update. Please try again.");
-    } finally {
-      setUpdatingPayoutMethod(null);
-    }
   };
 
   const updateStatus = async (
@@ -1630,6 +1638,7 @@ export default function WithdrawalsClient({
                       ? formatCurrencyFromCents(r.amount)
                       : `${r.amount} coins`}
                   </div>
+                  <PayoutSendLine request={r} />
                   <div className="text-xs text-muted-foreground capitalize">
                     {r.amount_type}
                   </div>
@@ -2065,6 +2074,17 @@ export default function WithdrawalsClient({
                         ? formatCurrencyFromCents(g.totalCents)
                         : `${g.totalCents} coins`}
                     </div>
+                    {g.amountType === "cash" && (g.feeCents > 0 || g.netLocalMinor !== null) && (
+                      <div className="text-xs text-muted-foreground">
+                        Send{" "}
+                        <span className="font-semibold text-foreground">
+                          {g.netLocalMinor !== null
+                            ? formatInrFromPaise(g.netLocalMinor)
+                            : formatCurrencyFromCents(g.netCents)}
+                        </span>
+                        {g.feeCents > 0 && ` · fees ${formatCurrencyFromCents(g.feeCents)}`}
+                      </div>
+                    )}
                     <div className="text-xs text-muted-foreground">
                       {g.currency} · {g.amountType}
                     </div>
@@ -2407,96 +2427,7 @@ export default function WithdrawalsClient({
           })}
         </div>
 
-        {/* Payout method availability */}
-        <Card
-          className={cn(
-            "rounded-xl border shadow-none",
-            isDark
-              ? "bg-[#170337] border-white/10 text-white"
-              : "bg-white border-slate-200 text-black",
-          )}
-        >
-          <CardHeader className="pb-2 px-4 sm:px-5 pt-4">
-            <CardTitle className="text-base font-medium flex items-center gap-2">
-              <PauseCircle className="h-4 w-4" />
-              Payout method availability
-            </CardTitle>
-            <CardDescription
-              className={cn(
-                "text-sm",
-                isDark ? "text-slate-400" : "text-muted-foreground",
-              )}
-            >
-              When a method is paused, users cannot request withdrawals using
-              that payment method.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0 px-4 sm:px-5 pb-4">
-            {loadingPayoutSettings ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <div className="flex flex-wrap gap-3">
-                {DEFAULT_METHOD_TYPES.map((methodType) => {
-                  const setting = payoutMethodSettings.find(
-                    (s) => s.method_type === methodType,
-                  );
-                  const isPaused = setting ? setting.is_paused : false;
-                  const enabled = !isPaused;
-                  const updating = updatingPayoutMethod === methodType;
-                  return (
-                    <div
-                      key={methodType}
-                      className={cn(
-                        "flex items-center gap-3 rounded-xl border px-3.5 py-2.5 min-w-[200px] flex-1 sm:flex-none",
-                        enabled
-                          ? isDark
-                            ? "border-emerald-500/35 bg-emerald-500/10"
-                            : "border-emerald-200 bg-emerald-50/70"
-                          : isDark
-                            ? "border-white/10 bg-white/5"
-                            : "border-slate-200 bg-slate-50",
-                      )}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium capitalize text-sm">
-                          {PAYOUT_METHOD_LABELS[methodType] || methodType}
-                        </p>
-                        <p
-                          className={cn(
-                            "text-xs mt-0.5",
-                            enabled
-                              ? isDark
-                                ? "text-emerald-300"
-                                : "text-emerald-700"
-                              : isDark
-                                ? "text-slate-500"
-                                : "text-slate-500",
-                          )}
-                        >
-                          {enabled ? "Available" : "Paused"}
-                        </p>
-                      </div>
-                      <Switch
-                        checked={enabled}
-                        onCheckedChange={(checked) =>
-                          setPayoutMethodPaused(methodType, !checked)
-                        }
-                        disabled={updating}
-                        className={cn(
-                          "border-transparent",
-                          "data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500",
-                          "data-[state=unchecked]:bg-slate-300 data-[state=unchecked]:border-slate-300",
-                          isDark &&
-                          "data-[state=unchecked]:bg-slate-600 data-[state=unchecked]:border-slate-600 data-[state=checked]:bg-emerald-500",
-                        )}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <PayoutMethodSettingsCard isDark={isDark} />
 
         {/* Toolbar: date range + payout method + grouping + export */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -3096,8 +3027,9 @@ export default function WithdrawalsClient({
                               : `${active.amount} coins`}
                           </p>
                           <p className="text-xs text-muted-foreground capitalize">
-                            {active.amount_type}
+                            {active.amount_type === "cash" ? "Requested" : active.amount_type}
                           </p>
+                          {active.amount_type === "cash" && <PayoutBreakdown request={active} />}
                         </div>
                       </div>
                     </CardContent>

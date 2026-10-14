@@ -161,6 +161,13 @@ export interface WithdrawalRequest {
   payout_method_type_snapshot?: PayoutMethodType | string | null; // Optional
   payout_method_details_snapshot?: PayoutMethodDetails | any | null; // Optional, allow 'any' for broader JSONB compatibility initially
   redeemed_item_description?: any | null; // New field for JSONB data
+  /** Processing fee snapshot; absent on requests made before fees existed. */
+  fee_bps?: number | null;
+  fee_cents?: number | null;
+  net_amount_cents?: number | null;
+  payout_currency?: "INR" | "USD" | string | null;
+  fx_rate_snapshot?: number | string | null;
+  net_amount_local_minor?: number | null;
   cancelled_at?: string | null;
   cancellation_reason?: string | null;
   payout_method_summary?: string; // This is a frontend-added field

@@ -22,7 +22,16 @@ import {
   sanitizeAmountInput,
   validateWithdrawAmount,
 } from "@/lib/withdraw-amount";
+import {
+  SKYDO_CONVERSION_NOTE,
+  formatFeePercent,
+  formatQuoteReceive,
+  formatUsdInrRate,
+  quotePayout,
+  type PayoutFeeSettings,
+} from "@/lib/payout-fees";
 import { SkydoStatusBadge } from "@/components/payouts/SkydoStatusBadge";
+import { ProcessingFeeInfo } from "@/components/payouts/ProcessingFeeInfo";
 import { FormField } from "@/components/payouts/payout-method-dialog/FormField";
 import {
   describeSavedMethod,
@@ -35,6 +44,9 @@ export interface WithdrawRequest {
   amountCents: number;
   payoutMethodId: string;
   notes: string;
+  /** Fee and rate the user was shown; the request is refused if they changed since. */
+  expectedFeeBps: number;
+  expectedUsdInrRate: number;
 }
 
 export type WithdrawSubmitResult = { ok: true } | { ok: false; message: string };
@@ -49,6 +61,9 @@ export interface WithdrawBalanceDialogProps {
   /** Methods that can receive a withdrawal right now. */
   availableMethodIds: string[];
   pausedMethodTypes: string[];
+  feeSettings: PayoutFeeSettings;
+  /** Reloads fees and rate; called each time the dialog opens. */
+  onOpenRefresh?: () => void;
   onManageMethods: () => void;
   /** Creates the request. Shows its own success toast; returns the error message on failure. */
   onSubmit: (request: WithdrawRequest) => Promise<WithdrawSubmitResult>;
@@ -68,6 +83,8 @@ export function WithdrawBalanceDialog({
   payoutMethods,
   availableMethodIds,
   pausedMethodTypes,
+  feeSettings,
+  onOpenRefresh,
   onManageMethods,
   onSubmit,
 }: WithdrawBalanceDialogProps) {
@@ -99,6 +116,7 @@ export function WithdrawBalanceDialog({
       setServerError(null);
       const preferred = availableMethods.find((m) => m.is_default) ?? availableMethods[0] ?? null;
       setMethodId(preferred?.id ?? null);
+      onOpenRefresh?.();
     }
     wasOpen.current = open;
     // Only react to the dialog opening.
@@ -122,6 +140,17 @@ export function WithdrawBalanceDialog({
   const methodError =
     submitted && !methodId && availableMethods.length > 0 ? "Choose where to send this withdrawal." : undefined;
   const selectedMethod = availableMethods.find((m) => m.id === methodId) ?? null;
+  const feeBpsFor = (methodType: string) => feeSettings.feeBpsByMethod[methodType] ?? 0;
+  const quote =
+    amountCheck.cents !== null && selectedMethod
+      ? quotePayout({
+          amountCents: amountCheck.cents,
+          methodType: selectedMethod.method_type,
+          feeBps: feeBpsFor(selectedMethod.method_type),
+          usdInrRate: feeSettings.usdInrRate,
+        })
+      : null;
+  const netTooSmall = quote !== null && quote.netCents <= 0;
   const canWithdraw = availableMethods.length > 0;
   const belowMinimum = availableBalanceCents < minWithdrawalCents;
 
@@ -133,7 +162,7 @@ export function WithdrawBalanceDialog({
   const handleSubmit = async () => {
     if (submittingRef.current) return;
     setSubmitted(true);
-    if (amountCheck.cents === null) {
+    if (amountCheck.cents === null || netTooSmall) {
       document.getElementById(AMOUNT_ID)?.focus();
       return;
     }
@@ -145,7 +174,14 @@ export function WithdrawBalanceDialog({
     setSubmitting(true);
     setServerError(null);
     try {
-      const result = await onSubmit({ amountCents: amountCheck.cents, payoutMethodId: methodId, notes });
+      const method = availableMethods.find((m) => m.id === methodId);
+      const result = await onSubmit({
+        amountCents: amountCheck.cents,
+        payoutMethodId: methodId,
+        notes,
+        expectedFeeBps: method ? feeBpsFor(method.method_type) : 0,
+        expectedUsdInrRate: feeSettings.usdInrRate,
+      });
       if (result.ok) {
         submittingRef.current = false;
         onOpenChange(false);
@@ -378,6 +414,13 @@ export function WithdrawBalanceDialog({
                               {meta.label}
                               {detail ? ` · ${detail}` : ""}
                             </span>
+                            {available && (
+                              <span className={cn("mt-0.5 block text-xs", t.muted)}>
+                                {feeBpsFor(method.method_type) > 0
+                                  ? `${formatFeePercent(feeBpsFor(method.method_type))} processing fee`
+                                  : "No processing fee"}
+                              </span>
+                            )}
                             {!available && (
                               <span className="mt-1 block">
                                 {reason ? (
@@ -445,15 +488,51 @@ export function WithdrawBalanceDialog({
               />
             </FormField>
 
-            {/* Summary. TODO: no fee or timing config exists, so none is shown. */}
-            {amountCheck.cents !== null && selectedMethod && (
+            {/* Breakdown */}
+            {quote && selectedMethod && (
               <div
                 aria-live="polite"
                 className={cn("rounded-lg border px-4 py-3 text-sm", t.border, t.subtle, t.text)}
               >
-                You&apos;ll request{" "}
-                <span className="font-semibold tabular-nums">{formatCurrencyFromCents(amountCheck.cents)}</span> to{" "}
-                <span className="font-semibold">{describeSavedMethod(selectedMethod).title}</span>.
+                <dl className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className={t.muted}>Amount</dt>
+                    <dd className="tabular-nums">{formatCurrencyFromCents(amountCheck.cents)}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className={cn("flex items-center gap-0.5", t.muted)}>
+                      {quote.feeBps > 0 ? (
+                        <>
+                          Processing fee ({formatFeePercent(quote.feeBps)})
+                          <ProcessingFeeInfo feeBps={quote.feeBps} isDark={isDark} />
+                        </>
+                      ) : (
+                        "Processing fee"
+                      )}
+                    </dt>
+                    <dd className="tabular-nums">
+                      {quote.feeCents > 0 ? `−${formatCurrencyFromCents(quote.feeCents)}` : "None"}
+                    </dd>
+                  </div>
+                  <div className={cn("flex items-center justify-between gap-3 border-t pt-2", t.border)}>
+                    <dt className="font-semibold">You&apos;ll receive</dt>
+                    <dd className="text-base font-semibold tabular-nums">
+                      {netTooSmall ? "—" : formatQuoteReceive(quote)}
+                      {quote.currency === "USD" && !netTooSmall && (
+                        <span className={cn("ml-1 text-xs font-normal", t.muted)}>USD</span>
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+                <p className={cn("mt-2 text-xs", t.muted)}>
+                  {netTooSmall
+                    ? "This amount is too small to withdraw after the processing fee."
+                    : quote.currency === "INR" && quote.usdInrRate !== null
+                      ? `Converted at ${formatUsdInrRate(quote.usdInrRate)} per $1 and sent to ${describeSavedMethod(selectedMethod).title}.`
+                      : selectedMethod.method_type === "skydo"
+                        ? SKYDO_CONVERSION_NOTE
+                        : `Sent to ${describeSavedMethod(selectedMethod).title}.`}
+                </p>
               </div>
             )}
 
@@ -497,7 +576,7 @@ export function WithdrawBalanceDialog({
             form="withdraw-form"
             loading={submitting}
             loadingText="Processing..."
-            disabled={submitting || !canWithdraw}
+            disabled={submitting || !canWithdraw || netTooSmall}
             className="h-11 sm:h-10 sm:min-w-[180px]"
           >
             Request withdrawal
