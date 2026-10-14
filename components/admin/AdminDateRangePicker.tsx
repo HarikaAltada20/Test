@@ -24,6 +24,8 @@ import {
   ADMIN_GROWTH_TIMEZONE,
   type AdminGrowthTimezone,
   dayRangeFromKeys,
+  getAllTimeRange,
+  getAllTimeSpanDays,
   getDateStrInTz,
   getLastNDaysRange,
   getMonthsAgoRange,
@@ -57,6 +59,8 @@ export function AdminDateRangePicker({
   maxHistoryDays = 730,
 }: AdminDateRangePickerProps) {
   const now = useMemo(() => new Date(), []);
+  // Pages whose backend caps the range (e.g. brand analytics, 366 days) can't serve All Time.
+  const allTimeAllowed = getAllTimeSpanDays() <= maxHistoryDays;
   const [open, setOpen] = useState(false);
   const [internalRange, setInternalRange] = useState<AdminDateRangeValue>(value);
   const [calendarRange, setCalendarRange] = useState<
@@ -123,10 +127,26 @@ export function AdminDateRangePicker({
                   get: () => getMonthsAgoRange(3, rangeTimezone),
                 },
                 {
+                  label: "Last 6 Months",
+                  get: () => getMonthsAgoRange(6, rangeTimezone),
+                },
+                {
+                  label: "Last 9 Months",
+                  get: () => getMonthsAgoRange(9, rangeTimezone),
+                },
+                {
                   label: "Last 12 Months",
                   get: () => getMonthsAgoRange(12, rangeTimezone),
                 },
-              ] as const
+                ...(allTimeAllowed
+                  ? [
+                      {
+                        label: "All Time",
+                        get: () => getAllTimeRange(rangeTimezone),
+                      },
+                    ]
+                  : []),
+              ]
             ).map(({ label: presetLabelItem, get }) => (
               <Button
                 key={presetLabelItem}

@@ -23,6 +23,7 @@ import {
   type AdminAnalyticsSummary,
   type AdminAnalyticsViewsByStatus,
 } from "@/lib/admin-analytics";
+import { fetchAllRows } from "@/lib/supabase-fetch-all";
 
 /** 30-min TTL for analytics KPI cards + All Campaigns graph. */
 export const ADMIN_ANALYTICS_CACHE_SECONDS = 30 * 60;
@@ -155,6 +156,7 @@ async function fetchAllContestsPaginated(
         "id, title, platform, contest_type, contest_based_details, payment_details, moderation_status, start_date, end_date, advertiser_id, advertiser_profiles!advertiser_id(company_name)",
       )
       .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
       .range(from, from + CHUNK - 1);
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) break;
@@ -168,9 +170,14 @@ async function fetchAllContestsPaginated(
 async function fetchAnalyticsContests(
   supabase: ReturnType<typeof createAdminClient>,
 ): Promise<AdminAnalyticsContest[]> {
-  const { data, error } = await supabase.rpc("admin_analytics_contest_catalog");
+  const { data, error } = await fetchAllRows<ContestCatalogRow>((from, to) =>
+    supabase
+      .rpc("admin_analytics_contest_catalog")
+      .order("id")
+      .range(from, to),
+  );
   if (!error) {
-    return ((data ?? []) as ContestCatalogRow[]).map(mapContestCatalogRow);
+    return data.map(mapContestCatalogRow);
   }
 
   const code = (error as { code?: string }).code ?? "";
@@ -191,7 +198,7 @@ async function fetchAnalyticsContests(
 async function getCachedAdminAnalyticsContests(): Promise<AdminAnalyticsContest[]> {
   return unstable_cache(
     async () => fetchAnalyticsContests(createAdminClient()),
-    [ADMIN_ANALYTICS_CACHE_TAG, "contest-catalog-v1"],
+    [ADMIN_ANALYTICS_CACHE_TAG, "contest-catalog-v2"],
     {
       revalidate: ADMIN_ANALYTICS_CONTESTS_CACHE_SECONDS,
       tags: [ADMIN_ANALYTICS_CACHE_TAG],
@@ -254,35 +261,47 @@ async function fetchAnalyticsDailyRows(
 
   for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
     const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
-    const { data, error } = await supabase
-      .from("admin_analytics_submission_daily_rollup")
-      .select(
-        "day_key, status, submission_count, views_sum, likes_sum, comments_sum, shares_sum, payouts_cents_sum",
-      )
-      .in("contest_id", idChunk)
-      .in("platform", platformFilter)
-      .gte("day_key", fromDay)
-      .lte("day_key", toDay);
+    const { data, error } = await fetchAllRows<AdminAnalyticsDailySqlRow>(
+      (from, to) =>
+        supabase
+          .from("admin_analytics_submission_daily_rollup")
+          .select(
+            "day_key, status, submission_count, views_sum, likes_sum, comments_sum, shares_sum, payouts_cents_sum",
+          )
+          .in("contest_id", idChunk)
+          .in("platform", platformFilter)
+          .gte("day_key", fromDay)
+          .lte("day_key", toDay)
+          .order("contest_id")
+          .order("day_key")
+          .order("status")
+          .order("platform")
+          .range(from, to),
+    );
 
     if (error) {
       // Fallback to legacy RPC (no platform filter) if rollup table is unavailable.
-      const { data: rpcData, error: rpcError } = await supabase.rpc(
-        "admin_analytics_daily",
-        {
-          p_from: fromIso,
-          p_to: toIso,
-          p_contest_ids: idChunk,
-        },
-      );
+      const { data: rpcData, error: rpcError } =
+        await fetchAllRows<AdminAnalyticsDailySqlRow>((from, to) =>
+          supabase
+            .rpc("admin_analytics_daily", {
+              p_from: fromIso,
+              p_to: toIso,
+              p_contest_ids: idChunk,
+            })
+            .order("day_key")
+            .order("status")
+            .range(from, to),
+        );
       if (rpcError) {
         throw new Error(
           `Failed to aggregate admin analytics: ${rpcError.message}`,
         );
       }
-      chunks.push(...((rpcData ?? []) as AdminAnalyticsDailySqlRow[]));
+      chunks.push(...rpcData);
       continue;
     }
-    chunks.push(...((data ?? []) as AdminAnalyticsDailySqlRow[]));
+    chunks.push(...data);
   }
 
   return mergeDailyRows(chunks);
@@ -356,15 +375,24 @@ async function fetchPcAnalyticsOverview(
 
   for (let i = 0; i < scopeContestIds.length; i += CONTEST_ID_CHUNK) {
     const idChunk = scopeContestIds.slice(i, i + CONTEST_ID_CHUNK);
-    const { data, error } = await supabase
-      .from("admin_analytics_pc_daily_rollup")
-      .select(
-        "contest_id, day_key, status, submission_count, views_sum, likes_sum, comments_sum, shares_sum, payouts_cents_sum",
-      )
-      .in("contest_id", idChunk)
-      .in("platform", platformFilter)
-      .gte("day_key", fromDay)
-      .lte("day_key", toDay);
+    const { data, error } = await fetchAllRows<
+      AdminAnalyticsDailySqlRow & { contest_id: string | null }
+    >((from, to) =>
+      supabase
+        .from("admin_analytics_pc_daily_rollup")
+        .select(
+          "contest_id, day_key, status, submission_count, views_sum, likes_sum, comments_sum, shares_sum, payouts_cents_sum",
+        )
+        .in("contest_id", idChunk)
+        .in("platform", platformFilter)
+        .gte("day_key", fromDay)
+        .lte("day_key", toDay)
+        .order("contest_id")
+        .order("day_key")
+        .order("status")
+        .order("platform")
+        .range(from, to),
+    );
 
     if (error) {
       const { data: rpcData, error: rpcError } = await supabase.rpc(
@@ -391,7 +419,7 @@ async function fetchPcAnalyticsOverview(
       continue;
     }
 
-    for (const row of data ?? []) {
+    for (const row of data) {
       const contestId = String(row.contest_id ?? "");
       if (!contestId) continue;
       contestIdSet.add(contestId);
@@ -635,7 +663,7 @@ function normalizeListKey(ids: string[] | null): string {
 function buildCacheKeyParts(params: AdminAnalyticsOverviewParams): string[] {
   return [
     ADMIN_ANALYTICS_CACHE_TAG,
-    "v8-multi-platform-filter",
+    "v9-paginated-rollups",
     params.source,
     params.fromIso,
     params.toIso,
