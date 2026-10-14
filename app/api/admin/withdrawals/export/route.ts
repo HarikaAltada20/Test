@@ -19,6 +19,7 @@ import {
   type WithdrawalExportColumnId,
   type WithdrawalExportColumnSpec,
 } from "@/lib/withdrawal-export-columns";
+import { formatFeePercentNumber, withdrawalPayout } from "@/lib/payout-fees";
 
 type ExportCurrency = { code: string; rate: number };
 
@@ -45,8 +46,20 @@ function csvCell(v: unknown): string {
   return s;
 }
 
-function convertCents(cents: number, rate: number): string {
-  return (Math.round(cents * rate) / 100).toFixed(2);
+function minorToDecimal(minor: number): string {
+  return (minor / 100).toFixed(2);
+}
+
+/**
+ * Amount to send for one request, in minor units of the export currency.
+ * INR exports use the INR amount fixed when the request was made, when it has one.
+ */
+function payoutMinor(m: Record<string, unknown>, currency: ExportCurrency): number {
+  const p = withdrawalPayout(m);
+  if (currency.code === "INR" && p.currency === "INR" && p.netLocalMinor !== null) {
+    return p.netLocalMinor;
+  }
+  return Math.round(p.netCents * currency.rate);
 }
 
 function describe(usernames: string[]): string {
@@ -68,14 +81,13 @@ function rowValues(
   const d = (m.payout_method_details_snapshot || {}) as Record<string, unknown>;
   const accountNumber = d.account_number ? String(d.account_number) : "";
   const isCash = String(m.amount_type || "cash") === "cash";
-  const cents = Number(m.amount ?? 0);
   const username = users?.username ?? "";
+  const p = withdrawalPayout(m);
 
   return {
     payee_email: payoutDestination(m).destination,
     payout_currency: isCash ? currency.code : "",
-    payout_amount:
-      isCash && Number.isFinite(cents) ? convertCents(cents, currency.rate) : "",
+    payout_amount: isCash ? minorToDecimal(payoutMinor(m, currency)) : "",
     description: describe(username ? [username] : []),
     request_count: "1",
     usernames: username,
@@ -84,6 +96,11 @@ function rowValues(
     processed_at: m.processed_at ? String(m.processed_at) : "",
     status: String(m.status ?? ""),
     amount: String(m.amount ?? ""),
+    fee_percent: isCash ? formatFeePercentNumber(p.feeBps) : "",
+    fee_usd: isCash ? minorToDecimal(p.feeCents) : "",
+    net_usd: isCash ? minorToDecimal(p.netCents) : "",
+    inr_amount: isCash && p.netLocalMinor !== null ? minorToDecimal(p.netLocalMinor) : "",
+    inr_rate: isCash && p.usdInrRate !== null ? String(p.usdInrRate) : "",
     amount_type: String(m.amount_type ?? ""),
     currency: String(m.currency ?? ""),
     full_name: users?.full_name ?? "",
@@ -123,11 +140,16 @@ function groupValues(
     ...merged,
     payee_email: g.destination,
     payout_currency: isCash ? currency.code : "",
-    payout_amount: isCash ? convertCents(g.totalCents, currency.rate) : "",
+    payout_amount: isCash
+      ? minorToDecimal(g.requests.reduce((sum, r) => sum + payoutMinor(r, currency), 0))
+      : "",
     description: describe(g.usernames),
     request_count: String(g.count),
     usernames: g.usernames.join(", "),
     amount: String(g.totalCents),
+    fee_usd: isCash ? minorToDecimal(g.feeCents) : "",
+    net_usd: isCash ? minorToDecimal(g.netCents) : "",
+    inr_amount: isCash && g.netLocalMinor !== null ? minorToDecimal(g.netLocalMinor) : "",
     amount_type: g.amountType,
     currency: g.currency,
     payout_method_type: g.method,

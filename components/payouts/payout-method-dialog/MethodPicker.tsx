@@ -13,6 +13,8 @@ export interface MethodPickerOption {
   descriptor?: string;
   locked?: boolean;
   paused?: boolean;
+  /** Processing fee, e.g. "10% fee". Only set for methods that are switched on. */
+  feeLabel?: string;
 }
 
 export function MethodPicker({
@@ -88,6 +90,9 @@ export function MethodPicker({
               <Clock aria-hidden className="h-3 w-3 shrink-0" />
               {meta.descriptor}
             </span>
+            {opt.feeLabel && (
+              <span className={cn("text-xs", t.muted)}>{opt.feeLabel}</span>
+            )}
             {opt.descriptor && (
               <span className={cn("flex items-center gap-1 text-xs font-medium", t.text)}>
                 {opt.locked && <Lock aria-hidden className="h-3 w-3 shrink-0" />}
