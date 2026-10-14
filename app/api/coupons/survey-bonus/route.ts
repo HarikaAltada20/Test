@@ -232,7 +232,7 @@ export async function POST(request: NextRequest) {
     console.log("✅ Success! Cash credited:", creditRes);
 
     // Also increment other_earnings in users table
-    const { error: otherEarningsErr } = await supabase
+    const { error: otherEarningsErr } = await createAdminClient()
       .from("users")
       .update({
         other_earnings: ((userRow as any).other_earnings || 0) + cashCredited,

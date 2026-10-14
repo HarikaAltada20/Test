@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Also increment other_earnings in users table
-      const { error: otherEarningsErr } = await supabase
+      const { error: otherEarningsErr } = await createAdminClient()
         .from("users")
         .update({
           other_earnings: ((userRow as any).other_earnings || 0) + cashCredited,
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
 
     if (config.reward.coins && config.reward.coins > 0) {
       coinsCredited = config.reward.coins;
-      const { error: userUpdateErr } = await supabase
+      const { error: userUpdateErr } = await createAdminClient()
         .from("users")
         .update({
           coins: (userRow.coins || 0) + coinsCredited,
