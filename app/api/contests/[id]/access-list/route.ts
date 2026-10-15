@@ -11,6 +11,7 @@ import {
   getServiceClient,
   loadAllowlistMemberIds,
   loadCampaignAccessUserIds,
+  loadSavedListSyncStatus,
   loadUserDisplay,
   resolveUsernamesToUserIds,
 } from "@/lib/campaign-access-server";
@@ -140,7 +141,11 @@ export async function GET(_request: Request, { params }: Ctx) {
         .order("user_id"),
     );
 
-    const users = await loadUserDisplay(admin, rows.map((r) => r.user_id));
+    const usesSavedLists = rows.some((r) => r.source_allowlist_id);
+    const [users, listSync] = await Promise.all([
+      loadUserDisplay(admin, rows.map((r) => r.user_id)),
+      usesSavedLists ? loadSavedListSyncStatus(admin, id) : Promise.resolve([]),
+    ]);
     const listIds = Array.from(
       new Set(rows.map((r) => r.source_allowlist_id).filter(Boolean)),
     ) as string[];
@@ -184,7 +189,7 @@ export async function GET(_request: Request, { params }: Ctx) {
       };
     });
 
-    return NextResponse.json({ contest, members });
+    return NextResponse.json({ contest, members, listSync });
   } catch (err) {
     return campaignAccessErrorResponse(err);
   }

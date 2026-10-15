@@ -52,6 +52,8 @@ import {
 } from "lucide-react";
 import { DeleteContestButton } from "@/components/delete-contest-button";
 import { formatLocalDateTime, cn } from "@/lib/utils";
+import { AccessModeBadge } from "@/components/campaign-access/AccessBadge";
+import { CampaignAccessInfo } from "@/components/campaign-access/CampaignAccessInfo";
 import { isModifiedLinkClick } from "@/lib/navigation-link-utils";
 import {
   KNOWN_POST_CONTEST_STATUSES,
@@ -122,6 +124,11 @@ import {
 type Contest = {
   id: string;
   title: string | null;
+  access_mode?: string | null;
+  access_list_skips_requirements?: boolean | null;
+  /** Restricted campaigns: added by the list API after its cache. */
+  applications_open?: boolean | null;
+  pending_applications?: number | null;
   platform: string | null;
   contest_type: string | null;
   created_at: string;
@@ -1127,7 +1134,13 @@ export function ContestListClient({
               ) : (
                 <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
               )}
-              <div className="absolute top-2 right-2">
+              <div className="absolute top-2 right-2 flex flex-wrap justify-end gap-1.5">
+                {(contest.access_mode === "private" ||
+                  contest.access_mode === "restricted") && (
+                  <span className={cn("inline-flex", isDark && "dark")}>
+                    <AccessModeBadge mode={contest.access_mode} size="md" />
+                  </span>
+                )}
                 <Badge
                   className={cn(
                     "text-sm px-3 py-1 font-medium border",
@@ -1279,6 +1292,7 @@ export function ContestListClient({
                   size="compact"
                 />
               </div>
+              {renderAccessInfo(contest)}
             </CardHeader>
             <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
               <div
@@ -2032,6 +2046,7 @@ export function ContestListClient({
                     size="default"
                   />
                 </div>
+                {renderAccessInfo(contest)}
               </CardHeader>
               <CardContent className="p-0 pt-2 flex-1">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-resp">
@@ -2668,6 +2683,16 @@ export function ContestListClient({
   // Server already returned the sorted page ? do not re-sort or re-slice.
   const displayContests = contests;
   const paginatedContests = contests;
+
+  const renderAccessInfo = (contest: Contest) => (
+    <CampaignAccessInfo
+      accessMode={contest.access_mode}
+      applicationsOpen={contest.applications_open ?? null}
+      pendingCount={contest.pending_applications ?? null}
+      skipsRequirements={contest.access_list_skips_requirements}
+      isDark={isDark}
+    />
+  );
 
   useEffect(() => {
     if (!filtersHydrated) return;

@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { RestrictedCampaignPreview } from "@/components/campaign-access/RestrictedCampaignPreview";
+import { WelcomeBanner } from "@/components/campaign-access/WelcomeBanner";
 import { applicationsApi } from "@/components/campaign-access/api";
 import type { ContestPreview } from "@/lib/campaign-access";
 import {
@@ -3535,6 +3536,7 @@ export function ContestClientPage({
   return (
     <div className={cn("min-h-screen", isDark ? "bg-black" : "bg-slate-50")}>
       <div className="container mx-auto py-8 px-2 lg:px-4">
+        <WelcomeBanner isDark={isDark} />
         {/* Improved Header Navigation */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">

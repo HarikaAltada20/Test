@@ -1,36 +1,120 @@
 "use client";
 
-import { Globe, Lock, ClipboardList } from "lucide-react";
+import { Check, ClipboardList, EyeOff, Globe, Lock } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { SELECTABLE_ACCESS_MODES, type AccessMode } from "@/lib/campaign-access";
+import { useDashboardDark } from "@/hooks/use-dashboard-dark";
+
+type ChecklistRow = { visible: boolean; text: string };
 
 const OPTIONS: {
   value: AccessMode;
   title: string;
+  bestFor: string;
   description: string;
   icon: typeof Globe;
+  checklist: ChecklistRow[];
 }[] = [
   {
     value: "public",
     title: "Public",
-    description: "Anyone can see this campaign. Who can submit still depends on the requirements.",
+    bestFor: "Best for maximum reach",
+    description:
+      "Everyone sees the full campaign in Opportunities. Who can submit still depends on your requirements.",
     icon: Globe,
+    checklist: [
+      { visible: true, text: "Title and budget" },
+      { visible: true, text: "Full brief" },
+      { visible: true, text: "Anyone eligible can submit" },
+    ],
   },
   {
     value: "private",
     title: "Private",
-    description: "Hidden from everyone except creators on this campaign's access list.",
+    bestFor: "Best for hand-picked creators",
+    description:
+      "Hidden from everyone except the creators you add. It doesn't appear in discovery.",
     icon: Lock,
+    checklist: [
+      { visible: false, text: "Hidden from everyone else" },
+      { visible: true, text: "Invited creators see it" },
+      { visible: true, text: "Full brief for invited creators" },
+    ],
   },
   {
     value: "restricted",
     title: "Restricted",
-    description: "Shows a preview to everyone; creators apply and you approve who joins.",
+    bestFor: "Best for an open call where you choose",
+    description:
+      "Everyone sees a preview (title, budget, dates). Creators apply, and the full brief unlocks after you approve them.",
     icon: ClipboardList,
+    checklist: [
+      { visible: true, text: "Title, budget and dates" },
+      { visible: false, text: "Full brief after approval" },
+      { visible: true, text: "Apply first, then you approve" },
+    ],
   },
 ];
+
+/** A tiny, decorative sketch of what creators see in each mode. */
+function CreatorViewSketch({ mode }: { mode: AccessMode }) {
+  const bar = "rounded-full bg-gray-200 dark:bg-white/15";
+  const label = "text-[9px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500";
+
+  if (mode === "private") {
+    return (
+      <div aria-hidden="true" className="flex h-[118px] flex-col items-center justify-center gap-2 text-center">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300">
+          <Lock className="h-4 w-4" />
+        </span>
+        <p className="text-[11px] font-medium text-gray-600 dark:text-gray-300">Only invited creators see it</p>
+        <p className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500">
+          <EyeOff className="h-3 w-3" /> Invite-only · not in discovery
+        </p>
+      </div>
+    );
+  }
+
+  const restricted = mode === "restricted";
+  return (
+    <div aria-hidden="true" className="h-[118px] space-y-1.5">
+      <div className="h-7 rounded-sm bg-gradient-to-r from-gray-200 to-gray-100 dark:from-white/15 dark:to-white/5" />
+      <div className={cn(bar, "h-2 w-3/4")} />
+      <div className="flex items-center gap-1.5">
+        <span className={label}>Budget</span>
+        <div className={cn(bar, "h-1.5 w-10 bg-emerald-200 dark:bg-emerald-500/30")} />
+      </div>
+      <div className="relative">
+        <div className={cn("space-y-1", restricted && "select-none blur-[2px]")}>
+          <span className={label}>Brief</span>
+          <div className={cn(bar, "h-1.5 w-full")} />
+          <div className={cn(bar, "h-1.5 w-5/6")} />
+        </div>
+        {restricted && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-white/30 to-white/80 dark:from-transparent dark:to-[#170337]/80">
+            <span className="flex items-center gap-1 rounded-full bg-white/90 px-1.5 py-0.5 text-[9px] font-medium text-[#4A00BE] shadow-sm dark:bg-[#2B1159] dark:text-purple-200">
+              <Lock className="h-2.5 w-2.5" /> Brief unlocks after approval
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="flex justify-end">
+        <span
+          className={cn(
+            "rounded px-1.5 py-0.5 text-[10px] font-semibold",
+            restricted
+              ? "bg-purple-100 text-[#4A00BE] dark:bg-[#7F39EC]/30 dark:text-purple-200"
+              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300",
+          )}
+        >
+          {restricted ? "Apply" : "Submit"}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 type Props = {
   value: AccessMode;
@@ -39,44 +123,82 @@ type Props = {
 };
 
 export function AccessModeSelector({ value, onChange, disabled }: Props) {
+  const isDark = useDashboardDark();
   return (
     <RadioGroup
       value={value}
       onValueChange={(v) => onChange(v as AccessMode)}
-      className="grid gap-3 md:grid-cols-3"
+      aria-label="Who can see this campaign"
+      className={cn("grid items-stretch gap-3 md:grid-cols-3", isDark && "dark")}
       disabled={disabled}
     >
       {OPTIONS.map((opt) => {
         const selectable = SELECTABLE_ACCESS_MODES.includes(opt.value);
         const Icon = opt.icon;
         const id = `access-mode-${opt.value}`;
+        const selected = value === opt.value;
         return (
           <Label
             key={opt.value}
             htmlFor={id}
             className={cn(
-              "flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors",
-              value === opt.value
-                ? "border-[#7F39EC] bg-purple-50/60"
-                : "border-gray-200 hover:border-purple-300",
+              "flex h-full cursor-pointer flex-col rounded-xl border-2 p-4 transition-colors focus-within:ring-2 focus-within:ring-[#7F39EC] focus-within:ring-offset-1 dark:focus-within:ring-offset-transparent",
+              selected
+                ? "border-[#7F39EC] bg-purple-50/60 dark:bg-[#7F39EC]/20"
+                : "border-gray-200 hover:border-purple-300 dark:border-white/10 dark:hover:border-[#7F39EC]/60",
               (!selectable || disabled) && "cursor-not-allowed opacity-60",
             )}
           >
-            <RadioGroupItem
-              id={id}
-              value={opt.value}
-              disabled={!selectable || disabled}
-              className="mt-0.5 shrink-0"
-            />
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 font-medium text-gray-900">
-                <Icon className="h-4 w-4" />
-                {opt.title}
+            <div className="flex items-start gap-3">
+              <RadioGroupItem
+                id={id}
+                value={opt.value}
+                disabled={!selectable || disabled}
+                className="mt-1 shrink-0"
+              />
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-white">
+                  <span
+                    className={cn(
+                      "flex h-7 w-7 items-center justify-center rounded-full",
+                      selected
+                        ? "bg-[#7F39EC] text-white"
+                        : "bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  {opt.title}
+                </div>
+                <p className="text-xs font-medium text-[#7F39EC] dark:text-purple-300">{opt.bestFor}</p>
+                <p className="text-xs font-normal leading-snug text-gray-500 dark:text-gray-400">
+                  {opt.description}
+                </p>
               </div>
-              <p className="text-xs font-normal leading-snug text-gray-500">
-                {opt.description}
-              </p>
             </div>
+
+            <div className="mt-3 rounded-md border border-dashed border-gray-200 bg-white/70 p-2 dark:border-white/15 dark:bg-white/5">
+              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                What creators see
+              </p>
+              <CreatorViewSketch mode={opt.value} />
+            </div>
+
+            <ul className="mt-auto space-y-1 pt-3" aria-label={`${opt.title}: what creators can see`}>
+              {opt.checklist.map((row) => (
+                <li key={row.text} className="flex items-center gap-1.5 text-xs font-normal text-gray-700 dark:text-gray-300">
+                  {row.visible ? (
+                    <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                  ) : (
+                    <Lock className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-gray-500" aria-hidden="true" />
+                  )}
+                  <span>
+                    <span className="sr-only">{row.visible ? "Visible: " : "Hidden: "}</span>
+                    {row.text}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </Label>
         );
       })}
