@@ -231,6 +231,8 @@ export type DraftListPage = {
   total: number;
   counts: Partial<Record<DraftDisplayStatus, number>>;
   rows: DraftListRow[];
+  /** Brand lists only: whether the campaign currently requires review. */
+  review_before_posting?: boolean;
 };
 
 /** content_draft_campaign_status for the signed-in creator. */
@@ -609,6 +611,29 @@ export function draftSubmissionErrorMessage(message: string | null | undefined):
   return null;
 }
 
+/** In-app notification types (db/migrations/20261021_content_draft_notification_types.sql). */
+export const CONTENT_DRAFT_NOTIFICATION_TYPES = [
+  "content_draft_submitted",
+  "content_draft_approved",
+  "content_draft_revision_requested",
+  "content_draft_rejected",
+  "content_draft_comment",
+] as const;
+export type ContentDraftNotificationType = (typeof CONTENT_DRAFT_NOTIFICATION_TYPES)[number];
+
+export function isContentDraftNotificationType(type: string): type is ContentDraftNotificationType {
+  return (CONTENT_DRAFT_NOTIFICATION_TYPES as readonly string[]).includes(type);
+}
+
+/**
+ * Where a draft notification opens: the campaign's Drafts tab for brands and
+ * admins (campaignPath is their campaign page), the creator's drafts otherwise.
+ */
+export function draftNotificationHref(contestId: string, userType: string, campaignPath: string): string {
+  if (userType === "advertiser" || userType === "admin") return `${campaignPath}?tab=drafts`;
+  return `/dashboard/submissions?view=drafts&campaign=${encodeURIComponent(contestId)}`;
+}
+
 /** Normalised campaign settings from create/edit forms. */
 export type DraftReviewSettings = {
   review_before_posting: boolean;
@@ -644,6 +669,21 @@ export function normalizeDraftReviewSettings(raw: Partial<Record<keyof DraftRevi
         : limitOrNull(r.draft_max_revisions, DRAFT_LIMIT_RANGES.revisions),
     draft_max_rejections: limitOrNull(r.draft_max_rejections, DRAFT_LIMIT_RANGES.rejections),
   };
+}
+
+/** The review settings present in a create/update payload, normalised. Keys not sent stay out. */
+export function pickDraftReviewSettings(raw: Record<string, unknown> | null | undefined): Partial<DraftReviewSettings> {
+  const r = raw ?? {};
+  const out: Partial<DraftReviewSettings> = {};
+  if (r.review_before_posting !== undefined) out.review_before_posting = r.review_before_posting === true;
+  if (r.draft_max_open !== undefined) out.draft_max_open = limitOrNull(r.draft_max_open, DRAFT_LIMIT_RANGES.open);
+  if (r.draft_max_revisions !== undefined) {
+    out.draft_max_revisions = limitOrNull(r.draft_max_revisions, DRAFT_LIMIT_RANGES.revisions);
+  }
+  if (r.draft_max_rejections !== undefined) {
+    out.draft_max_rejections = limitOrNull(r.draft_max_rejections, DRAFT_LIMIT_RANGES.rejections);
+  }
+  return out;
 }
 
 export const DRAFT_REVIEW_SETTING_KEYS = [

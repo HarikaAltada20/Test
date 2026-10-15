@@ -61,7 +61,8 @@ export async function getCampaignDraftStatus(contestId: string): Promise<Campaig
 
 export async function listMyDrafts(opts: {
   contestId?: string | null;
-  status: MyDraftFilter;
+  /** "approved_all" = approved, posted or not (the submit page's draft picker). */
+  status: MyDraftFilter | "approved_all";
   offset: number;
   limit: number;
 }): Promise<DraftListPage> {
@@ -102,6 +103,9 @@ function normalizePage(data: unknown): DraftListPage {
     total: Number(page.total ?? 0),
     counts: page.counts ?? {},
     rows: Array.isArray(page.rows) ? page.rows : [],
+    ...(typeof page.review_before_posting === "boolean"
+      ? { review_before_posting: page.review_before_posting }
+      : {}),
   };
 }
 

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   MAX_DRAFT_FILE_BYTES,
   draftBlockMessage,
+  draftNotificationHref,
   draftPosterPath,
   draftReviewResultMessage,
   draftSendResultMessage,
@@ -14,10 +15,12 @@ import {
   formatBytes,
   formatDraftRecord,
   formatDuration,
+  isContentDraftNotificationType,
   normalizeDraftReviewSettings,
   parseCampaignDraftFilter,
   parseHashtags,
   parseMyDraftFilter,
+  pickDraftReviewSettings,
   titleFromFileName,
   validateDraftFields,
   validateDraftFile,
@@ -181,5 +184,38 @@ describe("normalizeDraftReviewSettings", () => {
     );
     assert.equal(normalizeDraftReviewSettings({ draft_max_open: null }).draft_max_open, null);
     assert.equal(normalizeDraftReviewSettings({ draft_max_rejections: "" }).draft_max_rejections, null);
+  });
+});
+
+describe("pickDraftReviewSettings", () => {
+  it("keeps only the keys that were sent, normalised", () => {
+    assert.deepEqual(pickDraftReviewSettings({ title: "x" }), {});
+    assert.deepEqual(pickDraftReviewSettings(null), {});
+    assert.deepEqual(
+      pickDraftReviewSettings({ review_before_posting: false, draft_max_open: 900, draft_max_rejections: null }),
+      { review_before_posting: false, draft_max_open: 500, draft_max_rejections: null },
+    );
+    assert.deepEqual(pickDraftReviewSettings({ review_before_posting: 1, draft_max_revisions: "0" }), {
+      review_before_posting: false,
+      draft_max_revisions: 0,
+    });
+  });
+});
+
+describe("draft notifications", () => {
+  it("recognises the draft types", () => {
+    assert.equal(isContentDraftNotificationType("content_draft_comment"), true);
+    assert.equal(isContentDraftNotificationType("campaign_access_granted"), false);
+  });
+  it("links brands and admins to the Drafts tab and creators to their drafts", () => {
+    assert.equal(draftNotificationHref("c1", "advertiser", "/dashboard/contests/c1"), "/dashboard/contests/c1?tab=drafts");
+    assert.equal(
+      draftNotificationHref("c1", "admin", "/dashboard/admin/contests/c1"),
+      "/dashboard/admin/contests/c1?tab=drafts",
+    );
+    assert.equal(
+      draftNotificationHref("c1", "creator", "/dashboard/opportunities/c1"),
+      "/dashboard/submissions?view=drafts&campaign=c1",
+    );
   });
 });

@@ -143,6 +143,12 @@ export function DraftReviewPanel({ contestId, onPendingCountChange, initialDraft
           Creators upload their video here before posting. Approve it, ask for changes, or reject
           it. Only approved videos can be submitted.
         </p>
+        {data?.review_before_posting === false && (
+          <p className="mt-2 rounded-md bg-gray-100 px-3 py-2 text-sm text-gray-700 dark:bg-white/5 dark:text-gray-300">
+            Review before posting is off for this campaign, so creators can post without approval. You
+            can still review the drafts already sent.
+          </p>
+        )}
       </div>
 
       <TabsPrimitive.Root

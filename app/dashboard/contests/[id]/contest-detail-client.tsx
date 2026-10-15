@@ -139,6 +139,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
+import { DraftReviewPanel } from "@/components/content-drafts/DraftReviewPanel";
+import { listCampaignDrafts } from "@/components/content-drafts/api";
 import { useTabState } from "@/components/ui/tab-utils";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -858,6 +860,7 @@ interface Contest {
   min_platform_views?: number | null;
   access_mode?: AccessMode | null;
   advertiser_id?: string | null;
+  review_before_posting?: boolean | null;
 }
 
 interface Submission {
@@ -1845,12 +1848,52 @@ export default function ContestDetailClient({
     return emailLocal || "Creator";
   };
 
+  // Review before posting: drafts waiting for review (tab label), and whether
+  // the campaign has any drafts, so the tab stays after the setting is turned off.
+  const [draftCounts, setDraftCounts] = useState<{
+    toReview: number;
+    any: boolean;
+    reviewOn: boolean;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    listCampaignDrafts({
+      contestId,
+      status: "pending_review",
+      sort: "oldest",
+      offset: 0,
+      limit: 1,
+    })
+      .then((page) => {
+        if (cancelled) return;
+        const total = Object.values(page.counts).reduce(
+          (sum: number, n) => sum + (n ?? 0),
+          0,
+        );
+        setDraftCounts({
+          toReview: page.counts.pending_review ?? 0,
+          any: total > 0,
+          reviewOn: page.review_before_posting === true,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [contestId]);
+  // The page's contest view doesn't carry the new column; the drafts list does.
+  const draftReviewOn =
+    !!contest?.review_before_posting || !!draftCounts?.reviewOn;
+  const showDraftsTab = draftReviewOn || !!draftCounts?.any;
+  const requestedDraftId = useSearchParams().get("draft");
+
   const tabs = [
     { id: "overview", label: "Overview" },
     {
       id: "submissions",
       label: `Submissions (${submissionTotalCount})`,
     },
+    ...(showDraftsTab ? [{ id: "drafts", label: "Drafts" }] : []),
     ...(contest?.platform?.toLowerCase() === "twitter"
       ? [{ id: "twitter-feed", label: "Twitter Feed" }]
       : []),
@@ -4230,6 +4273,16 @@ export default function ContestDetailClient({
         id: "submissions",
         label: `Submissions (${submissionTotalCount})`,
       },
+      ...(showDraftsTab
+        ? [
+            {
+              id: "drafts",
+              label: draftCounts?.toReview
+                ? `Drafts (${draftCounts.toReview} to review)`
+                : "Drafts",
+            },
+          ]
+        : []),
       ...(contest?.platform?.toLowerCase() === "twitter"
         ? [{ id: "twitter-feed", label: "Twitter Feed" }]
         : []),
@@ -4248,7 +4301,14 @@ export default function ContestDetailClient({
         ? [{ id: "access", label: "Access" }]
         : []),
     ],
-    [submissionTotalCount, contest?.platform, contest?.access_mode, pendingApplications],
+    [
+      submissionTotalCount,
+      contest?.platform,
+      contest?.access_mode,
+      pendingApplications,
+      showDraftsTab,
+      draftCounts?.toReview,
+    ],
   );
 
   // Filter + sort (memoized so virtualizer isn't fed a new array every render).
@@ -15898,6 +15958,33 @@ export default function ContestDetailClient({
                       {pendingApplications === 1 ? "" : "s"}
                     </button>
                   )}
+                {draftReviewOn && (
+                  <span
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-semibold sm:text-sm",
+                      isDark
+                        ? "bg-[#7F39EC]/20 text-purple-200"
+                        : "bg-purple-50 text-[#4A00BE]",
+                    )}
+                  >
+                    Review before posting
+                  </span>
+                )}
+                {showDraftsTab && (draftCounts?.toReview ?? 0) > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("drafts")}
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-semibold underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] sm:text-sm",
+                      isDark
+                        ? "bg-amber-500/15 text-amber-200"
+                        : "bg-amber-50 text-amber-800",
+                    )}
+                  >
+                    {draftCounts?.toReview} draft
+                    {draftCounts?.toReview === 1 ? "" : "s"} to review
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -34333,6 +34420,21 @@ export default function ContestDetailClient({
               </CardContent>
             </div>
           </TabPanel>
+          {showDraftsTab && (
+            <TabPanel value="drafts" activeTab={activeTab}>
+              <DraftReviewPanel
+                contestId={contestId}
+                initialDraftId={requestedDraftId}
+                onPendingCountChange={(n) =>
+                  setDraftCounts((c) => ({
+                    toReview: n,
+                    any: (c?.any ?? false) || n > 0,
+                    reviewOn: c?.reviewOn ?? false,
+                  }))
+                }
+              />
+            </TabPanel>
+          )}
           {contest?.access_mode === "restricted" && (
             <TabPanel value="applications" activeTab={activeTab}>
               <ApplicationsPanel

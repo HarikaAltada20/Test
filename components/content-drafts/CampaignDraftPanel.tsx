@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Clapperboard, Send, ShieldCheck, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,9 +13,20 @@ type Props = {
   contestId: string;
   campaignTitle?: string | null;
   isDark: boolean;
-  /** Called once the campaign's review setting is known (true when on). */
-  onReviewModeKnown?: (enabled: boolean) => void;
+  /** The campaign accepts posts from more than one platform. */
+  multiPlatform?: boolean;
+  /** Called with the creator's draft status (null when it couldn't be loaded). */
+  onStatusChange?: (status: CampaignDraftStatus | null) => void;
+  /** Increase to open the upload dialog, e.g. from the page's main button. */
+  uploadRequest?: number;
+  className?: string;
 };
+
+/** True when the creator has an approved draft they can still link to a post. */
+export function hasLinkableDraft(status: CampaignDraftStatus | null | undefined, multiPlatform = false): boolean {
+  const counts = status?.counts ?? {};
+  return (counts.approved ?? 0) > 0 || (multiPlatform && (counts.posted ?? 0) > 0);
+}
 
 const STEPS = ["Upload your draft", "The brand reviews it", "Post it and submit the link"];
 
@@ -24,18 +35,27 @@ const STEPS = ["Upload your draft", "The brand reviews it", "Post it and submit 
  * their draft counts and the upload button. Renders nothing when the
  * campaign doesn't use it (or the feature isn't set up yet).
  */
-export function CampaignDraftPanel({ contestId, campaignTitle, isDark, onReviewModeKnown }: Props) {
+export function CampaignDraftPanel({
+  contestId,
+  campaignTitle,
+  isDark,
+  multiPlatform = false,
+  onStatusChange,
+  uploadRequest = 0,
+  className,
+}: Props) {
   const [status, setStatus] = useState<CampaignDraftStatus | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
 
   const load = useCallback(async () => {
     try {
       const s = await getCampaignDraftStatus(contestId);
       setStatus(s);
-      onReviewModeKnown?.(!!s.review_before_posting);
+      onStatusChange?.(s);
     } catch {
       setStatus(null);
-      onReviewModeKnown?.(false);
+      onStatusChange?.(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contestId]);
@@ -43,6 +63,18 @@ export function CampaignDraftPanel({ contestId, campaignTitle, isDark, onReviewM
   useEffect(() => {
     load();
   }, [load]);
+
+  // The page's main button asks for an upload: open it, or show why not.
+  useEffect(() => {
+    if (!uploadRequest || !status?.review_before_posting) return;
+    if (status.can_upload) {
+      setUploadOpen(true);
+    } else {
+      sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      sectionRef.current?.focus({ preventScroll: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadRequest]);
 
   if (!status?.review_before_posting) return null;
 
@@ -52,6 +84,7 @@ export function CampaignDraftPanel({ contestId, campaignTitle, isDark, onReviewM
   const changes = counts.revision_requested ?? 0;
   const posted = counts.posted ?? 0;
   const block = draftBlockMessage(status.block_reason, status);
+  const linkable = hasLinkableDraft(status, multiPlatform);
   const slotsLeft =
     status.max_open != null ? Math.max(0, status.max_open - (status.open_count ?? 0)) : null;
   const draftsHref = `/dashboard/submissions?view=drafts&campaign=${contestId}`;
@@ -64,10 +97,13 @@ export function CampaignDraftPanel({ contestId, campaignTitle, isDark, onReviewM
 
   return (
     <section
+      ref={sectionRef}
+      tabIndex={-1}
       aria-labelledby="review-before-posting-heading"
       className={cn(
-        "rounded-xl border border-purple-200 bg-purple-50/50 p-4 sm:p-5 dark:border-[#7F39EC]/40 dark:bg-[#7F39EC]/10",
+        "rounded-xl border border-purple-200 bg-purple-50/50 p-4 focus:outline-none sm:p-5 dark:border-[#7F39EC]/40 dark:bg-[#7F39EC]/10",
         isDark && "dark",
+        className,
       )}
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -84,7 +120,7 @@ export function CampaignDraftPanel({ contestId, campaignTitle, isDark, onReviewM
           </p>
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
-          {approved > 0 && (
+          {linkable && (
             <Button asChild className="bg-[#7F39EC] hover:bg-[#7F39EC]/90">
               <Link href={`/dashboard/opportunities/${contestId}/submit`}>
                 <Send className="mr-1.5 h-4 w-4" /> Submit posted link
@@ -92,9 +128,9 @@ export function CampaignDraftPanel({ contestId, campaignTitle, isDark, onReviewM
             </Button>
           )}
           <Button
-            variant={approved > 0 ? "outline" : "default"}
+            variant={linkable ? "outline" : "default"}
             className={
-              approved > 0
+              linkable
                 ? "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10"
                 : "bg-[#7F39EC] hover:bg-[#7F39EC]/90"
             }

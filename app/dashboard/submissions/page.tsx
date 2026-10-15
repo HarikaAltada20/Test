@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { getSessionUser } from "@/utils/supabase/auth-server";
 import { redirect } from "next/navigation";
 import SubmissionsClient from "./SubmissionsClient";
+import { SubmissionsViews } from "./SubmissionsViews";
 import { RouteGuard } from "@/components/guards/RouteGuard";
 import { SubmissionWithContest } from "@/types/supabase";
 import { getCreatorStatsFromProfile } from "@/lib/creator-profile-stats";
@@ -51,17 +52,21 @@ export default async function SubmissionsPage() {
   if (submissionsError) {
     console.error("Error fetching submissions:", submissionsError.message);
     return (
-      <SubmissionsClient
-        initialSubmissions={[]}
-        fetchError={submissionsError.message}
-        creatorStats={{
-          trustScorePct: null,
-          trustNumber: null,
-          avgQualityScore: null,
-          bestQualityScore: null,
-          totalQualityScore: null,
-        }}
-      />
+      <Suspense>
+        <SubmissionsViews>
+          <SubmissionsClient
+            initialSubmissions={[]}
+            fetchError={submissionsError.message}
+            creatorStats={{
+              trustScorePct: null,
+              trustNumber: null,
+              avgQualityScore: null,
+              bestQualityScore: null,
+              totalQualityScore: null,
+            }}
+          />
+        </SubmissionsViews>
+      </Suspense>
     );
   }
 
@@ -146,11 +151,15 @@ export default async function SubmissionsPage() {
   };
 
   return (
-    <SubmissionsClient
-      initialSubmissions={(formattedSubmissions as SubmissionWithContest[]) || []}
-      creatorStats={creatorStats}
-      initialNextCursor={initialNextCursor}
-      totalCount={totalCount ?? undefined}
-    />
+    <Suspense>
+      <SubmissionsViews>
+        <SubmissionsClient
+          initialSubmissions={(formattedSubmissions as SubmissionWithContest[]) || []}
+          creatorStats={creatorStats}
+          initialNextCursor={initialNextCursor}
+          totalCount={totalCount ?? undefined}
+        />
+      </SubmissionsViews>
+    </Suspense>
   );
 }

@@ -1549,7 +1549,15 @@ BEGIN
     ), '[]'::jsonb)
   INTO v_counts, v_total, v_rows;
 
-  RETURN jsonb_build_object('total', v_total, 'counts', v_counts, 'rows', v_rows);
+  RETURN jsonb_build_object(
+    'total', v_total,
+    'counts', v_counts,
+    'rows', v_rows,
+    'review_before_posting', COALESCE(
+      (SELECT c.review_before_posting FROM public.contests c WHERE c.id = p_contest_id),
+      false
+    )
+  );
 END;
 $$;
 
