@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useLayoutEffect } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,17 +19,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Search, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Eye, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { UserSearchCombobox } from "@/components/admin/user-search/UserSearchCombobox";
+import { UserDetailsModal } from "@/components/admin/user-search/UserDetailsModal";
+import { UserAvatar } from "@/components/admin/user-search/UserAvatar";
+import { UserTypeBadge } from "@/components/admin/user-search/UserTypeBadge";
+import {
+  type AdminSearchUser,
+  userDisplayName,
+} from "@/components/admin/user-search/types";
 
-interface User {
-  id: string;
-  email: string;
-  full_name: string | null;
-  username: string | null;
-  user_type: string;
-  coins: number;
-}
+type User = AdminSearchUser;
 
 interface ManualEntryModalProps {
   isOpen: boolean;
@@ -76,9 +77,6 @@ export function ManualEntryModal({
     return () => observer.disconnect();
   }, []);
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<User[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [transactionType, setTransactionType] = useState<"coins" | "cash">(
     "coins"
@@ -89,6 +87,9 @@ export function ManualEntryModal({
   >("");
   const [transactionNote, setTransactionNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [idCopied, setIdCopied] = useState(false);
+  const viewDetailsRef = useRef<HTMLButtonElement>(null);
   const [submitStatus, setSubmitStatus] = useState<{
     type: "success" | "error" | null;
     message: string;
@@ -97,9 +98,8 @@ export function ManualEntryModal({
   // Reset form when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setSearchQuery("");
-      setSearchResults([]);
       setSelectedUser(null);
+      setDetailsOpen(false);
       setTransactionType("coins");
       setAmount("");
       setCashCategory("");
@@ -108,40 +108,32 @@ export function ManualEntryModal({
     }
   }, [isOpen]);
 
-  // Debounced search
+  // Keep keyboard focus on the new card once a user is picked.
   useEffect(() => {
-    if (searchQuery.trim().length < 2) {
-      setSearchResults([]);
-      return;
-    }
+    if (selectedUser) viewDetailsRef.current?.focus();
+  }, [selectedUser]);
 
-    const timeoutId = setTimeout(async () => {
-      setIsSearching(true);
-      try {
-        const response = await fetch(
-          `/api/admin/search-users?q=${encodeURIComponent(searchQuery)}`
-        );
-        const data = await response.json();
-        if (data.success) {
-          setSearchResults(data.users || []);
-        } else {
-          setSearchResults([]);
-        }
-      } catch (error) {
-        console.error("Error searching users:", error);
-        setSearchResults([]);
-      } finally {
-        setIsSearching(false);
-      }
-    }, 300);
-
-    return () => clearTimeout(timeoutId);
-  }, [searchQuery]);
+  const canReceiveCash = !selectedUser || selectedUser.user_type === "creator";
 
   const handleUserSelect = (user: User) => {
     setSelectedUser(user);
-    setSearchQuery(`${user.full_name || user.username || ""} (${user.email})`);
-    setSearchResults([]);
+    setSubmitStatus({ type: null, message: "" });
+    // Cash credits are creator-only (enforced by /api/admin/manual-entry too).
+    if (user.user_type !== "creator" && transactionType === "cash") {
+      setTransactionType("coins");
+      setCashCategory("");
+    }
+  };
+
+  const copySelectedId = async () => {
+    if (!selectedUser) return;
+    try {
+      await navigator.clipboard.writeText(selectedUser.id);
+      setIdCopied(true);
+      setTimeout(() => setIdCopied(false), 1200);
+    } catch {
+      /* clipboard unavailable */
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -214,7 +206,6 @@ export function ManualEntryModal({
 
         // Reset form
         setSelectedUser(null);
-        setSearchQuery("");
         setAmount("");
         setCashCategory("");
         setTransactionNote("");
@@ -277,90 +268,76 @@ export function ManualEntryModal({
             >
               User Selection
             </Label>
-            <div className="relative">
-              <Search
-                className={cn(
-                  "absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4",
-                  isDark ? "text-gray-400" : "text-gray-500"
-                )}
-              />
-              <Input
-                id="user-search"
-                type="text"
-                placeholder="Search by name, email, username, or user ID"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setSelectedUser(null);
-                }}
-                className={cn(
-                  "pl-10",
-                  isDark
-                    ? "bg-[#06021d] border-gray-700 text-white placeholder:text-gray-500"
-                    : "bg-white border-gray-300"
-                )}
-              />
-            </div>
-            {isSearching && (
-              <p
-                className={cn(
-                  "text-sm",
-                  isDark ? "text-gray-400" : "text-gray-600"
-                )}
-              >
-                Searching...
-              </p>
-            )}
-            {searchResults.length > 0 && !selectedUser && (
+            {selectedUser ? (
               <div
                 className={cn(
-                  "border rounded-lg max-h-60 overflow-y-auto",
+                  "flex flex-wrap items-center gap-3 rounded-lg border p-3",
                   isDark
-                    ? "border-gray-700 bg-[#210B43]"
-                    : "border-gray-300 bg-white"
-                )}
-              >
-                {searchResults.map((user) => (
-                  <button
-                    key={user.id}
-                    type="button"
-                    onClick={() => handleUserSelect(user)}
-                    className={cn(
-                      "w-full text-left px-4 py-2 hover:bg-opacity-50 transition-colors",
-                      isDark
-                        ? "hover:bg-purple-900 text-white"
-                        : "hover:bg-gray-100 text-gray-900"
-                    )}
-                  >
-                    <div className="font-medium">
-                      {user.full_name || user.username || "No name"}
-                    </div>
-                    <div className="text-sm opacity-75">{user.email}</div>
-                    <div className="text-xs opacity-60">
-                      ID: {user.id} • {user.user_type} • {user.coins} coins
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-            {selectedUser && (
-              <div
-                className={cn(
-                  "p-3 rounded-lg border",
-                  isDark
-                    ? "bg-[#06021d] border-gray-700 text-white"
+                    ? "bg-[#130a33] border-gray-700 text-white"
                     : "bg-gray-50 border-gray-300 text-gray-900"
                 )}
               >
-                <div className="font-medium">
-                  {selectedUser.full_name || selectedUser.username || "No name"}
+                <UserAvatar user={selectedUser} size={40} />
+                <div className="min-w-[180px] flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5 font-medium">
+                    {userDisplayName(selectedUser)}
+                    <UserTypeBadge userType={selectedUser.user_type} isDark={isDark} />
+                  </div>
+                  <div className="text-sm opacity-75 break-all">
+                    {selectedUser.username ? `@${selectedUser.username} · ` : ""}
+                    {selectedUser.email}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1 text-xs opacity-70">
+                    <span className="font-mono">{selectedUser.id.slice(0, 8)}…</span>
+                    <button
+                      type="button"
+                      onClick={copySelectedId}
+                      className="inline-flex items-center gap-1 rounded px-1 hover:opacity-100"
+                      aria-label="Copy user ID"
+                    >
+                      {idCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      {idCopied ? "Copied" : "Copy ID"}
+                    </button>
+                    <span>· {(selectedUser.coins ?? 0).toLocaleString()} coins</span>
+                  </div>
                 </div>
-                <div className="text-sm opacity-75">{selectedUser.email}</div>
-                <div className="text-xs opacity-60">
-                  ID: {selectedUser.id} • {selectedUser.user_type} •{" "}
-                  {selectedUser.coins} coins
+                <div className="flex gap-2">
+                  <Button
+                    ref={viewDetailsRef}
+                    type="button"
+                    size="sm"
+                    onClick={() => setDetailsOpen(true)}
+                    className={cn(
+                      "text-white",
+                      isDark
+                        ? "bg-[#5F2BB1] hover:bg-[#4A00BE]"
+                        : "bg-[#4A00BE] hover:bg-[#5F2BB1]"
+                    )}
+                  >
+                    <Eye className="mr-1.5 h-4 w-4" />
+                    View details
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setSelectedUser(null)}
+                    className={cn(
+                      isDark
+                        ? "border-gray-700 bg-transparent text-white hover:bg-[#1b0f44] hover:text-white"
+                        : "border-gray-300"
+                    )}
+                  >
+                    Change
+                  </Button>
                 </div>
               </div>
+            ) : (
+              <UserSearchCombobox
+                isDark={isDark}
+                onSelect={handleUserSelect}
+                autoFocus={isOpen}
+              />
             )}
           </div>
 
@@ -391,7 +368,9 @@ export function ManualEntryModal({
               </SelectTrigger>
               <SelectContent isDark={isDark}>
                 <SelectItem value="coins" isDark={isDark}>Coins</SelectItem>
-                <SelectItem value="cash" isDark={isDark}>Cash</SelectItem>
+                <SelectItem value="cash" isDark={isDark} disabled={!canReceiveCash}>
+                  {canReceiveCash ? "Cash" : "Cash (creators only)"}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -533,6 +512,13 @@ export function ManualEntryModal({
             </div>
           )}
         </form>
+
+        <UserDetailsModal
+          userId={selectedUser?.id ?? null}
+          open={detailsOpen && !!selectedUser}
+          onOpenChange={setDetailsOpen}
+          isDark={isDark}
+        />
       </DialogContent>
     </Dialog>
   );
