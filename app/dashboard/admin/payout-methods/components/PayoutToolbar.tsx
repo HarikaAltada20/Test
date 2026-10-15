@@ -1,28 +1,57 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { ArrowUpDown, Search, SlidersHorizontal, Users, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { SKYDO_STATUSES, SKYDO_STATUS_LABELS } from "@/lib/skydo-payout";
+import type { AdminPayoutSortKey } from "@/lib/admin-payout-methods";
 import type { PayoutQueryState } from "./usePayoutMethodsQuery";
 import { palette } from "./shared";
 
 const ANY = "any";
+
+interface SortOption {
+  sort: AdminPayoutSortKey;
+  order: "asc" | "desc";
+  label: string;
+}
+
+const SKYDO_SORTS: SortOption[] = [
+  { sort: "next_action", order: "asc", label: "Needs action first" },
+  { sort: "stage_since", order: "asc", label: "Waiting longest" },
+  { sort: "created_at", order: "desc", label: "Newest added" },
+  { sort: "withdrawable_balance", order: "desc", label: "Highest balance" },
+  { sort: "email_account_count", order: "desc", label: "Shared emails first" },
+  { sort: "skydo_email", order: "asc", label: "Skydo email A–Z" },
+  { sort: "full_name", order: "asc", label: "Name A–Z" },
+];
+
+const GROUP_SORTS: SortOption[] = [
+  { sort: "next_action", order: "asc", label: "Needs action first" },
+  { sort: "stage_since", order: "asc", label: "Waiting longest" },
+  { sort: "email_account_count", order: "desc", label: "Most accounts" },
+  { sort: "withdrawable_balance", order: "desc", label: "Highest balance" },
+  { sort: "created_at", order: "desc", label: "Newest added" },
+  { sort: "skydo_email", order: "asc", label: "Skydo email A–Z" },
+];
+
+const ALL_SORTS: SortOption[] = [
+  { sort: "created_at", order: "desc", label: "Newest added" },
+  { sort: "created_at", order: "asc", label: "Oldest added" },
+  { sort: "withdrawable_balance", order: "desc", label: "Highest balance" },
+  { sort: "withdrawal_count", order: "desc", label: "Most withdrawals" },
+  { sort: "full_name", order: "asc", label: "Name A–Z" },
+  { sort: "method_type", order: "asc", label: "Method" },
+];
+
+const sortValue = (o: { sort: string; order: string }) => `${o.sort}:${o.order}`;
+const CUSTOM_SORT = "custom";
 
 export function PayoutToolbar({
   state,
@@ -59,11 +88,7 @@ export function PayoutToolbar({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
-      )
-        return;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       e.preventDefault();
       inputRef.current?.focus();
     };
@@ -71,17 +96,18 @@ export function PayoutToolbar({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const moreCount =
-    (state.isDefault ? 1 : 0) + (state.view === "all" && state.skydoStatus ? 1 : 0);
+  const moreCount = (state.isDefault ? 1 : 0) + (state.view === "all" && state.skydoStatus ? 1 : 0);
 
   const selectTriggerClass = cn("h-10 w-full sm:w-[160px]", isDark && "border-gray-700");
+
+  const sortOptions = state.view === "all" ? ALL_SORTS : state.groupByEmail ? GROUP_SORTS : SKYDO_SORTS;
+  const currentSort = sortValue(state);
+  const matchedSort = sortOptions.some((o) => sortValue(o) === currentSort);
 
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
       <div className="relative min-w-0 flex-1 sm:min-w-[260px]">
-        <Search
-          className={cn("pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2", p.muted)}
-        />
+        <Search className={cn("pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2", p.muted)} />
         <Input
           ref={inputRef}
           value={search}
@@ -123,17 +149,20 @@ export function PayoutToolbar({
         </div>
       </div>
 
-      <Select
-        value={state.userType ?? ANY}
-        onValueChange={(v) => onChange({ userType: v === ANY ? null : v })}
-      >
+      <Select value={state.userType ?? ANY} onValueChange={(v) => onChange({ userType: v === ANY ? null : v })}>
         <SelectTrigger isDark={isDark} className={selectTriggerClass} aria-label="User role">
           <SelectValue />
         </SelectTrigger>
         <SelectContent isDark={isDark}>
-          <SelectItem isDark={isDark} value={ANY}>All roles</SelectItem>
-          <SelectItem isDark={isDark} value="creator">Creators</SelectItem>
-          <SelectItem isDark={isDark} value="advertiser">Advertisers</SelectItem>
+          <SelectItem isDark={isDark} value={ANY}>
+            All roles
+          </SelectItem>
+          <SelectItem isDark={isDark} value="creator">
+            Creators
+          </SelectItem>
+          <SelectItem isDark={isDark} value="advertiser">
+            Advertisers
+          </SelectItem>
         </SelectContent>
       </Select>
 
@@ -143,7 +172,11 @@ export function PayoutToolbar({
           onChange(
             v === "custom"
               ? { added: v }
-              : { added: v === ANY ? null : v, createdFrom: null, createdTo: null }
+              : {
+                  added: v === ANY ? null : v,
+                  createdFrom: null,
+                  createdTo: null,
+                }
           )
         }
       >
@@ -151,24 +184,79 @@ export function PayoutToolbar({
           <SelectValue />
         </SelectTrigger>
         <SelectContent isDark={isDark}>
-          <SelectItem isDark={isDark} value={ANY}>Added: any time</SelectItem>
-          <SelectItem isDark={isDark} value="today">Added today</SelectItem>
-          <SelectItem isDark={isDark} value="7d">Last 7 days</SelectItem>
-          <SelectItem isDark={isDark} value="30d">Last 30 days</SelectItem>
-          <SelectItem isDark={isDark} value="custom">Custom range…</SelectItem>
+          <SelectItem isDark={isDark} value={ANY}>
+            Added: any time
+          </SelectItem>
+          <SelectItem isDark={isDark} value="today">
+            Added today
+          </SelectItem>
+          <SelectItem isDark={isDark} value="7d">
+            Last 7 days
+          </SelectItem>
+          <SelectItem isDark={isDark} value="30d">
+            Last 30 days
+          </SelectItem>
+          <SelectItem isDark={isDark} value="custom">
+            Custom range…
+          </SelectItem>
         </SelectContent>
       </Select>
+
+      <Select
+        value={matchedSort ? currentSort : CUSTOM_SORT}
+        onValueChange={(v) => {
+          if (v === CUSTOM_SORT) return;
+          const [sort, order] = v.split(":");
+          onChange({ sort, order });
+        }}
+      >
+        <SelectTrigger
+          isDark={isDark}
+          className={cn("h-10 w-full gap-2 sm:w-[200px]", isDark && "border-gray-700")}
+          aria-label="Sort by"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <ArrowUpDown className={cn("h-4 w-4 shrink-0", p.muted)} />
+            <SelectValue />
+          </span>
+        </SelectTrigger>
+        <SelectContent isDark={isDark}>
+          {sortOptions.map((o) => (
+            <SelectItem isDark={isDark} key={sortValue(o)} value={sortValue(o)}>
+              {o.label}
+            </SelectItem>
+          ))}
+          {!matchedSort && (
+            <SelectItem isDark={isDark} value={CUSTOM_SORT} disabled>
+              Sorted by column
+            </SelectItem>
+          )}
+        </SelectContent>
+      </Select>
+
+      {state.view === "skydo" && (
+        <label
+          className={cn(
+            "flex h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm",
+            isDark ? "border-gray-700" : "border-input bg-white"
+          )}
+        >
+          <Switch
+            checked={state.groupByEmail}
+            onCheckedChange={(v) => onChange({ group: v ? "email" : null })}
+            aria-label="Group by Skydo email"
+          />
+          <Users className={cn("h-4 w-4", p.muted)} />
+          <span className="whitespace-nowrap">Group by email</span>
+        </label>
+      )}
 
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="outline" className={cn("h-10 gap-2", p.button)}>
             <SlidersHorizontal className="h-4 w-4" />
             More filters
-            {moreCount > 0 && (
-              <span className="rounded-full bg-[#7F39EC] px-1.5 text-xs text-white">
-                {moreCount}
-              </span>
-            )}
+            {moreCount > 0 && <span className="rounded-full bg-[#7F39EC] px-1.5 text-xs text-white">{moreCount}</span>}
           </Button>
         </PopoverTrigger>
         <PopoverContent
@@ -177,17 +265,20 @@ export function PayoutToolbar({
         >
           <div className="space-y-1.5">
             <Label className="text-xs">Default method</Label>
-            <Select
-              value={state.isDefault ?? ANY}
-              onValueChange={(v) => onChange({ isDefault: v === ANY ? null : v })}
-            >
+            <Select value={state.isDefault ?? ANY} onValueChange={(v) => onChange({ isDefault: v === ANY ? null : v })}>
               <SelectTrigger isDark={isDark}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent isDark={isDark}>
-                <SelectItem isDark={isDark} value={ANY}>Any</SelectItem>
-                <SelectItem isDark={isDark} value="true">Default only</SelectItem>
-                <SelectItem isDark={isDark} value="false">Not default</SelectItem>
+                <SelectItem isDark={isDark} value={ANY}>
+                  Any
+                </SelectItem>
+                <SelectItem isDark={isDark} value="true">
+                  Default only
+                </SelectItem>
+                <SelectItem isDark={isDark} value="false">
+                  Not default
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -202,7 +293,9 @@ export function PayoutToolbar({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
-                  <SelectItem isDark={isDark} value={ANY}>Any status</SelectItem>
+                  <SelectItem isDark={isDark} value={ANY}>
+                    Any status
+                  </SelectItem>
                   {SKYDO_STATUSES.map((s) => (
                     <SelectItem isDark={isDark} key={s} value={s}>
                       {SKYDO_STATUS_LABELS[s]}
