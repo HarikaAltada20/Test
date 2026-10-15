@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { WithdrawalFeeRevenueSection } from "./WithdrawalFeeRevenueSection";
 import {
   Trophy,
   Video,
@@ -1120,6 +1121,14 @@ export default function AdminDashboardClient({
           ) : null}
         </div>
       </div>
+
+      <WithdrawalFeeRevenueSection
+        from={dateRange.from}
+        to={dateRange.to}
+        periodLabel={overviewPeriodLabel}
+        isDark={isDark}
+        className="mt-8"
+      />
 
       {/* Platform Growth Chart */}
       <div className="mt-8 space-y-4 w-full min-w-0 overflow-visible">

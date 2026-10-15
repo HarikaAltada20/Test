@@ -41,3 +41,6 @@ db/full_backup*.sql
 # Local desktop downloader secrets / manifests (installer is hosted separately)
 **/*.gocdownload.local
 .env.goc-download.local
+
+qa-results/
+reviews/

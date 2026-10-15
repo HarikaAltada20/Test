@@ -174,7 +174,7 @@ export default async function AdvertiserBillingServerPage({
     // Fetch Withdrawal Requests
     const { data: withdrawalRequestsData, error: withdrawalRequestsError } = await supabase
         .from("withdrawal_requests")
-        .select("id, created_at, updated_at, amount, currency, status, payout_method_id, user_notes, admin_notes, amount_type, processed_at, transaction_reference, cancelled_at, cancellation_reason, redeemed_item_description, payout_method_type_snapshot, payout_method_details_snapshot")
+        .select("id, created_at, updated_at, amount, currency, status, payout_method_id, user_notes, admin_notes, amount_type, processed_at, transaction_reference, cancelled_at, cancellation_reason, redeemed_item_description, payout_method_type_snapshot, payout_method_details_snapshot, fee_bps, fee_cents, net_amount_cents, payout_currency, fx_rate_snapshot, net_amount_local_minor")
         .eq("user_id", authUser.id)
         .order("created_at", { ascending: false });
 

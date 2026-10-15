@@ -110,7 +110,8 @@ export async function middleware(request: NextRequest) {
           const creatorOnlyRoutes = [
             '/dashboard/opportunities',
             '/dashboard/submissions',
-            '/dashboard/earnings'
+            '/dashboard/earnings',
+            '/dashboard/my-applications'
           ]
 
           const adminOnlyRoutes = [

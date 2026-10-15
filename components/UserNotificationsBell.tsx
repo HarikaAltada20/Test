@@ -6,7 +6,14 @@ import { formatDistanceToNow } from "date-fns";
 import { getContestDashboardPath } from "@/lib/admin-notifications/template";
 import {
   Bell,
+  BellRing,
+  CheckCheck,
+  ChevronDown,
   ChevronRight,
+  CircleCheck,
+  CircleX,
+  Inbox,
+  KeyRound,
   Loader2,
   MessageCircle,
   Megaphone,
@@ -101,6 +108,40 @@ function opensContest(n: NotificationRow): boolean {
   );
 }
 
+/** Campaign page for a notification, opening the right tab or welcome banner. */
+function notificationHref(n: NotificationRow, userType: string): string {
+  const base = getContestDashboardPath(n.contest_id!, userType);
+  if (n.notification_type === "campaign_application_received") return `${base}?tab=applications`;
+  if (
+    n.notification_type === "campaign_application_approved" ||
+    n.notification_type === "campaign_access_granted"
+  ) {
+    return `${base}?welcome=1`;
+  }
+  return base;
+}
+
+type NotificationGroup = { lead: NotificationRow; more: NotificationRow[] };
+
+/** Groups campaign-access updates about the same campaign under the newest one. */
+function groupNotifications(rows: NotificationRow[]): NotificationGroup[] {
+  const groups: NotificationGroup[] = [];
+  const byContest = new Map<string, NotificationGroup>();
+  for (const n of rows) {
+    const key =
+      n.contest_id && isCampaignAccessNotificationType(n.notification_type) ? n.contest_id : null;
+    const existing = key ? byContest.get(key) : undefined;
+    if (existing) {
+      existing.more.push(n);
+      continue;
+    }
+    const group = { lead: n, more: [] };
+    groups.push(group);
+    if (key) byContest.set(key, group);
+  }
+  return groups;
+}
+
 function notificationTitle(n: NotificationRow): string {
   if (n.notification_type === "support_user_message") {
     return getSupportUserMessageDisplay(n).displayName;
@@ -164,13 +205,41 @@ function NotificationIcon({
   isDark: boolean;
 }) {
   const isSupport = isSupportNotificationType(type);
-  const Icon = isSupport ? MessageCircle : Megaphone;
+  const access: Record<string, { icon: typeof Bell; light: string; dark: string }> = {
+    campaign_application_approved: {
+      icon: CircleCheck,
+      light: "bg-emerald-100 text-emerald-600",
+      dark: "bg-emerald-500/20 text-emerald-300",
+    },
+    campaign_application_rejected: {
+      icon: CircleX,
+      light: "bg-red-100 text-red-600",
+      dark: "bg-red-500/20 text-red-300",
+    },
+    campaign_application_received: {
+      icon: Inbox,
+      light: "bg-purple-100 text-purple-600",
+      dark: "bg-purple-500/20 text-purple-300",
+    },
+    campaign_access_granted: {
+      icon: KeyRound,
+      light: "bg-amber-100 text-amber-700",
+      dark: "bg-amber-500/20 text-amber-300",
+    },
+    campaign_applications_reopened: {
+      icon: BellRing,
+      light: "bg-sky-100 text-sky-700",
+      dark: "bg-sky-500/20 text-sky-300",
+    },
+  };
+  const accessStyle = access[type];
+  const Icon = accessStyle?.icon ?? (isSupport ? MessageCircle : Megaphone);
 
   return (
     <div
       className={cn(
         "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-        isSupport
+        accessStyle ? (isDark ? accessStyle.dark : accessStyle.light) : isSupport
           ? isDark
             ? "bg-purple-500/20 text-purple-300"
             : "bg-purple-100 text-purple-600"
@@ -179,7 +248,7 @@ function NotificationIcon({
             : "bg-slate-100 text-slate-600",
       )}
     >
-      <Icon className="h-5 w-5" />
+      <Icon className="h-5 w-5" aria-hidden="true" />
     </div>
   );
 }
@@ -285,7 +354,9 @@ function NotificationCard({
                   : "text-purple-600 group-hover:text-purple-700",
               )}
             >
-              View campaign
+              {n.notification_type === "campaign_application_received"
+                ? "Review applications"
+                : "View campaign"}
               <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
             </p>
           )}
@@ -321,6 +392,8 @@ export function UserNotificationsBell({
   const [loading, setLoading] = useState(false);
   const [detailNotification, setDetailNotification] =
     useState<NotificationRow | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [markingAll, setMarkingAll] = useState(false);
 
   const fetchNotifications = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoading(true);
@@ -370,6 +443,22 @@ export function UserNotificationsBell({
     dispatchNotificationsChanged();
   };
 
+  const markAllRead = async () => {
+    setMarkingAll(true);
+    try {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mark_all_read: true }),
+      });
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      setUnreadCount(0);
+      dispatchNotificationsChanged();
+    } finally {
+      setMarkingAll(false);
+    }
+  };
+
   const markThreadRead = async (threadId: string) => {
     await fetch("/api/notifications", {
       method: "PATCH",
@@ -393,7 +482,7 @@ export function UserNotificationsBell({
 
     if (opensContest(n)) {
       setOpen(false);
-      router.push(getContestDashboardPath(n.contest_id!, userType));
+      router.push(notificationHref(n, userType));
       return;
     }
 
@@ -449,14 +538,35 @@ export function UserNotificationsBell({
           >
             <SheetTitle className="pr-8">Notifications</SheetTitle>
             {unreadCount > 0 && (
-              <p
-                className={cn(
-                  "text-xs mt-0.5",
-                  isDark ? "text-slate-400" : "text-muted-foreground",
-                )}
-              >
-                {unreadCount} unread
-              </p>
+              <div className="flex items-center justify-between gap-2 pr-8">
+                <p
+                  className={cn(
+                    "text-xs mt-0.5",
+                    isDark ? "text-slate-400" : "text-muted-foreground",
+                  )}
+                >
+                  {unreadCount} unread
+                </p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className={cn(
+                    "h-7 px-2 text-xs",
+                    isDark
+                      ? "text-purple-300 hover:bg-white/10"
+                      : "text-purple-700 hover:bg-purple-50",
+                  )}
+                  disabled={markingAll}
+                  onClick={markAllRead}
+                >
+                  {markingAll ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <CheckCheck className="mr-1 h-3.5 w-3.5" />
+                  )}
+                  Mark all as read
+                </Button>
+              </div>
             )}
           </SheetHeader>
 
@@ -494,15 +604,61 @@ export function UserNotificationsBell({
               </div>
             ) : (
               <ul className="flex flex-col gap-3 p-4">
-                {notifications.map((n) => (
-                  <li key={n.id}>
-                    <NotificationCard
-                      notification={n}
-                      isDark={isDark}
-                      onClick={() => handleClick(n)}
-                    />
-                  </li>
-                ))}
+                {groupNotifications(notifications).map(({ lead, more }) => {
+                  const expanded = expandedGroups.has(lead.id);
+                  return (
+                    <li key={lead.id} className="space-y-2">
+                      <NotificationCard
+                        notification={lead}
+                        isDark={isDark}
+                        onClick={() => handleClick(lead)}
+                      />
+                      {more.length > 0 && (
+                        <>
+                          <button
+                            type="button"
+                            aria-expanded={expanded}
+                            onClick={() =>
+                              setExpandedGroups((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(lead.id)) next.delete(lead.id);
+                                else next.add(lead.id);
+                                return next;
+                              })
+                            }
+                            className={cn(
+                              "ml-4 flex items-center gap-1 rounded-sm text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/40",
+                              isDark ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-700",
+                            )}
+                          >
+                            {expanded ? (
+                              <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                            ) : (
+                              <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                            )}
+                            {expanded ? "Hide" : "Show"} {more.length} more about this campaign
+                            {more.some((m) => !m.is_read) && !expanded && (
+                              <span className="ml-1 h-1.5 w-1.5 rounded-full bg-purple-600" aria-label="Unread" />
+                            )}
+                          </button>
+                          {expanded && (
+                            <ul className={cn("ml-4 space-y-2 border-l pl-3", isDark ? "border-slate-700" : "border-slate-200")}>
+                              {more.map((m) => (
+                                <li key={m.id}>
+                                  <NotificationCard
+                                    notification={m}
+                                    isDark={isDark}
+                                    onClick={() => handleClick(m)}
+                                  />
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

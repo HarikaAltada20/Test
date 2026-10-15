@@ -13,6 +13,7 @@ import {
   brandContestMatchesPlatforms,
   isBrandTwitterContest,
 } from "@/lib/brand-analytics-graph";
+import { fetchAllRows } from "@/lib/supabase-fetch-all";
 
 export const BRAND_ANALYTICS_CACHE_SECONDS = 5 * 60;
 export const BRAND_ANALYTICS_CACHE_TAG = "brand-analytics";
@@ -245,24 +246,36 @@ async function fetchDailyRowsForContests(
   for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
     const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
     if (rpcName === "admin_analytics_daily") {
-      const { data, error } = await supabase
-        .from("admin_analytics_submission_daily_rollup")
-        .select(
-          "day_key, status, submission_count, views_sum, likes_sum, comments_sum, shares_sum, payouts_cents_sum",
-        )
-        .in("contest_id", idChunk)
-        .in("platform", platformFilter)
-        .gte("day_key", fromDay)
-        .lte("day_key", toDay);
+      const { data, error } = await fetchAllRows<AdminAnalyticsDailySqlRow>(
+        (from, to) =>
+          supabase
+            .from("admin_analytics_submission_daily_rollup")
+            .select(
+              "day_key, status, submission_count, views_sum, likes_sum, comments_sum, shares_sum, payouts_cents_sum",
+            )
+            .in("contest_id", idChunk)
+            .in("platform", platformFilter)
+            .gte("day_key", fromDay)
+            .lte("day_key", toDay)
+            .order("contest_id")
+            .order("day_key")
+            .order("status")
+            .order("platform")
+            .range(from, to),
+      );
       if (error) {
-        const { data: rpcData, error: rpcError } = await supabase.rpc(
-          "admin_analytics_daily",
-          {
-            p_from: fromIso,
-            p_to: toIso,
-            p_contest_ids: idChunk,
-          },
-        );
+        const { data: rpcData, error: rpcError } =
+          await fetchAllRows<AdminAnalyticsDailySqlRow>((from, to) =>
+            supabase
+              .rpc("admin_analytics_daily", {
+                p_from: fromIso,
+                p_to: toIso,
+                p_contest_ids: idChunk,
+              })
+              .order("day_key")
+              .order("status")
+              .range(from, to),
+          );
         if (rpcError) {
           throwBrandAnalyticsDependencyError(
             rpcError,
@@ -274,15 +287,24 @@ async function fetchDailyRowsForContests(
       }
       dailyChunks.push(...((data ?? []) as AdminAnalyticsDailySqlRow[]));
     } else {
-      const { data, error } = await supabase
-        .from("admin_analytics_pc_daily_rollup")
-        .select(
-          "contest_id, day_key, status, submission_count, views_sum, likes_sum, comments_sum, shares_sum, payouts_cents_sum",
-        )
-        .in("contest_id", idChunk)
-        .in("platform", platformFilter)
-        .gte("day_key", fromDay)
-        .lte("day_key", toDay);
+      const { data, error } = await fetchAllRows<
+        AdminAnalyticsDailySqlRow & { contest_id: string }
+      >((from, to) =>
+        supabase
+          .from("admin_analytics_pc_daily_rollup")
+          .select(
+            "contest_id, day_key, status, submission_count, views_sum, likes_sum, comments_sum, shares_sum, payouts_cents_sum",
+          )
+          .in("contest_id", idChunk)
+          .in("platform", platformFilter)
+          .gte("day_key", fromDay)
+          .lte("day_key", toDay)
+          .order("contest_id")
+          .order("day_key")
+          .order("status")
+          .order("platform")
+          .range(from, to),
+      );
       if (error) {
         const { data: rpcData, error: rpcError } = await supabase.rpc(
           "admin_analytics_pc_overview",
@@ -366,11 +388,19 @@ async function fetchContestRollup(
 
   for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
     const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
-    const { data, error } = await supabase.rpc(rpcName, {
-      p_from: fromIso,
-      p_to: toIso,
-      p_contest_ids: idChunk,
-    });
+    const { data, error } = await fetchAllRows<BrandContestRollupRow>(
+      (from, to) =>
+        supabase
+          .rpc(rpcName, {
+            p_from: fromIso,
+            p_to: toIso,
+            p_contest_ids: idChunk,
+          })
+          .order("contest_id")
+          .order("status")
+          .order("platform")
+          .range(from, to),
+    );
     if (error) {
       throwBrandAnalyticsDependencyError(
         error,
@@ -410,11 +440,18 @@ async function fetchTwitterDaily(
 
   for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
     const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
-    const { data, error } = await supabase.rpc("brand_analytics_twitter_daily", {
-      p_from: fromIso,
-      p_to: toIso,
-      p_contest_ids: idChunk,
-    });
+    const { data, error } = await fetchAllRows<BrandTwitterDailyRow>(
+      (from, to) =>
+        supabase
+          .rpc("brand_analytics_twitter_daily", {
+            p_from: fromIso,
+            p_to: toIso,
+            p_contest_ids: idChunk,
+          })
+          .order("day_key")
+          .order("status")
+          .range(from, to),
+    );
     if (error) {
       throwBrandAnalyticsDependencyError(
         error,
@@ -464,13 +501,17 @@ async function fetchTwitterContestRollup(
 
   for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
     const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
-    const { data, error } = await supabase.rpc(
-      "brand_analytics_twitter_contest_rollup",
-      {
-        p_from: fromIso,
-        p_to: toIso,
-        p_contest_ids: idChunk,
-      },
+    const { data, error } = await fetchAllRows<BrandTwitterContestRow>(
+      (from, to) =>
+        supabase
+          .rpc("brand_analytics_twitter_contest_rollup", {
+            p_from: fromIso,
+            p_to: toIso,
+            p_contest_ids: idChunk,
+          })
+          .order("contest_id")
+          .order("status")
+          .range(from, to),
     );
     if (error) {
       throwBrandAnalyticsDependencyError(
@@ -508,11 +549,20 @@ async function fetchCreatorRollup(
 
   for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
     const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
-    const { data, error } = await supabase.rpc("brand_analytics_by_creator", {
-      p_from: fromIso,
-      p_to: toIso,
-      p_contest_ids: idChunk,
-    });
+    const { data, error } = await fetchAllRows<BrandCreatorRollupRow>(
+      (from, to) =>
+        supabase
+          .rpc("brand_analytics_by_creator", {
+            p_from: fromIso,
+            p_to: toIso,
+            p_contest_ids: idChunk,
+          })
+          .order("creator_id")
+          .order("contest_type")
+          .order("platform")
+          .order("status")
+          .range(from, to),
+    );
     if (error) {
       throwBrandAnalyticsDependencyError(
         error,
@@ -550,13 +600,18 @@ async function fetchTwitterCreatorRollup(
 
   for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
     const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
-    const { data, error } = await supabase.rpc(
-      "brand_analytics_twitter_creator_rollup",
-      {
-        p_from: fromIso,
-        p_to: toIso,
-        p_contest_ids: idChunk,
-      },
+    const { data, error } = await fetchAllRows<BrandCreatorRollupRow>(
+      (from, to) =>
+        supabase
+          .rpc("brand_analytics_twitter_creator_rollup", {
+            p_from: fromIso,
+            p_to: toIso,
+            p_contest_ids: idChunk,
+          })
+          .order("creator_id")
+          .order("contest_type")
+          .order("status")
+          .range(from, to),
     );
     if (error) {
       throwBrandAnalyticsDependencyError(
@@ -597,6 +652,7 @@ async function fetchAdvertiserContests(
       )
       .eq("advertiser_id", advertiserId)
       .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
       .range(from, from + CHUNK - 1);
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) break;
@@ -905,13 +961,19 @@ async function fetchCreatorRollupFromPc(
 
   for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
     const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
-    const { data, error } = await supabase.rpc(
-      "brand_analytics_pc_by_creator",
-      {
-        p_from: fromIso,
-        p_to: toIso,
-        p_contest_ids: idChunk,
-      },
+    const { data, error } = await fetchAllRows<BrandCreatorRollupRow>(
+      (from, to) =>
+        supabase
+          .rpc("brand_analytics_pc_by_creator", {
+            p_from: fromIso,
+            p_to: toIso,
+            p_contest_ids: idChunk,
+          })
+          .order("creator_id")
+          .order("contest_type")
+          .order("platform")
+          .order("status")
+          .range(from, to),
     );
     if (error) {
       throwBrandAnalyticsDependencyError(
@@ -1061,7 +1123,7 @@ export async function getCachedBrandAnalyticsBundle(
   ctx: BrandAnalyticsQueryContext,
 ): Promise<BrandAnalyticsBundle> {
   const requestCtx = rehydrateBrandAnalyticsContext(ctx);
-  const keyParts = buildCacheKeyParts("core-v3", requestCtx);
+  const keyParts = buildCacheKeyParts("core-v4", requestCtx);
   const serialized = serializeContext(requestCtx);
   const bundle = await unstable_cache(
     async () => loadBrandAnalyticsBundle(deserializeContext(serialized)),
@@ -1082,7 +1144,7 @@ export async function getCachedBrandAnalyticsCreatorsBundle(
   ctx: BrandAnalyticsQueryContext,
 ): Promise<BrandAnalyticsCreatorsBundle> {
   const requestCtx = rehydrateBrandAnalyticsContext(ctx);
-  const keyParts = buildCacheKeyParts("creators-v2", requestCtx);
+  const keyParts = buildCacheKeyParts("creators-v3", requestCtx);
   const serialized = serializeContext(requestCtx);
   const bundle = await unstable_cache(
     async () =>

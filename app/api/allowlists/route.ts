@@ -6,8 +6,10 @@ import {
   createAllowlistWithMembers,
   getAccessActor,
   getServiceClient,
+  loadAllowlistSummaries,
   resolveAllowlistOwner,
   resolveUsernamesToUserIds,
+  type AllowlistRow,
 } from "@/lib/campaign-access-server";
 import { normalizeAllowlistName } from "@/lib/campaign-access";
 
@@ -28,7 +30,14 @@ export async function GET(request: Request) {
       .order("updated_at", { ascending: false });
     if (error) throw error;
 
-    return NextResponse.json({ allowlists: data || [] });
+    const lists = (data || []) as AllowlistRow[];
+    const summaries = await loadAllowlistSummaries(
+      admin,
+      lists.map((l) => l.id),
+    );
+    return NextResponse.json({
+      allowlists: lists.map((l) => ({ ...l, ...summaries.get(l.id) })),
+    });
   } catch (err) {
     return campaignAccessErrorResponse(err);
   }

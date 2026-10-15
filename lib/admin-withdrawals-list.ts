@@ -50,6 +50,47 @@ export function parseOrder(raw: string | null): "asc" | "desc" {
   return raw?.toLowerCase() === "asc" ? "asc" : "desc";
 }
 
+export const WITHDRAWAL_PAYOUT_METHODS = [
+  "skydo",
+  "upi",
+  "bank_transfer",
+  "crypto",
+  "phantom",
+] as const;
+
+export type WithdrawalPayoutMethod = (typeof WITHDRAWAL_PAYOUT_METHODS)[number];
+
+export type WithdrawalsMethodFilter = "all" | WithdrawalPayoutMethod;
+
+export function parsePayoutMethod(raw: string | null): WithdrawalsMethodFilter {
+  const v = (raw || "all").toLowerCase();
+  return (WITHDRAWAL_PAYOUT_METHODS as readonly string[]).includes(v)
+    ? (v as WithdrawalPayoutMethod)
+    : "all";
+}
+
+export type WithdrawalsFilters = {
+  tab: WithdrawalsListTab;
+  method: WithdrawalsMethodFilter;
+  createdFrom?: string | null;
+  createdTo?: string | null;
+};
+
+/** Status tab + payout method + created_at range, shared by list, grouped and export. */
+export function applyWithdrawalsFilters(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  q: any,
+  filters: WithdrawalsFilters,
+) {
+  let next = applyWithdrawalsTabFilter(q, filters.tab);
+  if (filters.method !== "all") {
+    next = next.ilike("payout_method_type_snapshot", filters.method);
+  }
+  if (filters.createdFrom) next = next.gte("created_at", filters.createdFrom);
+  if (filters.createdTo) next = next.lte("created_at", filters.createdTo);
+  return next;
+}
+
 /** Map flat view row to API shape expected by admin UI (nested users). */
 export function mapWithdrawalListRow(r: Record<string, unknown>) {
   const {
@@ -116,6 +157,7 @@ export async function fetchWithdrawalsPage(
     page: number;
     pageSize: number;
     tab: WithdrawalsListTab;
+    method?: WithdrawalsMethodFilter;
     createdFrom?: string | null;
     createdTo?: string | null;
     sort: WithdrawalsSortKey;
@@ -131,14 +173,12 @@ export async function fetchWithdrawalsPage(
     .from("admin_withdrawal_requests_list")
     .select("*", { count: "exact" });
 
-  q = applyWithdrawalsTabFilter(q, tab);
-
-  if (createdFrom) {
-    q = q.gte("created_at", createdFrom);
-  }
-  if (createdTo) {
-    q = q.lte("created_at", createdTo);
-  }
+  q = applyWithdrawalsFilters(q, {
+    tab,
+    method: opts.method ?? "all",
+    createdFrom,
+    createdTo,
+  });
 
   const col = SORT_COLUMN[sort];
   q = q.order(col, { ascending });
@@ -158,6 +198,402 @@ export async function fetchWithdrawalsPage(
       mapWithdrawalListRow(row as Record<string, unknown>),
     ),
     total: total ?? 0,
+  };
+}
+
+export type WithdrawalStatusBuckets = {
+  all: number;
+  pending: number;
+  in_review: number;
+  approved: number;
+  paid: number;
+  rejected: number;
+  forfeited: number;
+  failed: number;
+};
+
+type StatusSummaryRow = {
+  status: string;
+  request_count: number | string;
+  cash_amount_cents: number | string;
+  /** Absent before 20261015130000_balance_guards_and_net_totals.sql. */
+  cash_fee_cents?: number | string | null;
+};
+
+/** Per-tab counts and cash totals, optionally limited to one payout method. */
+export async function fetchWithdrawalStatusSummary(
+  supabase: SupabaseClient,
+  method: WithdrawalsMethodFilter,
+): Promise<{
+  error: string | null;
+  totals: WithdrawalStatusBuckets;
+  /** Processing fees inside `totals`; amount sent = totals - fees. */
+  fees: WithdrawalStatusBuckets;
+  statusCounts: WithdrawalStatusBuckets;
+}> {
+  let res =
+    method === "all"
+      ? await supabase.rpc("admin_withdrawal_status_summary")
+      : await supabase.rpc("admin_withdrawal_status_summary", {
+          p_method_type: method,
+        });
+  if (res.error && method !== "all") {
+    console.warn(
+      "admin_withdrawal_status_summary(p_method_type) unavailable, using unfiltered summary:",
+      res.error.message,
+    );
+    res = await supabase.rpc("admin_withdrawal_status_summary");
+  }
+
+  const byStatus = new Map(
+    ((res.data ?? []) as StatusSummaryRow[]).map((row) => [
+      row.status,
+      {
+        count: toFiniteNumber(row.request_count),
+        cash: toFiniteNumber(row.cash_amount_cents),
+        fee: toFiniteNumber(row.cash_fee_cents ?? 0),
+      },
+    ]),
+  );
+  const sum = (field: "count" | "cash" | "fee", ...statuses: string[]) =>
+    statuses.reduce((s, st) => s + (byStatus.get(st)?.[field] ?? 0), 0);
+  const buckets = (field: "count" | "cash" | "fee"): WithdrawalStatusBuckets => ({
+    all: sum(
+      field,
+      "pending",
+      "in_review",
+      "approved",
+      "processed",
+      "rejected",
+      "cancelled",
+      "forfeited",
+      "failed",
+    ),
+    pending: sum(field, "pending"),
+    in_review: sum(field, "in_review"),
+    approved: sum(field, "approved"),
+    paid: sum(field, "processed"),
+    rejected: sum(field, "rejected", "cancelled"),
+    forfeited: sum(field, "forfeited"),
+    failed: sum(field, "failed"),
+  });
+
+  return {
+    error: res.error ? res.error.message || "Failed to load withdrawal totals" : null,
+    totals: buckets("cash"),
+    fees: buckets("fee"),
+    statusCounts: buckets("count"),
+  };
+}
+
+export const MAX_WITHDRAWALS_BULK_FETCH = 50_000;
+const BULK_FETCH_CHUNK = 1000;
+
+/**
+ * All rows matching the filters (mapped to API shape), fetched in chunks.
+ * Errors when the match count exceeds MAX_WITHDRAWALS_BULK_FETCH.
+ */
+export async function fetchAllFilteredWithdrawals(
+  supabase: SupabaseClient,
+  filters: WithdrawalsFilters,
+  sort: WithdrawalsSortKey = "created_at",
+  order: "asc" | "desc" = "desc",
+): Promise<{
+  error: string | null;
+  status?: number;
+  data: Record<string, unknown>[];
+}> {
+  const countQ = applyWithdrawalsFilters(
+    supabase
+      .from("admin_withdrawal_requests_list")
+      .select("*", { count: "exact", head: true }),
+    filters,
+  );
+  const { count, error: countErr } = await countQ;
+  if (countErr) return { error: countErr.message, status: 500, data: [] };
+  if ((count ?? 0) > MAX_WITHDRAWALS_BULK_FETCH) {
+    return {
+      error: `Too many rows (${count}). Narrow the date range, status or payout method filter (max ${MAX_WITHDRAWALS_BULK_FETCH}).`,
+      status: 400,
+      data: [],
+    };
+  }
+
+  const col = SORT_COLUMN[sort];
+  const ascending = order === "asc";
+  const rows: Record<string, unknown>[] = [];
+  for (let offset = 0; offset < (count ?? 0); offset += BULK_FETCH_CHUNK) {
+    const q = applyWithdrawalsFilters(
+      supabase.from("admin_withdrawal_requests_list").select("*"),
+      filters,
+    )
+      .order(col, { ascending })
+      .order("id", { ascending: true })
+      .range(offset, offset + BULK_FETCH_CHUNK - 1);
+    const { data, error } = await q;
+    if (error) return { error: error.message, status: 500, data: [] };
+    const chunk = (data ?? []) as Record<string, unknown>[];
+    rows.push(...chunk.map((r) => mapWithdrawalListRow(r)));
+    if (chunk.length < BULK_FETCH_CHUNK) break;
+  }
+  return { error: null, data: rows };
+}
+
+export const MISSING_PAYEE_LABEL = "Missing payee details";
+
+/** Normalised payout destination for a row (what the money is actually sent to). */
+export function payoutDestination(row: Record<string, unknown>): {
+  method: string;
+  destination: string;
+} {
+  const method = String(row.payout_method_type_snapshot || "").toLowerCase();
+  const d = (row.payout_method_details_snapshot || {}) as Record<
+    string,
+    unknown
+  >;
+  // Case-sensitive: only leading/trailing [ \t\n\r\f\v] is ignored, matching
+  // the SQL in admin_withdrawal_payee_groups.
+  const s = (v: unknown) =>
+    String(v ?? "").replace(/^[ \t\n\r\f\v]+|[ \t\n\r\f\v]+$/g, "");
+  let destination = "";
+  switch (method) {
+    case "skydo":
+      destination = s(d.email);
+      break;
+    case "upi":
+      destination = s(d.upi_id);
+      break;
+    case "bank_transfer": {
+      const acct = s(d.account_number);
+      const code = s(d.ifsc_code || d.swift_bic_code);
+      destination = acct ? (code ? `${acct} / ${code}` : acct) : "";
+      break;
+    }
+    case "crypto":
+    case "phantom":
+      destination = s(d.wallet_address);
+      break;
+    default:
+      destination = "";
+  }
+  return { method, destination };
+}
+
+export function payeeKey(row: Record<string, unknown>): string {
+  const { method, destination } = payoutDestination(row);
+  return `${method || "unknown"}|${destination || MISSING_PAYEE_LABEL}`;
+}
+
+export type WithdrawalPayeeGroup = {
+  key: string;
+  method: string;
+  destination: string;
+  currency: string;
+  amountType: string;
+  totalCents: number;
+  /** Processing fees in the group, cents. */
+  feeCents: number;
+  /** Amount to send after fees, cents (USD). */
+  netCents: number;
+  /** Amount to send in INR paise; null unless every request in the group has one. */
+  netLocalMinor: number | null;
+  count: number;
+  usernames: string[];
+  names: string[];
+  statuses: Record<string, number>;
+  latestCreatedAt: string | null;
+  requests: Record<string, unknown>[];
+};
+
+/**
+ * Group mapped withdrawal rows by payout destination. Currency and amount type
+ * are part of the key so totals never mix units.
+ */
+export function groupWithdrawalsByPayee(
+  rows: Record<string, unknown>[],
+): WithdrawalPayeeGroup[] {
+  const groups = new Map<string, WithdrawalPayeeGroup>();
+  for (const row of rows) {
+    const { method, destination } = payoutDestination(row);
+    const currency = String(row.currency || "USD").toUpperCase();
+    const amountType = String(row.amount_type || "cash");
+    const key = `${payeeKey(row)}|${currency}|${amountType}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = {
+        key,
+        method: method || "unknown",
+        destination: destination || MISSING_PAYEE_LABEL,
+        currency,
+        amountType,
+        totalCents: 0,
+        feeCents: 0,
+        netCents: 0,
+        netLocalMinor: 0,
+        count: 0,
+        usernames: [],
+        names: [],
+        statuses: {},
+        latestCreatedAt: null,
+        requests: [],
+      };
+      groups.set(key, g);
+    }
+    const amount = Number(row.amount ?? 0);
+    g.totalCents += Number.isFinite(amount) ? amount : 0;
+    const fee = Number(row.fee_cents ?? 0);
+    g.feeCents += Number.isFinite(fee) ? fee : 0;
+    const net = Number(row.net_amount_cents ?? amount - fee);
+    g.netCents += Number.isFinite(net) ? net : 0;
+    const local = row.net_amount_local_minor;
+    g.netLocalMinor =
+      g.netLocalMinor === null || local === null || local === undefined || !Number.isFinite(Number(local))
+        ? null
+        : g.netLocalMinor + Number(local);
+    g.count += 1;
+    const users = row.users as
+      | { username?: string | null; full_name?: string | null }
+      | null
+      | undefined;
+    if (users?.username && !g.usernames.includes(users.username)) {
+      g.usernames.push(users.username);
+    }
+    if (users?.full_name && !g.names.includes(users.full_name)) {
+      g.names.push(users.full_name);
+    }
+    const status = String(row.status || "unknown");
+    g.statuses[status] = (g.statuses[status] ?? 0) + 1;
+    const createdAt = row.created_at ? String(row.created_at) : null;
+    if (createdAt && (!g.latestCreatedAt || createdAt > g.latestCreatedAt)) {
+      g.latestCreatedAt = createdAt;
+    }
+    g.requests.push(row);
+  }
+  return [...groups.values()].sort((a, b) => b.totalCents - a.totalCents);
+}
+
+/** UUIDs per `.in()` filter; keeps the PostgREST request URL well under size limits. */
+const ID_FILTER_CHUNK = 150;
+
+type RpcPayeeGroupRow = {
+  method: string;
+  destination: string;
+  currency: string;
+  amount_type: string;
+  total_cents: number | string;
+  request_count: number | string;
+  usernames: string[] | null;
+  names: string[] | null;
+  statuses: Record<string, number | string> | null;
+  latest_created_at: string | null;
+  request_ids: string[] | null;
+  total_groups: number | string;
+  total_requests: number | string;
+  fee_cents?: number | string | null;
+  net_cents?: number | string | null;
+  net_local_minor?: number | string | null;
+};
+
+/**
+ * One page of payee groups. Grouping runs in SQL (admin_withdrawal_payee_groups);
+ * only the requests belonging to this page's groups are loaded.
+ * Falls back to in-memory grouping if the RPC is not deployed.
+ */
+export async function fetchWithdrawalPayeeGroupsPage(
+  supabase: SupabaseClient,
+  filters: WithdrawalsFilters,
+  page: number,
+  pageSize: number,
+): Promise<{
+  error: string | null;
+  status?: number;
+  groups: WithdrawalPayeeGroup[];
+  totalGroups: number;
+  totalRequests: number;
+}> {
+  const from = (page - 1) * pageSize;
+  const { data, error } = await supabase.rpc("admin_withdrawal_payee_groups", {
+    p_tab: filters.tab,
+    p_method_type: filters.method === "all" ? null : filters.method,
+    p_from: filters.createdFrom ?? null,
+    p_to: filters.createdTo ?? null,
+    p_limit: pageSize,
+    p_offset: from,
+  });
+
+  if (error) {
+    console.warn(
+      "admin_withdrawal_payee_groups RPC unavailable, grouping in memory:",
+      error.message,
+    );
+    const all = await fetchAllFilteredWithdrawals(supabase, filters);
+    if (all.error) {
+      return {
+        error: all.error,
+        status: all.status,
+        groups: [],
+        totalGroups: 0,
+        totalRequests: 0,
+      };
+    }
+    const groups = groupWithdrawalsByPayee(all.data);
+    return {
+      error: null,
+      groups: groups.slice(from, from + pageSize),
+      totalGroups: groups.length,
+      totalRequests: all.data.length,
+    };
+  }
+
+  const rows = (data ?? []) as RpcPayeeGroupRow[];
+  const ids = rows.flatMap((r) => r.request_ids ?? []);
+  const byId = new Map<string, Record<string, unknown>>();
+  for (let i = 0; i < ids.length; i += ID_FILTER_CHUNK) {
+    const { data: reqRows, error: reqErr } = await supabase
+      .from("admin_withdrawal_requests_list")
+      .select("*")
+      .in("id", ids.slice(i, i + ID_FILTER_CHUNK));
+    if (reqErr) {
+      return {
+        error: reqErr.message,
+        status: 500,
+        groups: [],
+        totalGroups: 0,
+        totalRequests: 0,
+      };
+    }
+    for (const r of (reqRows ?? []) as Record<string, unknown>[]) {
+      byId.set(String(r.id), mapWithdrawalListRow(r));
+    }
+  }
+
+  const groups: WithdrawalPayeeGroup[] = rows.map((r) => ({
+    key: `${r.method}|${r.destination}|${r.currency}|${r.amount_type}`,
+    method: r.method,
+    destination: r.destination,
+    currency: r.currency,
+    amountType: r.amount_type,
+    totalCents: toFiniteNumber(r.total_cents),
+    feeCents: toFiniteNumber(r.fee_cents),
+    netCents: r.net_cents == null ? toFiniteNumber(r.total_cents) : toFiniteNumber(r.net_cents),
+    netLocalMinor: r.net_local_minor == null ? null : toFiniteNumber(r.net_local_minor),
+    count: toFiniteNumber(r.request_count),
+    usernames: r.usernames ?? [],
+    names: r.names ?? [],
+    statuses: Object.fromEntries(
+      Object.entries(r.statuses ?? {}).map(([k, v]) => [k, toFiniteNumber(v)]),
+    ),
+    latestCreatedAt: r.latest_created_at,
+    requests: (r.request_ids ?? [])
+      .map((id) => byId.get(String(id)))
+      .filter((x): x is Record<string, unknown> => Boolean(x)),
+  }));
+
+  return {
+    error: null,
+    groups,
+    totalGroups: rows.length > 0 ? toFiniteNumber(rows[0].total_groups) : 0,
+    totalRequests: rows.length > 0 ? toFiniteNumber(rows[0].total_requests) : 0,
   };
 }
 
@@ -412,7 +848,7 @@ export async function fetchWithdrawalPayoutSeries(
   for (;;) {
     let q = supabase
       .from("admin_withdrawal_requests_list")
-      .select("amount, amount_type, processed_at")
+      .select("amount, net_amount_cents, amount_type, processed_at")
       .eq("status", "processed")
       .not("processed_at", "is", null)
       .order("processed_at", { ascending: true })
@@ -438,7 +874,7 @@ export async function fetchWithdrawalPayoutSeries(
       const amountType = (row.amount_type as string | null) || "cash";
       if (amountType !== "cash") continue;
       const day = new Date(processedAt).toISOString().slice(0, 10);
-      const amount = Number(row.amount ?? 0);
+      const amount = Number(row.net_amount_cents ?? row.amount ?? 0);
       if (!Number.isFinite(amount)) continue;
       const prev = daily.get(day) ?? { amountCents: 0, count: 0 };
       prev.amountCents += amount;

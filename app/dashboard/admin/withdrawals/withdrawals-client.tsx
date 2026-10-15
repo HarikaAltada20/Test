@@ -1,5 +1,6 @@
 "use client";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -20,11 +21,22 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import {
+  formatFeePercent,
+  formatInrFromPaise,
+  formatUsdInrRate,
+  withdrawalPayout,
+} from "@/lib/payout-fees";
 import type {
+  WithdrawalPayeeGroup,
   WithdrawalPayoutSeriesGranularity,
   WithdrawalPayoutSeriesPoint,
+  WithdrawalsMethodFilter,
 } from "@/lib/admin-withdrawals-list";
+import { MISSING_PAYEE_LABEL } from "@/lib/admin-withdrawals-list";
 import { PayoutHistoryChart } from "./payout-history-chart";
+import { PayoutMethodSettingsCard } from "./payout-method-settings-card";
+import { WithdrawalFeeRevenueSection } from "../WithdrawalFeeRevenueSection";
 import {
   Dialog,
   DialogContent,
@@ -57,7 +69,6 @@ import {
   CreditCard,
   Settings,
   Wallet,
-  PauseCircle,
   ShieldOff,
   RotateCcw,
   MoreVertical,
@@ -72,6 +83,9 @@ import {
   FileImage,
   Trash2,
   Loader2,
+  ChevronDown,
+  ChevronRight,
+  Users,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -94,8 +108,11 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { compressImage } from "@/lib/image-compression";
 import {
+  EXPORT_CURRENCY_OPTIONS,
+  SKYDO_EXPORT_PRESET,
   WITHDRAWAL_EXPORT_COLUMN_IDS,
   WITHDRAWAL_EXPORT_COLUMN_LABELS,
+  type WithdrawalExportColumnId,
 } from "@/lib/withdrawal-export-columns";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
@@ -123,9 +140,84 @@ type Request = {
   payment_proof_link?: string | null;
   payment_proof_storage_path?: string | null;
   payment_proof_file_size_bytes?: number | null;
+  fee_bps?: number | null;
+  fee_cents?: number | null;
+  net_amount_cents?: number | null;
+  payout_currency?: string | null;
+  fx_rate_snapshot?: number | string | null;
+  net_amount_local_minor?: number | null;
+};
+
+/** "Send ₹8,100.00 · fee $10.00 (10%)" for requests with a fee or an INR payout. */
+function PayoutSendLine({ request, className }: { request: Request; className?: string }) {
+  if (request.amount_type !== "cash") return null;
+  const p = withdrawalPayout(request);
+  if (p.feeCents <= 0 && p.currency === "USD") return null;
+  return (
+    <div className={cn("text-xs text-muted-foreground", className)}>
+      Send <span className="font-semibold text-foreground">{p.receiveLabel}</span>
+      {p.feeCents > 0 && ` · fee ${formatCurrencyFromCents(p.feeCents)} (${formatFeePercent(p.feeBps)})`}
+    </div>
+  );
+}
+
+/** Fee and amount to send, in the request details drawer. */
+function PayoutBreakdown({ request }: { request: Request }) {
+  const p = withdrawalPayout(request);
+  return (
+    <dl className="mt-2 space-y-0.5 text-xs">
+      <div className="flex justify-between gap-3">
+        <dt className="text-muted-foreground">
+          Processing fee{p.feeBps > 0 ? ` (${formatFeePercent(p.feeBps)})` : ""}
+        </dt>
+        <dd className="tabular-nums">
+          {p.feeCents > 0 ? `−${formatCurrencyFromCents(p.feeCents)}` : "None"}
+        </dd>
+      </div>
+      <div className="flex justify-between gap-3 font-semibold">
+        <dt>To send</dt>
+        <dd className="tabular-nums">
+          {p.receiveLabel}
+          {p.currency === "USD" ? " USD" : ""}
+        </dd>
+      </div>
+      {p.currency === "INR" && p.usdInrRate !== null && (
+        <div className="text-muted-foreground">
+          {formatCurrencyFromCents(p.netCents)} at {formatUsdInrRate(p.usdInrRate)} per $1
+        </div>
+      )}
+    </dl>
+  );
+}
+
+type PayeeGroup = Omit<WithdrawalPayeeGroup, "requests"> & {
+  requests: Request[];
 };
 
 const DEFAULT_PAGE_SIZE = 25;
+
+const EXPORT_PREFS_STORAGE_KEY = "admin-withdrawals-export-prefs-v1";
+
+const TAB_LABELS: Record<string, string> = {
+  all: "All statuses",
+  pending: "Pending",
+  in_review: "In Review",
+  approved: "Approved",
+  rejected: "Rejected",
+  paid: "Paid",
+  forfeited: "Forfeited",
+  failed: "Failed",
+};
+
+const METHOD_FILTER_OPTIONS: { value: WithdrawalsMethodFilter; label: string }[] =
+  [
+    { value: "all", label: "All methods" },
+    { value: "skydo", label: "Skydo" },
+    { value: "upi", label: "UPI" },
+    { value: "bank_transfer", label: "Bank transfer" },
+    { value: "crypto", label: "Crypto" },
+    { value: "phantom", label: "Phantom" },
+  ];
 
 /** Must match server `MAX_PROOF_FILE_BYTES` in payment-proof route. */
 const PAYMENT_PROOF_MAX_BYTES = 5 * 1024 * 1024;
@@ -172,6 +264,8 @@ export default function WithdrawalsClient({
     forfeited: number;
     failed: number;
   } | null>(null);
+  /** Processing fees inside each status total; null until the API returns them. */
+  const [feesFromApi, setFeesFromApi] = useState<Record<string, number> | null>(null);
   const [statusCountsFromApi, setStatusCountsFromApi] = useState<{
     all: number;
     pending: number;
@@ -208,9 +302,6 @@ export default function WithdrawalsClient({
   const [inReviewDialogOpen, setInReviewDialogOpen] = useState<boolean>(false);
   const [inReviewRequest, setInReviewRequest] = useState<Request | null>(null);
   const [inReviewReason, setInReviewReason] = useState<string>("");
-  const [payoutMethodSettings, setPayoutMethodSettings] = useState<{ method_type: string; is_paused: boolean }[]>([]);
-  const [loadingPayoutSettings, setLoadingPayoutSettings] = useState<boolean>(true);
-  const [updatingPayoutMethod, setUpdatingPayoutMethod] = useState<string | null>(null);
   const [filterRange, setFilterRange] = useState(defaultFilterRange);
   const [filterPresetLabel, setFilterPresetLabel] = useState("Last 30 Days");
   const [sortKey, setSortKey] = useState<WithdrawalsSortKey>("created_at");
@@ -222,6 +313,17 @@ export default function WithdrawalsClient({
         WITHDRAWAL_EXPORT_COLUMN_IDS.map((id) => [id, true] as const),
       ),
   );
+  const [exportOrder, setExportOrder] = useState<WithdrawalExportColumnId[]>(
+    () => [...WITHDRAWAL_EXPORT_COLUMN_IDS],
+  );
+  const [exportHeaders, setExportHeaders] = useState<Record<string, string>>(
+    () => ({ ...WITHDRAWAL_EXPORT_COLUMN_LABELS }),
+  );
+  const [exportCurrency, setExportCurrency] = useState<string>("USD");
+  const [exportRate, setExportRate] = useState<string>("");
+  const [exportGroupByPayee, setExportGroupByPayee] = useState(false);
+  const [exportPrefsLoaded, setExportPrefsLoaded] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [paymentProofLinkDraft, setPaymentProofLinkDraft] = useState("");
   const [proofUploading, setProofUploading] = useState(false);
   const [proofRemoving, setProofRemoving] = useState(false);
@@ -230,6 +332,11 @@ export default function WithdrawalsClient({
   const [metadataSaveMsg, setMetadataSaveMsg] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkApproving, setBulkApproving] = useState(false);
+  const [methodFilter, setMethodFilter] =
+    useState<WithdrawalsMethodFilter>("all");
+  const [groupByPayee, setGroupByPayee] = useState(false);
+  const [payeeGroups, setPayeeGroups] = useState<PayeeGroup[]>([]);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const proofFileInputRef = useRef<HTMLInputElement>(null);
   const metadataSaveMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -329,8 +436,11 @@ export default function WithdrawalsClient({
         createdFrom: new Date(filterFromMs).toISOString(),
         createdTo: new Date(filterToMs).toISOString(),
         includePayoutSeries: includePayoutSeries ? "1" : "0",
+        method: methodFilter,
       });
-      const res = await fetch(`/api/admin/withdrawals?${params}`);
+      const res = await fetch(
+        `/api/admin/withdrawals${groupByPayee ? "/grouped" : ""}?${params}`,
+      );
       if (!res.ok) {
         let message = `Withdrawals request failed (${res.status})`;
         try {
@@ -341,6 +451,7 @@ export default function WithdrawalsClient({
         }
         toast.error(message);
         setRequests([]);
+        setPayeeGroups([]);
         setTotalCount(0);
         if (includePayoutSeries && rangeChanged) {
           setPayoutSeries([]);
@@ -349,11 +460,12 @@ export default function WithdrawalsClient({
         return;
       }
       const json = await res.json();
-      const nextTotal = json.total ?? 0;
+      const nextTotal = (groupByPayee ? json.totalGroups : json.total) ?? 0;
       const totalPages = Math.max(1, Math.ceil(nextTotal / pageSize) || 1);
 
       setTotalCount(nextTotal);
       setTotalsFromApi(json.totals ?? null);
+      setFeesFromApi(json.fees ?? null);
       setStatusCountsFromApi(json.statusCounts ?? null);
 
       if (json.payoutSeriesIncluded && Array.isArray(json.payoutSeries)) {
@@ -370,15 +482,24 @@ export default function WithdrawalsClient({
 
       if (page > totalPages) {
         setRequests([]);
+        setPayeeGroups([]);
         keepLoadingForPageClamp = true;
         setPage(totalPages);
         return;
       }
 
-      setRequests(json.data ?? []);
+      if (groupByPayee) {
+        const groups = (json.groups ?? []) as PayeeGroup[];
+        setPayeeGroups(groups);
+        setRequests(groups.flatMap((g) => g.requests));
+      } else {
+        setPayeeGroups([]);
+        setRequests(json.data ?? []);
+      }
     } catch (e) {
       console.error("Fetch withdrawals error", e);
       setRequests([]);
+      setPayeeGroups([]);
       setTotalCount(0);
       if (includePayoutSeries && rangeChanged) {
         setPayoutSeries([]);
@@ -400,6 +521,8 @@ export default function WithdrawalsClient({
     sortOrder,
     filterFromMs,
     filterToMs,
+    methodFilter,
+    groupByPayee,
   ]);
 
   useEffect(() => {
@@ -409,7 +532,88 @@ export default function WithdrawalsClient({
   // Clear row selection when the list context changes
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [selectedTab, page, pageSize, filterFromMs, filterToMs, sortKey, sortOrder]);
+  }, [
+    selectedTab,
+    page,
+    pageSize,
+    filterFromMs,
+    filterToMs,
+    sortKey,
+    sortOrder,
+    methodFilter,
+    groupByPayee,
+  ]);
+
+  useEffect(() => {
+    setExpandedGroups(new Set());
+  }, [selectedTab, page, pageSize, filterFromMs, filterToMs, methodFilter, groupByPayee]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(EXPORT_PREFS_STORAGE_KEY);
+      if (raw) {
+        const prefs = JSON.parse(raw) as Partial<{
+          columns: Record<string, boolean>;
+          order: string[];
+          headers: Record<string, string>;
+          currency: string;
+          rate: string;
+          groupByPayee: boolean;
+        }>;
+        const known = new Set<string>(WITHDRAWAL_EXPORT_COLUMN_IDS);
+        if (prefs.columns) {
+          setExportColumns((prev) => ({ ...prev, ...prefs.columns }));
+        }
+        if (Array.isArray(prefs.order)) {
+          const saved = prefs.order.filter((id): id is WithdrawalExportColumnId =>
+            known.has(id),
+          );
+          setExportOrder([
+            ...saved,
+            ...WITHDRAWAL_EXPORT_COLUMN_IDS.filter((id) => !saved.includes(id)),
+          ]);
+        }
+        if (prefs.headers) {
+          setExportHeaders((prev) => ({ ...prev, ...prefs.headers }));
+        }
+        if (typeof prefs.currency === "string") setExportCurrency(prefs.currency);
+        if (typeof prefs.rate === "string") setExportRate(prefs.rate);
+        if (typeof prefs.groupByPayee === "boolean") {
+          setExportGroupByPayee(prefs.groupByPayee);
+        }
+      }
+    } catch {
+      /* ignore corrupt prefs */
+    }
+    setExportPrefsLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!exportPrefsLoaded) return;
+    try {
+      window.localStorage.setItem(
+        EXPORT_PREFS_STORAGE_KEY,
+        JSON.stringify({
+          columns: exportColumns,
+          order: exportOrder,
+          headers: exportHeaders,
+          currency: exportCurrency,
+          rate: exportRate,
+          groupByPayee: exportGroupByPayee,
+        }),
+      );
+    } catch {
+      /* storage unavailable */
+    }
+  }, [
+    exportPrefsLoaded,
+    exportColumns,
+    exportOrder,
+    exportHeaders,
+    exportCurrency,
+    exportRate,
+    exportGroupByPayee,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -447,55 +651,12 @@ export default function WithdrawalsClient({
     return () => observer.disconnect();
   }, [isDark]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoadingPayoutSettings(true);
-      try {
-        const res = await fetch("/api/admin/payout-method-settings");
-        if (!res.ok || cancelled) return;
-        const json = await res.json();
-        if (cancelled) return;
-        setPayoutMethodSettings(json.settings || []);
-      } catch {
-        if (!cancelled) setPayoutMethodSettings([]);
-      } finally {
-        if (!cancelled) setLoadingPayoutSettings(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
   const PAYOUT_METHOD_LABELS: Record<string, string> = {
     crypto: "Crypto",
     upi: "UPI",
     bank_transfer: "Bank transfer",
     phantom: "Phantom",
     skydo: "Skydo",
-  };
-  const DEFAULT_METHOD_TYPES = ["crypto", "upi", "bank_transfer", "skydo"];
-
-  const setPayoutMethodPaused = async (methodType: string, isPaused: boolean) => {
-    setUpdatingPayoutMethod(methodType);
-    try {
-      const res = await fetch("/api/admin/payout-method-settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ method_type: methodType, is_paused: isPaused }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      setPayoutMethodSettings((prev) => {
-        const next = prev.filter((s) => s.method_type !== methodType);
-        next.push({ method_type: methodType, is_paused: isPaused });
-        next.sort((a, b) => a.method_type.localeCompare(b.method_type));
-        return next;
-      });
-    } catch (e) {
-      console.error("Failed to update payout method setting", e);
-      alert("Failed to update. Please try again.");
-    } finally {
-      setUpdatingPayoutMethod(null);
-    }
   };
 
   const updateStatus = async (
@@ -674,17 +835,20 @@ export default function WithdrawalsClient({
       }
       const nextLink = linkTrim.length ? linkTrim : null;
       setMetadataDirty(false);
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.id === active.id
-            ? {
-              ...r,
-              admin_notes: adminNotes,
-              transaction_reference: txRef,
-              payment_proof_link: nextLink,
-            }
-            : r,
-        ),
+      const withSavedMetadata = <T extends Request>(r: T): T =>
+        r.id === active.id
+          ? {
+            ...r,
+            admin_notes: adminNotes,
+            transaction_reference: txRef,
+            payment_proof_link: nextLink,
+          }
+          : r;
+      setRequests((prev) => prev.map(withSavedMetadata));
+      // Grouped view renders from payeeGroups; keep it in sync so reopening
+      // a request doesn't show (and later re-save) the old values.
+      setPayeeGroups((prev) =>
+        prev.map((g) => ({ ...g, requests: g.requests.map(withSavedMetadata) })),
       );
       setActive((prev) =>
         prev && prev.id === active.id
@@ -1211,10 +1375,13 @@ export default function WithdrawalsClient({
     });
   };
 
-  const toggleSelectAllApprovable = (checked: boolean) => {
+  const toggleSelectAllApprovable = (
+    checked: boolean,
+    scope: Request[] = approvableOnPage,
+  ) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      for (const r of approvableOnPage) {
+      for (const r of scope) {
         if (checked) next.add(r.id);
         else next.delete(r.id);
       }
@@ -1332,7 +1499,15 @@ export default function WithdrawalsClient({
     );
   };
 
-  const renderTable = (rows: Request[]) => (
+  const renderTable = (rows: Request[]) => {
+    const scopeApprovable = rows.filter((r) => isApprovableStatus(r.status));
+    const scopeAllSelected =
+      scopeApprovable.length > 0 &&
+      scopeApprovable.every((r) => selectedIds.has(r.id));
+    const scopeSomeSelected = scopeApprovable.some((r) =>
+      selectedIds.has(r.id),
+    );
+    return (
     <div
       className={cn(
         "rounded-xl shadow",
@@ -1352,14 +1527,14 @@ export default function WithdrawalsClient({
             <TableHead className="w-10 pr-0 px-2 sm:px-4">
               <Checkbox
                 checked={
-                  someApprovableSelected && !allApprovableSelected
+                  scopeSomeSelected && !scopeAllSelected
                     ? "indeterminate"
-                    : allApprovableSelected
+                    : scopeAllSelected
                 }
                 onCheckedChange={(v) =>
-                  toggleSelectAllApprovable(v === true)
+                  toggleSelectAllApprovable(v === true, scopeApprovable)
                 }
-                disabled={loading || approvableOnPage.length === 0 || bulkApproving}
+                disabled={loading || scopeApprovable.length === 0 || bulkApproving}
                 aria-label="Select all approvable on this page"
                 className={cn(isDark && "border-white/60")}
               />
@@ -1467,6 +1642,7 @@ export default function WithdrawalsClient({
                       ? formatCurrencyFromCents(r.amount)
                       : `${r.amount} coins`}
                   </div>
+                  <PayoutSendLine request={r} />
                   <div className="text-xs text-muted-foreground capitalize">
                     {r.amount_type}
                   </div>
@@ -1756,28 +1932,279 @@ export default function WithdrawalsClient({
         </TableBody>
       </Table>
     </div>
+    );
+  };
+
+  const toggleGroupExpanded = (key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const renderGroupedTable = (groups: PayeeGroup[]) => (
+    <div
+      className={cn(
+        "rounded-xl shadow",
+        isDark ? "bg-[#170337]" : "bg-white  border border-gray-200",
+      )}
+    >
+      <Table className="min-w-[900px]">
+        <TableHeader>
+          <TableRow
+            className={cn(
+              "text-left border-b",
+              isDark
+                ? "bg-[#391A6A] text-white"
+                : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500",
+            )}
+          >
+            <TableHead className="w-10 px-2 sm:px-4"> </TableHead>
+            <TableHead className="px-2 sm:px-4">
+              <div className="flex items-center gap-2">
+                <CreditCard className="h-4 w-4" />
+                Payout method
+              </div>
+            </TableHead>
+            <TableHead className="px-2 sm:px-4">Payee</TableHead>
+            <TableHead className="px-2 sm:px-4">Requests</TableHead>
+            <TableHead className="px-2 sm:px-4">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Usernames
+              </div>
+            </TableHead>
+            <TableHead className="px-2 sm:px-4">Statuses</TableHead>
+            <TableHead className="px-2 sm:px-4 text-right">Total</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {groups.length === 0 && (
+            <TableRow>
+              <TableCell
+                colSpan={7}
+                className="py-10 text-center text-muted-foreground"
+              >
+                No withdrawal requests match these filters.
+              </TableCell>
+            </TableRow>
+          )}
+          {groups.map((g) => {
+            const expanded = expandedGroups.has(g.key);
+            const missing = g.destination === MISSING_PAYEE_LABEL;
+            return (
+              <Fragment key={g.key}>
+                <TableRow
+                  className="cursor-pointer hover:bg-muted/30 transition-colors"
+                  onClick={() => toggleGroupExpanded(g.key)}
+                >
+                  <TableCell className="w-10 px-2 sm:px-4">
+                    {expanded ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </TableCell>
+                  <TableCell className="px-2 sm:px-4 whitespace-nowrap">
+                    {PAYOUT_METHOD_LABELS[g.method] || g.method}
+                  </TableCell>
+                  <TableCell className="px-2 sm:px-4 max-w-[280px]">
+                    <div className="flex items-center gap-1">
+                      <span
+                        className={cn(
+                          "text-sm truncate",
+                          missing && "text-amber-600 dark:text-amber-400",
+                        )}
+                      >
+                        {g.destination}
+                      </span>
+                      {!missing && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void copyText(g.destination, "Payee");
+                          }}
+                          aria-label="Copy payee"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="px-2 sm:px-4">
+                    <Badge variant="secondary">{g.count}</Badge>
+                  </TableCell>
+                  <TableCell className="px-2 sm:px-4 max-w-[320px]">
+                    <div className="flex flex-wrap gap-1">
+                      {g.usernames.slice(0, 6).map((u) => (
+                        <Badge
+                          key={u}
+                          variant="outline"
+                          className="text-xs font-normal"
+                        >
+                          @{u}
+                        </Badge>
+                      ))}
+                      {g.usernames.length > 6 && (
+                        <span className="text-xs text-muted-foreground">
+                          +{g.usernames.length - 6} more
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="px-2 sm:px-4">
+                    <div className="flex flex-wrap gap-1">
+                      {Object.entries(g.statuses).map(([s, n]) => (
+                        <span key={s} className="inline-flex items-center gap-1">
+                          {getStatusBadge(s)}
+                          {n > 1 && (
+                            <span className="text-xs text-muted-foreground">
+                              x{n}
+                            </span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell className="px-2 sm:px-4 text-right whitespace-nowrap">
+                    <div className="text-lg font-semibold">
+                      {g.amountType === "cash"
+                        ? formatCurrencyFromCents(g.totalCents)
+                        : `${g.totalCents} coins`}
+                    </div>
+                    {g.amountType === "cash" && (g.feeCents > 0 || g.netLocalMinor !== null) && (
+                      <div className="text-xs text-muted-foreground">
+                        Send{" "}
+                        <span className="font-semibold text-foreground">
+                          {g.netLocalMinor !== null
+                            ? formatInrFromPaise(g.netLocalMinor)
+                            : formatCurrencyFromCents(g.netCents)}
+                        </span>
+                        {g.feeCents > 0 && ` · fees ${formatCurrencyFromCents(g.feeCents)}`}
+                      </div>
+                    )}
+                    <div className="text-xs text-muted-foreground">
+                      {g.currency} · {g.amountType}
+                    </div>
+                  </TableCell>
+                </TableRow>
+                {expanded && (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell
+                      colSpan={7}
+                      className={cn(
+                        "p-3",
+                        isDark ? "bg-[#0d0222]" : "bg-slate-50",
+                      )}
+                    >
+                      {renderTable(g.requests)}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </Fragment>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
   );
 
-  const runExportDownload = async () => {
-    const selectedCols = WITHDRAWAL_EXPORT_COLUMN_IDS.filter(
-      (id) => exportColumns[id],
+  const exportRateNumber = Number(exportRate);
+  const exportRateValid =
+    exportCurrency === "USD" ||
+    (Number.isFinite(exportRateNumber) && exportRateNumber > 0);
+
+  const applySkydoPreset = () => {
+    const presetIds = SKYDO_EXPORT_PRESET.map((c) => c.id);
+    setExportColumns(
+      Object.fromEntries(
+        WITHDRAWAL_EXPORT_COLUMN_IDS.map(
+          (id) => [id, presetIds.includes(id)] as const,
+        ),
+      ),
     );
-    const columns =
-      selectedCols.length > 0
-        ? selectedCols.join(",")
-        : WITHDRAWAL_EXPORT_COLUMN_IDS.join(",");
-    const params = new URLSearchParams({
-      tab: selectedTab,
-      sort: sortKey,
-      order: sortOrder,
-      columns,
-      createdFrom: new Date(filterFromMs).toISOString(),
-      createdTo: new Date(filterToMs).toISOString(),
+    setExportOrder([
+      ...presetIds,
+      ...WITHDRAWAL_EXPORT_COLUMN_IDS.filter((id) => !presetIds.includes(id)),
+    ]);
+    setExportHeaders((prev) => ({
+      ...prev,
+      ...Object.fromEntries(SKYDO_EXPORT_PRESET.map((c) => [c.id, c.header])),
+    }));
+    setExportGroupByPayee(true);
+    if (methodFilter !== "skydo") {
+      setPage(1);
+      setMethodFilter("skydo");
+    }
+    // Only approved requests are ready to pay; other tabs would add paid or
+    // rejected amounts to the payout.
+    if (selectedTab !== "approved") {
+      setPage(1);
+      setSelectedTab("approved");
+    }
+  };
+
+  const resetExportColumns = () => {
+    setExportColumns(
+      Object.fromEntries(
+        WITHDRAWAL_EXPORT_COLUMN_IDS.map((id) => [id, true] as const),
+      ),
+    );
+    setExportOrder([...WITHDRAWAL_EXPORT_COLUMN_IDS]);
+    setExportHeaders({ ...WITHDRAWAL_EXPORT_COLUMN_LABELS });
+  };
+
+  const moveExportColumn = (id: WithdrawalExportColumnId, delta: -1 | 1) => {
+    setExportOrder((prev) => {
+      const selected = prev.filter((c) => exportColumns[c] !== false);
+      const idx = selected.indexOf(id);
+      const swapWith = selected[idx + delta];
+      if (idx < 0 || !swapWith) return prev;
+      const next = [...prev];
+      const a = next.indexOf(id);
+      const b = next.indexOf(swapWith);
+      [next[a], next[b]] = [next[b], next[a]];
+      return next;
     });
+  };
+
+  const runExportDownload = async () => {
+    if (!exportRateValid) {
+      toast.error(`Enter a conversion rate for ${exportCurrency}`);
+      return;
+    }
+    const selectedCols = exportOrder.filter((id) => exportColumns[id] !== false);
+    const cols = selectedCols.length > 0 ? selectedCols : exportOrder;
+    setExporting(true);
     try {
-      const res = await fetch(
-        `/api/admin/withdrawals/export?${params.toString()}`,
-      );
+      const res = await fetch("/api/admin/withdrawals/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tab: selectedTab,
+          method: methodFilter,
+          sort: sortKey,
+          order: sortOrder,
+          createdFrom: new Date(filterFromMs).toISOString(),
+          createdTo: new Date(filterToMs).toISOString(),
+          columns: cols.map((id) => ({
+            id,
+            header:
+              exportHeaders[id]?.trim() || WITHDRAWAL_EXPORT_COLUMN_LABELS[id],
+          })),
+          currency: {
+            code: exportCurrency,
+            rate: exportCurrency === "USD" ? 1 : exportRateNumber,
+          },
+          groupByPayee: exportGroupByPayee,
+        }),
+      });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         toast.error(j.error || "Export failed");
@@ -1787,8 +2214,10 @@ export default function WithdrawalsClient({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `withdrawals-${selectedTab}-${new Date().toISOString().slice(0, 10)
-        }.csv`;
+      a.download = `withdrawals-${selectedTab}${methodFilter !== "all" ? `-${methodFilter}` : ""
+        }${exportGroupByPayee ? "-grouped" : ""}-${new Date()
+          .toISOString()
+          .slice(0, 10)}.csv`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("CSV download started");
@@ -1796,7 +2225,18 @@ export default function WithdrawalsClient({
     } catch (e) {
       console.error(e);
       toast.error("Export failed");
+    } finally {
+      setExporting(false);
     }
+  };
+
+  /** "Sent $90.00 after $10.00 fees" when the bucket includes processing fees. */
+  const afterFees = (key: string, verb: string, fallback: string) => {
+    const fee = feesFromApi?.[key] ?? 0;
+    const amount = (totals as Record<string, number>)[key] ?? 0;
+    return fee > 0
+      ? `${verb} ${formatCurrencyFromCents(amount - fee)} after ${formatCurrencyFromCents(fee)} fees`
+      : fallback;
   };
 
   const statusSummaryCards: {
@@ -1811,21 +2251,21 @@ export default function WithdrawalsClient({
         key: "pending",
         label: "Pending",
         amount: totals.pending,
-        description: "New requests",
+        description: afterFees("pending", "To send", "New requests"),
         accent: isDark ? "bg-amber-400" : "bg-amber-500",
       },
       {
         key: "approved",
         label: "Approved",
         amount: totals.approved,
-        description: "Approved for payment",
+        description: afterFees("approved", "To send", "Approved for payment"),
         accent: isDark ? "bg-blue-400" : "bg-blue-500",
       },
       {
         key: "paid",
         label: "Paid",
         amount: totals.paid,
-        description: "Successfully processed",
+        description: afterFees("paid", "Sent", "Successfully processed"),
         accent: isDark ? "bg-emerald-400" : "bg-emerald-500",
       },
       {
@@ -2000,100 +2440,18 @@ export default function WithdrawalsClient({
           })}
         </div>
 
-        {/* Payout method availability */}
-        <Card
-          className={cn(
-            "rounded-xl border shadow-none",
-            isDark
-              ? "bg-[#170337] border-white/10 text-white"
-              : "bg-white border-slate-200 text-black",
-          )}
-        >
-          <CardHeader className="pb-2 px-4 sm:px-5 pt-4">
-            <CardTitle className="text-base font-medium flex items-center gap-2">
-              <PauseCircle className="h-4 w-4" />
-              Payout method availability
-            </CardTitle>
-            <CardDescription
-              className={cn(
-                "text-sm",
-                isDark ? "text-slate-400" : "text-muted-foreground",
-              )}
-            >
-              When a method is paused, users cannot request withdrawals using
-              that payment method.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0 px-4 sm:px-5 pb-4">
-            {loadingPayoutSettings ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : (
-              <div className="flex flex-wrap gap-3">
-                {DEFAULT_METHOD_TYPES.map((methodType) => {
-                  const setting = payoutMethodSettings.find(
-                    (s) => s.method_type === methodType,
-                  );
-                  const isPaused = setting ? setting.is_paused : false;
-                  const enabled = !isPaused;
-                  const updating = updatingPayoutMethod === methodType;
-                  return (
-                    <div
-                      key={methodType}
-                      className={cn(
-                        "flex items-center gap-3 rounded-xl border px-3.5 py-2.5 min-w-[200px] flex-1 sm:flex-none",
-                        enabled
-                          ? isDark
-                            ? "border-emerald-500/35 bg-emerald-500/10"
-                            : "border-emerald-200 bg-emerald-50/70"
-                          : isDark
-                            ? "border-white/10 bg-white/5"
-                            : "border-slate-200 bg-slate-50",
-                      )}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium capitalize text-sm">
-                          {PAYOUT_METHOD_LABELS[methodType] || methodType}
-                        </p>
-                        <p
-                          className={cn(
-                            "text-xs mt-0.5",
-                            enabled
-                              ? isDark
-                                ? "text-emerald-300"
-                                : "text-emerald-700"
-                              : isDark
-                                ? "text-slate-500"
-                                : "text-slate-500",
-                          )}
-                        >
-                          {enabled ? "Available" : "Paused"}
-                        </p>
-                      </div>
-                      <Switch
-                        checked={enabled}
-                        onCheckedChange={(checked) =>
-                          setPayoutMethodPaused(methodType, !checked)
-                        }
-                        disabled={updating}
-                        className={cn(
-                          "border-transparent",
-                          "data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500",
-                          "data-[state=unchecked]:bg-slate-300 data-[state=unchecked]:border-slate-300",
-                          isDark &&
-                          "data-[state=unchecked]:bg-slate-600 data-[state=unchecked]:border-slate-600 data-[state=checked]:bg-emerald-500",
-                        )}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <PayoutMethodSettingsCard isDark={isDark} />
 
-        {/* Toolbar: date range + export */}
+        <WithdrawalFeeRevenueSection
+          from={filterRange.from}
+          to={filterRange.to}
+          periodLabel={filterPresetLabel || "the selected period"}
+          isDark={isDark}
+        />
+
+        {/* Toolbar: date range + payout method + grouping + export */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="w-full sm:w-auto">
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
             <AdminDateRangePicker
               isDark={isDark}
               value={filterRange}
@@ -2104,6 +2462,48 @@ export default function WithdrawalsClient({
                 setFilterPresetLabel(label);
               }}
             />
+            <Select
+              value={methodFilter}
+              onValueChange={(v) => {
+                setPage(1);
+                setMethodFilter(v as WithdrawalsMethodFilter);
+              }}
+            >
+              <SelectTrigger
+                className={cn(
+                  "w-full sm:w-[180px] rounded-xl",
+                  isDark && "border-white/15",
+                )}
+                aria-label="Payout method filter"
+              >
+                <CreditCard className="h-4 w-4 mr-2 opacity-70" />
+                <SelectValue placeholder="Payout method" />
+              </SelectTrigger>
+              <SelectContent>
+                {METHOD_FILTER_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <label
+              className={cn(
+                "flex items-center gap-2 rounded-xl border px-3 py-2 text-sm cursor-pointer",
+                isDark ? "border-white/15" : "border-slate-200",
+              )}
+            >
+              <Switch
+                checked={groupByPayee}
+                onCheckedChange={(v) => {
+                  setPage(1);
+                  setGroupByPayee(v);
+                }}
+                aria-label="Group by payee"
+              />
+              <Users className="h-4 w-4 opacity-70" />
+              Group by payee
+            </label>
           </div>
           <Button
             type="button"
@@ -2128,7 +2528,9 @@ export default function WithdrawalsClient({
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">
-            Tip: tap/click any column header to sort.
+            {groupByPayee
+              ? "Grouped by payout destination. Click a group to see its requests."
+              : "Tip: tap/click any column header to sort."}
           </p>
           {(selectedIds.size > 0 ||
             selectedTab === "pending" ||
@@ -2299,7 +2701,9 @@ export default function WithdrawalsClient({
             </div>
           ) : (
             <>
-              {renderTable(requests)}
+              {groupByPayee
+                ? renderGroupedTable(payeeGroups)
+                : renderTable(requests)}
               <div className={cn("mt-4 border-t pt-4", isDark ? "border-gray-700" : "border-gray-200")}>
                 <PaginationControls
                   page={page}
@@ -2339,11 +2743,109 @@ export default function WithdrawalsClient({
                 Export withdrawals (CSV)
               </DialogTitle>
               <DialogDescription>
-                Uses the current status tab and date range above. Choose
-                columns to include (empty selection exports all).
+                Exports rows matching the filters below. Pick columns, rename
+                headers, reorder them, and optionally convert currency or
+                combine requests sent to the same payee.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
+              <div
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-xs",
+                  isDark
+                    ? "border-violet-700/60 bg-violet-900/20 text-violet-200"
+                    : "border-violet-200 bg-violet-50 text-violet-800",
+                )}
+              >
+                Filters applied: {TAB_LABELS[selectedTab] ?? selectedTab},{" "}
+                {METHOD_FILTER_OPTIONS.find((o) => o.value === methodFilter)
+                  ?.label ?? methodFilter}
+                , {filterPresetLabel}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={applySkydoPreset}
+                >
+                  Skydo bulk payout preset
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={resetExportColumns}
+                >
+                  Reset columns
+                </Button>
+              </div>
+
+              <div
+                className={cn(
+                  "rounded-lg border p-3 text-sm space-y-3",
+                  isDark
+                    ? "border-gray-600 bg-[#06021D]/80"
+                    : "border-slate-200 bg-slate-50/80",
+                )}
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Payout currency</Label>
+                    <Select
+                      value={exportCurrency}
+                      onValueChange={setExportCurrency}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EXPORT_CURRENCY_OPTIONS.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {exportCurrency !== "USD" && (
+                    <div className="space-y-1">
+                      <Label className="text-xs" htmlFor="export-fx-rate">
+                        1 USD = ? {exportCurrency}
+                      </Label>
+                      <Input
+                        id="export-fx-rate"
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="0.0001"
+                        placeholder="e.g. 92"
+                        value={exportRate}
+                        onChange={(e) => setExportRate(e.target.value)}
+                        className={cn(
+                          "h-9",
+                          !exportRateValid && exportRate !== "" &&
+                          "border-red-500",
+                        )}
+                      />
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Applies to the &quot;Payout amount&quot; and &quot;Payout
+                  currency&quot; columns. Stored amounts are in USD.
+                </p>
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <Switch
+                    checked={exportGroupByPayee}
+                    onCheckedChange={setExportGroupByPayee}
+                  />
+                  Group by payee email (one row per payout destination, amounts
+                  summed, usernames listed)
+                </label>
+              </div>
+
               <div
                 className={cn(
                   "rounded-lg border p-3 text-sm",
@@ -2352,27 +2854,65 @@ export default function WithdrawalsClient({
                     : "border-slate-200 bg-slate-50/80",
                 )}
               >
-                <p className="font-medium mb-2">Columns</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                  {WITHDRAWAL_EXPORT_COLUMN_IDS.map((id) => (
-                    <label
-                      key={id}
-                      className="flex items-center gap-2 cursor-pointer text-xs"
-                    >
-                      <Checkbox
-                        checked={exportColumns[id] !== false}
-                        onCheckedChange={(checked) =>
-                          setExportColumns((prev) => ({
-                            ...prev,
-                            [id]: checked === true,
-                          }))
-                        }
-                      />
-                      <span className="truncate">
-                        {WITHDRAWAL_EXPORT_COLUMN_LABELS[id]}
-                      </span>
-                    </label>
-                  ))}
+                <p className="font-medium mb-2">Columns and headers</p>
+                <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                  {exportOrder.map((id) => {
+                    const checked = exportColumns[id] !== false;
+                    return (
+                      <div key={id} className="flex items-center gap-2 text-xs">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(v) =>
+                            setExportColumns((prev) => ({
+                              ...prev,
+                              [id]: v === true,
+                            }))
+                          }
+                          aria-label={`Include ${WITHDRAWAL_EXPORT_COLUMN_LABELS[id]}`}
+                        />
+                        {checked ? (
+                          <>
+                            <Input
+                              value={exportHeaders[id] ?? ""}
+                              placeholder={WITHDRAWAL_EXPORT_COLUMN_LABELS[id]}
+                              onChange={(e) =>
+                                setExportHeaders((prev) => ({
+                                  ...prev,
+                                  [id]: e.target.value,
+                                }))
+                              }
+                              className="h-7 text-xs flex-1"
+                              title={WITHDRAWAL_EXPORT_COLUMN_LABELS[id]}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => moveExportColumn(id, -1)}
+                              aria-label="Move column up"
+                            >
+                              <ArrowUp className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => moveExportColumn(id, 1)}
+                              aria-label="Move column down"
+                            >
+                              <ArrowDown className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        ) : (
+                          <span className="truncate text-muted-foreground">
+                            {WITHDRAWAL_EXPORT_COLUMN_LABELS[id]}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -2384,8 +2924,16 @@ export default function WithdrawalsClient({
               >
                 Cancel
               </Button>
-              <Button type="button" onClick={() => void runExportDownload()}>
-                <Download className="h-4 w-4 mr-2" />
+              <Button
+                type="button"
+                disabled={exporting || !exportRateValid}
+                onClick={() => void runExportDownload()}
+              >
+                {exporting ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
                 Download
               </Button>
             </DialogFooter>
@@ -2499,8 +3047,9 @@ export default function WithdrawalsClient({
                               : `${active.amount} coins`}
                           </p>
                           <p className="text-xs text-muted-foreground capitalize">
-                            {active.amount_type}
+                            {active.amount_type === "cash" ? "Requested" : active.amount_type}
                           </p>
+                          {active.amount_type === "cash" && <PayoutBreakdown request={active} />}
                         </div>
                       </div>
                     </CardContent>

@@ -1,3 +1,5 @@
+import { withRestrictedSummaries } from "@/lib/campaign-access-server";
+import type { ListCampaignsResult } from "@/lib/contest-list-query";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import {
@@ -101,9 +103,13 @@ export async function GET(request: NextRequest) {
         scope: "advertiser",
         total: Number((cached as { total?: number }).total) || 0,
       });
-      return NextResponse.json(cached, {
-        headers: { "X-Campaign-List-Cache": "HIT" },
-      });
+      // Applications switch and pending counts change often, so they're added after the cache.
+      return NextResponse.json(
+        await withRestrictedSummaries(supabase, cached as ListCampaignsResult),
+        {
+          headers: { "X-Campaign-List-Cache": "HIT" },
+        },
+      );
     }
 
     const result = await listCampaignsPaginated({
@@ -132,7 +138,7 @@ export async function GET(request: NextRequest) {
       total: result.total,
     });
 
-    return NextResponse.json(result, {
+    return NextResponse.json(await withRestrictedSummaries(supabase, result), {
       headers: { "X-Campaign-List-Cache": "MISS" },
     });
   } catch (err: unknown) {

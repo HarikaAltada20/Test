@@ -5,6 +5,7 @@ import {
   postCampaignSnapshotToSubmission,
   type PostCampaignSubmissionSnapshot,
 } from "@/lib/post-campaign-submission-shape";
+import { fetchAllRows } from "@/lib/supabase-fetch-all";
 
 export type BrandPcSubmissionFetchOptions = {
   dateFrom: Date;
@@ -56,6 +57,7 @@ export async function fetchBrandPcSubmissionsAsAnalyticsRows(
         .gte("created_at", options.dateFrom.toISOString())
         .lte("created_at", options.dateTo.toISOString())
         .order("created_at", { ascending: false })
+        .order("submission_id", { ascending: true })
         .range(from, to);
 
       query = applyPcStatusFilter(query, options);
@@ -93,12 +95,17 @@ export async function fetchBrandPcCampaignIdsInRange(
 
   for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
     const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
-    const { data, error } = await supabase
-      .from("post_campaign_submission_metrics")
-      .select("contest_id")
-      .in("contest_id", idChunk)
-      .gte("created_at", dateFrom.toISOString())
-      .lte("created_at", dateTo.toISOString());
+    const { data, error } = await fetchAllRows<{ contest_id: string | null }>(
+      (from, to) =>
+        supabase
+          .from("post_campaign_submission_metrics")
+          .select("contest_id")
+          .in("contest_id", idChunk)
+          .gte("created_at", dateFrom.toISOString())
+          .lte("created_at", dateTo.toISOString())
+          .order("submission_id", { ascending: true })
+          .range(from, to),
+    );
 
     if (error) throw new Error(error.message);
 

@@ -1,33 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import {
-  Check,
-  CheckCircle2,
-  Circle,
-  Copy,
-  Eye,
-  EyeOff,
-  Loader2,
-  Send,
-} from "lucide-react";
+import { BadgeCheck, Check, CheckCircle2, Circle, Copy, Eye, EyeOff, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import {
@@ -36,23 +15,10 @@ import {
   type AdminPayoutMethodDetailResponse,
   type AdminPayoutMethodRow,
 } from "@/lib/admin-payout-methods";
-import {
-  SKYDO_STATUSES,
-  SKYDO_STATUS_DESCRIPTIONS,
-  SKYDO_STATUS_LABELS,
-  getSkydoStatus,
-} from "@/lib/skydo-payout";
+import { SKYDO_STATUSES, SKYDO_STATUS_DESCRIPTIONS, SKYDO_STATUS_LABELS, getSkydoStatus } from "@/lib/skydo-payout";
 import { SkydoStatusBadge } from "@/components/payouts/SkydoStatusBadge";
 import type { SkydoStatus } from "@/types/earnings";
-import {
-  METHOD_LABELS,
-  MethodIcon,
-  RelativeTime,
-  copyText,
-  durationSince,
-  exactTime,
-  palette,
-} from "./shared";
+import { METHOD_LABELS, MethodIcon, RelativeTime, copyText, durationSince, exactTime, palette } from "./shared";
 
 const NOTES_MAX = 2000;
 
@@ -70,12 +36,7 @@ function Section({
   return (
     <section className={cn("space-y-3 border-t px-6 py-5", isDark ? "border-gray-800" : "border-gray-100")}>
       <div className="flex items-center justify-between">
-        <h3
-          className={cn(
-            "text-xs font-semibold uppercase tracking-wide",
-            isDark ? "text-gray-400" : "text-gray-500"
-          )}
-        >
+        <h3 className={cn("text-xs font-semibold uppercase tracking-wide", isDark ? "text-gray-400" : "text-gray-500")}>
           {title}
         </h3>
         {action}
@@ -111,7 +72,10 @@ function Field({
             type="button"
             onClick={() => copyText(copyValue, label)}
             aria-label={`Copy ${label}`}
-            className={cn("shrink-0 rounded p-1 opacity-60 hover:opacity-100", isDark ? "hover:bg-white/10" : "hover:bg-gray-100")}
+            className={cn(
+              "shrink-0 rounded p-1 opacity-60 hover:opacity-100",
+              isDark ? "hover:bg-white/10" : "hover:bg-gray-100"
+            )}
           >
             <Copy className="h-3.5 w-3.5" />
           </button>
@@ -124,25 +88,57 @@ function Field({
 function payoutFields(row: AdminPayoutMethodRow, revealBank: boolean) {
   const d = (row.details ?? {}) as Record<string, unknown>;
   const s = (v: unknown) => (v === null || v === undefined ? "" : String(v));
-  const fields: { label: string; value: string; copy?: string; mono?: boolean; bank?: boolean }[] = [];
+  const fields: {
+    label: string;
+    value: string;
+    copy?: string;
+    mono?: boolean;
+    bank?: boolean;
+  }[] = [];
   switch (row.method_type) {
     case "skydo":
-      fields.push({ label: "Skydo email", value: s(d.email), copy: s(d.email), mono: true });
+      fields.push({
+        label: "Skydo email",
+        value: s(d.email),
+        copy: s(d.email),
+        mono: true,
+      });
       break;
     case "upi":
-      fields.push({ label: "UPI ID", value: s(d.upi_id), copy: s(d.upi_id), mono: true });
-      if (d.account_holder_name) fields.push({ label: "Account holder", value: s(d.account_holder_name) });
+      fields.push({
+        label: "UPI ID",
+        value: s(d.upi_id),
+        copy: s(d.upi_id),
+        mono: true,
+      });
+      if (d.account_holder_name)
+        fields.push({
+          label: "Account holder",
+          value: s(d.account_holder_name),
+        });
       break;
     case "crypto":
     case "phantom":
-      fields.push({ label: "Wallet", value: s(d.wallet_address), copy: s(d.wallet_address), mono: true });
+      fields.push({
+        label: "Wallet",
+        value: s(d.wallet_address),
+        copy: s(d.wallet_address),
+        mono: true,
+      });
       if (d.network) fields.push({ label: "Network", value: s(d.network) });
       if (d.currency || d.preferred_token)
-        fields.push({ label: "Token", value: s(d.currency || d.preferred_token) });
+        fields.push({
+          label: "Token",
+          value: s(d.currency || d.preferred_token),
+        });
       break;
     case "bank_transfer": {
       const acct = s(d.account_number);
-      fields.push({ label: "Account holder", value: s(d.account_holder_name), copy: s(d.account_holder_name) });
+      fields.push({
+        label: "Account holder",
+        value: s(d.account_holder_name),
+        copy: s(d.account_holder_name),
+      });
       fields.push({
         label: "Account number",
         value: revealBank ? acct : getPayoutIdentifier("bank_transfer", d),
@@ -150,9 +146,20 @@ function payoutFields(row: AdminPayoutMethodRow, revealBank: boolean) {
         mono: true,
         bank: true,
       });
-      if (d.ifsc_code) fields.push({ label: "IFSC", value: s(d.ifsc_code), copy: s(d.ifsc_code), mono: true });
+      if (d.ifsc_code)
+        fields.push({
+          label: "IFSC",
+          value: s(d.ifsc_code),
+          copy: s(d.ifsc_code),
+          mono: true,
+        });
       if (d.swift_bic_code)
-        fields.push({ label: "SWIFT / BIC", value: s(d.swift_bic_code), copy: s(d.swift_bic_code), mono: true });
+        fields.push({
+          label: "SWIFT / BIC",
+          value: s(d.swift_bic_code),
+          copy: s(d.swift_bic_code),
+          mono: true,
+        });
       if (d.bank_name) fields.push({ label: "Bank", value: s(d.bank_name) });
       if (d.country) fields.push({ label: "Country", value: s(d.country) });
       break;
@@ -167,12 +174,19 @@ function SkydoTimeline({ row, isDark }: { row: AdminPayoutMethodRow; isDark: boo
   const changedAt = row.skydo_status_updated_at;
   const steps = [
     { label: "Method added", at: row.created_at, done: true },
-    { label: "Skydo email sent", at: status === "email_sent" ? changedAt : null, done: idx >= 1 },
-    { label: "Payout method verified", at: status === "verified" ? changedAt : null, done: idx >= 2 },
+    {
+      label: "Skydo email sent",
+      at: status === "email_sent" ? changedAt : null,
+      done: idx >= 1,
+    },
+    {
+      label: "Payout method verified",
+      at: status === "verified" ? changedAt : null,
+      done: idx >= 2,
+    },
   ];
   const overdue =
-    status === "email_pending" &&
-    Date.now() - new Date(row.stage_since ?? row.created_at).getTime() > SKYDO_OVERDUE_MS;
+    status === "email_pending" && Date.now() - new Date(row.stage_since ?? row.created_at).getTime() > SKYDO_OVERDUE_MS;
 
   return (
     <div className="space-y-3">
@@ -195,22 +209,25 @@ function SkydoTimeline({ row, isDark }: { row: AdminPayoutMethodRow; isDark: boo
             )}
             <div className="text-sm">
               <div className={cn(!step.done && palette(isDark).muted)}>{step.label}</div>
-              {step.at && (
-                <div className={cn("text-xs", palette(isDark).muted)}>{exactTime(step.at)}</div>
-              )}
+              {step.at && <div className={cn("text-xs", palette(isDark).muted)}>{exactTime(step.at)}</div>}
             </div>
           </li>
         ))}
       </ol>
       {overdue && (
         <p className={cn("rounded-md bg-red-500/10 px-3 py-2 text-xs", isDark ? "text-red-400" : "text-red-600")}>
-          Pending for {durationSince(row.stage_since ?? row.created_at)}. The user was promised a Skydo email within 24 hours.
+          Pending for {durationSince(row.stage_since ?? row.created_at)}. The user was promised a Skydo email within 24
+          hours.
         </p>
       )}
       {changedAt && (
         <p className={cn("text-xs", palette(isDark).muted)}>
           Status last changed {exactTime(changedAt)}
-          {row.status_updated_by_name ? ` by ${row.status_updated_by_name}` : ""}.
+          {row.status_updated_by_name ? ` by ${row.status_updated_by_name}` : ""}
+          {status === "verified" && row.skydo_verified_via === "known_email"
+            ? ", using an email already verified on another account"
+            : ""}
+          .
         </p>
       )}
     </div>
@@ -303,6 +320,7 @@ export function PayoutMethodDrawer({
   onClose,
   onOpen,
   onSetStatus,
+  onVerifyKnown,
   onSaveNotes,
 }: {
   methodId: string | null;
@@ -312,6 +330,7 @@ export function PayoutMethodDrawer({
   onClose: () => void;
   onOpen: (id: string) => void;
   onSetStatus: (row: AdminPayoutMethodRow, status: SkydoStatus) => void;
+  onVerifyKnown: (row: AdminPayoutMethodRow) => void;
   onSaveNotes: (id: string, notes: string | null) => Promise<boolean>;
 }) {
   const p = palette(isDark);
@@ -433,10 +452,47 @@ export function PayoutMethodDrawer({
 
             {isSkydo && status && (
               <Section title="Skydo verification" isDark={isDark}>
+                {row.known_verified && (
+                  <div
+                    className={cn(
+                      "space-y-2 rounded-lg border p-3 text-sm",
+                      isDark
+                        ? "border-emerald-800 bg-emerald-950/30 text-emerald-200"
+                        : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    )}
+                  >
+                    <div className="flex items-start gap-2">
+                      <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                      <p>
+                        Skydo already verified this email on{" "}
+                        {row.email_verified_peers.map((peer, i) => (
+                          <span key={peer.id}>
+                            {i > 0 && ", "}
+                            <button
+                              type="button"
+                              onClick={() => onOpen(peer.id)}
+                              className="font-medium underline underline-offset-2"
+                            >
+                              {peer.name || (peer.username ? `@${peer.username}` : "another account")}
+                            </button>
+                          </span>
+                        ))}
+                        . No new Skydo invite is needed.
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+                      onClick={() => onVerifyKnown(row)}
+                    >
+                      <BadgeCheck className="h-3.5 w-3.5" /> Verify (known email)
+                    </Button>
+                  </div>
+                )}
                 <SkydoTimeline row={row} isDark={isDark} />
                 <p className={cn("text-xs", p.muted)}>{SKYDO_STATUS_DESCRIPTIONS[status]}</p>
                 <div className="flex flex-wrap items-center gap-2">
-                  {status === "email_pending" && (
+                  {status === "email_pending" && !row.known_verified && (
                     <Button
                       size="sm"
                       className="gap-1.5 bg-[#7F39EC] text-white hover:bg-[#6a2fd0]"
@@ -470,6 +526,36 @@ export function PayoutMethodDrawer({
               </Section>
             )}
 
+            {isSkydo && data && data.sameEmailAccounts.length > 0 && (
+              <Section title={`Same Skydo email on other accounts (${data.sameEmailAccounts.length})`} isDark={isDark}>
+                <ul className="space-y-1.5">
+                  {data.sameEmailAccounts.map((acct) => (
+                    <li key={acct.id}>
+                      <button
+                        type="button"
+                        onClick={() => onOpen(acct.id)}
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                          isDark ? "border-gray-800 hover:bg-white/5" : "border-gray-200 hover:bg-gray-50"
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium">
+                            {acct.full_name || acct.username || "Unnamed user"}
+                          </div>
+                          <div className={cn("truncate text-xs", p.muted)}>
+                            {acct.email ?? "—"}
+                            {acct.username ? ` · @${acct.username}` : ""}
+                          </div>
+                        </div>
+                        <SkydoStatusBadge status={getSkydoStatus(acct)} size="sm" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </Section>
+            )}
+
             <Section title="Payout details" isDark={isDark}>
               <div className="space-y-2.5">
                 {payoutFields(row, revealBank).map((f) => (
@@ -499,12 +585,7 @@ export function PayoutMethodDrawer({
             </Section>
 
             <Section title="Admin notes" isDark={isDark}>
-              <NotesEditor
-                methodId={row.id}
-                initial={row.admin_notes ?? ""}
-                isDark={isDark}
-                onSave={onSaveNotes}
-              />
+              <NotesEditor methodId={row.id} initial={row.admin_notes ?? ""} isDark={isDark} onSave={onSaveNotes} />
             </Section>
 
             <Section title="Account" isDark={isDark}>
@@ -512,12 +593,12 @@ export function PayoutMethodDrawer({
                 {[
                   {
                     label: "Withdrawable",
-                    value:
-                      row.withdrawable_balance === null
-                        ? "—"
-                        : formatCurrencyFromCents(row.withdrawable_balance),
+                    value: row.withdrawable_balance === null ? "—" : formatCurrencyFromCents(row.withdrawable_balance),
                   },
-                  { label: "Withdrawals", value: String(row.withdrawal_count ?? 0) },
+                  {
+                    label: "Withdrawals",
+                    value: String(row.withdrawal_count ?? 0),
+                  },
                   { label: "Country", value: row.country || "—" },
                 ].map((s) => (
                   <div key={s.label} className={cn("rounded-lg p-3", p.surfaceAlt)}>
@@ -553,9 +634,7 @@ export function PayoutMethodDrawer({
                           {m.is_default && (
                             <span className="text-[10px] font-semibold uppercase text-[#7F39EC]">Default</span>
                           )}
-                          {m.method_type === "skydo" && (
-                            <SkydoStatusBadge status={getSkydoStatus(m)} size="sm" />
-                          )}
+                          {m.method_type === "skydo" && <SkydoStatusBadge status={getSkydoStatus(m)} size="sm" />}
                         </button>
                       </li>
                     );

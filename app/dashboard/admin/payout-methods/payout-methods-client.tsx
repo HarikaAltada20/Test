@@ -1,27 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { CheckCircle2, Copy, Download, Inbox, Loader2, RefreshCw, SearchX, Send } from "lucide-react";
+import { BadgeCheck, CheckCircle2, Copy, Download, Inbox, Loader2, RefreshCw, SearchX, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { cn } from "@/lib/utils";
-import type { AdminPayoutMethodRow, AdminPayoutSortKey } from "@/lib/admin-payout-methods";
+import type { AdminPayoutEmailGroup, AdminPayoutMethodRow, AdminPayoutSortKey } from "@/lib/admin-payout-methods";
 import { getSkydoStatus } from "@/lib/skydo-payout";
 import type { SkydoStatus } from "@/types/earnings";
 import { ActiveFilterChips } from "./components/ActiveFilterChips";
 import { BulkActionBar } from "./components/BulkActionBar";
+import { EmailGroupsList } from "./components/EmailGroupsList";
 import { ConfirmVerifyDialog, type ConfirmRequest } from "./components/ConfirmVerifyDialog";
 import { MethodTypeChips } from "./components/MethodTypeChips";
 import { PayoutMethodDrawer } from "./components/PayoutMethodDrawer";
-import { PayoutMethodsTable } from "./components/PayoutMethodsTable";
+import { PayoutMethodsTable, peerLabel } from "./components/PayoutMethodsTable";
 import { PayoutToolbar } from "./components/PayoutToolbar";
 import { SkydoPipeline } from "./components/SkydoPipeline";
-import {
-  hasActiveFilters,
-  usePayoutMethodsQuery,
-  type PayoutView,
-} from "./components/usePayoutMethodsQuery";
+import { hasActiveFilters, usePayoutMethodsQuery, type PayoutView } from "./components/usePayoutMethodsQuery";
 import { WithTooltip, palette, useIsDark, useNow } from "./components/shared";
 import { formatDistanceToNowStrict } from "date-fns";
 
@@ -34,7 +31,14 @@ interface SelectedInfo {
   email: string;
 }
 
-const ASC_FIRST: AdminPayoutSortKey[] = ["full_name", "email", "method_type", "stage_since"];
+const ASC_FIRST: AdminPayoutSortKey[] = [
+  "full_name",
+  "email",
+  "method_type",
+  "stage_since",
+  "skydo_email",
+  "next_action",
+];
 
 function selectedInfo(row: AdminPayoutMethodRow): SelectedInfo {
   const isSkydo = row.method_type === "skydo";
@@ -50,7 +54,7 @@ export default function PayoutMethodsClient() {
   const now = useNow(30_000);
   const p = palette(isDark);
   const q = usePayoutMethodsQuery();
-  const { state, rows, total, summary, setParams } = q;
+  const { state, rows, groups, total, summary, setParams } = q;
 
   const [selected, setSelected] = useState<Map<string, SelectedInfo>>(new Map());
   const [allMatching, setAllMatching] = useState(false);
@@ -69,19 +73,10 @@ export default function PayoutMethodsClient() {
     clearSelection();
   }, [q.apiQuery, clearSelection]);
 
-  const onChangeFilters = useCallback(
-    (updates: Record<string, string | null>) => setParams(updates),
-    [setParams]
-  );
+  const onChangeFilters = useCallback((updates: Record<string, string | null>) => setParams(updates), [setParams]);
 
-  const openMethod = useCallback(
-    (id: string) => setParams({ method: id }, { resetPage: false }),
-    [setParams]
-  );
-  const closeMethod = useCallback(
-    () => setParams({ method: null }, { resetPage: false }),
-    [setParams]
-  );
+  const openMethod = useCallback((id: string) => setParams({ method: id }, { resetPage: false }), [setParams]);
+  const closeMethod = useCallback(() => setParams({ method: null }, { resetPage: false }), [setParams]);
 
   /* ---------- status changes ---------- */
 
@@ -121,6 +116,95 @@ export default function PayoutMethodsClient() {
           onConfirm: run,
         });
       } else run();
+    },
+    [changeStatus]
+  );
+
+  /* ---------- already-verified emails ---------- */
+
+  const runVerifyKnown = useCallback(
+    (ids: string[], previous: Record<string, SkydoStatus | null>) => q.verifyKnown(ids, previous),
+    [q]
+  );
+
+  const requestVerifyKnown = useCallback(
+    (row: AdminPayoutMethodRow) => {
+      if (!row.known_verified) return;
+      const name = row.full_name || row.email || "This user";
+      const email = String((row.details as Record<string, unknown> | null)?.email ?? "");
+      setConfirm({
+        title: `Verify ${name}'s Skydo method?`,
+        description: `Skydo already verified ${email} on ${peerLabel(row)}, so no new invite is needed. ${name} will be able to withdraw to Skydo straight away.`,
+        confirmLabel: "Verify",
+        onConfirm: () => void runVerifyKnown([row.id], { [row.id]: getSkydoStatus(row) }),
+      });
+    },
+    [runVerifyKnown]
+  );
+
+  const knownCount = summary?.skydo_known_verified ?? 0;
+  const [verifyingAllKnown, setVerifyingAllKnown] = useState(false);
+
+  const verifyAllKnown = useCallback(async () => {
+    setVerifyingAllKnown(true);
+    try {
+      const res = await fetch(
+        "/api/admin/payout-methods?methodType=skydo&knownEmail=1&sort=next_action&order=asc&format=ids"
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to load accounts");
+      const ids: string[] = json.ids ?? [];
+      if (ids.length === 0) {
+        toast.info("Nothing left to verify");
+        q.refetch();
+        return;
+      }
+      const previous: Record<string, SkydoStatus | null> = json.statuses ?? {};
+      setConfirm({
+        title: `Verify ${ids.length} Skydo method${ids.length === 1 ? "" : "s"}?`,
+        description: `Each of these uses an email that Skydo already verified on another account, so no new invite is needed. They'll be able to withdraw to Skydo straight away.${json.truncated ? " Only the first 200 are included." : ""}`,
+        confirmLabel: `Verify ${ids.length}`,
+        onConfirm: () => void runVerifyKnown(ids, previous),
+      });
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setVerifyingAllKnown(false);
+    }
+  }, [q, runVerifyKnown]);
+
+  const groupVerifyKnown = useCallback(
+    (group: AdminPayoutEmailGroup) => {
+      const members = group.members.filter((m) => m.known_verified);
+      if (members.length === 0) return;
+      const verifiedOn = group.members
+        .filter((m) => getSkydoStatus(m) === "verified")
+        .map((m) => m.full_name || m.username || "another account");
+      setConfirm({
+        title: `Verify ${members.length} account${members.length === 1 ? "" : "s"} using ${group.email}?`,
+        description: `Skydo already verified this email on ${verifiedOn.join(", ")}. ${members
+          .map((m) => m.full_name || m.username || "This user")
+          .join(", ")} will be able to withdraw to Skydo straight away.`,
+        confirmLabel: "Verify",
+        onConfirm: () =>
+          void runVerifyKnown(
+            members.map((m) => m.id),
+            Object.fromEntries(members.map((m) => [m.id, getSkydoStatus(m)]))
+          ),
+      });
+    },
+    [runVerifyKnown]
+  );
+
+  const groupMarkSent = useCallback(
+    (group: AdminPayoutEmailGroup) => {
+      const members = group.members.filter((m) => getSkydoStatus(m) === "email_pending" && !m.known_verified);
+      if (members.length === 0) return;
+      void changeStatus(
+        members.map((m) => m.id),
+        "email_sent",
+        Object.fromEntries(members.map((m) => [m.id, "email_pending" as SkydoStatus]))
+      );
     },
     [changeStatus]
   );
@@ -177,10 +261,7 @@ export default function PayoutMethodsClient() {
     }
   }, [q, rows]);
 
-  const selectedSkydo = useMemo(
-    () => Array.from(selected.entries()).filter(([, info]) => info.isSkydo),
-    [selected]
-  );
+  const selectedSkydo = useMemo(() => Array.from(selected.entries()).filter(([, info]) => info.isSkydo), [selected]);
 
   const copySelectedEmails = useCallback(async () => {
     try {
@@ -227,24 +308,33 @@ export default function PayoutMethodsClient() {
   /* ---------- pending email batch ---------- */
 
   const pendingCount = summary?.by_skydo_status.email_pending ?? 0;
+  /** Pending emails that still need a Skydo invite (already-verified ones don't). */
+  const invitePendingCount = Math.max(0, pendingCount - (summary?.skydo_known_pending ?? 0));
 
   const copyAllPending = useCallback(async () => {
     setCopyingPending(true);
     try {
       const res = await fetch(
-        "/api/admin/payout-methods?methodType=skydo&skydoStatus=email_pending&format=emails"
+        "/api/admin/payout-methods?methodType=skydo&skydoStatus=email_pending&format=emails&excludeKnown=1"
       );
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Failed to load pending emails");
       const emails: string[] = json.emails ?? [];
+      const skipped: number = json.skippedKnown ?? 0;
+      const skippedNote =
+        skipped > 0
+          ? ` ${skipped} skipped because ${skipped === 1 ? "it's" : "they're"} already verified in Skydo.`
+          : "";
       if (emails.length === 0) {
-        toast.info("No pending Skydo emails");
+        toast.info("No pending Skydo emails need an invite", {
+          description: skippedNote.trim() || undefined,
+        });
         return;
       }
       await navigator.clipboard.writeText(emails.join(", "));
       setCopiedPending(json.ids ?? []);
       toast.success(`${emails.length} pending Skydo email${emails.length === 1 ? "" : "s"} copied`, {
-        description: "Paste them into Skydo, then mark them as Email sent.",
+        description: `Paste them into Skydo, then mark them as Email sent.${skippedNote}`,
       });
     } catch (err) {
       toast.error((err as Error).message);
@@ -272,13 +362,7 @@ export default function PayoutMethodsClient() {
   const onSort = useCallback(
     (key: AdminPayoutSortKey) => {
       const order =
-        state.sort === key
-          ? state.order === "asc"
-            ? "desc"
-            : "asc"
-          : ASC_FIRST.includes(key)
-            ? "asc"
-            : "desc";
+        state.sort === key ? (state.order === "asc" ? "desc" : "asc") : ASC_FIRST.includes(key) ? "asc" : "desc";
       setParams({ sort: key, order });
     },
     [setParams, state.order, state.sort]
@@ -301,7 +385,25 @@ export default function PayoutMethodsClient() {
           icon={<SearchX className="h-6 w-6" />}
           title="No payout methods match these filters"
           body="Try a different search or remove a filter."
-          action={<Button variant="outline" size="sm" className={p.button} onClick={q.clearFilters}>Clear filters</Button>}
+          action={
+            <Button variant="outline" size="sm" className={p.button} onClick={q.clearFilters}>
+              Clear filters
+            </Button>
+          }
+          isDark={isDark}
+        />
+      );
+    if (state.view === "skydo" && state.known)
+      return (
+        <EmptyState
+          icon={<CheckCircle2 className="h-6 w-6 text-emerald-500" />}
+          title="Nothing to verify"
+          body="No pending Skydo email is already verified on another account."
+          action={
+            <Button variant="outline" size="sm" className={p.button} onClick={() => setParams({ known: null })}>
+              Back to pending
+            </Button>
+          }
           isDark={isDark}
         />
       );
@@ -311,7 +413,11 @@ export default function PayoutMethodsClient() {
           icon={<CheckCircle2 className="h-6 w-6 text-emerald-500" />}
           title="All caught up"
           body="No Skydo methods are waiting for an invite email."
-          action={<Button variant="outline" size="sm" className={p.button} onClick={() => setParams({ stage: "any" })}>View all Skydo methods</Button>}
+          action={
+            <Button variant="outline" size="sm" className={p.button} onClick={() => setParams({ stage: "any" })}>
+              View all Skydo methods
+            </Button>
+          }
           isDark={isDark}
         />
       );
@@ -321,7 +427,11 @@ export default function PayoutMethodsClient() {
           icon={<CheckCircle2 className="h-6 w-6 text-emerald-500" />}
           title="Nothing overdue"
           body="Every pending Skydo method was added less than 24 hours ago."
-          action={<Button variant="outline" size="sm" className={p.button} onClick={() => setParams({ overdue: null })}>Back to pending</Button>}
+          action={
+            <Button variant="outline" size="sm" className={p.button} onClick={() => setParams({ overdue: null })}>
+              Back to pending
+            </Button>
+          }
           isDark={isDark}
         />
       );
@@ -335,9 +445,24 @@ export default function PayoutMethodsClient() {
     );
   })();
 
-  const tabs: { view: PayoutView; label: string; count: number | null; highlight: boolean }[] = [
-    { view: "skydo", label: "Skydo queue", count: summary ? pendingCount : null, highlight: pendingCount > 0 },
-    { view: "all", label: "All methods", count: summary?.total ?? null, highlight: false },
+  const tabs: {
+    view: PayoutView;
+    label: string;
+    count: number | null;
+    highlight: boolean;
+  }[] = [
+    {
+      view: "skydo",
+      label: "Skydo queue",
+      count: summary ? pendingCount : null,
+      highlight: pendingCount > 0,
+    },
+    {
+      view: "all",
+      label: "All methods",
+      count: summary?.total ?? null,
+      highlight: false,
+    },
   ];
 
   return (
@@ -347,8 +472,8 @@ export default function PayoutMethodsClient() {
         <div className="space-y-1">
           <h1 className="text-2xl font-bold">Payout Methods</h1>
           <p className={cn("max-w-2xl text-sm", p.muted)}>
-            See every payout method users have added. Use the Skydo queue to send invites and
-            verify accounts: users can only withdraw to Skydo once it&apos;s verified.
+            See every payout method users have added. Use the Skydo queue to send invites and verify accounts: users can
+            only withdraw to Skydo once it&apos;s verified.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -425,11 +550,72 @@ export default function PayoutMethodsClient() {
             summary={summary}
             stage={state.skydoStage}
             overdue={state.overdue}
+            known={state.known}
             isDark={isDark}
-            onSelectStage={(stage) => setParams({ stage: stage === "email_pending" ? null : stage, overdue: null })}
-            onSelectOverdue={() => setParams({ overdue: state.overdue ? null : "1", stage: null })}
+            onSelectStage={(stage) =>
+              setParams({
+                stage: stage === "email_pending" ? null : stage,
+                overdue: null,
+                known: null,
+              })
+            }
+            onSelectOverdue={() =>
+              setParams({
+                overdue: state.overdue ? null : "1",
+                stage: null,
+                known: null,
+              })
+            }
+            onSelectKnown={() =>
+              setParams({
+                known: state.known ? null : "1",
+                stage: null,
+                overdue: null,
+              })
+            }
           />
-          {pendingCount > 0 && (
+          {knownCount > 0 && (
+            <div
+              className={cn(
+                "flex flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between",
+                isDark ? "border-emerald-800/70 bg-emerald-950/20" : "border-emerald-200 bg-emerald-50/60"
+              )}
+            >
+              <p className={cn("flex items-start gap-2 text-sm", isDark ? "text-emerald-200" : "text-emerald-800")}>
+                <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  {knownCount} Skydo email{knownCount === 1 ? " is" : "s are"} already verified on another account. No
+                  new invite is needed, just verify {knownCount === 1 ? "it" : "them"}.
+                </span>
+              </p>
+              <div className="flex shrink-0 gap-2">
+                {!state.known && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={p.button}
+                    onClick={() => setParams({ known: "1", stage: null, overdue: null })}
+                  >
+                    Review
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  onClick={() => void verifyAllKnown()}
+                  disabled={verifyingAllKnown}
+                  className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+                >
+                  {verifyingAllKnown ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <BadgeCheck className="h-3.5 w-3.5" />
+                  )}
+                  Verify all {knownCount}
+                </Button>
+              </div>
+            </div>
+          )}
+          {invitePendingCount > 0 && (
             <div
               className={cn(
                 "flex flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between",
@@ -439,7 +625,9 @@ export default function PayoutMethodsClient() {
               <p className={cn("text-sm", p.muted)}>
                 {copiedPending
                   ? `${copiedPending.length} pending email${copiedPending.length === 1 ? "" : "s"} copied. Once the Skydo invites are sent, mark them here.`
-                  : "Copy every pending Skydo email at once to paste into Skydo."}
+                  : (summary?.skydo_known_pending ?? 0) > 0
+                    ? "Copy every pending Skydo email that needs an invite. Already-verified emails are left out."
+                    : "Copy every pending Skydo email at once to paste into Skydo."}
               </p>
               <div className="flex shrink-0 gap-2">
                 <Button
@@ -450,7 +638,8 @@ export default function PayoutMethodsClient() {
                   className={cn("gap-1.5", p.button)}
                 >
                   {copyingPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
-                  Copy all {pendingCount} pending emails
+                  Copy all {invitePendingCount} pending email
+                  {invitePendingCount === 1 ? "" : "s"}
                 </Button>
                 {copiedPending && copiedPending.length > 0 && (
                   <Button
@@ -478,12 +667,7 @@ export default function PayoutMethodsClient() {
       {/* Filters */}
       <div className="space-y-3">
         <PayoutToolbar state={state} isDark={isDark} onChange={onChangeFilters} />
-        <ActiveFilterChips
-          state={state}
-          isDark={isDark}
-          onChange={onChangeFilters}
-          onClearAll={q.clearFilters}
-        />
+        <ActiveFilterChips state={state} isDark={isDark} onChange={onChangeFilters} onClearAll={q.clearFilters} />
       </div>
 
       {/* Results */}
@@ -493,25 +677,49 @@ export default function PayoutMethodsClient() {
             ? "Loading…"
             : total === 0
               ? "No results"
-              : `Showing ${rangeStart}–${rangeEnd} of ${total}`}
+              : state.groupByEmail
+                ? `Showing emails ${rangeStart}–${rangeEnd} of ${total}. Click an email to see its accounts.`
+                : `Showing ${rangeStart}–${rangeEnd} of ${total}`}
         </div>
-        <PayoutMethodsTable
-          view={state.view}
-          rows={rows}
-          loading={q.initialLoading}
-          refreshing={q.refreshing}
-          now={now}
-          isDark={isDark}
-          selectedIds={new Set(selected.keys())}
-          sort={state.sort}
-          order={state.order}
-          emptyState={emptyState}
-          onToggleRow={toggleRow}
-          onTogglePage={togglePage}
-          onSort={onSort}
-          onOpen={openMethod}
-          onSetStatus={requestRowStatus}
-        />
+        {state.groupByEmail ? (
+          <EmailGroupsList
+            groups={groups ?? []}
+            loading={q.initialLoading || (groups === null && q.refreshing)}
+            refreshing={q.refreshing}
+            now={now}
+            isDark={isDark}
+            selectedIds={new Set(selected.keys())}
+            sort={state.sort}
+            order={state.order}
+            emptyState={emptyState}
+            onToggleRow={toggleRow}
+            onSort={onSort}
+            onOpen={openMethod}
+            onSetStatus={requestRowStatus}
+            onVerifyKnown={requestVerifyKnown}
+            onGroupVerifyKnown={groupVerifyKnown}
+            onGroupMarkSent={groupMarkSent}
+          />
+        ) : (
+          <PayoutMethodsTable
+            view={state.view}
+            rows={rows}
+            loading={q.initialLoading}
+            refreshing={q.refreshing}
+            now={now}
+            isDark={isDark}
+            selectedIds={new Set(selected.keys())}
+            sort={state.sort}
+            order={state.order}
+            emptyState={emptyState}
+            onToggleRow={toggleRow}
+            onTogglePage={togglePage}
+            onSort={onSort}
+            onOpen={openMethod}
+            onSetStatus={requestRowStatus}
+            onVerifyKnown={requestVerifyKnown}
+          />
+        )}
         {total > 0 && (
           <PaginationControls
             page={state.page}
@@ -550,6 +758,7 @@ export default function PayoutMethodsClient() {
         onClose={closeMethod}
         onOpen={openMethod}
         onSetStatus={requestRowStatus}
+        onVerifyKnown={requestVerifyKnown}
         onSaveNotes={q.saveNotes}
       />
 
