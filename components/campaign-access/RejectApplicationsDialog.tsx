@@ -27,7 +27,7 @@ type Props = {
   onConfirm: (reason: string) => void;
 };
 
-const outlineDark = "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
+const outlineDark = "text-gray-900 dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
 
 export function RejectApplicationsDialog({ count, name, busy, isDark, onCancel, onConfirm }: Props) {
   const [reason, setReason] = useState("");
@@ -56,7 +56,7 @@ export function RejectApplicationsDialog({ count, name, busy, isDark, onCancel, 
 
   return (
     <Dialog isdark={isDark} open={open} onOpenChange={(o) => !o && onCancel()}>
-      <DialogContent className={cn("sm:max-w-lg", isDark && "dark text-white")}>
+      <DialogContent className={cn("sm:max-w-lg", isDark ? "dark text-white" : "text-gray-900")}>
         <DialogHeader>
           <DialogTitle>
             {count > 1 ? `Reject ${count} applications?` : `Reject ${name ?? "this application"}?`}

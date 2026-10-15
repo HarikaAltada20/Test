@@ -46,7 +46,7 @@ import { toast } from "@/hooks/use-toast";
 import { useDashboardDark } from "@/hooks/use-dashboard-dark";
 import { cn } from "@/lib/utils";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
-import { resolveContestPoolBudgetCents } from "@/lib/video-platform-campaigns";
+import { resolveCampaignPrizeCents } from "@/lib/campaign-prize";
 import {
   ANSWER_MAX_LENGTH,
   APPLICATION_RESULT_MESSAGES,
@@ -302,7 +302,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
   const formRef = useRef<HTMLDivElement>(null);
 
   const app = preview.my_application;
-  const prizeCents = resolveContestPoolBudgetCents(
+  const prizeCents = resolveCampaignPrizeCents(
     preview.contest_type,
     preview.contest_based_details,
     preview.platform,
@@ -740,7 +740,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
       )}
 
       <AlertDialog open={confirmWithdraw} onOpenChange={(o) => !o && setConfirmWithdraw(false)}>
-        <AlertDialogContent className={cn(isDark && "dark border-white/10 bg-[#06021D] text-white")}>
+        <AlertDialogContent className={cn(isDark ? "dark border-white/10 bg-[#06021D] text-white" : "text-gray-900")}>
           <AlertDialogHeader>
             <AlertDialogTitle>Withdraw your application?</AlertDialogTitle>
             <AlertDialogDescription>

@@ -40,7 +40,7 @@ export function AccessModeSwitchDialog({ pending, onCancel, onConfirm }: Props) 
 
   return (
     <AlertDialog open={!!pending} onOpenChange={(open) => !open && onCancel()}>
-      <AlertDialogContent className={cn(isDark && "dark border-white/10 bg-[#06021D] text-white")}>
+      <AlertDialogContent className={cn(isDark ? "dark border-white/10 bg-[#06021D] text-white" : "text-gray-900")}>
         <AlertDialogHeader>
           <AlertDialogTitle>Make this campaign {pending ? LABEL[pending.to] : ""}?</AlertDialogTitle>
           <AlertDialogDescription asChild>

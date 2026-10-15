@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { createClient } from "@/utils/supabase/server";
 import { getSessionUser } from "@/utils/supabase/auth-server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { resolveContestPoolBudgetCents } from "@/lib/video-platform-campaigns";
+import { resolveCampaignPrizeCents } from "@/lib/campaign-prize";
 import InviteLandingClient, { type InvitePreview } from "./client";
 
 /** "youtube,instagram" → ["youtube", "instagram"]. */
@@ -30,7 +30,7 @@ async function loadPrizeCents(contestId: string): Promise<number> {
     .eq("id", contestId)
     .maybeSingle();
   if (error || !data) return 0;
-  return resolveContestPoolBudgetCents(
+  return resolveCampaignPrizeCents(
     data.contest_type,
     data.contest_based_details as Record<string, unknown> | null,
     data.platform,

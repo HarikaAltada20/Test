@@ -72,9 +72,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const cardClass = "rounded-xl border border-gray-200 dark:border-white/10";
 const fieldClass =
-  "dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500";
+  "text-gray-900 dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500";
 const outlineDark =
-  "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
+  "text-gray-900 dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
 
 type Failures = Pick<AddResult, "notFound" | "invalid">;
 
@@ -536,7 +536,7 @@ export default function AllowlistsClient() {
       </Sheet>
 
       <Dialog isdark={isDark} open={!!renameTarget} onOpenChange={(open) => !open && setRenameTarget(null)}>
-        <DialogContent className={cn("sm:max-w-md", isDark && "dark text-white")}>
+        <DialogContent className={cn("sm:max-w-md", isDark ? "dark text-white" : "text-gray-900")}>
           <DialogHeader>
             <DialogTitle>Rename list</DialogTitle>
           </DialogHeader>
@@ -570,7 +570,7 @@ export default function AllowlistsClient() {
       </Dialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent className={cn(isDark && "dark border-white/10 bg-[#06021D] text-white")}>
+        <AlertDialogContent className={cn(isDark ? "dark border-white/10 bg-[#06021D] text-white" : "text-gray-900")}>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{deleteTarget?.name}”?</AlertDialogTitle>
             <AlertDialogDescription>

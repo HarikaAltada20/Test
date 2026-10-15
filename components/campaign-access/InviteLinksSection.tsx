@@ -52,8 +52,8 @@ import { InviteLinkStatusBadge } from "./AccessBadge";
 import { RelativeTime } from "./RelativeTime";
 import { InviteLinksSkeleton } from "./Skeletons";
 
-const fieldClass = "dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500";
-const outlineDark = "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
+const fieldClass = "text-gray-900 dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500";
+const outlineDark = "text-gray-900 dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
 
 const LABEL_SUGGESTIONS = ["Instagram bio", "Instagram story", "Email", "Discord"];
 
@@ -388,7 +388,7 @@ export function InviteLinksSection({
       />
 
       <Dialog isdark={isDark} open={!!created} onOpenChange={(o) => !o && setCreated(null)}>
-        <DialogContent className={cn("sm:max-w-md", isDark && "dark text-white")}>
+        <DialogContent className={cn("sm:max-w-md", isDark ? "dark text-white" : "text-gray-900")}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CircleCheck className="h-5 w-5 text-emerald-500" aria-hidden="true" /> Invite link ready
@@ -434,7 +434,7 @@ export function InviteLinksSection({
       </Dialog>
 
       <AlertDialog open={!!revokeTarget} onOpenChange={(open) => !open && setRevokeTarget(null)}>
-        <AlertDialogContent className={cn(isDark && "dark border-white/10 bg-[#06021D] text-white")}>
+        <AlertDialogContent className={cn(isDark ? "dark border-white/10 bg-[#06021D] text-white" : "text-gray-900")}>
           <AlertDialogHeader>
             <AlertDialogTitle>Revoke this invite link?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -555,7 +555,7 @@ function CreateInviteLinkDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} isdark={isDark}>
-      <DialogContent className={cn("sm:max-w-md", isDark && "dark text-white")}>
+      <DialogContent className={cn("sm:max-w-md", isDark ? "dark text-white" : "text-gray-900")}>
         <DialogHeader>
           <DialogTitle>{template ? "Create a new link like this" : "Create invite link"}</DialogTitle>
           <DialogDescription>

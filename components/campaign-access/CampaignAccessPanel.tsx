@@ -99,8 +99,8 @@ const ROSTER_PAGE_SIZE = 50;
 const UNDO_REMOVE_MS = 5000;
 
 const cardClass = "rounded-xl border border-gray-200 p-4 sm:p-5 dark:border-white/10";
-const fieldClass = "dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500";
-const outlineDark = "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
+const fieldClass = "text-gray-900 dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500";
+const outlineDark = "text-gray-900 dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
 const tabTrigger =
   "flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] data-[state=active]:bg-white data-[state=active]:text-[#4A00BE] data-[state=active]:shadow-sm dark:text-gray-300 dark:hover:text-white dark:data-[state=active]:bg-[#7F39EC] dark:data-[state=active]:text-white";
 
@@ -755,7 +755,7 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
                 <Button
                   size="sm"
                   variant="outline"
-                  className={cn("ml-auto text-red-600 dark:text-red-400", outlineDark)}
+                  className={cn("ml-auto", outlineDark, "text-red-600 dark:text-red-400")}
                   onClick={() => setConfirmBulkRemove(true)}
                 >
                   <Trash2 className="mr-1.5 h-4 w-4" /> Remove {checked.size}
@@ -905,7 +905,7 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
       </section>
 
       <AlertDialog open={confirmBulkRemove} onOpenChange={setConfirmBulkRemove}>
-        <AlertDialogContent className={cn(isDark && "dark border-white/10 bg-[#06021D] text-white")}>
+        <AlertDialogContent className={cn(isDark ? "dark border-white/10 bg-[#06021D] text-white" : "text-gray-900")}>
           <AlertDialogHeader>
             <AlertDialogTitle>
               Remove {checked.size} creator{checked.size === 1 ? "" : "s"}?
@@ -942,7 +942,7 @@ export function CampaignAccessPanel({ contestId, advertiserId }: Props) {
       </AlertDialog>
 
       <Dialog isdark={isDark} open={saveListOpen} onOpenChange={setSaveListOpen}>
-        <DialogContent className={cn("sm:max-w-md", isDark && "dark text-white")}>
+        <DialogContent className={cn("sm:max-w-md", isDark ? "dark text-white" : "text-gray-900")}>
           <DialogHeader>
             <DialogTitle>Save roster as a list</DialogTitle>
             <DialogDescription>

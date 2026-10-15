@@ -92,12 +92,12 @@ export function ApplicantVisibilityEditor(props: Props) {
   const hiddenCount = visibility ? APPLICANT_FIELDS.filter((f) => !visibility[f]).length : 0;
 
   return (
+    // The "dark" class goes on a wrapper: Tailwind's dark: variants only match
+    // elements inside it, so on the section itself its own background stayed light.
+    <div className={cn(isDark && "dark")}>
     <section
       aria-labelledby="applicant-visibility-heading"
-      className={cn(
-        "space-y-3 rounded-lg border border-amber-200 bg-amber-50/40 p-4 dark:border-amber-500/30 dark:bg-amber-500/5",
-        isDark && "dark",
-      )}
+      className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/40 p-4 dark:border-amber-500/30 dark:bg-amber-500/5"
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
@@ -168,5 +168,6 @@ export function ApplicantVisibilityEditor(props: Props) {
         </>
       )}
     </section>
+    </div>
   );
 }
