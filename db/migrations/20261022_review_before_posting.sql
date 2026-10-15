@@ -122,6 +122,10 @@ CREATE TABLE IF NOT EXISTS public.content_draft_versions (
   CONSTRAINT content_draft_versions_path_key UNIQUE (storage_path)
 );
 
+CREATE INDEX IF NOT EXISTS content_draft_versions_poster_path
+  ON public.content_draft_versions (poster_path)
+  WHERE poster_path IS NOT NULL;
+
 -- Deferred so a draft and its first version can be inserted in either order.
 DO $$
 BEGIN
@@ -1811,10 +1815,8 @@ AS $$
   FROM storage.objects o
   WHERE o.bucket_id = 'content-drafts'
     AND o.created_at < now() - make_interval(hours => GREATEST(COALESCE(p_hours, 24), 1))
-    AND NOT EXISTS (
-      SELECT 1 FROM public.content_draft_versions v
-      WHERE v.storage_path = o.name OR v.poster_path = o.name
-    )
+    AND NOT EXISTS (SELECT 1 FROM public.content_draft_versions v WHERE v.storage_path = o.name)
+    AND NOT EXISTS (SELECT 1 FROM public.content_draft_versions v WHERE v.poster_path = o.name)
   ORDER BY o.created_at
   LIMIT LEAST(GREATEST(COALESCE(p_limit, 200), 1), 1000);
 $$;
