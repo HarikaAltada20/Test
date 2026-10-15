@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, Eye, MoreHorizontal } from "lucide-react";
+import { BadgeCheck, Check, Copy, Eye, MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,10 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import {
-  getPayoutIdentifier,
-  type AdminPayoutMethodRow,
-} from "@/lib/admin-payout-methods";
+import { getPayoutIdentifier, type AdminPayoutMethodRow } from "@/lib/admin-payout-methods";
 import { SKYDO_STATUSES, SKYDO_STATUS_LABELS } from "@/lib/skydo-payout";
 import type { SkydoStatus } from "@/types/earnings";
 import { METHOD_LABELS, copyText } from "./shared";
@@ -23,13 +20,17 @@ export function RowActions({
   isDark,
   onOpen,
   onSetStatus,
+  onVerifyKnown,
 }: {
   row: AdminPayoutMethodRow;
   isDark: boolean;
   onOpen: () => void;
   onSetStatus: (status: SkydoStatus) => void;
+  onVerifyKnown: () => void;
 }) {
-  const identifier = getPayoutIdentifier(row.method_type, row.details, { maskBank: false });
+  const identifier = getPayoutIdentifier(row.method_type, row.details, {
+    maskBank: false,
+  });
   const isSkydo = row.method_type === "skydo";
 
   return (
@@ -75,18 +76,16 @@ export function RowActions({
         {isSkydo && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs font-normal opacity-70">
-              Set Skydo status
-            </DropdownMenuLabel>
+            {row.known_verified && (
+              <DropdownMenuItem onSelect={onVerifyKnown} className="text-emerald-600">
+                <BadgeCheck className="mr-2 h-4 w-4" />
+                Verify (known email)
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuLabel className="text-xs font-normal opacity-70">Set Skydo status</DropdownMenuLabel>
             {SKYDO_STATUSES.map((s) => (
-              <DropdownMenuItem
-                key={s}
-                disabled={row.skydo_status === s}
-                onSelect={() => onSetStatus(s)}
-              >
-                <Check
-                  className={cn("mr-2 h-4 w-4", row.skydo_status === s ? "opacity-100" : "opacity-0")}
-                />
+              <DropdownMenuItem key={s} disabled={row.skydo_status === s} onSelect={() => onSetStatus(s)}>
+                <Check className={cn("mr-2 h-4 w-4", row.skydo_status === s ? "opacity-100" : "opacity-0")} />
                 {SKYDO_STATUS_LABELS[s]}
               </DropdownMenuItem>
             ))}

@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { SKYDO_STATUS_LABELS, isSkydoStatus } from "@/lib/skydo-payout";
 import type {
+  AdminPayoutEmailGroup,
   AdminPayoutMethodRow,
   AdminPayoutMethodsSummary,
   AdminPayoutSortKey,
@@ -23,6 +24,10 @@ export interface PayoutQueryState {
   /** All view only; Skydo view uses skydoStage. */
   skydoStatus: SkydoStatus | null;
   overdue: boolean;
+  /** Skydo view: rows whose email is already verified on another account. */
+  known: boolean;
+  /** Skydo view: one row per Skydo email. */
+  groupByEmail: boolean;
   userType: string | null;
   isDefault: "true" | "false" | null;
   added: AddedPreset;
@@ -42,6 +47,7 @@ export const FILTER_PARAM_KEYS = [
   "stage",
   "skydoStatus",
   "overdue",
+  "known",
   "userType",
   "isDefault",
   "added",
@@ -50,7 +56,7 @@ export const FILTER_PARAM_KEYS = [
 ] as const;
 
 const DEFAULT_SORT: Record<PayoutView, { sort: AdminPayoutSortKey; order: "asc" | "desc" }> = {
-  skydo: { sort: "stage_since", order: "asc" },
+  skydo: { sort: "next_action", order: "asc" },
   all: { sort: "created_at", order: "desc" },
 };
 
@@ -83,6 +89,8 @@ function parseState(params: URLSearchParams, fallbackView: PayoutView): PayoutQu
     skydoStage,
     skydoStatus: isSkydoStatus(skydoStatusParam) ? skydoStatusParam : null,
     overdue: params.get("overdue") === "1",
+    known: params.get("known") === "1",
+    groupByEmail: view === "skydo" && params.get("group") === "email",
     userType: params.get("userType"),
     isDefault: isDefaultParam === "true" || isDefaultParam === "false" ? isDefaultParam : null,
     added,
@@ -102,7 +110,8 @@ export function buildApiQuery(state: PayoutQueryState): URLSearchParams {
   if (state.search.trim()) qs.set("search", state.search.trim());
   if (state.view === "skydo") {
     qs.set("methodType", "skydo");
-    if (state.overdue) qs.set("overdue", "1");
+    if (state.known) qs.set("knownEmail", "1");
+    else if (state.overdue) qs.set("overdue", "1");
     else if (state.skydoStage !== "any") qs.set("skydoStatus", state.skydoStage);
   } else {
     if (state.methodType) qs.set("methodType", state.methodType);
@@ -118,16 +127,17 @@ export function buildApiQuery(state: PayoutQueryState): URLSearchParams {
   }
   qs.set("sort", state.sort);
   qs.set("order", state.order);
+  if (state.groupByEmail) qs.set("group", "email");
   return qs;
 }
 
 export function hasActiveFilters(state: PayoutQueryState): boolean {
   return Boolean(
     state.search.trim() ||
-      state.userType ||
-      state.isDefault ||
-      state.added !== "any" ||
-      (state.view === "all" && (state.methodType || state.skydoStatus))
+    state.userType ||
+    state.isDefault ||
+    state.added !== "any" ||
+    (state.view === "all" && (state.methodType || state.skydoStatus))
   );
 }
 
@@ -143,6 +153,7 @@ export function usePayoutMethodsQuery() {
   );
 
   const [rows, setRows] = useState<AdminPayoutMethodRow[]>([]);
+  const [groups, setGroups] = useState<AdminPayoutEmailGroup[] | null>(null);
   const [total, setTotal] = useState(0);
   const [summary, setSummary] = useState<AdminPayoutMethodsSummary | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -196,6 +207,7 @@ export function usePayoutMethodsQuery() {
         if (cancelled) return;
         const nextSummary: AdminPayoutMethodsSummary | null = json.summary ?? null;
         setRows(json.data ?? []);
+        setGroups(Array.isArray(json.groups) ? json.groups : null);
         setTotal(json.total ?? 0);
         setSummary(nextSummary);
         setLastUpdated(Date.now());
@@ -219,13 +231,18 @@ export function usePayoutMethodsQuery() {
 
   const refetch = useCallback(() => setReloadKey((k) => k + 1), []);
 
-  const patchRows = useCallback(
-    (ids: string[], patch: Partial<AdminPayoutMethodRow>) => {
-      const set = new Set(ids);
-      setRows((prev) => prev.map((r) => (set.has(r.id) ? { ...r, ...patch } : r)));
-    },
-    []
-  );
+  const patchRows = useCallback((ids: string[], patch: Partial<AdminPayoutMethodRow>) => {
+    const set = new Set(ids);
+    setRows((prev) => prev.map((r) => (set.has(r.id) ? { ...r, ...patch } : r)));
+    setGroups((prev) =>
+      prev
+        ? prev.map((g) => ({
+            ...g,
+            members: g.members.map((m) => (set.has(m.id) ? { ...m, ...patch } : m)),
+          }))
+        : prev
+    );
+  }, []);
 
   /** Sends one status to many rows (single PATCH for one id, bulk endpoint otherwise). */
   const sendStatus = useCallback(async (ids: string[], status: SkydoStatus) => {
@@ -249,6 +266,20 @@ export function usePayoutMethodsQuery() {
     return (json.updated as number) ?? ids.length;
   }, []);
 
+  /** Undo for a status change: restores each id to its previous status. */
+  const restoreStatuses = useCallback(
+    (ids: string[], previous: Record<string, SkydoStatus | null>) => {
+      const byStatus = new Map<SkydoStatus, string[]>();
+      for (const id of ids) {
+        const prev = previous[id];
+        if (!prev) continue;
+        byStatus.set(prev, [...(byStatus.get(prev) ?? []), id]);
+      }
+      return Promise.all(Array.from(byStatus.entries()).map(([prev, groupIds]) => sendStatus(groupIds, prev)));
+    },
+    [sendStatus]
+  );
+
   /**
    * Changes Skydo status with an Undo toast. `previous` maps id -> prior status
    * so undo can restore mixed selections.
@@ -262,37 +293,29 @@ export function usePayoutMethodsQuery() {
     ): Promise<boolean> => {
       if (ids.length === 0) return false;
       const nowIso = new Date().toISOString();
-      patchRows(ids, { skydo_status: status, skydo_status_updated_at: nowIso, stage_since: nowIso });
+      patchRows(ids, {
+        skydo_status: status,
+        skydo_status_updated_at: nowIso,
+        stage_since: nowIso,
+        ...(status === "verified" ? { known_verified: false } : {}),
+      });
       try {
         const updated = await sendStatus(ids, status);
         if (!options.silent) {
           const label = SKYDO_STATUS_LABELS[status];
-          toast.success(
-            updated === 1 ? `Marked as ${label}` : `${updated} Skydo methods marked as ${label}`,
-            {
-              action: {
-                label: "Undo",
-                onClick: () => {
-                  const groups = new Map<SkydoStatus, string[]>();
-                  for (const id of ids) {
-                    const prev = previous[id];
-                    if (!prev) continue;
-                    groups.set(prev, [...(groups.get(prev) ?? []), id]);
-                  }
-                  void Promise.all(
-                    Array.from(groups.entries()).map(([prev, groupIds]) =>
-                      sendStatus(groupIds, prev)
-                    )
-                  )
-                    .then(() => {
-                      toast.success("Status change undone");
-                      refetch();
-                    })
-                    .catch((err: Error) => toast.error(err.message));
-                },
+          toast.success(updated === 1 ? `Marked as ${label}` : `${updated} Skydo methods marked as ${label}`, {
+            action: {
+              label: "Undo",
+              onClick: () => {
+                void restoreStatuses(ids, previous)
+                  .then(() => {
+                    toast.success("Status change undone");
+                    refetch();
+                  })
+                  .catch((err: Error) => toast.error(err.message));
               },
-            }
-          );
+            },
+          });
         }
         refetch();
         return true;
@@ -302,7 +325,67 @@ export function usePayoutMethodsQuery() {
         return false;
       }
     },
-    [patchRows, refetch, sendStatus]
+    [patchRows, refetch, sendStatus, restoreStatuses]
+  );
+
+  /**
+   * Verifies rows whose Skydo email is already verified on another account.
+   * The server re-checks each id and skips any that no longer qualify.
+   */
+  const verifyKnown = useCallback(
+    async (ids: string[], previous: Record<string, SkydoStatus | null>): Promise<boolean> => {
+      if (ids.length === 0) return false;
+      try {
+        const res = await fetch("/api/admin/payout-methods/verify-known", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error || "Failed to verify");
+        const updatedIds: string[] = json.ids ?? [];
+        if (updatedIds.length === 0) {
+          toast.info("Nothing to verify", {
+            description: "The matching verified account may have changed. The list has been refreshed.",
+          });
+        } else {
+          const nowIso = new Date().toISOString();
+          patchRows(updatedIds, {
+            skydo_status: "verified",
+            skydo_status_updated_at: nowIso,
+            stage_since: nowIso,
+            known_verified: false,
+            skydo_verified_via: "known_email",
+          });
+          toast.success(
+            updatedIds.length === 1
+              ? "Verified using the already-verified email"
+              : `${updatedIds.length} Skydo methods verified`,
+            {
+              description: json.skipped > 0 ? `${json.skipped} skipped because they no longer qualify.` : undefined,
+              action: {
+                label: "Undo",
+                onClick: () => {
+                  void restoreStatuses(updatedIds, previous)
+                    .then(() => {
+                      toast.success("Verification undone");
+                      refetch();
+                    })
+                    .catch((err: Error) => toast.error(err.message));
+                },
+              },
+            }
+          );
+        }
+        refetch();
+        return updatedIds.length > 0;
+      } catch (err) {
+        toast.error((err as Error).message);
+        refetch();
+        return false;
+      }
+    },
+    [patchRows, refetch, restoreStatuses]
   );
 
   const saveNotes = useCallback(
@@ -326,14 +409,16 @@ export function usePayoutMethodsQuery() {
   );
 
   const fetchAllMatching = useCallback(
-    async (format: "emails" | "ids") => {
-      const res = await fetch(`/api/admin/payout-methods?${apiQuery}&format=${format}`);
+    async (format: "emails" | "ids", extra = "") => {
+      const res = await fetch(`/api/admin/payout-methods?${apiQuery}&format=${format}${extra}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Request failed");
       return json as {
         emails?: string[];
+        skippedKnown?: number;
         ids: string[];
         skydoIds?: string[];
+        statuses?: Record<string, SkydoStatus | null>;
         truncated?: boolean;
       };
     },
@@ -343,6 +428,7 @@ export function usePayoutMethodsQuery() {
   return {
     state,
     rows,
+    groups,
     total,
     summary,
     initialLoading,
@@ -354,6 +440,7 @@ export function usePayoutMethodsQuery() {
     clearFilters,
     refetch,
     updateStatus,
+    verifyKnown,
     saveNotes,
     fetchAllMatching,
     patchRows,

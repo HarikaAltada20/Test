@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 export async function POST(request: NextRequest) {
   try {
@@ -201,7 +202,7 @@ export async function POST(request: NextRequest) {
     const remarks = "survey_completion_bonus";
 
     console.log("💳 Crediting cash via RPC...");
-    const { data: creditRes, error: rpcErr } = await supabase.rpc(
+    const { data: creditRes, error: rpcErr } = await createAdminClient().rpc(
       "credit_creator_cash_atomic",
       {
         p_user_id: user.id,
@@ -231,7 +232,7 @@ export async function POST(request: NextRequest) {
     console.log("✅ Success! Cash credited:", creditRes);
 
     // Also increment other_earnings in users table
-    const { error: otherEarningsErr } = await supabase
+    const { error: otherEarningsErr } = await createAdminClient()
       .from("users")
       .update({
         other_earnings: ((userRow as any).other_earnings || 0) + cashCredited,

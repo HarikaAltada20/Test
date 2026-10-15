@@ -24,6 +24,8 @@ import {
   ADMIN_GROWTH_TIMEZONE,
   type AdminGrowthTimezone,
   dayRangeFromKeys,
+  getAllTimeRange,
+  getAllTimeSpanDays,
   getDateStrInTz,
   getLastNDaysRange,
   getMonthsAgoRange,
@@ -54,9 +56,13 @@ export function AdminDateRangePicker({
   onChange,
   triggerClassName,
   align = "end",
-  maxHistoryDays = 730,
+  maxHistoryDays,
 }: AdminDateRangePickerProps) {
   const now = useMemo(() => new Date(), []);
+  // Pages whose backend caps the range (e.g. brand analytics, 366 days) pass
+  // maxHistoryDays and lose All Time; uncapped admin pages always reach launch.
+  const historyDays = maxHistoryDays ?? Math.max(730, getAllTimeSpanDays());
+  const allTimeAllowed = getAllTimeSpanDays() <= historyDays;
   const [open, setOpen] = useState(false);
   const [internalRange, setInternalRange] = useState<AdminDateRangeValue>(value);
   const [calendarRange, setCalendarRange] = useState<
@@ -123,10 +129,26 @@ export function AdminDateRangePicker({
                   get: () => getMonthsAgoRange(3, rangeTimezone),
                 },
                 {
+                  label: "Last 6 Months",
+                  get: () => getMonthsAgoRange(6, rangeTimezone),
+                },
+                {
+                  label: "Last 9 Months",
+                  get: () => getMonthsAgoRange(9, rangeTimezone),
+                },
+                {
                   label: "Last 12 Months",
                   get: () => getMonthsAgoRange(12, rangeTimezone),
                 },
-              ] as const
+                ...(allTimeAllowed
+                  ? [
+                      {
+                        label: "All Time",
+                        get: () => getAllTimeRange(rangeTimezone),
+                      },
+                    ]
+                  : []),
+              ]
             ).map(({ label: presetLabelItem, get }) => (
               <Button
                 key={presetLabelItem}
@@ -186,7 +208,7 @@ export function AdminDateRangePicker({
               }}
               numberOfMonths={1}
               disabled={(date) =>
-                date > now || date < subDays(now, maxHistoryDays)
+                date > now || date < subDays(now, historyDays)
               }
               className={isDark ? "rounded-md border-0 bg-transparent" : ""}
             />
