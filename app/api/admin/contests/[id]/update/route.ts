@@ -10,6 +10,7 @@ import {
 } from "@/lib/contest-creator-requirements-validation";
 import { invalidateCampaignListCachesAfterMutation } from "@/lib/campaign-list-cache";
 import { validateCampaignAccessFields } from "@/lib/campaign-access";
+import { DRAFT_REVIEW_SETTING_KEYS, pickDraftReviewSettings } from "@/lib/content-drafts";
 import { preserveExistingBudgetSpentFields } from "@/lib/contest-budget-spent-fields";
 import { schedulePersistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 import {
@@ -82,6 +83,8 @@ export async function POST(
       "preview_description",
       "applications_open",
       "list_only_to_eligible",
+      // Review before posting
+      ...DRAFT_REVIEW_SETTING_KEYS,
     ]);
 
     const updateData: Record<string, any> = {};
@@ -90,6 +93,7 @@ export async function POST(
         updateData[key] = value;
       }
     });
+    Object.assign(updateData, pickDraftReviewSettings(updateData));
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
