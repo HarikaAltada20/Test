@@ -156,7 +156,7 @@ export function DraftReviewPanel({ contestId, onPendingCountChange, initialDraft
         onValueChange={(v) => setStatus(v as CampaignDraftFilter)}
         className="space-y-4"
       >
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <TabsPrimitive.List
             aria-label="Draft status"
             className="flex max-w-full overflow-x-auto rounded-lg bg-gray-100 p-1 dark:bg-white/5"
@@ -181,7 +181,7 @@ export function DraftReviewPanel({ contestId, onPendingCountChange, initialDraft
               </TabsPrimitive.Trigger>
             ))}
           </TabsPrimitive.List>
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <div className="relative w-full sm:w-60">
               <Search
                 className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
@@ -320,7 +320,10 @@ function ReviewRow({
 }) {
   const v = row.current_version;
   const creator = row.creator;
-  const pending = row.display_status === "pending_review";
+  const when =
+    row.display_status === "pending_review"
+      ? `Waiting ${waitingLabel(row.submitted_at)}`
+      : formatDistanceToNowStrict(new Date(row.updated_at), { addSuffix: true });
   return (
     <li>
       <button
@@ -351,14 +354,15 @@ function ReviewRow({
               </span>
             )}
           </p>
+          {/* On phones the status goes under the text so the title has room. */}
+          <div className="mt-1.5 flex items-center gap-2 sm:hidden">
+            <DraftStatusBadge status={row.display_status} />
+            <span className="text-xs text-gray-500 dark:text-gray-400">{when}</span>
+          </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
+        <div className="hidden shrink-0 flex-col items-end gap-1 sm:flex">
           <DraftStatusBadge status={row.display_status} />
-          <span className="text-xs text-gray-500 dark:text-gray-400">
-            {pending
-              ? `Waiting ${waitingLabel(row.submitted_at)}`
-              : formatDistanceToNowStrict(new Date(row.updated_at), { addSuffix: true })}
-          </span>
+          <span className="text-xs text-gray-500 dark:text-gray-400">{when}</span>
         </div>
       </button>
     </li>

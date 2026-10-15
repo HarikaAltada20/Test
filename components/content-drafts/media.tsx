@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Download, Film, Loader2, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatDuration, type DraftMedia } from "@/lib/content-drafts";
 import { fetchDraftMedia } from "./api";
@@ -169,11 +169,9 @@ export function DraftVideoPlayer({ versionId, purged = false, className }: Playe
         </p>
         <div className="flex flex-wrap justify-center gap-2">
           {media?.download_url && (
-            <Button asChild size="sm" variant="secondary">
-              <a href={media.download_url}>
-                <Download className="mr-1.5 h-4 w-4" /> Download to watch
-              </a>
-            </Button>
+            <a href={media.download_url} className={buttonVariants({ size: "sm", variant: "secondary" })}>
+              <Download aria-hidden="true" /> Download to watch
+            </a>
           )}
           {failed === "load" && (
             <Button size="sm" variant="secondary" onClick={() => load()}>

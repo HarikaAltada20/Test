@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatDistanceToNowStrict } from "date-fns";
 import { CheckCircle2, Clapperboard, Loader2, RefreshCw, Upload } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { DraftListRow } from "@/lib/content-drafts";
 import { listMyDrafts } from "./api";
@@ -119,21 +119,21 @@ export function ApprovedDraftPicker({
                 ` ${inReview} of your drafts ${inReview === 1 ? "is" : "are"} still in review or waiting for changes.`}
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button asChild size="sm" className="bg-[#7F39EC] hover:bg-[#7F39EC]/90">
-                <Link href={`/dashboard/opportunities/${contestId}`}>
-                  <Upload className="mr-1.5 h-4 w-4" /> Upload a draft
-                </Link>
-              </Button>
-              <Button
-                asChild
-                size="sm"
-                variant="outline"
-                className="dark:border-white/15 dark:bg-transparent dark:text-gray-200"
+              <Link
+                href={`/dashboard/opportunities/${contestId}`}
+                className={cn(buttonVariants({ size: "sm" }), "bg-[#7F39EC] hover:bg-[#7F39EC]/90")}
               >
-                <Link href={`/dashboard/submissions?view=drafts&campaign=${contestId}`}>
-                  <Clapperboard className="mr-1.5 h-4 w-4" /> My drafts
-                </Link>
-              </Button>
+                <Upload aria-hidden="true" /> Upload a draft
+              </Link>
+              <Link
+                href={`/dashboard/submissions?view=drafts&campaign=${contestId}`}
+                className={cn(
+                  buttonVariants({ size: "sm", variant: "outline" }),
+                  "dark:border-white/15 dark:bg-transparent dark:text-gray-200",
+                )}
+              >
+                <Clapperboard aria-hidden="true" /> My drafts
+              </Link>
             </div>
           </div>
         ) : (

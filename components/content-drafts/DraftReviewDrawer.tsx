@@ -15,7 +15,6 @@ import { cn } from "@/lib/utils";
 import {
   draftReviewResultMessage,
   formatDraftRecord,
-  waitingLabel,
   type DraftDetail,
   type DraftListRow,
   type DraftReviewDecision,
@@ -213,9 +212,6 @@ export function DraftReviewDrawer({ rows, index, onIndexChange, onChanged, isDar
                   <div className="flex flex-wrap items-center gap-2 pt-2 text-xs text-gray-500 dark:text-gray-400">
                     <DraftStatusBadge status={shown?.display_status ?? row.display_status} />
                     <RelativeTime value={row.submitted_at} prefix="Sent" />
-                    {row.display_status === "pending_review" && (
-                      <span>· waiting {waitingLabel(row.submitted_at)}</span>
-                    )}
                   </div>
                 </SheetDescription>
                 <p className="flex items-center gap-1.5 pt-1 text-xs text-gray-600 dark:text-gray-300">

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formatDistanceToNowStrict } from "date-fns";
 import { ChevronRight, Clapperboard, Loader2, SearchX, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -178,9 +178,12 @@ export function MyDraftsPanel({ isDark, onActionCountChange }: Props) {
               title="No drafts yet"
               description="Some campaigns review your video before you post it. Upload a draft from the campaign page, and it shows up here."
               actions={
-                <Button asChild size="sm" className="bg-[#7F39EC] hover:bg-[#7F39EC]/90">
-                  <Link href="/dashboard/opportunities">Find campaigns</Link>
-                </Button>
+                <Link
+                  href="/dashboard/opportunities"
+                  className={cn(buttonVariants({ size: "sm" }), "bg-[#7F39EC] hover:bg-[#7F39EC]/90")}
+                >
+                  Find campaigns
+                </Link>
               }
             />
           )
@@ -234,6 +237,7 @@ function DraftRow({
 }) {
   const v = row.current_version;
   const needsAction = row.display_status === "revision_requested" || (row.display_status === "approved" && !row.campaign?.has_ended);
+  const updated = formatDistanceToNowStrict(new Date(row.updated_at), { addSuffix: true });
   return (
     <li>
       <button
@@ -243,10 +247,10 @@ function DraftRow({
       >
         <DraftThumb posterUrl={posterUrl} durationSec={v?.duration_sec} />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <p className="truncate font-medium text-gray-900 dark:text-white">{v?.title ?? "Untitled draft"}</p>
             {row.version_count > 1 && (
-              <span className="text-xs text-gray-500 dark:text-gray-400">v{row.version_count}</span>
+              <span className="shrink-0 text-xs text-gray-500 dark:text-gray-400">v{row.version_count}</span>
             )}
           </div>
           <p className="truncate text-sm text-gray-500 dark:text-gray-400">
@@ -261,11 +265,18 @@ function DraftRow({
           >
             {draftNextStep(row)}
           </p>
+          {/* On phones the status goes under the text so the title has room. */}
+          <div className="mt-1.5 flex items-center gap-2 sm:hidden">
+            <DraftStatusBadge status={row.display_status} />
+            <time dateTime={row.updated_at} className="text-xs text-gray-500 dark:text-gray-400">
+              {updated}
+            </time>
+          </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
+        <div className="hidden shrink-0 flex-col items-end gap-1 sm:flex">
           <DraftStatusBadge status={row.display_status} />
           <time dateTime={row.updated_at} className="text-xs text-gray-500 dark:text-gray-400">
-            {formatDistanceToNowStrict(new Date(row.updated_at), { addSuffix: true })}
+            {updated}
           </time>
         </div>
         <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />

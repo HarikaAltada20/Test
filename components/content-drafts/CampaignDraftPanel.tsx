@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Clapperboard, Send, ShieldCheck, Upload } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { draftBlockMessage, type CampaignDraftStatus } from "@/lib/content-drafts";
 import { getCampaignDraftStatus } from "./api";
@@ -121,11 +121,12 @@ export function CampaignDraftPanel({
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
           {linkable && (
-            <Button asChild className="bg-[#7F39EC] hover:bg-[#7F39EC]/90">
-              <Link href={`/dashboard/opportunities/${contestId}/submit`}>
-                <Send className="mr-1.5 h-4 w-4" /> Submit posted link
-              </Link>
-            </Button>
+            <Link
+              href={`/dashboard/opportunities/${contestId}/submit`}
+              className={cn(buttonVariants(), "bg-[#7F39EC] hover:bg-[#7F39EC]/90")}
+            >
+              <Send aria-hidden="true" /> Submit posted link
+            </Link>
           )}
           <Button
             variant={linkable ? "outline" : "default"}

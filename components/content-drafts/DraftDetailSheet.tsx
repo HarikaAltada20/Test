@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ExternalLink, Loader2, Plus, RotateCcw, Send, Undo2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -327,11 +327,12 @@ export function DraftDetailSheet({ draftId, onClose, onChanged, isDark }: Props)
                   </Button>
                 )}
                 {detail.can.post && detail.display_status === "approved" && (
-                  <Button asChild className="bg-[#7F39EC] hover:bg-[#7F39EC]/90 sm:flex-1">
-                    <Link href={`/dashboard/opportunities/${detail.contest_id}/submit?draft=${detail.id}`}>
-                      <Send className="mr-1.5 h-4 w-4" /> Submit posted link
-                    </Link>
-                  </Button>
+                  <Link
+                    href={`/dashboard/opportunities/${detail.contest_id}/submit?draft=${detail.id}`}
+                    className={cn(buttonVariants(), "bg-[#7F39EC] hover:bg-[#7F39EC]/90 sm:flex-1")}
+                  >
+                    <Send aria-hidden="true" /> Submit posted link
+                  </Link>
                 )}
                 {(detail.status === "rejected" || detail.status === "withdrawn") &&
                   !detail.campaign?.has_ended && (
