@@ -251,6 +251,7 @@ import ManualPointsModal from "@/components/ManualPointsModal";
 import { CreatorSubmissionsModal } from "@/components/CreatorSubmissionsModal";
 import { InstagramCreatorAnalyticsModal } from "@/components/contest/InstagramCreatorAnalyticsModal";
 import { UpdateCampaignStatusDialog } from "@/components/contest/UpdateCampaignStatusDialog";
+import { DuplicateCampaignDialog } from "@/components/campaign-duplicate/DuplicateCampaignDialog";
 import { BudgetProgress } from "@/components/BudgetProgress";
 import { PaidReversalRefundEstimate } from "@/components/PaidReversalRefundEstimate";
 import type { PaidReversalRefundLine } from "@/components/PaidReversalRefundEstimate";
@@ -2412,6 +2413,7 @@ export default function ContestDetailClient({
   // Status update states
   const [isSyncingCreatorViews, setIsSyncingCreatorViews] = useState(false);
   const [statusUpdateDialog, setStatusUpdateDialog] = useState(false);
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   // Get theme from parent layout instead of managing independent state
   const [isDark, setIsDark] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -15903,6 +15905,27 @@ export default function ContestDetailClient({
           </div>
           {/* Quick Actions Bar */}
           <div className="flex flex-wrap gap-2 items-center lg:justify-end shrink-0 w-full lg:w-auto pl-0 sm:pl-12 lg:pl-0">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDuplicateDialogOpen(true)}
+              className={cn(
+                "rounded-xl",
+                isDark
+                  ? "border-purple-400/60 text-purple-300 hover:bg-white/5"
+                  : "border-purple-400/50 text-purple-700 hover:bg-purple-50",
+              )}
+            >
+              <Copy className="h-4 w-4 shrink-0" />
+              Duplicate
+            </Button>
+            <DuplicateCampaignDialog
+              open={duplicateDialogOpen}
+              onOpenChange={setDuplicateDialogOpen}
+              isAdmin={!!isAdminView}
+              sourceContestId={contestId}
+              allowChangeTarget={!!isAdminView}
+            />
             {isAdminView && (
               <Button
                 size="sm"
