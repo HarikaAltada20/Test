@@ -9,7 +9,6 @@ import {
   type ReactNode,
 } from "react";
 import { subDays } from "date-fns";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import {
   Table,
@@ -78,7 +77,6 @@ import {
   ArrowUpDown,
   Download,
   Paperclip,
-  Link2,
   ExternalLink,
   FileImage,
   Trash2,
@@ -86,6 +84,8 @@ import {
   ChevronDown,
   ChevronRight,
   Users,
+  Wand2,
+  ClipboardPaste,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -115,7 +115,9 @@ import {
   type WithdrawalExportColumnId,
 } from "@/lib/withdrawal-export-columns";
 import { toast } from "sonner";
-import { Separator } from "@/components/ui/separator";
+import { readPayoutDetails } from "@/lib/skydo-payout-import";
+import { PayoutRecordCard, type PayoutRecordInput } from "./payout-record-card";
+import { SkydoPayoutDialog, type SkydoDialogScope } from "./skydo-payout-dialog";
 
 
 type Request = {
@@ -146,7 +148,26 @@ type Request = {
   payout_currency?: string | null;
   fx_rate_snapshot?: number | string | null;
   net_amount_local_minor?: number | null;
+  /** Structured payout record (Skydo payout ID, UTR, amounts). See lib/skydo-payout-import. */
+  payout_details?: unknown;
 };
+
+function initialsOf(name: string): string {
+  const parts = name.replace(/^@/, "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
+
+/** USD cents the payee should receive (after our processing fee). */
+function sendCentsOf(r: Request): number {
+  if (r.amount_type !== "cash") return 0;
+  return r.net_amount_cents ?? r.amount;
+}
+
+function skydoEmailOf(r: Request): string {
+  const d = (r.payout_method_details_snapshot || {}) as { email?: unknown };
+  return typeof d.email === "string" ? d.email.trim().toLowerCase() : "";
+}
 
 /** "Send ₹8,100.00 · fee $10.00 (10%)" for requests with a fee or an INR payout. */
 function PayoutSendLine({ request, className }: { request: Request; className?: string }) {
@@ -158,35 +179,6 @@ function PayoutSendLine({ request, className }: { request: Request; className?: 
       Send <span className="font-semibold text-foreground">{p.receiveLabel}</span>
       {p.feeCents > 0 && ` · fee ${formatCurrencyFromCents(p.feeCents)} (${formatFeePercent(p.feeBps)})`}
     </div>
-  );
-}
-
-/** Fee and amount to send, in the request details drawer. */
-function PayoutBreakdown({ request }: { request: Request }) {
-  const p = withdrawalPayout(request);
-  return (
-    <dl className="mt-2 space-y-0.5 text-xs">
-      <div className="flex justify-between gap-3">
-        <dt className="text-muted-foreground">
-          Processing fee{p.feeBps > 0 ? ` (${formatFeePercent(p.feeBps)})` : ""}
-        </dt>
-        <dd className="tabular-nums">
-          {p.feeCents > 0 ? `−${formatCurrencyFromCents(p.feeCents)}` : "None"}
-        </dd>
-      </div>
-      <div className="flex justify-between gap-3 font-semibold">
-        <dt>To send</dt>
-        <dd className="tabular-nums">
-          {p.receiveLabel}
-          {p.currency === "USD" ? " USD" : ""}
-        </dd>
-      </div>
-      {p.currency === "INR" && p.usdInrRate !== null && (
-        <div className="text-muted-foreground">
-          {formatCurrencyFromCents(p.netCents)} at {formatUsdInrRate(p.usdInrRate)} per $1
-        </div>
-      )}
-    </dl>
   );
 }
 
@@ -337,6 +329,8 @@ export default function WithdrawalsClient({
   const [groupByPayee, setGroupByPayee] = useState(false);
   const [payeeGroups, setPayeeGroups] = useState<PayeeGroup[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [skydoDialogOpen, setSkydoDialogOpen] = useState(false);
+  const [skydoScope, setSkydoScope] = useState<SkydoDialogScope | null>(null);
   const proofFileInputRef = useRef<HTMLInputElement>(null);
   const metadataSaveMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -892,6 +886,50 @@ export default function WithdrawalsClient({
     await updateStatus(active.id, newStatus, extras, { closeDetails: true });
   };
 
+  /** Save the payout record card (one request, never changes status). */
+  const savePayoutRecord = async (input: PayoutRecordInput): Promise<boolean> => {
+    if (!active) return false;
+    const prevDetails = readPayoutDetails(active.payout_details);
+    try {
+      const res = await fetch("/api/admin/withdrawals/skydo-payouts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "manual",
+          ids: [active.id],
+          markPaid: false,
+          details: {
+            ...input,
+            status: prevDetails?.status ?? (input.utr.trim() ? "Completed" : "In progress"),
+            payee_name: prevDetails?.payee_name ?? undefined,
+            group_request_count: prevDetails?.group_request_count ?? 1,
+          },
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error || json.failedItems?.[0]?.error || "Could not save");
+      }
+      const details = json.details;
+      const txRefNext = input.payout_id.trim() || active.transaction_reference || "";
+      const patch = <T extends Request>(r: T): T =>
+        r.id === active.id
+          ? { ...r, payout_details: details, transaction_reference: txRefNext }
+          : r;
+      setRequests((prev) => prev.map(patch));
+      setPayeeGroups((prev) =>
+        prev.map((g) => ({ ...g, requests: g.requests.map(patch) })),
+      );
+      setActive((prev) => (prev ? patch(prev) : prev));
+      if (!metadataDirty) setTxRef(txRefNext);
+      notify("success", "Payout record saved");
+      return true;
+    } catch (e) {
+      notify("error", e instanceof Error ? e.message : "Could not save payout record");
+      return false;
+    }
+  };
+
   const openProofInNewTab = async (requestId: string) => {
     try {
       const res = await fetch(
@@ -1233,6 +1271,61 @@ export default function WithdrawalsClient({
     return [];
   };
 
+  /** Destination fields for the details modal, with what to copy. */
+  const getPayToRows = (
+    r: Request,
+  ): { label: string; value: string; copy?: string; mono?: boolean; wide?: boolean }[] => {
+    const type = (r.payout_method_type_snapshot || "").toLowerCase();
+    const d: any = r.payout_method_details_snapshot || {};
+    const rows: { label: string; value: string; copy?: string; mono?: boolean; wide?: boolean }[] = [];
+    const add = (label: string, v: unknown, opts?: { copy?: boolean; mono?: boolean; wide?: boolean; display?: string }) => {
+      if (v === null || v === undefined || String(v).trim() === "") return;
+      rows.push({
+        label,
+        value: opts?.display ?? String(v),
+        copy: opts?.copy ? String(v) : undefined,
+        mono: opts?.mono,
+        wide: opts?.wide,
+      });
+    };
+    if (type === "skydo") {
+      add("Skydo email", d?.email, { copy: true, wide: true });
+    } else if (type === "upi") {
+      add("UPI ID", d?.upi_id, { copy: true });
+      add("Account holder", d?.account_holder_name, { copy: true });
+    } else if (type === "bank_transfer") {
+      add("Account holder", d?.account_holder_name, { copy: true });
+      add("Account number", d?.account_number, {
+        copy: true,
+        mono: true,
+        display: d?.account_number ? `•••• ${String(d.account_number).slice(-4)}` : undefined,
+      });
+      add("IFSC / SWIFT", d?.ifsc_code || d?.swift_bic_code, { copy: true, mono: true });
+      add("Bank", d?.bank_name);
+      add("Branch", d?.branch_name);
+      add("Country", d?.country);
+    } else if (type === "crypto") {
+      add("Network", d?.network);
+      add("Currency", d?.currency);
+      add("Wallet address", d?.wallet_address, { copy: true, mono: true, wide: true });
+    } else if (type === "phantom") {
+      add("Friendly name", d?.friendly_name);
+      add("Token", d?.preferred_token || "USDC");
+      add(
+        "Network",
+        d?.network ||
+          (process.env.NEXT_PUBLIC_SOLANA_NETWORK === "mainnet-beta" ||
+          process.env.NEXT_PUBLIC_SOLANA_NETWORK === "mainnet"
+            ? "mainnet"
+            : "devnet"),
+      );
+      add("Wallet address", d?.wallet_address, { copy: true, mono: true, wide: true });
+    } else if (type) {
+      add("Details", formatPayoutSummary(r), { mono: true, wide: true });
+    }
+    return rows;
+  };
+
   const copyText = async (text: string, doneLabel: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -1329,31 +1422,14 @@ export default function WithdrawalsClient({
     );
   };
 
-  const formatUserInfo = (r: Request) => {
-    const user = r.users;
-    if (!user) return <span className="text-muted-foreground">-</span>;
-
-    return (
-      <div className="space-y-1">
-        <div className="flex items-center gap-2">
-          <User className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">{user.full_name || "Unknown"}</span>
-        </div>
-        {user.username && (
-          <div className="text-sm text-muted-foreground">@{user.username}</div>
-        )}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Mail className="h-3 w-3" />
-          {user.email || "-"}
-        </div>
-      </div>
-    );
-  };
 
   const FINAL_STATUSES = ["processed", "forfeited", "cancelled", "rejected"];
   const isFinalStatus = (s: string) => FINAL_STATUSES.includes(s);
   const isApprovableStatus = (s: string) =>
     s === "pending" || s === "in_review";
+  /** Approved rows are selectable too, for Fill details & mark paid. */
+  const isSelectableStatus = (s: string) =>
+    isApprovableStatus(s) || s === "approved";
 
   const approvableOnPage = useMemo(
     () => requests.filter((r) => isApprovableStatus(r.status)),
@@ -1387,6 +1463,43 @@ export default function WithdrawalsClient({
       }
       return next;
     });
+  };
+
+  const selectedApproved = useMemo(
+    () => requests.filter((r) => r.status === "approved" && selectedIds.has(r.id)),
+    [requests, selectedIds],
+  );
+
+  const openSkydoImport = () => {
+    setSkydoScope({
+      kind: "filters",
+      createdFrom: new Date(filterFromMs).toISOString(),
+      createdTo: new Date(filterToMs).toISOString(),
+      label: filterPresetLabel || "Selected dates",
+    });
+    setSkydoDialogOpen(true);
+  };
+
+  const openFillDetails = () => {
+    if (selectedApproved.length === 0) return;
+    setSkydoScope({
+      kind: "selection",
+      ids: selectedApproved.map((r) => r.id),
+      sendCents: selectedApproved.reduce((sum, r) => sum + sendCentsOf(r), 0),
+      payeeCount: new Set(
+        selectedApproved.map((r) => skydoEmailOf(r) || formatPayoutSummary(r)),
+      ).size,
+    });
+    setSkydoDialogOpen(true);
+  };
+
+  const onSkydoApplied = (paidIds: string[]) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of paidIds) next.delete(id);
+      return next;
+    });
+    void reloadWithdrawals({ refreshPayoutSeries: true });
   };
 
   const bulkApproveSelected = async () => {
@@ -1500,7 +1613,7 @@ export default function WithdrawalsClient({
   };
 
   const renderTable = (rows: Request[]) => {
-    const scopeApprovable = rows.filter((r) => isApprovableStatus(r.status));
+    const scopeApprovable = rows.filter((r) => isSelectableStatus(r.status));
     const scopeAllSelected =
       scopeApprovable.length > 0 &&
       scopeApprovable.every((r) => selectedIds.has(r.id));
@@ -1535,7 +1648,7 @@ export default function WithdrawalsClient({
                   toggleSelectAllApprovable(v === true, scopeApprovable)
                 }
                 disabled={loading || scopeApprovable.length === 0 || bulkApproving}
-                aria-label="Select all approvable on this page"
+                aria-label="Select all on this page"
                 className={cn(isDark && "border-white/60")}
               />
             </TableHead>
@@ -1588,7 +1701,7 @@ export default function WithdrawalsClient({
                     onCheckedChange={(v) =>
                       toggleSelectId(r.id, v === true)
                     }
-                    disabled={!isApprovableStatus(r.status) || bulkApproving}
+                    disabled={!isSelectableStatus(r.status) || bulkApproving}
                     aria-label={`Select withdrawal for ${r.users?.full_name || r.id}`}
                     className={cn(isDark && "border-white/60")}
                   />
@@ -1649,6 +1762,23 @@ export default function WithdrawalsClient({
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                   {getStatusBadge(r.status)}
+                  {(() => {
+                    const rec = readPayoutDetails(r.payout_details);
+                    if (!rec?.utr && !rec?.payout_id) return null;
+                    const value = rec.utr ?? rec.payout_id!;
+                    return (
+                      <button
+                        type="button"
+                        className="mt-1 flex items-center gap-1 font-mono text-[11px] text-muted-foreground hover:text-foreground"
+                        title={`Copy ${rec.utr ? "UTR" : "payout ID"}`}
+                        onClick={() => void copyText(value, rec.utr ? "UTR" : "Payout ID")}
+                      >
+                        {rec.utr ? "UTR " : ""}
+                        {value}
+                        <Copy className="h-3 w-3 opacity-60" />
+                      </button>
+                    );
+                  })()}
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col gap-1 max-w-xs">
@@ -1944,7 +2074,14 @@ export default function WithdrawalsClient({
     });
   };
 
-  const renderGroupedTable = (groups: PayeeGroup[]) => (
+  const renderGroupedTable = (groups: PayeeGroup[]) => {
+    const pageSelectable = groups.flatMap((g) =>
+      g.requests.filter((r) => isSelectableStatus(r.status)),
+    );
+    const pageAll =
+      pageSelectable.length > 0 && pageSelectable.every((r) => selectedIds.has(r.id));
+    const pageSome = pageSelectable.some((r) => selectedIds.has(r.id));
+    return (
     <div
       className={cn(
         "rounded-xl shadow",
@@ -1961,7 +2098,15 @@ export default function WithdrawalsClient({
                 : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500",
             )}
           >
-            <TableHead className="w-10 px-2 sm:px-4"> </TableHead>
+            <TableHead className="w-16 px-2 sm:px-4">
+              <Checkbox
+                checked={pageSome && !pageAll ? "indeterminate" : pageAll}
+                onCheckedChange={(v) => toggleSelectAllApprovable(v === true, pageSelectable)}
+                disabled={loading || pageSelectable.length === 0 || bulkApproving}
+                aria-label="Select every request in these groups"
+                className={cn(isDark && "border-white/60")}
+              />
+            </TableHead>
             <TableHead className="px-2 sm:px-4">
               <div className="flex items-center gap-2">
                 <CreditCard className="h-4 w-4" />
@@ -1994,18 +2139,39 @@ export default function WithdrawalsClient({
           {groups.map((g) => {
             const expanded = expandedGroups.has(g.key);
             const missing = g.destination === MISSING_PAYEE_LABEL;
+            const groupSelectable = g.requests.filter((r) => isSelectableStatus(r.status));
+            const groupAll =
+              groupSelectable.length > 0 &&
+              groupSelectable.every((r) => selectedIds.has(r.id));
+            const groupSome = groupSelectable.some((r) => selectedIds.has(r.id));
             return (
               <Fragment key={g.key}>
                 <TableRow
-                  className="cursor-pointer hover:bg-muted/30 transition-colors"
+                  className={cn(
+                    "cursor-pointer hover:bg-muted/30 transition-colors",
+                    groupSome && (isDark ? "bg-violet-500/[0.06]" : "bg-violet-50/60"),
+                  )}
                   onClick={() => toggleGroupExpanded(g.key)}
                 >
-                  <TableCell className="w-10 px-2 sm:px-4">
-                    {expanded ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    )}
+                  <TableCell className="w-16 px-2 sm:px-4">
+                    <div className="flex items-center gap-2">
+                      <span onClick={(e) => e.stopPropagation()} className="inline-flex">
+                        <Checkbox
+                          checked={groupSome && !groupAll ? "indeterminate" : groupAll}
+                          onCheckedChange={(v) =>
+                            toggleSelectAllApprovable(v === true, groupSelectable)
+                          }
+                          disabled={groupSelectable.length === 0 || bulkApproving}
+                          aria-label={`Select all requests for ${g.destination}`}
+                          className={cn(isDark && "border-white/60")}
+                        />
+                      </span>
+                      {expanded ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="px-2 sm:px-4 whitespace-nowrap">
                     {PAYOUT_METHOD_LABELS[g.method] || g.method}
@@ -2113,7 +2279,8 @@ export default function WithdrawalsClient({
         </TableBody>
       </Table>
     </div>
-  );
+    );
+  };
 
   const exportRateNumber = Number(exportRate);
   const exportRateValid =
@@ -2535,6 +2702,7 @@ export default function WithdrawalsClient({
           {(selectedIds.size > 0 ||
             selectedTab === "pending" ||
             selectedTab === "in_review" ||
+            selectedTab === "approved" ||
             selectedTab === "all") && (
               <div className="flex flex-wrap items-center gap-2">
                 {selectedIds.size > 0 && (
@@ -2547,6 +2715,7 @@ export default function WithdrawalsClient({
                     {selectedIds.size} selected
                   </span>
                 )}
+                {(selectedTab !== "approved" || someApprovableSelected) && (
                 <Button
                   type="button"
                   size="sm"
@@ -2567,6 +2736,19 @@ export default function WithdrawalsClient({
                   )}
                   Approve selected
                 </Button>
+                )}
+                {selectedTab === "approved" && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={openSkydoImport}
+                    disabled={loading}
+                    className="rounded-xl gap-1.5 bg-gradient-to-r from-[#8B47F5] to-[#6A2FD0] text-white shadow-md shadow-violet-500/20 hover:from-[#7F39EC] hover:to-[#5d27bd]"
+                  >
+                    <ClipboardPaste className="h-4 w-4" />
+                    Import Skydo payouts
+                  </Button>
+                )}
                 {selectedIds.size > 0 && (
                   <Button
                     type="button"
@@ -2940,7 +3122,55 @@ export default function WithdrawalsClient({
           </DialogContent>
         </Dialog>
 
-        {/* Enhanced Details Modal */}
+        {/* Selected approved requests: fill payout details */}
+        {selectedApproved.length > 0 && !skydoDialogOpen && !detailsOpen && (
+          <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+            <div
+              role="toolbar"
+              aria-label="Selected approved requests"
+              className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-[#140B3A] px-3 py-2 text-white shadow-2xl animate-in slide-in-from-bottom-4"
+            >
+              <div className="flex items-baseline gap-2 px-1 text-sm">
+                <span className="font-semibold tabular-nums">
+                  {selectedApproved.length} approved selected
+                </span>
+                <span className="text-xs text-white/60 tabular-nums">
+                  {formatCurrencyFromCents(
+                    selectedApproved.reduce((sum, r) => sum + sendCentsOf(r), 0),
+                  )}{" "}
+                  to send
+                </span>
+              </div>
+              <span className="hidden h-6 w-px bg-white/15 sm:block" aria-hidden />
+              <Button
+                size="sm"
+                onClick={openFillDetails}
+                className="h-8 gap-1.5 bg-[#7F39EC] text-white hover:bg-[#6a2fd0]"
+              >
+                <Wand2 className="h-3.5 w-3.5" />
+                Fill details & mark paid
+              </Button>
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                aria-label="Clear selection"
+                className="rounded-md p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        <SkydoPayoutDialog
+          open={skydoDialogOpen}
+          onOpenChange={setSkydoDialogOpen}
+          isDark={isDark}
+          scope={skydoScope}
+          onApplied={onSkydoApplied}
+        />
+
+        {/* Withdrawal Details Modal */}
         <Dialog
           open={detailsOpen}
           onOpenChange={(open) => {
@@ -2951,471 +3181,257 @@ export default function WithdrawalsClient({
         >
           <DialogContent
             className={cn(
-              "sm:max-w-[700px] max-h-[min(92vh,900px)] w-[calc(100%-1.5rem)] p-0 gap-0 overflow-hidden flex flex-col",
-              isDark && "border-gray-600",
+              "sm:max-w-[720px] max-h-[min(92vh,920px)] w-[calc(100%-1.5rem)] p-0 sm:p-0 gap-0 overflow-hidden flex flex-col",
+              isDark ? "border-white/10 text-white" : "text-slate-900",
             )}
           >
-            <DialogHeader className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-6 pb-3 pr-12">
-              <DialogTitle
-                className={cn(
-                  "flex items-center gap-2",
-                  isDark ? "text-white" : "text-black"
-                )}
-              >
-                <DollarSign className="h-5 w-5" />
-                Withdrawal Details
-              </DialogTitle>
-              <DialogDescription>
-                Review withdrawal information and manage the request status
-              </DialogDescription>
+            <DialogHeader
+              className={cn(
+                "shrink-0 space-y-0 border-b px-5 sm:px-6 pt-5 pb-4 pr-12 text-left",
+                isDark
+                  ? "border-white/10 bg-gradient-to-br from-[#2A1060] via-[#140B3A] to-[#06021D]"
+                  : "border-slate-200 bg-gradient-to-br from-violet-50 via-white to-white",
+              )}
+            >
+              {active ? (
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#9B5CFF] to-[#6A2FD0] text-sm font-semibold text-white shadow-lg shadow-violet-500/25">
+                    {initialsOf(active.users?.full_name || active.users?.username || "?")}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <DialogTitle className="truncate text-lg font-semibold leading-tight">
+                        {active.users?.full_name || "Unknown user"}
+                      </DialogTitle>
+                      {getStatusBadge(active.status)}
+                    </div>
+                    <DialogDescription asChild>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        {active.users?.username && <span>@{active.users.username}</span>}
+                        {active.users?.email && (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 hover:text-foreground"
+                            onClick={() => void copyText(active.users!.email!, "Email")}
+                            title="Copy email"
+                          >
+                            <Mail className="h-3 w-3" />
+                            {active.users.email}
+                          </button>
+                        )}
+                        <span className="inline-flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {new Date(active.created_at).toLocaleString(undefined, {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                    </DialogDescription>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <DialogTitle>Withdrawal details</DialogTitle>
+                  <DialogDescription>Review the request and record the payout.</DialogDescription>
+                </>
+              )}
             </DialogHeader>
-            {active && (
-              <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 space-y-4 py-2">
-                {/* Key Information Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {/* Created Date Card */}
-                  <Card
-                    className={cn(
-                      "border-l-4 border-l-blue-500 shadow-sm",
-                      isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-                    )}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
+            {active && (() => {
+              const payout = withdrawalPayout(active);
+              const isCash = active.amount_type === "cash";
+              const payTo = getPayToRows(active);
+              const methodType = (active.payout_method_type_snapshot || "").toLowerCase();
+              const MethodIcon = getPaymentMethodIcon(active);
+              const showRecord =
+                Boolean(active.payout_details) ||
+                ["approved", "processed", "failed"].includes(active.status);
+              const panel = cn(
+                "rounded-xl border",
+                isDark ? "border-white/10 bg-white/[0.02]" : "border-slate-200 bg-white",
+              );
+              const sectionLabel =
+                "text-[11px] font-semibold uppercase tracking-wider text-muted-foreground";
+              const fieldCls = cn(
+                "w-full text-sm",
+                isDark
+                  ? "border-white/10 bg-white/[0.03] text-white placeholder:text-white/30"
+                  : "bg-white text-black",
+              );
+              return (
+                <div className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-6 py-5 space-y-5">
+                  {/* Amount */}
+                  <div className={cn(panel, "overflow-hidden")}>
+                    <div className="grid grid-cols-2 sm:grid-cols-3">
+                      <div className={cn("p-4", isDark ? "border-white/10" : "border-slate-100")}>
+                        <p className={sectionLabel}>Requested</p>
+                        <p className="mt-1 text-2xl font-semibold tabular-nums">
+                          {isCash
+                            ? formatCurrencyFromCents(active.amount)
+                            : `${active.amount} coins`}
+                        </p>
+                        <p className="text-xs text-muted-foreground capitalize">
+                          {active.amount_type}
+                        </p>
+                      </div>
+                      {isCash && (
                         <div
                           className={cn(
-                            "p-2 rounded-lg",
-                            isDark ? "bg-blue-900/20" : "bg-blue-100"
+                            "p-4 border-l",
+                            isDark ? "border-white/10" : "border-slate-100",
                           )}
                         >
-                          <Calendar
-                            className={cn(
-                              "h-4 w-4",
-                              isDark ? "text-blue-400" : "text-blue-600"
-                            )}
-                          />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Created
+                          <p className={sectionLabel}>
+                            Fee{payout.feeBps > 0 ? ` · ${formatFeePercent(payout.feeBps)}` : ""}
                           </p>
-                          <p className="text-sm font-semibold truncate">
-                            {new Date(active.created_at).toLocaleDateString()}
+                          <p className="mt-1 text-2xl font-semibold tabular-nums text-muted-foreground">
+                            {payout.feeCents > 0
+                              ? `−${formatCurrencyFromCents(payout.feeCents)}`
+                              : "None"}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(active.created_at).toLocaleTimeString()}
+                            {payout.feeCents > 0 ? "Kept by Game of Creators" : "No processing fee"}
                           </p>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Amount Card */}
-                  <Card
-                    className={cn(
-                      "border-l-4 border-l-green-500 shadow-sm",
-                      isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-                    )}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
+                      )}
+                      {isCash && (
                         <div
                           className={cn(
-                            "p-2 rounded-lg",
-                            isDark ? "bg-green-900/20" : "bg-green-100"
+                            "col-span-2 sm:col-span-1 p-4 border-t sm:border-t-0 sm:border-l",
+                            isDark
+                              ? "border-white/10 bg-emerald-500/[0.06]"
+                              : "border-slate-100 bg-emerald-50/60",
                           )}
                         >
-                          <DollarSign
-                            className={cn(
-                              "h-4 w-4",
-                              isDark ? "text-green-400" : "text-green-600"
-                            )}
-                          />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Amount
-                          </p>
+                          <p className={sectionLabel}>To send</p>
                           <p
                             className={cn(
-                              "text-lg font-bold truncate",
-                              isDark ? "text-green-400" : "text-green-600"
+                              "mt-1 text-2xl font-semibold tabular-nums",
+                              isDark ? "text-emerald-300" : "text-emerald-700",
                             )}
                           >
-                            {active.amount_type === "cash"
-                              ? formatCurrencyFromCents(active.amount)
-                              : `${active.amount} coins`}
+                            {payout.receiveLabel}
                           </p>
-                          <p className="text-xs text-muted-foreground capitalize">
-                            {active.amount_type === "cash" ? "Requested" : active.amount_type}
+                          <p className="text-xs text-muted-foreground">
+                            {payout.currency === "INR" && payout.usdInrRate !== null
+                              ? `${formatCurrencyFromCents(payout.netCents)} at ${formatUsdInrRate(payout.usdInrRate)} per $1`
+                              : payout.currency}
                           </p>
-                          {active.amount_type === "cash" && <PayoutBreakdown request={active} />}
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      )}
+                    </div>
+                  </div>
 
-                  {/* Status Card */}
-                  <Card
-                    className={cn(
-                      "border-l-4 border-l-purple-500 shadow-sm",
-                      isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-                    )}
-                  >
-                    <CardContent className="p-4">
+                  {/* Pay to */}
+                  <section className="space-y-2">
+                    <p className={sectionLabel}>Pay to</p>
+                    <div className={cn(panel, "p-4")}>
                       <div className="flex items-center gap-3">
                         <div
                           className={cn(
-                            "p-2 rounded-lg",
-                            isDark ? "bg-purple-900/20" : "bg-purple-100"
+                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                            isDark ? "bg-orange-500/10" : "bg-orange-50",
                           )}
                         >
-                          <Clock
-                            className={cn(
-                              "h-4 w-4",
-                              isDark ? "text-purple-400" : "text-purple-600"
-                            )}
-                          />
+                          <MethodIcon className={cn("h-4 w-4", getPaymentMethodColor(active))} />
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Status
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold">
+                            {PAYOUT_METHOD_LABELS[methodType] || methodType || "Unknown method"}
                           </p>
-                          <div className="mt-1">
-                            {getStatusBadge(active.status)}
-                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Details saved when the request was made
+                          </p>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                </div>
+                      {payTo.length > 0 && (
+                        <dl className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {payTo.map((row) => (
+                            <div
+                              key={row.label}
+                              className={cn(
+                                "min-w-0 rounded-lg px-3 py-2",
+                                row.wide && "sm:col-span-2",
+                                isDark ? "bg-white/[0.03]" : "bg-slate-50",
+                              )}
+                            >
+                              <dt className="text-[11px] text-muted-foreground">{row.label}</dt>
+                              <dd className="mt-0.5 flex items-center gap-1.5">
+                                <span
+                                  className={cn(
+                                    "min-w-0 text-sm font-medium",
+                                    row.mono ? "break-all font-mono text-xs" : "truncate",
+                                  )}
+                                >
+                                  {row.value}
+                                </span>
+                                {row.copy && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 shrink-0"
+                                    onClick={() => void copyText(row.copy!, row.label)}
+                                    aria-label={`Copy ${row.label}`}
+                                  >
+                                    <Copy className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      )}
+                    </div>
+                  </section>
 
-                {/* User Information */}
-                <Card
-                  className={cn(
-                    "shadow-sm",
-                    isDark
-                      ? "bg-[#06021D] border border-gray-600 text-white"
-                      : "bg-white text-black"
+                  {/* Payout record */}
+                  {showRecord && (
+                    <section className="space-y-2">
+                      <p className={sectionLabel}>Payout record</p>
+                      <PayoutRecordCard
+                        raw={active.payout_details}
+                        isDark={isDark}
+                        onSave={savePayoutRecord}
+                      />
+                    </section>
                   )}
-                >
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      User Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    {formatUserInfo(active)}
-                  </CardContent>
-                </Card>
 
-                {/* Payment Details */}
-                <Card
-                  className={cn(
-                    "shadow-sm",
-                    isDark
-                      ? "bg-[#06021D] border border-gray-600 text-white"
-                      : "bg-white text-black"
-                  )}
-                >
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                      <CreditCard className="h-4 w-4" />
-                      Payment Details
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <div className="flex items-center gap-3">
-                      <div
+                  {active.user_notes && (
+                    <section className="space-y-2">
+                      <p className={sectionLabel}>Note from user</p>
+                      <p
                         className={cn(
-                          "p-2 rounded-lg",
-                          isDark ? "bg-orange-900/20" : "bg-orange-100"
+                          "rounded-xl border px-4 py-3 text-sm whitespace-pre-wrap",
+                          isDark ? "border-white/10 bg-white/[0.02]" : "border-slate-200 bg-slate-50",
                         )}
                       >
-                        {(() => {
-                          const IconComponent = getPaymentMethodIcon(active);
-                          const colorClass = getPaymentMethodColor(active);
-                          return (
-                            <IconComponent
-                              className={`h-4 w-4 ${colorClass}`}
-                            />
-                          );
-                        })()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium text-muted-foreground">
-                          Payment Method
-                        </p>
-                        <div className="text-sm bg-muted/50 px-2 py-1 rounded mt-1">
-                          {(() => {
-                            const type = (
-                              active.payout_method_type_snapshot || ""
-                            ).toLowerCase();
-                            const d: any =
-                              active.payout_method_details_snapshot || {};
-
-                            if (type === "phantom") {
-                              return (
-                                <div className="space-y-2">
-                                  <div className="font-medium">
-                                    Phantom Wallet
-                                  </div>
-                                  {d?.friendly_name && (
-                                    <div className="text-sm">
-                                      <span className="text-muted-foreground">
-                                        Friendly Name:
-                                      </span>{" "}
-                                      <span className="font-medium">
-                                        {d.friendly_name}
-                                      </span>
-                                    </div>
-                                  )}
-                                  <div className="grid grid-cols-2 gap-2 text-xs">
-                                    <div>
-                                      <span className="text-muted-foreground">
-                                        Network:
-                                      </span>{" "}
-                                      <span className="font-medium">
-                                        {d?.network ||
-                                          (process.env
-                                            .NEXT_PUBLIC_SOLANA_NETWORK ===
-                                            "mainnet-beta" ||
-                                            process.env
-                                              .NEXT_PUBLIC_SOLANA_NETWORK ===
-                                            "mainnet"
-                                            ? "mainnet"
-                                            : "devnet")}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <span className="text-muted-foreground">
-                                        Token:
-                                      </span>{" "}
-                                      <span className="font-medium">
-                                        {d?.preferred_token || "USDC"}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div className="text-xs text-muted-foreground mb-1">
-                                      Wallet Address:
-                                    </div>
-                                    <div className="font-mono text-xs break-all bg-background/50 p-2 rounded border">
-                                      {d?.wallet_address || "No address"}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            }
-
-                            if (type === "crypto") {
-                              return (
-                                <div className="space-y-2">
-                                  <div className="font-medium">
-                                    Crypto Wallet
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-2 text-xs">
-                                    <div>
-                                      <span className="text-muted-foreground">
-                                        Network:
-                                      </span>{" "}
-                                      <span className="font-medium">
-                                        {d?.network || "N/A"}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <span className="text-muted-foreground">
-                                        Currency:
-                                      </span>{" "}
-                                      <span className="font-medium">
-                                        {d?.currency || "N/A"}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div className="text-xs text-muted-foreground mb-1">
-                                      Wallet Address:
-                                    </div>
-                                    <div className="font-mono text-xs break-all bg-background/50 p-2 rounded border">
-                                      {d?.wallet_address || "No address"}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            }
-
-                            if (type === "upi") {
-                              return (
-                                <div className="space-y-2">
-                                  <div className="font-medium">UPI Payment</div>
-                                  <div className="space-y-1 text-xs">
-                                    <div>
-                                      <span className="text-muted-foreground">
-                                        UPI ID:
-                                      </span>{" "}
-                                      <span className="font-medium">
-                                        {d?.upi_id || "N/A"}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <span className="text-muted-foreground">
-                                        Account Holder:
-                                      </span>{" "}
-                                      <span className="font-medium">
-                                        {d?.account_holder_name || "N/A"}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            }
-
-                            if (type === "skydo") {
-                              return (
-                                <div className="space-y-2">
-                                  <div className="font-medium">Skydo Payout</div>
-                                  <div className="space-y-1 text-xs">
-                                    <div>
-                                      <span className="text-muted-foreground">
-                                        Email:
-                                      </span>{" "}
-                                      <span className="font-medium break-all">
-                                        {d?.email || "N/A"}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            }
-
-                            if (type === "bank_transfer") {
-                              return (
-                                <div className="space-y-2">
-                                  <div className="font-medium">
-                                    Bank Transfer
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-2 text-xs">
-                                    <div>
-                                      <span className="text-muted-foreground">
-                                        Account Holder:
-                                      </span>{" "}
-                                      <span className="font-medium">
-                                        {d?.account_holder_name || "N/A"}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <span className="text-muted-foreground">
-                                        Account Number:
-                                      </span>{" "}
-                                      <span className="font-medium">
-                                        {d?.account_number
-                                          ? `****${String(
-                                            d.account_number
-                                          ).slice(-4)}`
-                                          : "N/A"}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <span className="text-muted-foreground">
-                                        IFSC/SWIFT:
-                                      </span>{" "}
-                                      <span className="font-medium">
-                                        {d?.ifsc_code ||
-                                          d?.swift_bic_code ||
-                                          "N/A"}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <span className="text-muted-foreground">
-                                        Bank Name:
-                                      </span>{" "}
-                                      <span className="font-medium">
-                                        {d?.bank_name || "N/A"}
-                                      </span>
-                                    </div>
-                                    {d?.branch_name && (
-                                      <div>
-                                        <span className="text-muted-foreground">
-                                          Branch:
-                                        </span>{" "}
-                                        <span className="font-medium">
-                                          {d.branch_name}
-                                        </span>
-                                      </div>
-                                    )}
-                                    {d?.country && (
-                                      <div>
-                                        <span className="text-muted-foreground">
-                                          Country:
-                                        </span>{" "}
-                                        <span className="font-medium">
-                                          {d.country}
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <p className="font-mono break-all">
-                                {formatPayoutSummary(active)}
-                              </p>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Admin Actions */}
-                <Card
-                  className={cn(
-                    "shadow-sm",
-                    isDark
-                      ? "bg-[#06021D] border border-gray-600 text-white"
-                      : "bg-white text-black"
-                  )}
-                >
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                      <Settings className="h-4 w-4" />
-                      Admin Actions
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0 space-y-5">
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Notes & transaction reference
+                        {active.user_notes}
                       </p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-4">
-                        <div className="space-y-1.5 min-w-0">
-                          <Label
-                            htmlFor="admin_notes"
-                            className="text-xs font-medium"
-                          >
-                            Admin notes
-                          </Label>
-                          <Input
-                            id="admin_notes"
-                            value={adminNotes}
-                            onChange={(e) => {
-                              setAdminNotes(e.target.value);
-                              setMetadataDirty(true);
-                              setMetadataSaveMsg(null);
-                            }}
-                            placeholder="Internal notes, campaign context…"
-                            className={cn(
-                              "w-full h-10 text-sm",
-                              isDark
-                                ? "bg-[#06021D] border border-gray-600 text-white"
-                                : "bg-white text-black"
-                            )}
-                          />
-                        </div>
+                    </section>
+                  )}
+
+                  {/* Notes, reference, proof */}
+                  <section className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className={sectionLabel}>Internal notes & proof</p>
+                      {metadataDirty && !savingMetadata && (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 text-[11px] font-medium",
+                            isDark ? "text-amber-300" : "text-amber-700",
+                          )}
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                          Unsaved changes
+                        </span>
+                      )}
+                    </div>
+                    <div className={cn(panel, "p-4 space-y-4")}>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_1fr]">
                         <div className="space-y-1.5 min-w-0">
                           <Label htmlFor="tx_ref" className="text-xs font-medium">
                             Transaction reference
@@ -3428,114 +3444,70 @@ export default function WithdrawalsClient({
                               setMetadataDirty(true);
                               setMetadataSaveMsg(null);
                             }}
-                            placeholder="UTR / TXID / reference #"
-                            className={cn(
-                              "w-full h-10 text-sm",
-                              isDark
-                                ? "bg-[#06021D] border border-gray-600 text-white"
-                                : "bg-white text-black"
-                            )}
+                            placeholder="Skydo payout ID / TXID / reference"
+                            className={cn(fieldCls, "h-10 font-mono placeholder:font-sans")}
                           />
                         </div>
-                      </div>
-                    </div>
-
-                    <Separator
-                      className={isDark ? "bg-gray-600" : undefined}
-                    />
-
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Payment proof
-                        </p>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {active.payment_proof_storage_path ? (
-                            <Badge
-                              variant="secondary"
+                        <div className="space-y-1.5 min-w-0">
+                          <Label htmlFor="payment_proof_link" className="text-xs font-medium">
+                            Proof URL <span className="text-muted-foreground">(optional)</span>
+                          </Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="payment_proof_link"
+                              value={paymentProofLinkDraft}
+                              onChange={(e) => {
+                                setPaymentProofLinkDraft(e.target.value);
+                                setMetadataDirty(true);
+                                setMetadataSaveMsg(null);
+                              }}
+                              placeholder="https://…"
                               className={cn(
-                                "text-xs font-normal gap-1",
-                                isDark &&
-                                "bg-emerald-900/40 text-emerald-200 border-emerald-700",
+                                fieldCls,
+                                "h-10 min-w-0",
+                                /^https?:\/\//i.test(paymentProofLinkDraft.trim())
+                                  ? "border-emerald-600/50 focus-visible:ring-emerald-600/30"
+                                  : null,
                               )}
-                            >
-                              <FileImage className="h-3 w-3" />
-                              File on record
-                            </Badge>
-                          ) : null}
-                          {active.payment_proof_link ? (
-                            <Badge
-                              variant="secondary"
-                              className={cn(
-                                "text-xs font-normal gap-1 max-w-[220px] truncate",
-                                isDark &&
-                                "bg-sky-900/40 text-sky-200 border-sky-700",
-                              )}
-                              title={active.payment_proof_link}
-                            >
-                              <Link2 className="h-3 w-3 shrink-0" />
-                              Link on record
-                            </Badge>
-                          ) : null}
-                          {!active.payment_proof_storage_path &&
-                            !active.payment_proof_link ? (
-                            <span className="text-xs text-muted-foreground">
-                              None attached yet
-                            </span>
-                          ) : null}
+                            />
+                            {/^https?:\/\//i.test(paymentProofLinkDraft.trim()) ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-10 w-10 shrink-0"
+                                title="Open URL in new tab"
+                                onClick={() =>
+                                  window.open(
+                                    paymentProofLinkDraft.trim(),
+                                    "_blank",
+                                    "noopener,noreferrer",
+                                  )
+                                }
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </Button>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
 
-                      <div className="space-y-2 pt-1">
-                        <Label
-                          htmlFor="payment_proof_link"
-                          className="text-xs font-medium"
-                        >
-                          Proof URL (optional)
+                      <div className="space-y-1.5">
+                        <Label htmlFor="admin_notes" className="text-xs font-medium">
+                          Admin notes
                         </Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="payment_proof_link"
-                            value={paymentProofLinkDraft}
-                            onChange={(e) => {
-                              setPaymentProofLinkDraft(e.target.value);
-                              setMetadataDirty(true);
-                              setMetadataSaveMsg(null);
-                            }}
-                            placeholder="https://…"
-                            className={cn(
-                              "w-full min-w-0 h-10 text-sm",
-                              isDark
-                                ? "bg-[#06021D] border border-gray-600 text-white"
-                                : "bg-white text-black",
-                              /^https?:\/\//i.test(
-                                paymentProofLinkDraft.trim(),
-                              )
-                                ? "border-emerald-600/50 focus-visible:ring-emerald-600/30"
-                                : null,
-                            )}
-                          />
-                          {/^https?:\/\//i.test(
-                            paymentProofLinkDraft.trim(),
-                          ) ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="h-10 w-10 shrink-0"
-                              title="Open URL in new tab"
-                              onClick={() =>
-                                window.open(
-                                  paymentProofLinkDraft.trim(),
-                                  "_blank",
-                                  "noopener,noreferrer",
-                                )
-                              }
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                            </Button>
-                          ) : null}
-                        </div>
+                        <Textarea
+                          id="admin_notes"
+                          value={adminNotes}
+                          onChange={(e) => {
+                            setAdminNotes(e.target.value);
+                            setMetadataDirty(true);
+                            setMetadataSaveMsg(null);
+                          }}
+                          rows={3}
+                          placeholder="Internal notes, campaign context…"
+                          className={cn(fieldCls, "min-h-[76px] resize-y")}
+                        />
                       </div>
 
                       <input
@@ -3543,215 +3515,220 @@ export default function WithdrawalsClient({
                         type="file"
                         accept="image/*,video/*"
                         className="hidden"
-                        onChange={(e) =>
-                          void onPaymentProofFile(e.target.files)
-                        }
+                        onChange={(e) => void onPaymentProofFile(e.target.files)}
                       />
 
-                      <div className="flex flex-col gap-3 pt-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            className={cn(
-                              "gap-2 shadow-sm",
-                              isDark && "bg-violet-600 hover:bg-violet-500",
-                            )}
-                            disabled={
-                              proofUploading || proofRemoving || !active
-                            }
-                            onClick={() => proofFileInputRef.current?.click()}
-                          >
-                            <Paperclip className="h-4 w-4" />
-                            {proofUploading ? "Uploading…" : "Upload file"}
-                          </Button>
-                          <span className="text-xs text-muted-foreground">
-                            Max {PAYMENT_PROOF_MAX_BYTES / 1024 / 1024} MB
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {active.payment_proof_link ? (
-                            <Button
+                      <div
+                        className={cn(
+                          "flex flex-wrap items-center gap-2 rounded-lg border border-dashed px-3 py-2.5",
+                          isDark ? "border-white/15" : "border-slate-300",
+                        )}
+                      >
+                        <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        {active.payment_proof_storage_path ? (
+                          <>
+                            <button
                               type="button"
-                              size="sm"
-                              variant="outline"
-                              className="gap-1.5"
-                              onClick={() =>
-                                window.open(
-                                  active.payment_proof_link!,
-                                  "_blank",
-                                  "noopener,noreferrer",
-                                )
-                              }
+                              className="min-w-0 flex-1 truncate text-left font-mono text-xs hover:underline"
+                              title={active.payment_proof_storage_path}
+                              onClick={() => void openProofInNewTab(active.id)}
                             >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                              Open saved link
-                            </Button>
-                          ) : null}
-                          {active.payment_proof_storage_path ? (
+                              {active.payment_proof_storage_path.split("/").pop()}
+                            </button>
+                            {active.payment_proof_file_size_bytes != null && (
+                              <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                                {formatProofFileSize(active.payment_proof_file_size_bytes)}
+                              </span>
+                            )}
                             <Button
                               type="button"
                               size="sm"
-                              variant="outline"
-                              className="gap-1.5"
-                              onClick={() =>
-                                void openProofInNewTab(active.id)
-                              }
+                              variant="ghost"
+                              className="h-7 gap-1 px-2 text-xs"
+                              onClick={() => void openProofInNewTab(active.id)}
                             >
                               <FileImage className="h-3.5 w-3.5" />
-                              View file
+                              View
                             </Button>
-                          ) : null}
-                        </div>
-                        {active.payment_proof_storage_path ? (
-                          <div
-                            className={cn(
-                              "flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs",
-                              isDark
-                                ? "border-gray-600 bg-[#0a0524]/60"
-                                : "border-slate-200 bg-slate-50/80",
-                            )}
-                          >
-                            <span
-                              className="font-mono truncate min-w-0 flex-1"
-                              title={active.payment_proof_storage_path}
-                            >
-                              {active.payment_proof_storage_path
-                                .split("/")
-                                .pop()}
-                            </span>
-                            {active.payment_proof_file_size_bytes != null ? (
-                              <span className="text-muted-foreground shrink-0 tabular-nums">
-                                {formatProofFileSize(
-                                  active.payment_proof_file_size_bytes,
-                                )}
-                              </span>
-                            ) : null}
                             <Button
                               type="button"
                               size="icon"
                               variant="ghost"
-                              className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
+                              className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
                               disabled={proofRemoving || proofUploading}
                               title="Remove uploaded file"
                               onClick={() => void removePaymentProofFile()}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
-                          </div>
-                        ) : null}
+                          </>
+                        ) : (
+                          <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+                            No proof file. Images or video, max{" "}
+                            {PAYMENT_PROOF_MAX_BYTES / 1024 / 1024} MB.
+                          </span>
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className={cn(
+                            "h-7 gap-1 px-2.5 text-xs",
+                            isDark && "border-white/15 bg-transparent hover:bg-white/5",
+                          )}
+                          disabled={proofUploading || proofRemoving}
+                          onClick={() => proofFileInputRef.current?.click()}
+                        >
+                          {proofUploading ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : null}
+                          {proofUploading
+                            ? "Uploading…"
+                            : active.payment_proof_storage_path
+                              ? "Replace"
+                              : "Upload file"}
+                        </Button>
+                      </div>
+
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        {metadataSaveMsg ? (
+                          <p
+                            className={cn(
+                              "inline-flex items-center gap-1.5 text-sm font-medium order-2 sm:order-1",
+                              isDark ? "text-emerald-300" : "text-emerald-700",
+                            )}
+                            role="status"
+                          >
+                            <CheckCircle className="h-4 w-4 shrink-0" />
+                            {metadataSaveMsg}
+                          </p>
+                        ) : (
+                          <span className="hidden sm:block order-1" />
+                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={cn(
+                            "w-full sm:w-auto order-1 sm:order-2",
+                            isDark && "border-white/15 bg-transparent hover:bg-white/5",
+                          )}
+                          disabled={savingMetadata || !metadataDirty}
+                          onClick={() => void saveMetadata()}
+                        >
+                          {savingMetadata ? (
+                            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckCircle className="mr-1.5 h-4 w-4" />
+                          )}
+                          {savingMetadata ? "Saving…" : "Save notes, reference & proof"}
+                        </Button>
                       </div>
                     </div>
+                  </section>
 
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-2">
-                      {metadataSaveMsg ? (
-                        <p
-                          className={cn(
-                            "inline-flex items-center gap-1.5 text-sm font-medium order-2 sm:order-1",
-                            isDark ? "text-emerald-300" : "text-emerald-700",
-                          )}
-                          role="status"
-                        >
-                          <CheckCircle className="h-4 w-4 shrink-0" />
-                          {metadataSaveMsg}
-                        </p>
-                      ) : (
-                        <span className="hidden sm:block order-1" />
-                      )}
-                      <Button
-                        type="button"
-                        className={cn(
-                          "w-full sm:w-auto sm:min-w-[180px] order-1 sm:order-2",
-                          isDark && "bg-violet-600 hover:bg-violet-500",
-                        )}
-                        disabled={savingMetadata || !metadataDirty}
-                        onClick={() => void saveMetadata()}
-                      >
-                        {savingMetadata
-                          ? "Saving…"
-                          : (
-                            <>
-                              <span className="sm:hidden">Save notes & UTR</span>
-                              <span className="hidden sm:inline">
-                                Save notes, UTR & proof link
-                              </span>
-                            </>
-                          )}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
+                  <p className="pb-1 text-[11px] text-muted-foreground">
+                    Request ID{" "}
+                    <button
+                      type="button"
+                      className="font-mono hover:text-foreground"
+                      onClick={() => void copyText(active.id, "Request ID")}
+                    >
+                      {active.id}
+                    </button>
+                    {active.processed_at &&
+                      ` · Paid ${new Date(active.processed_at).toLocaleString(undefined, {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}`}
+                  </p>
+                </div>
+              );
+            })()}
             <DialogFooter
               className={cn(
-                "shrink-0 border-t px-4 sm:px-6 py-3 sm:py-4 gap-2",
-                isDark
-                  ? "bg-[#06021D] border-gray-700"
-                  : "bg-white border-slate-200",
+                "shrink-0 border-t px-5 sm:px-6 py-3 sm:py-3.5",
+                isDark ? "bg-[#06021D] border-white/10" : "bg-white border-slate-200",
               )}
             >
               {active && !isFinalStatus(active.status) ? (
-                <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full">
-                  {["pending", "in_review"].includes(active.status) && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full sm:w-auto justify-center"
-                          onClick={() => cancelRequest(active)}
-                          disabled={updating || savingMetadata}
-                        >
-                          <X className="h-4 w-4 mr-1 shrink-0" />
-                          Cancel
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className="z-[60]">
-                        <p>Cancel and refund user balance</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                  {["pending", "in_review"].includes(active.status) && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          size="sm"
-                          className={cn(
-                            "w-full sm:w-auto justify-center",
-                            isDark
-                              ? "bg-violet-600 hover:bg-violet-500"
-                              : "bg-violet-600 hover:bg-violet-700 text-white",
-                          )}
-                          onClick={() =>
-                            void applyStatusFromDetails("approved", {
-                              admin_notes: adminNotes,
-                              transaction_reference: txRef,
-                            })
-                          }
-                          disabled={updating || savingMetadata}
-                        >
-                          <CheckCircle className="h-4 w-4 mr-1 shrink-0" />
-                          Approve
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className="z-[60]">
-                        <p>
-                          Approve for payment processing (keeps transaction
-                          reference)
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                  {["pending", "in_review", "approved", "failed"].includes(
-                    active.status,
-                  ) && (
+                <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                    {["pending", "in_review"].includes(active.status) && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
                             size="sm"
-                            variant="outline"
-                            className="w-full sm:w-auto justify-center"
+                            variant="ghost"
+                            className="justify-center"
+                            onClick={() => cancelRequest(active)}
+                            disabled={updating || savingMetadata}
+                          >
+                            <X className="h-4 w-4 mr-1 shrink-0" />
+                            Cancel
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent className="z-[60]">
+                          <p>Cancel and refund user balance</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    {["pending", "in_review"].includes(active.status) && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="justify-center"
+                            onClick={() => openInReviewDialog(active)}
+                            disabled={updating || savingMetadata}
+                          >
+                            <Clock className="h-4 w-4 mr-1 shrink-0" />
+                            Review
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent className="z-[60]">
+                          <p>Mark as under review (add internal reason for other reviewers)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    {active.status === "in_review" && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="justify-center"
+                            onClick={() =>
+                              void updateStatus(active.id, "pending", undefined, {
+                                closeDetails: true,
+                              })
+                            }
+                            disabled={updating || savingMetadata}
+                          >
+                            <RotateCcw className="h-4 w-4 mr-1 shrink-0" />
+                            Back to pending
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent className="z-[60]">
+                          <p>Revert to pending</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    {["pending", "in_review", "approved", "failed"].includes(active.status) && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className={cn(
+                              "justify-center",
+                              isDark
+                                ? "text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+                                : "text-rose-600 hover:bg-rose-50 hover:text-rose-700",
+                            )}
                             onClick={() => openRejectDialog(active)}
                             disabled={updating || savingMetadata}
                           >
@@ -3764,58 +3741,70 @@ export default function WithdrawalsClient({
                         </TooltipContent>
                       </Tooltip>
                     )}
+                    {active.status === "approved" && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="justify-center"
+                            onClick={() => openFailedDialog(active)}
+                            disabled={updating || savingMetadata}
+                          >
+                            <AlertTriangle className="h-4 w-4 mr-1 shrink-0" />
+                            Failed
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent className="z-[60]">
+                          <p>Payment failed (internal tracking)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    {active.status === "approved" && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="justify-center"
+                            onClick={() => openForfeitDialog(active)}
+                            disabled={updating || savingMetadata}
+                          >
+                            <ShieldOff className="h-4 w-4 mr-1 shrink-0" />
+                            Forfeit
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent className="z-[60]">
+                          <p>Forfeit (no refund)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </div>
                   {["pending", "in_review"].includes(active.status) && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full sm:w-auto justify-center"
-                          onClick={() => openInReviewDialog(active)}
-                          disabled={updating || savingMetadata}
-                        >
-                          <Clock className="h-4 w-4 mr-1 shrink-0" />
-                          Review
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className="z-[60]">
-                        <p>
-                          Mark as under review (add internal reason for other
-                          reviewers)
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                  {active.status === "in_review" && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full sm:w-auto justify-center col-span-2 sm:col-span-1"
+                          className="w-full sm:w-auto sm:min-w-[150px] justify-center bg-[#7F39EC] text-white hover:bg-[#6a2fd0]"
                           onClick={() =>
-                            void updateStatus(active.id, "pending", undefined, {
-                              closeDetails: true,
+                            void applyStatusFromDetails("approved", {
+                              admin_notes: adminNotes,
+                              transaction_reference: txRef,
                             })
                           }
                           disabled={updating || savingMetadata}
                         >
-                          <RotateCcw className="h-4 w-4 mr-1 shrink-0" />
-                          Back to pending
+                          <CheckCircle className="h-4 w-4 mr-1.5 shrink-0" />
+                          Approve
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent className="z-[60]">
-                        <p>Revert to pending</p>
+                        <p>Approve for payment processing (keeps transaction reference)</p>
                       </TooltipContent>
                     </Tooltip>
                   )}
                   {["approved", "failed"].includes(active.status) && (
                     <Button
-                      size="sm"
-                      className={cn(
-                        "w-full sm:w-auto justify-center col-span-2 sm:col-span-1",
-                        isDark && "bg-violet-600 hover:bg-violet-500",
-                      )}
+                      className="w-full sm:w-auto sm:min-w-[150px] justify-center bg-emerald-600 text-white hover:bg-emerald-700"
                       onClick={() =>
                         void applyStatusFromDetails("processed", {
                           transaction_reference: txRef,
@@ -3824,47 +3813,9 @@ export default function WithdrawalsClient({
                       }
                       disabled={updating || savingMetadata}
                     >
-                      <DollarSign className="h-4 w-4 mr-1 shrink-0" />
+                      <DollarSign className="h-4 w-4 mr-1.5 shrink-0" />
                       Mark Paid
                     </Button>
-                  )}
-                  {active.status === "approved" && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full sm:w-auto justify-center"
-                          onClick={() => openFailedDialog(active)}
-                          disabled={updating || savingMetadata}
-                        >
-                          <AlertTriangle className="h-4 w-4 mr-1 shrink-0" />
-                          Failed
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className="z-[60]">
-                        <p>Payment failed (internal tracking)</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                  {active.status === "approved" && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full sm:w-auto justify-center"
-                          onClick={() => openForfeitDialog(active)}
-                          disabled={updating || savingMetadata}
-                        >
-                          <ShieldOff className="h-4 w-4 mr-1 shrink-0" />
-                          Forfeit
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className="z-[60]">
-                        <p>Forfeit (no refund)</p>
-                      </TooltipContent>
-                    </Tooltip>
                   )}
                 </div>
               ) : active ? (
