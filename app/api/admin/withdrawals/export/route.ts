@@ -20,6 +20,7 @@ import {
   type WithdrawalExportColumnSpec,
 } from "@/lib/withdrawal-export-columns";
 import { formatFeePercentNumber, withdrawalPayout } from "@/lib/payout-fees";
+import { readPayoutDetails } from "@/lib/skydo-payout-import";
 
 type ExportCurrency = { code: string; rate: number };
 
@@ -83,6 +84,7 @@ function rowValues(
   const isCash = String(m.amount_type || "cash") === "cash";
   const username = users?.username ?? "";
   const p = withdrawalPayout(m);
+  const record = readPayoutDetails(m.payout_details);
 
   return {
     payee_email: payoutDestination(m).destination,
@@ -115,6 +117,10 @@ function rowValues(
     bank_name: String(d.bank_name || ""),
     skydo_email: type === "skydo" ? String(d.email || "") : "",
     transaction_reference: String(m.transaction_reference ?? ""),
+    utr: record?.utr ?? "",
+    amount_settled_inr:
+      record?.amount_settled_inr != null ? record.amount_settled_inr.toFixed(2) : "",
+    date_of_credit: record?.date_of_credit ?? "",
     admin_notes: String(m.admin_notes ?? ""),
     user_notes: String(m.user_notes ?? ""),
     payment_proof_link: String(m.payment_proof_link ?? ""),
