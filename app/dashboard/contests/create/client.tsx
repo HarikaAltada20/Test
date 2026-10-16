@@ -6216,14 +6216,13 @@ export default function CreateContestPage({
     // Drafts made with "Copy an existing campaign": banner + copied invites.
     if (draft.duplicated_from_contest_id && draft.moderation_status === "draft") {
       const sourceId = String(draft.duplicated_from_contest_id);
-      supabase
-        .from("contests")
-        .select("title")
-        .eq("id", sourceId)
-        .maybeSingle()
-        .then(({ data }) =>
-          setCopiedFrom({ id: sourceId, title: data?.title || "another campaign" }),
-        );
+      // Brands only see the banner for a copy of their own campaign; an admin
+      // copy from another brand never shows that brand's campaign to them.
+      let sourceQuery = supabase.from("contests").select("title").eq("id", sourceId);
+      if (!isAdmin) sourceQuery = sourceQuery.eq("advertiser_id", draft.advertiser_id);
+      sourceQuery.maybeSingle().then(({ data }) =>
+        setCopiedFrom(data ? { id: sourceId, title: data.title || "Untitled campaign" } : null),
+      );
     } else {
       setCopiedFrom(null);
     }
