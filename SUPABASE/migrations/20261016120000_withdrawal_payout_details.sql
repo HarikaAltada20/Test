@@ -5,7 +5,7 @@
 --      that isn't on its allow-list, including new ones.
 --   2. Index on payout_details->>'payout_id' so re-imports can spot payouts already recorded.
 --   3. admin_withdrawal_requests_list: appends payout_details (end of the column list,
---      as CREATE OR REPLACE VIEW requires).
+--      as CREATE OR REPLACE VIEW requires), and makes it readable by service_role only.
 --   4. admin_record_withdrawal_payout(): saves payout_details and, when asked, marks the
 --      request paid through the existing admin_set_withdrawal_status, in one transaction.
 --
@@ -78,6 +78,11 @@ SELECT
   wr.payout_details
 FROM public.withdrawal_requests wr
 LEFT JOIN public.users u ON u.id = wr.user_id;
+
+-- The view runs as its owner (RLS doesn't apply), so only the server's service role may
+-- read it. The app reads it only from the admin API routes, which use service_role.
+REVOKE ALL ON public.admin_withdrawal_requests_list FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.admin_withdrawal_requests_list TO service_role;
 
 -- 4. Record a payout (and optionally mark paid) -----------------------------------------
 
