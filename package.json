@@ -80,6 +80,7 @@
     "@upstash/qstash": "^2.9.0",
     "@upstash/redis": "^1.36.2",
     "@vercel/analytics": "^1.5.0",
+    "@vercel/speed-insights": "^2.0.0",
     "archiver": "^8.0.0",
     "autoprefixer": "^10.4.20",
     "axios": "^1.13.2",
