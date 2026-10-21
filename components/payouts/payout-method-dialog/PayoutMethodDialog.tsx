@@ -27,7 +27,15 @@ import {
   type PayoutCountry,
   type PayoutMethodDraft,
 } from "@/lib/payout-method-validation";
+import {
+  SKYDO_CONVERSION_NOTE,
+  formatFeePercent,
+  formatUsdInrRate,
+  payoutCurrencyFor,
+  type PayoutFeeSettings,
+} from "@/lib/payout-fees";
 import { SkydoPayoutForm } from "@/components/payouts/SkydoPayoutForm";
+import { ProcessingFeeInfo } from "@/components/payouts/ProcessingFeeInfo";
 import type { PayoutMethod } from "@/types/earnings";
 import { MethodPicker, type MethodPickerOption } from "./MethodPicker";
 import { BankFields, CryptoFields, UpiFields } from "./MethodFields";
@@ -47,16 +55,31 @@ export interface PayoutMethodDialogProps {
   payoutMethods: PayoutMethod[];
   withdrawableBalanceCents: number;
   pausedMethodTypes: string[];
+  feeSettings: PayoutFeeSettings;
   /** Persists the method (the page adds user_id). Shows its own success toast. */
   onSave: (draft: PayoutMethodDraft) => Promise<PayoutSaveResult>;
   onDelete: (method: PayoutMethod) => Promise<boolean>;
   onSetDefault: (method: PayoutMethod) => Promise<boolean>;
 }
 
-const COUNTRY_HELPER: Record<PayoutCountry, string> = {
-  IN: "Available in India: UPI, bank transfer, crypto and Skydo.",
-  OTHER: "Outside India, payouts are available in crypto only.",
+const METHOD_NAMES_IN_SENTENCE: Record<string, string> = {
+  upi: "UPI",
+  bank_transfer: "bank transfer",
+  crypto: "crypto",
+  skydo: "Skydo",
 };
+
+/** Lists only the methods that are switched on, e.g. "Available in India: UPI, crypto and Skydo." */
+function countryHelper(country: PayoutCountry, pausedMethodTypes: string[]): string {
+  const names = PAYOUT_TYPES_BY_COUNTRY[country]
+    .filter((type) => !pausedMethodTypes.includes(type))
+    .map((type) => METHOD_NAMES_IN_SENTENCE[type] ?? type);
+  if (names.length === 0) return "Payouts are paused for now. Please check back soon.";
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return country === "IN"
+    ? `Available in India: ${list}.`
+    : `Outside India, payouts are available in ${list} only.`;
+}
 
 export function PayoutMethodDialog({
   open,
@@ -66,6 +89,7 @@ export function PayoutMethodDialog({
   payoutMethods,
   withdrawableBalanceCents,
   pausedMethodTypes,
+  feeSettings,
   onSave,
   onDelete,
   onSetDefault,
@@ -113,7 +137,13 @@ export function PayoutMethodDialog({
   const pickerOptions: MethodPickerOption[] = useMemo(
     () =>
       PAYOUT_TYPES_BY_COUNTRY[form.country].map((type) => {
-        const option: MethodPickerOption = { type, paused: pausedMethodTypes.includes(type) };
+        const paused = pausedMethodTypes.includes(type);
+        const feeBps = feeSettings.feeBpsByMethod[type] ?? 0;
+        const option: MethodPickerOption = {
+          type,
+          paused,
+          feeLabel: paused ? undefined : feeBps > 0 ? `${formatFeePercent(feeBps)} fee` : "No fee",
+        };
         if (type === "skydo") {
           if (existingSkydo) option.descriptor = "Already added";
           else if (!skydoEligible) {
@@ -123,7 +153,7 @@ export function PayoutMethodDialog({
         }
         return option;
       }),
-    [existingSkydo, form.country, minLabel, pausedMethodTypes, skydoEligible]
+    [existingSkydo, feeSettings.feeBpsByMethod, form.country, minLabel, pausedMethodTypes, skydoEligible]
   );
 
   const requestClose = () => {
@@ -259,6 +289,7 @@ export function PayoutMethodDialog({
               isDark={isDark}
               busyId={busyId}
               pausedMethodTypes={pausedMethodTypes}
+              feeBpsByMethod={feeSettings.feeBpsByMethod}
               onEdit={openEditForm}
               onDelete={(m) => void runRowAction(m, onDelete)}
               onSetDefault={(m) => void runRowAction(m, onSetDefault)}
@@ -308,7 +339,7 @@ export function PayoutMethodDialog({
                       </SelectContent>
                     </Select>
                     <p id="payoutCountry-helper" className={cn("text-xs", t.muted)}>
-                      {COUNTRY_HELPER[form.country]}
+                      {countryHelper(form.country, pausedMethodTypes)}
                     </p>
                   </div>
 
@@ -324,12 +355,28 @@ export function PayoutMethodDialog({
                       disabled={submitting}
                       labelledBy="payoutMethodLabel"
                     />
+                    {!pausedMethodTypes.includes(form.type) && (
+                      <MethodFeeLine
+                        methodType={form.type}
+                        feeBps={feeSettings.feeBpsByMethod[form.type] ?? 0}
+                        usdInrRate={feeSettings.usdInrRate}
+                        isDark={isDark}
+                      />
+                    )}
                   </div>
                 </>
               )}
 
               <section aria-label={`${getPayoutMethodMeta(form.type).label} details`}>
-                {form.type === "upi" && <UpiFields form={form} isDark={isDark} disabled={submitting} />}
+                {form.type === "upi" && (
+                  <UpiFields
+                    form={form}
+                    isDark={isDark}
+                    disabled={submitting}
+                    upiEnabled={!pausedMethodTypes.includes("upi")}
+                    usdInrRate={feeSettings.usdInrRate}
+                  />
+                )}
                 {form.type === "bank_transfer" && (
                   <BankFields form={form} isDark={isDark} disabled={submitting} />
                 )}
@@ -441,5 +488,35 @@ export function PayoutMethodDialog({
         }}
       />
     </Dialog>
+  );
+}
+
+/** Fee and payout currency for the selected method; shown only when the method is on. */
+function MethodFeeLine({
+  methodType,
+  feeBps,
+  usdInrRate,
+  isDark,
+}: {
+  methodType: string;
+  feeBps: number;
+  usdInrRate: number;
+  isDark: boolean;
+}) {
+  const t = payoutDialogTheme(isDark);
+  const paidIn =
+    payoutCurrencyFor(methodType) === "INR"
+      ? `Paid in INR at ${formatUsdInrRate(usdInrRate)} per $1.`
+      : methodType === "skydo"
+        ? `Paid in USD. ${SKYDO_CONVERSION_NOTE}`
+        : "Paid in USD.";
+  return (
+    <p className={cn("flex flex-wrap items-center gap-x-1 text-xs", t.muted)}>
+      <span className={cn("inline-flex items-center font-medium", t.text)}>
+        {feeBps > 0 ? `Processing fee: ${formatFeePercent(feeBps)}` : "No processing fee"}
+        {feeBps > 0 && <ProcessingFeeInfo feeBps={feeBps} isDark={isDark} />}
+      </span>
+      <span>{paidIn}</span>
+    </p>
   );
 }

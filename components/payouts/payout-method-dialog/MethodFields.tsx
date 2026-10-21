@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { CRYPTO_NETWORKS, type CryptoNetwork } from "@/lib/payout-method-validation";
+import { formatUsdInrRate } from "@/lib/payout-fees";
 import { FieldNote, FormField } from "./FormField";
 import { PAYOUT_FIELD_IDS, type PayoutMethodFormState } from "./usePayoutMethodForm";
 import { payoutDialogTheme } from "./theme";
@@ -50,7 +51,13 @@ function FriendlyNameField({
   );
 }
 
-export function UpiFields({ form, isDark, disabled }: FieldsProps) {
+export function UpiFields({
+  form,
+  isDark,
+  disabled,
+  upiEnabled,
+  usdInrRate,
+}: FieldsProps & { upiEnabled: boolean; usdInrRate: number }) {
   const t = payoutDialogTheme(isDark);
   return (
     <div className="space-y-4">
@@ -85,6 +92,13 @@ export function UpiFields({ form, isDark, disabled }: FieldsProps) {
         />
       </FormField>
       <FriendlyNameField form={form} isDark={isDark} disabled={disabled} placeholder="e.g. My UPI" />
+      {upiEnabled && (
+        <FieldNote isDark={isDark}>
+          Game of Creators is an international platform, so we recommend Skydo, crypto or bank
+          transfer. If UPI works best for you, you can still use it. You&apos;ll receive INR at{" "}
+          {formatUsdInrRate(usdInrRate)} per $1, after the processing fee.
+        </FieldNote>
+      )}
       <FieldNote isDark={isDark}>
         UPI withdrawals take 2–48 hours. You&apos;re responsible for declaring your
         earnings and paying any taxes under Indian law.

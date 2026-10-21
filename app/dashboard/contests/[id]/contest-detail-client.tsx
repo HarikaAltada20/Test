@@ -8,13 +8,17 @@ import React, {
   useRef,
 } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { CampaignAccessPanel } from "@/components/campaign-access/CampaignAccessPanel";
 import { ApplicationsPanel } from "@/components/campaign-access/ApplicationsPanel";
+import { applicationsApi } from "@/components/campaign-access/api";
 import {
+  isAccessMode,
   isPrivateLikeAccessMode,
   type AccessMode,
 } from "@/lib/campaign-access";
+import { AccessModeBadge } from "@/components/campaign-access/AccessBadge";
 import {
   CONTEST_VIRTUAL_BODY_CLASS,
   CONTEST_VIRTUAL_ROW_CLASS,
@@ -247,6 +251,7 @@ import ManualPointsModal from "@/components/ManualPointsModal";
 import { CreatorSubmissionsModal } from "@/components/CreatorSubmissionsModal";
 import { InstagramCreatorAnalyticsModal } from "@/components/contest/InstagramCreatorAnalyticsModal";
 import { UpdateCampaignStatusDialog } from "@/components/contest/UpdateCampaignStatusDialog";
+import { DuplicateCampaignDialog } from "@/components/campaign-duplicate/DuplicateCampaignDialog";
 import { BudgetProgress } from "@/components/BudgetProgress";
 import { PaidReversalRefundEstimate } from "@/components/PaidReversalRefundEstimate";
 import type { PaidReversalRefundLine } from "@/components/PaidReversalRefundEstimate";
@@ -1862,6 +1867,17 @@ export default function ContestDetailClient({
   const { activeTab, setActiveTab } = useTabState(tabs, {
     defaultTab: "overview",
   });
+  // Notifications can link straight to a tab, e.g. ?tab=applications. Applied
+  // whenever the requested tab changes, including when a notification for
+  // this same campaign is clicked while the page is already open.
+  const requestedTab = useSearchParams().get("tab");
+  const lastRequestedTab = useRef<string | null>(null);
+  useEffect(() => {
+    if (!contest || !requestedTab || requestedTab === lastRequestedTab.current) return;
+    if (!tabs.some((t) => t.id === requestedTab)) return;
+    lastRequestedTab.current = requestedTab;
+    setActiveTab(requestedTab);
+  });
   // Debug: Log current toasts state
   console.log("🔍 Current toasts state:", toasts);
   // const [currentSubmissions, setCurrentSubmissions] = useState<Submission[]>(
@@ -2397,6 +2413,7 @@ export default function ContestDetailClient({
   // Status update states
   const [isSyncingCreatorViews, setIsSyncingCreatorViews] = useState(false);
   const [statusUpdateDialog, setStatusUpdateDialog] = useState(false);
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   // Get theme from parent layout instead of managing independent state
   const [isDark, setIsDark] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -4194,6 +4211,20 @@ export default function ContestDetailClient({
     return ordered.length > 0 ? ordered.join(", ") : "All Quality Scores";
   }, [analyticsQualityScoreFilters]);
 
+  // Pending applications for the tab label; the panel keeps it current after reviews.
+  const [pendingApplications, setPendingApplications] = useState<number | null>(null);
+  useEffect(() => {
+    if (contest?.access_mode !== "restricted") return;
+    let cancelled = false;
+    applicationsApi
+      .list(contestId, { status: "pending", limit: 1 })
+      .then((res) => !cancelled && setPendingApplications(res.counts.pending))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [contestId, contest?.access_mode]);
+
   const displayTabs = useMemo(
     () => [
       { id: "overview", label: "Overview" },
@@ -4206,13 +4237,20 @@ export default function ContestDetailClient({
         : []),
       { id: "analytics", label: "Analytics" },
       ...(contest?.access_mode === "restricted"
-        ? [{ id: "applications", label: "Applications" }]
+        ? [
+            {
+              id: "applications",
+              label: pendingApplications
+                ? `Applications (${pendingApplications})`
+                : "Applications",
+            },
+          ]
         : []),
       ...(isPrivateLikeAccessMode(contest?.access_mode)
         ? [{ id: "access", label: "Access" }]
         : []),
     ],
-    [submissionTotalCount, contest?.platform, contest?.access_mode],
+    [submissionTotalCount, contest?.platform, contest?.access_mode, pendingApplications],
   );
 
   // Filter + sort (memoized so virtualizer isn't fed a new array every render).
@@ -15841,11 +15879,53 @@ export default function ContestDetailClient({
                           : "Leaderboard"}
                   </Badge>
                 )}
+                {isAccessMode(contest?.access_mode) && (
+                  <span className={cn("inline-flex", isDark && "dark")}>
+                    <AccessModeBadge mode={contest.access_mode} size="md" />
+                  </span>
+                )}
+                {contest?.access_mode === "restricted" &&
+                  (pendingApplications ?? 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("applications")}
+                      className={cn(
+                        "rounded-full px-3 py-1 text-xs font-semibold underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] sm:text-sm",
+                        isDark
+                          ? "bg-amber-500/15 text-amber-200"
+                          : "bg-amber-50 text-amber-800",
+                      )}
+                    >
+                      {pendingApplications} pending application
+                      {pendingApplications === 1 ? "" : "s"}
+                    </button>
+                  )}
               </div>
             </div>
           </div>
           {/* Quick Actions Bar */}
           <div className="flex flex-wrap gap-2 items-center lg:justify-end shrink-0 w-full lg:w-auto pl-0 sm:pl-12 lg:pl-0">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDuplicateDialogOpen(true)}
+              className={cn(
+                "rounded-xl",
+                isDark
+                  ? "border-purple-400/60 text-purple-300 hover:bg-white/5"
+                  : "border-purple-400/50 text-purple-700 hover:bg-purple-50",
+              )}
+            >
+              <Copy className="h-4 w-4 shrink-0" />
+              Duplicate
+            </Button>
+            <DuplicateCampaignDialog
+              open={duplicateDialogOpen}
+              onOpenChange={setDuplicateDialogOpen}
+              isAdmin={!!isAdminView}
+              sourceContestId={contestId}
+              allowChangeTarget={!!isAdminView}
+            />
             {isAdminView && (
               <Button
                 size="sm"
@@ -34278,7 +34358,15 @@ export default function ContestDetailClient({
           </TabPanel>
           {contest?.access_mode === "restricted" && (
             <TabPanel value="applications" activeTab={activeTab}>
-              <ApplicationsPanel contestId={contestId} />
+              <ApplicationsPanel
+                contestId={contestId}
+                onPendingCountChange={setPendingApplications}
+                profileBasePath={
+                  isAdminView
+                    ? `/dashboard/admin/contests/${contestId}`
+                    : `/dashboard/contests/${contestId}`
+                }
+              />
             </TabPanel>
           )}
           {isPrivateLikeAccessMode(contest?.access_mode) && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation"; // Added for potential future use
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,12 @@ import {
   PayoutMethodDialog,
   type PayoutSaveResult,
 } from "@/components/payouts/payout-method-dialog/PayoutMethodDialog";
+import { WithdrawalReceiveNote } from "@/components/payouts/WithdrawalReceiveNote";
+import {
+  DEFAULT_PAYOUT_FEE_SETTINGS,
+  parsePayoutFeeSettings,
+  type PayoutFeeSettings,
+} from "@/lib/payout-fees";
 import {
   WithdrawBalanceDialog,
   type WithdrawRequest,
@@ -333,23 +339,24 @@ export default function EarningsClientPage({
     router,
   ]);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/payout-method-settings")
-      .then((res) => res.json())
-      .then((data) => {
-        if (cancelled) return;
-        setPausedPayoutMethodTypes(data.pausedMethodTypes || []);
-        setEnabledPayoutMethodTypes(data.enabledMethodTypes || ["crypto", "upi", "bank_transfer", "skydo"]);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setPausedPayoutMethodTypes([]);
-          setEnabledPayoutMethodTypes(["crypto", "upi", "bank_transfer", "skydo"]);
-        }
-      });
-    return () => { cancelled = true; };
+  const [payoutFeeSettings, setPayoutFeeSettings] = useState<PayoutFeeSettings>(DEFAULT_PAYOUT_FEE_SETTINGS);
+
+  const loadPayoutSettings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/payout-method-settings");
+      const data = await res.json();
+      setPausedPayoutMethodTypes(data.pausedMethodTypes || []);
+      setEnabledPayoutMethodTypes(data.enabledMethodTypes || ["crypto", "upi", "bank_transfer", "skydo"]);
+      setPayoutFeeSettings(parsePayoutFeeSettings(data));
+    } catch {
+      setPausedPayoutMethodTypes([]);
+      setEnabledPayoutMethodTypes(["crypto", "upi", "bank_transfer", "skydo"]);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadPayoutSettings();
+  }, [loadPayoutSettings]);
 
   const PAYOUT_METHOD_LABELS: Record<string, string> = {
     crypto: "Crypto",
@@ -479,6 +486,8 @@ export default function EarningsClientPage({
     amountCents,
     payoutMethodId,
     notes,
+    expectedFeeBps,
+    expectedUsdInrRate,
   }: WithdrawRequest): Promise<WithdrawSubmitResult> => {
     if (!authUser || !profile || !userData) {
       return { ok: false, message: "User profile or data not loaded." };
@@ -492,6 +501,8 @@ export default function EarningsClientPage({
       p_amount_type: "cash" as const,
       p_user_notes: notes,
       p_redeemed_item_description: null,
+      p_expected_fee_bps: expectedFeeBps,
+      p_expected_usd_inr_rate: expectedUsdInrRate,
     };
 
     console.log(
@@ -506,6 +517,8 @@ export default function EarningsClientPage({
 
     if (rpcError) {
       console.error("Error creating withdrawal request via RPC:", rpcError);
+      // The fee or rate changed since the dialog loaded them: show the new amounts.
+      if (rpcError.message?.includes("Fees were just updated")) void loadPayoutSettings();
       return {
         ok: false,
         message: formatErrorWithCurrency(rpcError.message || "Unknown error"),
@@ -1224,6 +1237,7 @@ export default function EarningsClientPage({
                         <TableCell>{formatDateTime(req.created_at)}</TableCell>
                         <TableCell>
                           {formatCurrencyFromCents(req.amount)}
+                          <WithdrawalReceiveNote request={req} />
                         </TableCell>
                         <TableCell>{req.payout_method_summary}</TableCell>
                         <TableCell>
@@ -1653,6 +1667,7 @@ export default function EarningsClientPage({
         payoutMethods={payoutMethods}
         withdrawableBalanceCents={withdrawableBalanceCents}
         pausedMethodTypes={pausedPayoutMethodTypes}
+        feeSettings={payoutFeeSettings}
         onSave={savePayoutMethod}
         onDelete={deletePayoutMethod}
         onSetDefault={setDefaultPayoutMethod}
@@ -1668,6 +1683,8 @@ export default function EarningsClientPage({
         payoutMethods={payoutMethods}
         availableMethodIds={availablePayoutMethodsForWithdraw.map((m) => m.id)}
         pausedMethodTypes={pausedPayoutMethodTypes}
+        feeSettings={payoutFeeSettings}
+        onOpenRefresh={loadPayoutSettings}
         onManageMethods={() => {
           setIsWithdrawModalOpen(false);
           openPayoutDialog("list");

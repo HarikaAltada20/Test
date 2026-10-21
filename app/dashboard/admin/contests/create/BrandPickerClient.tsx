@@ -12,15 +12,18 @@ import {
   AlertTriangle,
   ArrowRight,
   Building2,
+  Copy,
   Crown,
   Loader2,
   Mail,
+  Plus,
   Sparkles,
   Trophy,
   Wallet,
   Zap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { DuplicateCampaignDialog } from "@/components/campaign-duplicate/DuplicateCampaignDialog";
 
 type BrandSummary = {
   advertiser: AdvertiserSearchOption;
@@ -72,6 +75,7 @@ export function AdminCreateForBrandClient() {
   const [summary, setSummary] = useState<BrandSummary | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [copyOpen, setCopyOpen] = useState(false);
 
   useEffect(() => {
     if (!selectedBrand) {
@@ -329,35 +333,60 @@ export function AdminCreateForBrandClient() {
         </div>
 
         <div className="border-t border-purple-100/80 bg-muted/20 px-6 py-4 dark:border-violet-500/20">
-          <button
-            type="button"
-            disabled={!canContinue}
-            onClick={handleContinue}
-            className={cn(
-              "inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition-all",
-              "bg-[#4A00BE] ring-1 ring-black/5 hover:opacity-95 active:scale-[0.99]",
-              "disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100",
-              "dark:bg-[#5F2BB1] dark:ring-white/10",
-            )}
-          >
-            {loadingSummary ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Checking plan…
-              </>
-            ) : (
-              <>
-                Continue to campaign wizard
+          {loadingSummary ? (
+            <div className="flex items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking plan…
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                disabled={!canContinue}
+                onClick={handleContinue}
+                className={cn(
+                  "inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition-all",
+                  "bg-[#4A00BE] ring-1 ring-black/5 hover:opacity-95 active:scale-[0.99]",
+                  "disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100",
+                  "dark:bg-[#5F2BB1] dark:ring-white/10",
+                )}
+              >
+                <Plus className="h-4 w-4" />
+                Start from scratch
                 <ArrowRight className="h-4 w-4" />
-              </>
-            )}
-          </button>
+              </button>
+              <button
+                type="button"
+                disabled={!canContinue}
+                onClick={() => setCopyOpen(true)}
+                className={cn(
+                  "inline-flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3.5 text-sm font-semibold shadow-sm transition-all",
+                  "border-[#4A00BE] text-[#4A00BE] hover:bg-purple-50 active:scale-[0.99]",
+                  "disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100",
+                  "dark:border-violet-400/60 dark:text-violet-200 dark:hover:bg-violet-500/10",
+                )}
+              >
+                <Copy className="h-4 w-4" />
+                Copy an existing campaign
+              </button>
+            </div>
+          )}
           <p className="mt-2 text-center text-xs text-muted-foreground">
             Wizard uses this brand&apos;s plan for contest types, limits, and
             commission. Payment is wallet-only.
           </p>
         </div>
       </div>
+
+      {selectedBrand && (
+        <DuplicateCampaignDialog
+          open={copyOpen}
+          onOpenChange={setCopyOpen}
+          isAdmin
+          targetAdvertiserId={selectedBrand.id}
+          targetBrandName={displayName || null}
+        />
+      )}
     </div>
   );
 }

@@ -1,16 +1,24 @@
 import type {
   AllowlistMember,
   ApplicationQuestion,
+  ApplicationRequirementFilter,
   ApplicationResult,
+  ApplicationSort,
   ApplicationStatus,
   BrandAllowlist,
+  CampaignRequirementsMode,
   ContestAccessMember,
   ContestApplication,
   ContestPreview,
   InviteExpiryPreset,
   InviteLink,
   InviteRedeemResult,
+  MyApplicationListItem,
+  SavedListSyncStatus,
+  WaitlistResult,
 } from "@/lib/campaign-access";
+import { formatAddResultSummary } from "@/lib/campaign-access";
+import type { ApplicantVisibility } from "@/lib/campaign-applicant-profile";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -84,6 +92,8 @@ export const accessListApi = {
     request<{
       contest: { id: string; advertiser_id: string | null; access_mode: string; access_list_skips_requirements: boolean };
       members: ContestAccessMember[];
+      /** Per saved list used on the campaign; empty before the 20261020 migration. */
+      listSync?: SavedListSyncStatus[];
     }>(`/api/contests/${contestId}/access-list`),
 
   addUsernames: (contestId: string, usernames: string) =>
@@ -174,6 +184,8 @@ export type ApplicationListResponse = {
   page: number;
   limit: number;
   counts: Record<ApplicationStatus, number>;
+  applicationsOpen?: boolean;
+  requirementsMode?: CampaignRequirementsMode;
 };
 
 export type ApplyResponse = {
@@ -187,11 +199,20 @@ export type ApplyResponse = {
 export const applicationsApi = {
   list: (
     contestId: string,
-    opts: { status?: ApplicationStatus | "all"; search?: string; page?: number; limit?: number } = {},
+    opts: {
+      status?: ApplicationStatus | "all";
+      search?: string;
+      page?: number;
+      limit?: number;
+      sort?: ApplicationSort;
+      requirements?: ApplicationRequirementFilter;
+    } = {},
   ) => {
     const sp = new URLSearchParams();
     if (opts.status) sp.set("status", opts.status);
     if (opts.search) sp.set("search", opts.search);
+    if (opts.sort && opts.sort !== "newest") sp.set("sort", opts.sort);
+    if (opts.requirements && opts.requirements !== "all") sp.set("requirements", opts.requirements);
     if (opts.page) sp.set("page", String(opts.page));
     if (opts.limit) sp.set("limit", String(opts.limit));
     return request<ApplicationListResponse>(
@@ -232,6 +253,49 @@ export const applicationsApi = {
 
   preview: (contestId: string) =>
     request<{ preview: ContestPreview }>(`/api/contests/${contestId}/preview`),
+
+  /** Brand or admin pauses or reopens applications. */
+  setOpen: (contestId: string, open: boolean) =>
+    request<{ applicationsOpen: boolean }>(`/api/contests/${contestId}/applications-open`, {
+      method: "PATCH",
+      body: JSON.stringify({ open }),
+    }),
+};
+
+export type MyApplicationsResponse = {
+  applications: MyApplicationListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: Record<ApplicationStatus, number>;
+};
+
+/** The signed-in creator's own applications. */
+export const myApplicationsApi = {
+  list: (opts: { status?: ApplicationStatus | "all"; page?: number } = {}) => {
+    const sp = new URLSearchParams();
+    if (opts.status && opts.status !== "all") sp.set("status", opts.status);
+    if (opts.page && opts.page > 1) sp.set("page", String(opts.page));
+    return request<MyApplicationsResponse>(`/api/applications/mine?${sp.toString()}`);
+  },
+};
+
+/** "Notify me when applications reopen" for the signed-in creator. */
+export const waitlistApi = {
+  status: (contestId: string) =>
+    request<{ waiting: boolean }>(`/api/contests/${contestId}/application-waitlist`),
+
+  join: (contestId: string) =>
+    request<{ result: WaitlistResult; waiting: boolean; message: string }>(
+      `/api/contests/${contestId}/application-waitlist`,
+      { method: "POST" },
+    ),
+
+  leave: (contestId: string) =>
+    request<{ result: WaitlistResult; waiting: boolean; message: string }>(
+      `/api/contests/${contestId}/application-waitlist`,
+      { method: "DELETE" },
+    ),
 };
 
 export const questionsApi = {
@@ -247,10 +311,21 @@ export const questionsApi = {
     ),
 };
 
-export function summarizeAddResult(result: AddResult): string {
-  const parts = [`${result.added} added`];
-  if (result.alreadyOnList > 0) parts.push(`${result.alreadyOnList} already on the list`);
-  if (result.notFound?.length) parts.push(`not found: ${result.notFound.join(", ")}`);
-  if (result.invalid?.length) parts.push(`invalid: ${result.invalid.join(", ")}`);
-  return parts.join(" · ");
+/** Short toast line; failed usernames are listed with AddResultDetails instead. */
+export function summarizeAddResult(result: AddResult, alreadyLabel?: string): string {
+  return formatAddResultSummary(result, alreadyLabel);
 }
+
+export const applicantVisibilityApi = {
+  get: (contestId: string) =>
+    request<{ visibility: ApplicantVisibility; canEdit: boolean }>(
+      `/api/contests/${contestId}/applicant-visibility`,
+    ),
+
+  /** Admins only. */
+  save: (contestId: string, visibility: ApplicantVisibility) =>
+    request<{ visibility: ApplicantVisibility; canEdit: boolean }>(
+      `/api/contests/${contestId}/applicant-visibility`,
+      { method: "PUT", body: JSON.stringify({ visibility }) },
+    ),
+};

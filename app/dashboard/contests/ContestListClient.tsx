@@ -49,9 +49,13 @@ import {
   X,
   RefreshCw,
   Hourglass,
+  Copy,
 } from "lucide-react";
 import { DeleteContestButton } from "@/components/delete-contest-button";
+import { DuplicateCampaignDialog } from "@/components/campaign-duplicate/DuplicateCampaignDialog";
 import { formatLocalDateTime, cn } from "@/lib/utils";
+import { AccessModeBadge } from "@/components/campaign-access/AccessBadge";
+import { CampaignAccessInfo } from "@/components/campaign-access/CampaignAccessInfo";
 import { isModifiedLinkClick } from "@/lib/navigation-link-utils";
 import {
   KNOWN_POST_CONTEST_STATUSES,
@@ -122,6 +126,11 @@ import {
 type Contest = {
   id: string;
   title: string | null;
+  access_mode?: string | null;
+  access_list_skips_requirements?: boolean | null;
+  /** Restricted campaigns: added by the list API after its cache. */
+  applications_open?: boolean | null;
+  pending_applications?: number | null;
   platform: string | null;
   contest_type: string | null;
   created_at: string;
@@ -800,6 +809,32 @@ export function ContestListClient({
     };
   }>({});
 
+  // "Duplicate" on a card opens the copy dialog for that campaign.
+  const [duplicateSourceId, setDuplicateSourceId] = useState<string | null>(null);
+
+  const renderDuplicateButton = (contest: Contest, className?: string) => (
+    <button
+      type="button"
+      title="Duplicate"
+      aria-label={`Duplicate ${contest.title || "campaign"}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        setDuplicateSourceId(contest.id);
+      }}
+      className={cn(
+        "pointer-events-auto relative z-[2] inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]",
+        isDark
+          ? "border-gray-700 text-purple-300 hover:bg-white/5"
+          : "border-purple-200 text-[#7F39EC] hover:bg-purple-50",
+        className,
+      )}
+    >
+      <Copy className="h-4 w-4" />
+    </button>
+  );
+
   // Helper functions for loading states
   const setButtonLoading = (
     contestId: string,
@@ -1127,7 +1162,13 @@ export function ContestListClient({
               ) : (
                 <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
               )}
-              <div className="absolute top-2 right-2">
+              <div className="absolute top-2 right-2 flex flex-wrap justify-end gap-1.5">
+                {(contest.access_mode === "private" ||
+                  contest.access_mode === "restricted") && (
+                  <span className={cn("inline-flex", isDark && "dark")}>
+                    <AccessModeBadge mode={contest.access_mode} size="md" />
+                  </span>
+                )}
                 <Badge
                   className={cn(
                     "text-sm px-3 py-1 font-medium border",
@@ -1279,6 +1320,7 @@ export function ContestListClient({
                   size="compact"
                 />
               </div>
+              {renderAccessInfo(contest)}
             </CardHeader>
             <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
               <div
@@ -1593,10 +1635,13 @@ export function ContestListClient({
 
               <ContestListStatsFooter contest={contest} isDark={isDark} />
 
-              {renderViewDetailsLink(contest, "px-3 py-3", {
-                fullWidth: true,
-                eyeClassName: "mr-1",
-              })}
+              <div className="pointer-events-auto relative z-[2] flex items-center gap-2">
+                {renderViewDetailsLink(contest, "px-3 py-3", {
+                  fullWidth: true,
+                  eyeClassName: "mr-1",
+                })}
+                {renderDuplicateButton(contest)}
+              </div>
             </CardContent>
           </div>
         </Card>
@@ -1840,6 +1885,7 @@ export function ContestListClient({
                   className="flex items-center gap-2"
                 />
               )}
+              {renderDuplicateButton(contest)}
             </div>
           </CardContent>
         </div>
@@ -2032,6 +2078,7 @@ export function ContestListClient({
                     size="default"
                   />
                 </div>
+                {renderAccessInfo(contest)}
               </CardHeader>
               <CardContent className="p-0 pt-2 flex-1">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-resp">
@@ -2399,6 +2446,7 @@ export function ContestListClient({
               {renderViewDetailsLink(contest, "px-4 py-3 whitespace-nowrap", {
                 textClassName: "text-sm font-medium",
               })}
+              {renderDuplicateButton(contest)}
             </div>
           </div>
         </Card>
@@ -2659,6 +2707,7 @@ export function ContestListClient({
                 fullWidth: true,
               })
             )}
+            {renderDuplicateButton(contest)}
           </div>
         </div>
       </Card>
@@ -2668,6 +2717,16 @@ export function ContestListClient({
   // Server already returned the sorted page ? do not re-sort or re-slice.
   const displayContests = contests;
   const paginatedContests = contests;
+
+  const renderAccessInfo = (contest: Contest) => (
+    <CampaignAccessInfo
+      accessMode={contest.access_mode}
+      applicationsOpen={contest.applications_open ?? null}
+      pendingCount={contest.pending_applications ?? null}
+      skipsRequirements={contest.access_list_skips_requirements}
+      isDark={isDark}
+    />
+  );
 
   useEffect(() => {
     if (!filtersHydrated) return;
@@ -3726,6 +3785,15 @@ export function ContestListClient({
         isOpen={showCpmUpgradeModal}
         onClose={() => setShowCpmUpgradeModal(false)}
         featureName={upgradeFeatureName}
+      />
+      <DuplicateCampaignDialog
+        open={duplicateSourceId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDuplicateSourceId(null);
+        }}
+        isAdmin={!!isAdminView}
+        sourceContestId={duplicateSourceId}
+        allowChangeTarget={!!isAdminView}
       />
       {hasCreatedContests ? (
         <>

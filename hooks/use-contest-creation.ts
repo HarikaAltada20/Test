@@ -45,14 +45,29 @@ export function useContestCreation(userId: string | undefined) {
     }
   };
 
+  /** Whether the brand has any campaign at all (any status), so one can be copied. */
+  const checkForCampaigns = async () => {
+    if (!userId) return false;
+    const { count, error } = await supabase
+      .from("contests")
+      .select("id", { count: "exact", head: true })
+      .eq("advertiser_id", userId);
+    if (error) {
+      console.error("Error checking for campaigns:", error);
+      return false;
+    }
+    return (count ?? 0) > 0;
+  };
+
   const handleCreateContest = async () => {
     const { hasDrafts } = await checkForDrafts();
-    
-    if (!hasDrafts) {
-      // No drafts - directly go to create new contest
+    const hasCampaigns = hasDrafts || (await checkForCampaigns());
+
+    if (!hasCampaigns) {
+      // Nothing to continue or copy - go straight to a new campaign
       router.push("/dashboard/contests/create?new=true");
     } else {
-      // Has drafts - return true to indicate modal should be shown
+      // Drafts or past campaigns - show "How do you want to start?"
       return true;
     }
   };

@@ -1,15 +1,7 @@
 "use client";
 
 import type { ReactNode, SyntheticEvent } from "react";
-import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  CheckCircle2,
-  Copy,
-  Send,
-  StickyNote,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, BadgeCheck, CheckCircle2, Copy, Send, StickyNote, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -65,10 +57,14 @@ export interface PayoutMethodsTableProps {
   onSort: (key: AdminPayoutSortKey) => void;
   onOpen: (id: string) => void;
   onSetStatus: (row: AdminPayoutMethodRow, status: SkydoStatus) => void;
+  onVerifyKnown: (row: AdminPayoutMethodRow) => void;
+  /** Rendered inside an expanded email group: no outer frame, no select-all. */
+  embedded?: boolean;
 }
 
 function isOverdue(row: AdminPayoutMethodRow, now: number): boolean {
   if (row.method_type !== "skydo" || getSkydoStatus(row) !== "email_pending") return false;
+  if (row.known_verified) return false;
   const since = row.stage_since ?? row.created_at;
   return now - new Date(since).getTime() > SKYDO_OVERDUE_MS;
 }
@@ -121,6 +117,62 @@ function CopyButton({ value, label, isDark }: { value: string; label: string; is
   );
 }
 
+export function peerLabel(row: AdminPayoutMethodRow): string {
+  const peers = row.email_verified_peers;
+  if (peers.length === 0) return "";
+  const first = peers[0].name || (peers[0].username ? `@${peers[0].username}` : "another account");
+  return peers.length === 1 ? first : `${peers.length} accounts`;
+}
+
+/** Green chip: this email is already verified on another account. */
+export function KnownVerifiedChip({ row, isDark }: { row: AdminPayoutMethodRow; isDark: boolean }) {
+  if (!row.known_verified) return null;
+  const peers = row.email_verified_peers;
+  return (
+    <WithTooltip
+      content={
+        <span className="block max-w-xs">
+          Skydo already verified this email on:
+          {peers.map((peer) => (
+            <span key={peer.id} className="block font-medium">
+              {peer.name || "Unnamed"}
+              {peer.username ? ` (@${peer.username})` : ""}
+            </span>
+          ))}
+        </span>
+      }
+    >
+      <span
+        className={cn(
+          "inline-flex w-fit max-w-[200px] cursor-default items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+          isDark ? "bg-emerald-500/15 text-emerald-300" : "bg-emerald-50 text-emerald-700"
+        )}
+      >
+        <BadgeCheck className="h-3 w-3 shrink-0" />
+        <span className="truncate">Verified on {peerLabel(row)}</span>
+      </span>
+    </WithTooltip>
+  );
+}
+
+/** Small chip when more than one account uses the same Skydo email. */
+function SharedEmailChip({ row, isDark }: { row: AdminPayoutMethodRow; isDark: boolean }) {
+  if (row.email_account_count < 2) return null;
+  return (
+    <WithTooltip content={`${row.email_account_count} accounts use this Skydo email`}>
+      <span
+        className={cn(
+          "inline-flex shrink-0 cursor-default items-center gap-0.5 rounded px-1.5 text-[10px] font-medium",
+          isDark ? "bg-white/10 text-gray-300" : "bg-gray-100 text-gray-600"
+        )}
+      >
+        <Users className="h-3 w-3" />
+        {row.email_account_count}
+      </span>
+    </WithTooltip>
+  );
+}
+
 function UserCell({ row, isDark }: { row: AdminPayoutMethodRow; isDark: boolean }) {
   const p = palette(isDark);
   const name = row.full_name || row.username || "Unnamed user";
@@ -149,7 +201,11 @@ function UserCell({ row, isDark }: { row: AdminPayoutMethodRow; isDark: boolean 
   );
 }
 
-function detailLines(row: AdminPayoutMethodRow): { display: string; full: string; sub: string } {
+function detailLines(row: AdminPayoutMethodRow): {
+  display: string;
+  full: string;
+  sub: string;
+} {
   const d = (row.details ?? {}) as Record<string, unknown>;
   const s = (v: unknown) => (v === null || v === undefined ? "" : String(v));
   const full = getPayoutIdentifier(row.method_type, d, { maskBank: false });
@@ -157,9 +213,7 @@ function detailLines(row: AdminPayoutMethodRow): { display: string; full: string
   let sub = "";
   if (row.method_type === "bank_transfer") {
     display = getPayoutIdentifier(row.method_type, d);
-    sub = [s(d.account_holder_name), s(d.ifsc_code || d.swift_bic_code), s(d.bank_name)]
-      .filter(Boolean)
-      .join(" · ");
+    sub = [s(d.account_holder_name), s(d.ifsc_code || d.swift_bic_code), s(d.bank_name)].filter(Boolean).join(" · ");
   } else if (row.method_type === "crypto" || row.method_type === "phantom") {
     display = full.length > 20 ? `${full.slice(0, 8)}…${full.slice(-6)}` : full;
     sub = [s(d.network), s(d.currency || d.preferred_token)].filter(Boolean).join(" · ");
@@ -173,12 +227,30 @@ function NextAction({
   row,
   isDark,
   onSetStatus,
+  onVerifyKnown,
 }: {
   row: AdminPayoutMethodRow;
   isDark: boolean;
   onSetStatus: (status: SkydoStatus) => void;
+  onVerifyKnown: () => void;
 }) {
   const status = getSkydoStatus(row);
+  if (row.known_verified)
+    return (
+      <WithTooltip content={`Skydo already verified this email on ${peerLabel(row)}`}>
+        <Button
+          size="sm"
+          className="h-8 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+          onClick={(e) => {
+            e.stopPropagation();
+            onVerifyKnown();
+          }}
+        >
+          <BadgeCheck className="h-3.5 w-3.5" />
+          Verify (known email)
+        </Button>
+      </WithTooltip>
+    );
   if (status === "email_pending")
     return (
       <Button
@@ -212,7 +284,17 @@ function NextAction({
       </Button>
     );
   return (
-    <span className={cn("text-xs", palette(isDark).muted)}>Ready for withdrawals</span>
+    <WithTooltip content="Verified. Ready for withdrawals.">
+      <span
+        className={cn(
+          "inline-flex cursor-default items-center gap-1 text-xs",
+          isDark ? "text-emerald-400/80" : "text-emerald-600"
+        )}
+      >
+        <CheckCircle2 className="h-4 w-4" aria-hidden />
+        <span className="sr-only">Verified. Ready for withdrawals.</span>
+      </span>
+    </WithTooltip>
   );
 }
 
@@ -238,14 +320,14 @@ function SortHeader({
       type="button"
       onClick={() => onSort(sortKey)}
       className={cn(
-        "inline-flex items-center gap-1 font-medium hover:text-[#7F39EC]",
-        align === "right" && "flex-row-reverse",
+        "inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide hover:text-[#7F39EC]",
+        align === "right" && "justify-end",
         active && "text-[#7F39EC]"
       )}
       aria-label={`Sort by ${label}`}
     >
       {label}
-      <Icon className={cn("h-3.5 w-3.5", !active && "opacity-40")} />
+      <Icon className={cn("h-3.5 w-3.5 shrink-0", !active && "opacity-40")} />
     </button>
   );
 }
@@ -267,33 +349,30 @@ export function PayoutMethodsTable(props: PayoutMethodsTableProps) {
     onSort,
     onOpen,
     onSetStatus,
+    onVerifyKnown,
+    embedded = false,
   } = props;
   const p = palette(isDark);
   const isSkydoView = view === "skydo";
 
   const pageSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id));
   const someSelected = rows.some((r) => selectedIds.has(r.id));
-  const headerCheck: boolean | "indeterminate" = pageSelected
-    ? true
-    : someSelected
-      ? "indeterminate"
-      : false;
+  const headerCheck: boolean | "indeterminate" = pageSelected ? true : someSelected ? "indeterminate" : false;
 
   const sortProps = { sort, order, onSort };
   const thClass = cn(
-    "sticky top-0 z-10 whitespace-nowrap px-3 py-2.5 text-left text-xs uppercase tracking-wide",
+    "whitespace-nowrap px-3 py-2.5 text-left align-middle text-xs font-medium uppercase tracking-wide",
     isDark ? "bg-[#120A35] text-gray-400" : "bg-gray-50 text-gray-500"
   );
   const columnCount = isSkydoView ? 8 : 9;
 
   const renderStatus = (row: AdminPayoutMethodRow) => {
     const status = getSkydoStatus(row);
-    if (row.method_type !== "skydo" || !status)
-      return <span className={cn("text-xs", p.muted)}>Active</span>;
+    if (row.method_type !== "skydo" || !status) return <span className={cn("text-xs", p.muted)}>Active</span>;
     return (
       <div className="flex flex-col gap-1">
         <SkydoStatusBadge status={status} size="sm" label={SHORT_STAGE_LABEL[status]} />
-        {isSkydoView && <StageDots status={status} isDark={isDark} />}
+        <KnownVerifiedChip row={row} isDark={isDark} />
       </div>
     );
   };
@@ -301,8 +380,16 @@ export function PayoutMethodsTable(props: PayoutMethodsTableProps) {
   const renderWaiting = (row: AdminPayoutMethodRow) => {
     const status = getSkydoStatus(row);
     const since = row.stage_since ?? row.created_at;
-    if (status === "verified")
-      return <RelativeTime value={row.skydo_status_updated_at ?? since} className="text-xs" />;
+    if (status === "verified") {
+      const at = row.skydo_status_updated_at ?? since;
+      return (
+        <WithTooltip content={`Verified ${exactTime(at)}`}>
+          <span className={cn("cursor-default whitespace-nowrap text-xs", p.muted)}>
+            Verified {durationSince(at)} ago
+          </span>
+        </WithTooltip>
+      );
+    }
     const overdue = isOverdue(row, now);
     return (
       <WithTooltip content={`In this stage since ${exactTime(since)}`}>
@@ -338,7 +425,13 @@ export function PayoutMethodsTable(props: PayoutMethodsTableProps) {
   ));
 
   return (
-    <div className={cn("relative overflow-hidden rounded-xl border", p.surface)}>
+    <div
+      className={cn(
+        "relative",
+        embedded ? "overflow-hidden rounded-lg border" : "overflow-hidden rounded-xl border",
+        p.surface
+      )}
+    >
       {refreshing && !loading && (
         <div className="absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden">
           <div className="h-full w-1/3 animate-[pulse_1s_ease-in-out_infinite] bg-[#7F39EC]" />
@@ -346,24 +439,28 @@ export function PayoutMethodsTable(props: PayoutMethodsTableProps) {
       )}
 
       {/* Desktop table */}
-      <div className="hidden max-h-[70vh] overflow-auto md:block">
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
             <tr>
               <th className={cn(thClass, "w-10")}>
-                <Checkbox
-                  checked={headerCheck}
-                  onCheckedChange={(v) => onTogglePage(v === true)}
-                  aria-label="Select all on this page"
-                  disabled={loading || rows.length === 0}
-                />
+                {!embedded && (
+                  <Checkbox
+                    checked={headerCheck}
+                    onCheckedChange={(v) => onTogglePage(v === true)}
+                    aria-label="Select all on this page"
+                    disabled={loading || rows.length === 0}
+                  />
+                )}
               </th>
               <th className={thClass}>
                 <SortHeader label="User" sortKey="full_name" {...sortProps} />
               </th>
               {isSkydoView ? (
                 <>
-                  <th className={thClass}>Skydo email</th>
+                  <th className={thClass}>
+                    <SortHeader label="Skydo email" sortKey="skydo_email" {...sortProps} />
+                  </th>
                   <th className={thClass}>
                     <SortHeader label="Stage" sortKey="skydo_status" {...sortProps} />
                   </th>
@@ -373,7 +470,9 @@ export function PayoutMethodsTable(props: PayoutMethodsTableProps) {
                   <th className={cn(thClass, "text-right")}>
                     <SortHeader label="Balance" sortKey="withdrawable_balance" align="right" {...sortProps} />
                   </th>
-                  <th className={thClass}>Next action</th>
+                  <th className={thClass}>
+                    <SortHeader label="Next action" sortKey="next_action" {...sortProps} />
+                  </th>
                 </>
               ) : (
                 <>
@@ -401,119 +500,119 @@ export function PayoutMethodsTable(props: PayoutMethodsTableProps) {
             </tr>
           </thead>
           <tbody>
-            {loading
-              ? skeletonRows
-              : rows.length === 0
-                ? (
-                  <tr>
-                    <td colSpan={columnCount} className="px-4 py-14">
-                      {emptyState}
+            {loading ? (
+              skeletonRows
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={columnCount} className="px-4 py-14">
+                  {emptyState}
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => {
+                const details = detailLines(row);
+                return (
+                  <tr
+                    key={row.id}
+                    onClick={() => onOpen(row.id)}
+                    className={cn(
+                      "cursor-pointer border-t transition-colors",
+                      isDark ? "border-gray-800" : "border-gray-100",
+                      rowSelected(row) ? p.selected : p.hover,
+                      isOverdue(row, now) && !rowSelected(row) && (isDark ? "bg-red-950/10" : "bg-red-50/40"),
+                      row.known_verified && !rowSelected(row) && (isDark ? "bg-emerald-950/10" : "bg-emerald-50/40")
+                    )}
+                  >
+                    <td className="px-3 py-3" onClick={stopRowClick}>
+                      <Checkbox
+                        checked={rowSelected(row)}
+                        onCheckedChange={(v) => onToggleRow(row.id, v === true)}
+                        aria-label={`Select ${row.full_name ?? row.email ?? "row"}`}
+                      />
                     </td>
-                  </tr>
-                )
-                : rows.map((row) => {
-                    const details = detailLines(row);
-                    return (
-                      <tr
-                        key={row.id}
-                        onClick={() => onOpen(row.id)}
-                        className={cn(
-                          "cursor-pointer border-t transition-colors",
-                          isDark ? "border-gray-800" : "border-gray-100",
-                          rowSelected(row) ? p.selected : p.hover,
-                          isOverdue(row, now) && !rowSelected(row) && (isDark ? "bg-red-950/10" : "bg-red-50/40")
-                        )}
-                      >
-                        <td className="px-3 py-3" onClick={stopRowClick}>
-                          <Checkbox
-                            checked={rowSelected(row)}
-                            onCheckedChange={(v) => onToggleRow(row.id, v === true)}
-                            aria-label={`Select ${row.full_name ?? row.email ?? "row"}`}
-                          />
+                    <td className="max-w-[240px] px-3 py-3">
+                      <UserCell row={row} isDark={isDark} />
+                    </td>
+                    {isSkydoView ? (
+                      <>
+                        <td className="px-3 py-3">
+                          <div className="flex max-w-[280px] items-center gap-1">
+                            <span className="truncate font-mono text-xs">{details.full || "—"}</span>
+                            {details.full && <CopyButton value={details.full} label="Skydo email" isDark={isDark} />}
+                            <SharedEmailChip row={row} isDark={isDark} />
+                          </div>
                         </td>
-                        <td className="max-w-[240px] px-3 py-3">
-                          <UserCell row={row} isDark={isDark} />
-                        </td>
-                        {isSkydoView ? (
-                          <>
-                            <td className="px-3 py-3">
-                              <div className="flex max-w-[260px] items-center gap-1">
-                                <span className="truncate font-mono text-xs">{details.full || "—"}</span>
-                                {details.full && (
-                                  <CopyButton value={details.full} label="Skydo email" isDark={isDark} />
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-3 py-3">{renderStatus(row)}</td>
-                            <td className="px-3 py-3">{renderWaiting(row)}</td>
-                            <td className="px-3 py-3 text-right">{balance(row)}</td>
-                            <td className="px-3 py-3" onClick={stopRowClick}>
-                              <NextAction
-                                row={row}
-                                isDark={isDark}
-                                onSetStatus={(s) => onSetStatus(row, s)}
-                              />
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="px-3 py-3">
-                              <div className="flex items-center gap-2 whitespace-nowrap">
-                                <MethodIcon type={row.method_type} className={p.muted} />
-                                <span>{METHOD_LABELS[row.method_type] ?? row.method_type}</span>
-                                {row.is_default && (
-                                  <span className="rounded-full bg-[#7F39EC]/15 px-1.5 text-[10px] font-semibold uppercase text-[#7F39EC]">
-                                    Default
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-3 py-3">
-                              <div className="max-w-[240px]">
-                                <div className="flex items-center gap-1">
-                                  <span className="truncate font-mono text-xs">{details.display || "—"}</span>
-                                  {details.full && (
-                                    <CopyButton
-                                      value={details.full}
-                                      label={`${METHOD_LABELS[row.method_type] ?? "Payout"} details`}
-                                      isDark={isDark}
-                                    />
-                                  )}
-                                </div>
-                                {details.sub && (
-                                  <div className={cn("truncate text-xs", p.muted)}>{details.sub}</div>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-3 py-3">{renderStatus(row)}</td>
-                            <td className="px-3 py-3 text-right">{balance(row)}</td>
-                            <td className="px-3 py-3 text-right">
-                              <WithTooltip
-                                content={
-                                  row.last_withdrawal_at
-                                    ? `Last withdrawal ${exactTime(row.last_withdrawal_at)}`
-                                    : "No withdrawals yet"
-                                }
-                              >
-                                <span className="cursor-default tabular-nums">{row.withdrawal_count ?? 0}</span>
-                              </WithTooltip>
-                            </td>
-                            <td className="whitespace-nowrap px-3 py-3 text-xs">
-                              <RelativeTime value={row.created_at} />
-                            </td>
-                          </>
-                        )}
+                        <td className="px-3 py-3">{renderStatus(row)}</td>
+                        <td className="px-3 py-3">{renderWaiting(row)}</td>
+                        <td className="px-3 py-3 text-right">{balance(row)}</td>
                         <td className="px-3 py-3" onClick={stopRowClick}>
-                          <RowActions
+                          <NextAction
                             row={row}
                             isDark={isDark}
-                            onOpen={() => onOpen(row.id)}
                             onSetStatus={(s) => onSetStatus(row, s)}
+                            onVerifyKnown={() => onVerifyKnown(row)}
                           />
                         </td>
-                      </tr>
-                    );
-                  })}
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2 whitespace-nowrap">
+                            <MethodIcon type={row.method_type} className={p.muted} />
+                            <span>{METHOD_LABELS[row.method_type] ?? row.method_type}</span>
+                            {row.is_default && (
+                              <span className="rounded-full bg-[#7F39EC]/15 px-1.5 text-[10px] font-semibold uppercase text-[#7F39EC]">
+                                Default
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="max-w-[240px]">
+                            <div className="flex items-center gap-1">
+                              <span className="truncate font-mono text-xs">{details.display || "—"}</span>
+                              {details.full && (
+                                <CopyButton
+                                  value={details.full}
+                                  label={`${METHOD_LABELS[row.method_type] ?? "Payout"} details`}
+                                  isDark={isDark}
+                                />
+                              )}
+                            </div>
+                            {details.sub && <div className={cn("truncate text-xs", p.muted)}>{details.sub}</div>}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">{renderStatus(row)}</td>
+                        <td className="px-3 py-3 text-right">{balance(row)}</td>
+                        <td className="px-3 py-3 text-right">
+                          <WithTooltip
+                            content={
+                              row.last_withdrawal_at
+                                ? `Last withdrawal ${exactTime(row.last_withdrawal_at)}`
+                                : "No withdrawals yet"
+                            }
+                          >
+                            <span className="cursor-default tabular-nums">{row.withdrawal_count ?? 0}</span>
+                          </WithTooltip>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-3 text-xs">
+                          <RelativeTime value={row.created_at} />
+                        </td>
+                      </>
+                    )}
+                    <td className="px-3 py-3" onClick={stopRowClick}>
+                      <RowActions
+                        row={row}
+                        isDark={isDark}
+                        onOpen={() => onOpen(row.id)}
+                        onSetStatus={(s) => onSetStatus(row, s)}
+                        onVerifyKnown={() => onVerifyKnown(row)}
+                      />
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
@@ -556,19 +655,20 @@ export function PayoutMethodsTable(props: PayoutMethodsTableProps) {
                         isDark={isDark}
                         onOpen={() => onOpen(row.id)}
                         onSetStatus={(s) => onSetStatus(row, s)}
+                        onVerifyKnown={() => onVerifyKnown(row)}
                       />
                     </div>
                   </div>
                   <div className="flex items-center gap-2 pl-7 text-sm">
                     <MethodIcon type={row.method_type} className={p.muted} />
                     <span className="min-w-0 flex-1 truncate font-mono text-xs">{details.display || "—"}</span>
-                    {details.full && (
-                      <CopyButton value={details.full} label="Payout details" isDark={isDark} />
-                    )}
+                    {details.full && <CopyButton value={details.full} label="Payout details" isDark={isDark} />}
+                    <SharedEmailChip row={row} isDark={isDark} />
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 pl-7">
                     <div className="flex items-center gap-2">
                       {renderStatus(row)}
+                      {isSkydo && <StageDots status={getSkydoStatus(row)} isDark={isDark} />}
                       {isSkydo && getSkydoStatus(row) !== "verified" && (
                         <span className="text-xs">{renderWaiting(row)}</span>
                       )}
@@ -577,7 +677,12 @@ export function PayoutMethodsTable(props: PayoutMethodsTableProps) {
                   </div>
                   {isSkydo && getSkydoStatus(row) !== "verified" && (
                     <div className="pl-7" onClick={stopRowClick}>
-                      <NextAction row={row} isDark={isDark} onSetStatus={(s) => onSetStatus(row, s)} />
+                      <NextAction
+                        row={row}
+                        isDark={isDark}
+                        onSetStatus={(s) => onSetStatus(row, s)}
+                        onVerifyKnown={() => onVerifyKnown(row)}
+                      />
                     </div>
                   )}
                 </li>

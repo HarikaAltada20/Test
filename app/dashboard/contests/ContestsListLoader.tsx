@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
 import { listCampaignsPaginated } from "@/lib/contest-list-query";
+import { withRestrictedSummaries } from "@/lib/campaign-access-server";
 import { SSR_CAMPAIGN_LIST_DEFAULTS } from "@/lib/campaign-list-filters-storage";
 import { ContestListClient } from "./ContestListClient";
 import {
@@ -27,7 +28,7 @@ export async function ContestsListLoader({
 
   const supabase = await createClient();
 
-  const list = await listCampaignsPaginated({
+  const list = await withRestrictedSummaries(supabase, await listCampaignsPaginated({
     supabase,
     scope: isAdminView ? "admin" : "advertiser",
     advertiserId: isAdminView ? undefined : userId,
@@ -35,7 +36,7 @@ export async function ContestsListLoader({
     sort: SSR_CAMPAIGN_LIST_DEFAULTS.sort,
     page: SSR_CAMPAIGN_LIST_DEFAULTS.page,
     limit: SSR_CAMPAIGN_LIST_DEFAULTS.limit,
-  });
+  }));
 
   const contests = isAdminView
     ? list.contests.map((contest) => ({

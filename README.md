@@ -105,3 +105,5 @@ How it is enforced:
 - Creators get in-app notifications when an application is approved or rejected and when a brand adds them; brands are told when applications arrive.
 
 Main code: `lib/campaign-access*.ts`, `lib/campaign-applications-server.ts`, `components/campaign-access/`, `app/api/contests/[id]/{access-list,applications,application-questions,invite-links,preview}`. Migrations: `20261010` through `20261017`.
+
+v1.8

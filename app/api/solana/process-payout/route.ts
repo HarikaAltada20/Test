@@ -67,6 +67,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Pay the amount after the processing fee stored on the request, not the body amount.
+    const payoutCents = Number(withdrawalRequest.net_amount_cents ?? withdrawalRequest.amount);
+
     // Check if already processed
     if (withdrawalRequest.status === 'processed') {
       return NextResponse.json(
@@ -87,7 +90,7 @@ export async function POST(request: NextRequest) {
     // Process the Solana payout
     const payoutResult = await processSolanaPayout(
       recipientWallet,
-      amountInCents,
+      payoutCents,
       tokenType as 'USDC' | 'USDT',
       memo
     );
@@ -126,7 +129,7 @@ export async function POST(request: NextRequest) {
     await logTransaction(
       withdrawalRequest.user_id,
       'withdrawal',
-      amountInCents,
+      payoutCents,
       'success',
       `Payout to Phantom Wallet (${tokenType})`,
       payoutResult.transactionSignature,

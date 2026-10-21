@@ -1,3 +1,7 @@
+import {
+  OPPORTUNITY_ACCESS_FILTERS,
+  type OpportunityAccessFilter,
+} from "@/lib/campaign-access";
 import { normalizeCampaignPlatformFilter } from "@/lib/campaign-platform-filter";
 
 export const BRAND_CONTEST_LIST_FILTERS_KEY = "gv-dashboard-contests-filters";
@@ -156,6 +160,7 @@ export type ContestListFilters = {
 
 export type OpportunitiesListFilters = {
   mediaType: OpportunitiesMediaTypeOption;
+  accessFilter: OpportunityAccessFilter;
   eligibilityFilter: OpportunitiesEligibilityFilterOption;
   platformFilter: string;
   typeFilter: ContestTypeFilterOption;
@@ -176,6 +181,7 @@ export const DEFAULT_CONTEST_LIST_FILTERS: ContestListFilters = {
 
 export const DEFAULT_OPPORTUNITIES_LIST_FILTERS: OpportunitiesListFilters = {
   mediaType: "all",
+  accessFilter: "all",
   eligibilityFilter: "all",
   platformFilter: "all",
   typeFilter: "all",
@@ -292,6 +298,9 @@ export function readStoredOpportunitiesListFilters(
       mediaType: isOneOf(parsed.mediaType, OPPORTUNITIES_MEDIA_TYPE_OPTIONS)
         ? parsed.mediaType
         : defaults.mediaType,
+      accessFilter: isOneOf(parsed.accessFilter, OPPORTUNITY_ACCESS_FILTERS)
+        ? parsed.accessFilter
+        : defaults.accessFilter,
       eligibilityFilter: isOneOf(
         parsed.eligibilityFilter,
         OPPORTUNITIES_ELIGIBILITY_FILTER_OPTIONS,

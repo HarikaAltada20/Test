@@ -10,6 +10,7 @@ import {
   type OpportunitiesStatusTab,
 } from "@/lib/contest-list-query";
 import { getCreatorUserCountries } from "@/lib/opportunities-user-countries";
+import { parseOpportunityAccessFilter } from "@/lib/campaign-access";
 import {
   getCreatorRequirementsSnapshot,
   getRequirementsSkippedContestIds,
@@ -80,10 +81,12 @@ export async function GET(request: NextRequest) {
     const contestFormat = sp.get("contestFormat") || "all";
     const search = sp.get("search") || "";
     const mediaType = parseOpportunitiesMediaType(sp.get("mediaType"));
+    const access = parseOpportunityAccessFilter(sp.get("access"));
     const countriesKey = [...(userCountries || [])].sort().join(",");
 
-    // Skip Redis for eligibleOnly — results are user-gate specific and heavier.
-    const cacheKey = eligibleOnly
+    // Skip Redis for eligibleOnly and access filters: results depend on the
+    // creator's own applications and access, which change as they apply.
+    const cacheKey = eligibleOnly || access !== "all"
       ? null
       : await buildCampaignListCacheKeyAsync({
           scope: "opportunities",
@@ -143,6 +146,7 @@ export async function GET(request: NextRequest) {
       userCountries,
       eligibleOnly,
       creatorEligibilitySnapshot,
+      access,
     });
 
     const skippedIds = await getRequirementsSkippedContestIds(

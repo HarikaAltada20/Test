@@ -10,6 +10,8 @@ export type OpportunitiesListQueryParams = {
   userCountries?: string[];
   /** When true, server returns only contests the creator passes gates for. */
   eligibleOnly?: boolean;
+  /** open | apply | invited | applied; "all" (or missing) is left out of the key. */
+  access?: string;
 };
 
 export function buildOpportunitiesListQueryKey(
@@ -30,6 +32,9 @@ export function buildOpportunitiesListQueryKey(
   }
   if (params.eligibleOnly) {
     urlParams.set("eligibleOnly", "1");
+  }
+  if (params.access && params.access !== "all") {
+    urlParams.set("access", params.access);
   }
   return urlParams.toString();
 }

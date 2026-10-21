@@ -13,6 +13,7 @@ import {
 } from "@/utils/supabase/auth-server";
 import { ConditionalFooter } from "./conditional-footer";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import Script from "next/script";
 import { cookies } from "next/headers";
 import { MobileAuthBridge } from "@/components/MobileAuthBridge";
@@ -169,6 +170,7 @@ export default async function RootLayout({
         <Toaster />
         <SonnerToaster />
         <Analytics />
+        <SpeedInsights />
         {process.env.NEXT_PUBLIC_CLARITY_ID ? (
           <Script id="ms-clarity" strategy="afterInteractive">
             {`
