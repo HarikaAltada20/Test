@@ -71,6 +71,7 @@ type Props = {
   onChanged: () => void;
   /** Brand-side preview from the campaign editor: nothing is sent or saved. */
   previewMode?: boolean;
+  accent?: "purple" | "ink";
 };
 
 const fieldClass = "dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500";
@@ -122,6 +123,7 @@ function QuestionField({
   onChange,
   onBlur,
   disabled,
+  ink,
 }: {
   question: ApplicationQuestion & { id: string };
   value: string;
@@ -129,6 +131,7 @@ function QuestionField({
   onChange: (value: string) => void;
   onBlur: () => void;
   disabled?: boolean;
+  ink?: boolean;
 }) {
   const id = `apply-q-${question.id}`;
   const errorId = `${id}-error`;
@@ -200,7 +203,12 @@ function QuestionField({
           {options.map((o, i) => (
             <label
               key={o.value}
-              className="flex cursor-pointer items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 has-[[data-state=checked]]:border-[#7F39EC] has-[[data-state=checked]]:bg-purple-50/60 dark:border-white/10 dark:text-gray-200 dark:has-[[data-state=checked]]:bg-[#7F39EC]/15"
+              className={cn(
+                "flex cursor-pointer items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 dark:border-white/10 dark:text-gray-200",
+                ink
+                  ? "has-[[data-state=checked]]:border-[#1a1a1a] has-[[data-state=checked]]:bg-[#f6f6f7] dark:has-[[data-state=checked]]:bg-white/10"
+                  : "has-[[data-state=checked]]:border-[#7F39EC] has-[[data-state=checked]]:bg-purple-50/60 dark:has-[[data-state=checked]]:bg-[#7F39EC]/15",
+              )}
             >
               <RadioGroupItem id={`${id}-${i}`} value={o.value} />
               {o.label}
@@ -288,9 +296,20 @@ function StatusBox({
   );
 }
 
-export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: Props) {
+export function RestrictedCampaignPreview({ preview, onChanged, previewMode, accent = "purple" }: Props) {
   const router = useRouter();
   const isDark = useDashboardDark();
+  const ink = accent === "ink";
+  const primaryBtn = ink
+    ? "bg-[#1a1a1a] text-white hover:bg-black"
+    : "bg-[#4A00BE] text-white hover:bg-[#4A00BE]/90";
+  const accentIcon = ink ? "text-[#1a1a1a] dark:text-white" : "text-[#7F39EC] dark:text-purple-300";
+  const accentChip = ink
+    ? "bg-[#f3f3f5] text-[#1a1a1a] dark:bg-white/10 dark:text-white"
+    : "bg-purple-50 text-[#7F39EC] dark:bg-[#7F39EC]/20 dark:text-purple-200";
+  const accentBar = ink ? "bg-[#1a1a1a]" : "bg-[#7F39EC]";
+  const inkOutline =
+    "border border-[#1a1a1a] bg-white text-[#1a1a1a] hover:bg-[#f3f3f5] dark:border-white/40 dark:bg-transparent dark:text-white dark:hover:bg-white/10";
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Set<string>>(new Set());
@@ -447,7 +466,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
           We&apos;ll notify you when the brand decides. Sent{" "}
           <RelativeTime value={justSubmittedAt} />.
         </p>
-        <Button size="sm" variant="outline" className={outlineDark} onClick={browse}>
+        <Button size="sm" variant="outline" className={ink ? inkOutline : outlineDark} onClick={browse}>
           Browse other campaigns
         </Button>
       </StatusBox>
@@ -466,7 +485,10 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
         <p>You&apos;ll get a notification when the brand decides.</p>
         <button
           type="button"
-          className="rounded-sm text-sm font-medium underline underline-offset-4 opacity-80 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]"
+          className={cn(
+            "rounded-sm text-sm font-medium underline underline-offset-4 opacity-80 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2",
+            ink ? "focus-visible:ring-[#1a1a1a]" : "focus-visible:ring-[#7F39EC]",
+          )}
           disabled={busy}
           onClick={() => setConfirmWithdraw(true)}
         >
@@ -484,7 +506,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
         ) : (
           <p>The brand didn&apos;t give a reason.</p>
         )}
-        <Button size="sm" variant="outline" className={outlineDark} onClick={browse}>
+        <Button size="sm" variant="outline" className={ink ? inkOutline : outlineDark} onClick={browse}>
           Find similar campaigns
         </Button>
       </StatusBox>
@@ -502,7 +524,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
     statusBox = (
       <StatusBox tone="green" icon={CircleCheck} title="You're approved!">
         <p>You can now see the full brief and submit your content.</p>
-        <Button className="bg-[#7F39EC] text-white hover:bg-[#7F39EC]/90" onClick={onChanged}>
+        <Button className={ink ? primaryBtn : "bg-[#7F39EC] text-white hover:bg-[#7F39EC]/90"} onClick={onChanged}>
           Open the campaign
         </Button>
       </StatusBox>
@@ -511,7 +533,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
     statusBox = (
       <StatusBox tone="gray" icon={CalendarDays} title="This campaign has ended">
         <p>Applications are closed.</p>
-        <Button size="sm" variant="outline" className={outlineDark} onClick={browse}>
+        <Button size="sm" variant="outline" className={ink ? inkOutline : outlineDark} onClick={browse}>
           Browse open campaigns
         </Button>
       </StatusBox>
@@ -525,7 +547,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {!previewMode && <NotifyWhenReopenButton contestId={preview.id} />}
-          <Button size="sm" variant="outline" className={outlineDark} onClick={browse}>
+          <Button size="sm" variant="outline" className={ink ? inkOutline : outlineDark} onClick={browse}>
             Browse open campaigns
           </Button>
         </div>
@@ -542,8 +564,20 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
 
   return (
     <div className={cn("mx-auto max-w-3xl space-y-6 px-0 py-4 sm:px-4 sm:py-8", isDark && "dark")}>
-      <div className="overflow-hidden rounded-2xl border border-purple-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#170337]">
-        <div className="relative flex h-56 items-center justify-center bg-gradient-to-br from-[#7F39EC]/20 to-[#4A00BE]/30 sm:h-72">
+      <div
+        className={cn(
+          "overflow-hidden rounded-2xl border bg-white shadow-sm dark:bg-[#170337]",
+          ink ? "border-[#e6e6ea] dark:border-white/10" : "border-purple-100 dark:border-white/10",
+        )}
+      >
+        <div
+          className={cn(
+            "relative flex h-56 items-center justify-center sm:h-72",
+            ink
+              ? "bg-gradient-to-br from-[#1a1a1a]/80 to-[#3a3a42]"
+              : "bg-gradient-to-br from-[#7F39EC]/20 to-[#4A00BE]/30",
+          )}
+        >
           {preview.thumbnail_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -564,7 +598,15 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
                     className="inline-flex items-center gap-1 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     aria-label="Restricted, apply to join. The brand reviews applications; you'll see the full brief once approved."
                   >
-                    <AccessModeBadge mode="restricted" label="Restricted · apply to join" />
+                    <AccessModeBadge
+                      mode="restricted"
+                      label="Restricted · apply to join"
+                      className={
+                        ink
+                          ? "border-white/30 bg-[#1a1a1a] text-white dark:border-white/30 dark:bg-white/15 dark:text-white"
+                          : undefined
+                      }
+                    />
                     <Info className="h-4 w-4 text-white/80" aria-hidden="true" />
                   </button>
                 </TooltipTrigger>
@@ -592,7 +634,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
                     f.strong && "font-semibold text-gray-900 dark:text-white",
                   )}
                 >
-                  <f.icon className="h-4 w-4 text-[#7F39EC] dark:text-purple-300" aria-hidden="true" />
+                  <f.icon className={cn("h-4 w-4", accentIcon)} aria-hidden="true" />
                   {f.text}
                 </li>
               ))}
@@ -617,7 +659,12 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
               className="rounded-xl border border-gray-200 bg-white p-3 dark:border-white/10 dark:bg-white/5"
             >
               <span className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-50 text-[#7F39EC] dark:bg-[#7F39EC]/20 dark:text-purple-200">
+                <span
+                  className={cn(
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
+                    accentChip,
+                  )}
+                >
                   <step.icon className="h-4 w-4" aria-hidden="true" />
                 </span>
                 <span>
@@ -667,7 +714,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
               aria-valuenow={answered}
             >
               <div
-                className="h-full rounded-full bg-[#7F39EC] transition-all"
+                className={cn("h-full rounded-full transition-all", accentBar)}
                 style={{ width: `${(answered / questions.length) * 100}%` }}
               />
             </div>
@@ -701,6 +748,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
                 disabled={busy}
                 onChange={(v) => setAnswer(q.id, v)}
                 onBlur={() => touch(q.id)}
+                ink={ink}
               />
             ))
           )}
@@ -708,11 +756,11 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
           <div className="flex flex-col-reverse gap-3 sm:flex-row">
             {reviewing ? (
               <>
-                <Button variant="outline" className={outlineDark} disabled={busy} onClick={() => setReviewing(false)}>
+                <Button variant="outline" className={ink ? inkOutline : outlineDark} disabled={busy} onClick={() => setReviewing(false)}>
                   <Pencil className="mr-2 h-4 w-4" /> Edit answers
                 </Button>
                 <Button
-                  className="bg-[#4A00BE] text-white hover:bg-[#4A00BE]/90"
+                  className={primaryBtn}
                   disabled={busy}
                   onClick={submit}
                 >
@@ -722,11 +770,11 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
               </>
             ) : (
               <>
-                <Button variant="outline" className={outlineDark} onClick={browse}>
+                <Button variant="outline" className={ink ? inkOutline : outlineDark} onClick={browse}>
                   Browse campaigns
                 </Button>
                 <Button
-                  className="bg-[#4A00BE] text-white hover:bg-[#4A00BE]/90"
+                  className={primaryBtn}
                   disabled={busy}
                   onClick={questions.length > 0 ? goToReview : submit}
                 >

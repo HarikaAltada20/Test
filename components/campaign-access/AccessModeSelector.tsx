@@ -59,7 +59,7 @@ const OPTIONS: {
 ];
 
 /** A tiny, decorative sketch of what creators see in each mode. */
-function CreatorViewSketch({ mode }: { mode: AccessMode }) {
+function CreatorViewSketch({ mode, ink }: { mode: AccessMode; ink?: boolean }) {
   const bar = "rounded-full bg-gray-200 dark:bg-white/15";
   const label = "text-[9px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500";
 
@@ -94,7 +94,7 @@ function CreatorViewSketch({ mode }: { mode: AccessMode }) {
         </div>
         {restricted && (
           <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-white/30 to-white/80 dark:from-transparent dark:to-[#170337]/80">
-            <span className="flex items-center gap-1 rounded-full bg-white/90 px-1.5 py-0.5 text-[9px] font-medium text-[#4A00BE] shadow-sm dark:bg-[#2B1159] dark:text-purple-200">
+            <span className={cn("flex items-center gap-1 rounded-full bg-white/90 px-1.5 py-0.5 text-[9px] font-medium shadow-sm", ink ? "text-[#1a1a1a] dark:bg-[#1a1a1a] dark:text-white" : "text-[#4A00BE] dark:bg-[#2B1159] dark:text-purple-200")}>
               <Lock className="h-2.5 w-2.5" /> Brief unlocks after approval
             </span>
           </div>
@@ -105,7 +105,9 @@ function CreatorViewSketch({ mode }: { mode: AccessMode }) {
           className={cn(
             "rounded px-1.5 py-0.5 text-[10px] font-semibold",
             restricted
-              ? "bg-purple-100 text-[#4A00BE] dark:bg-[#7F39EC]/30 dark:text-purple-200"
+              ? ink
+                ? "bg-[#f3f3f5] text-[#1a1a1a] dark:bg-white/15 dark:text-white"
+                : "bg-purple-100 text-[#4A00BE] dark:bg-[#7F39EC]/30 dark:text-purple-200"
               : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300",
           )}
         >
@@ -120,9 +122,11 @@ type Props = {
   value: AccessMode;
   onChange: (mode: AccessMode) => void;
   disabled?: boolean;
+  accent?: "purple" | "ink";
 };
 
-export function AccessModeSelector({ value, onChange, disabled }: Props) {
+export function AccessModeSelector({ value, onChange, disabled, accent = "purple" }: Props) {
+  const ink = accent === "ink";
   const isDark = useDashboardDark();
   return (
     <RadioGroup
@@ -142,10 +146,15 @@ export function AccessModeSelector({ value, onChange, disabled }: Props) {
             key={opt.value}
             htmlFor={id}
             className={cn(
-              "flex h-full cursor-pointer flex-col rounded-xl border-2 p-4 transition-colors focus-within:ring-2 focus-within:ring-[#7F39EC] focus-within:ring-offset-1 dark:focus-within:ring-offset-transparent",
+              "flex h-full cursor-pointer flex-col rounded-xl border-2 p-4 transition-colors focus-within:ring-2 focus-within:ring-offset-1 dark:focus-within:ring-offset-transparent",
+              ink ? "focus-within:ring-[#1a1a1a]" : "focus-within:ring-[#7F39EC]",
               selected
-                ? "border-[#7F39EC] bg-purple-50/60 dark:bg-[#7F39EC]/20"
-                : "border-gray-200 hover:border-purple-300 dark:border-white/10 dark:hover:border-[#7F39EC]/60",
+                ? ink
+                  ? "border-[#1a1a1a] bg-[#f6f6f7] dark:border-white dark:bg-white/10"
+                  : "border-[#7F39EC] bg-purple-50/60 dark:bg-[#7F39EC]/20"
+                : ink
+                  ? "border-gray-200 hover:border-[#1a1a1a] dark:border-white/10 dark:hover:border-white/40"
+                  : "border-gray-200 hover:border-purple-300 dark:border-white/10 dark:hover:border-[#7F39EC]/60",
               (!selectable || disabled) && "cursor-not-allowed opacity-60",
             )}
           >
@@ -154,7 +163,8 @@ export function AccessModeSelector({ value, onChange, disabled }: Props) {
                 id={id}
                 value={opt.value}
                 disabled={!selectable || disabled}
-                className="mt-1 shrink-0"
+                className={cn("mt-1 shrink-0", ink && "border-[#1a1a1a] text-[#1a1a1a]")}
+                indicatorClassName={ink ? "text-[#1a1a1a]" : undefined}
               />
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-white">
@@ -162,7 +172,9 @@ export function AccessModeSelector({ value, onChange, disabled }: Props) {
                     className={cn(
                       "flex h-7 w-7 items-center justify-center rounded-full",
                       selected
-                        ? "bg-[#7F39EC] text-white"
+                        ? ink
+                          ? "bg-[#1a1a1a] text-white"
+                          : "bg-[#7F39EC] text-white"
                         : "bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300",
                     )}
                   >
@@ -170,7 +182,7 @@ export function AccessModeSelector({ value, onChange, disabled }: Props) {
                   </span>
                   {opt.title}
                 </div>
-                <p className="text-xs font-medium text-[#7F39EC] dark:text-purple-300">{opt.bestFor}</p>
+                <p className={cn("text-xs font-medium", ink ? "text-[#1a1a1a] dark:text-white" : "text-[#7F39EC] dark:text-purple-300")}>{opt.bestFor}</p>
                 <p className="text-xs font-normal leading-snug text-gray-500 dark:text-gray-400">
                   {opt.description}
                 </p>
@@ -181,7 +193,7 @@ export function AccessModeSelector({ value, onChange, disabled }: Props) {
               <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
                 What creators see
               </p>
-              <CreatorViewSketch mode={opt.value} />
+              <CreatorViewSketch mode={opt.value} ink={ink} />
             </div>
 
             <ul className="mt-auto space-y-1 pt-3" aria-label={`${opt.title}: what creators can see`}>

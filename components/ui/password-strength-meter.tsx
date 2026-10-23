@@ -6,12 +6,14 @@ interface PasswordStrengthMeterProps {
     password: string;
     className?: string;
     showRequirements?: boolean;
+    variant?: "default" | "brand";
 }
 
 export function PasswordStrengthMeter({
     password,
     className = "",
-    showRequirements = true
+    showRequirements = true,
+    variant = "default",
 }: PasswordStrengthMeterProps) {
     const validation = validatePassword(password);
     const strength = getPasswordStrength(password);
@@ -96,23 +98,25 @@ export function PasswordStrengthMeter({
 
     if (!password) return null;
 
+    const brand = variant === "brand";
+
     return (
         <div className={`space-y-3 ${className}`}>
             {/* Strength Indicator */}
             <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-300">
+                    <span className={`text-sm font-medium ${brand ? "text-[#1a1a1a]" : "text-slate-300"}`}>
                         Password Strength
                     </span>
-                    <span className={`text-sm font-semibold ${getStrengthColor()}`}>
+                    <span className={`text-sm font-semibold ${brand ? "text-[#1a1a1a]" : getStrengthColor()}`}>
                         {getStrengthLabel()}
                     </span>
                 </div>
 
                 {/* Progress Bar */}
-                <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+                <div className={`w-full rounded-full h-2 overflow-hidden ${brand ? "bg-[#e6e6e8]" : "bg-slate-700"}`}>
                     <div
-                        className={`h-full transition-all duration-300 ease-out ${getProgressColor()}`}
+                        className={`h-full transition-all duration-300 ease-out ${brand ? "bg-[#1a1a1a]" : getProgressColor()}`}
                         style={{ width: `${getProgressPercentage()}%` }}
                     />
                 </div>
@@ -123,8 +127,8 @@ export function PasswordStrengthMeter({
                         <div
                             key={level}
                             className={`w-2 h-2 rounded-full transition-colors duration-200 ${getProgressPercentage() > index * 20
-                                    ? getProgressColor().replace('bg-', 'bg-')
-                                    : 'bg-slate-600'
+                                    ? (brand ? "bg-[#1a1a1a]" : getProgressColor())
+                                    : (brand ? "bg-[#d4d4d8]" : "bg-slate-600")
                                 }`}
                         />
                     ))}
@@ -135,8 +139,8 @@ export function PasswordStrengthMeter({
             {showRequirements && (
                 <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                        <Shield className="h-4 w-4 text-slate-400" />
-                        <span className="text-sm font-medium text-slate-300">
+                        <Shield className={`h-4 w-4 ${brand ? "text-[#1a1a1a]" : "text-slate-400"}`} />
+                        <span className={`text-sm font-medium ${brand ? "text-[#1a1a1a]" : "text-slate-300"}`}>
                             Security Requirements
                         </span>
                     </div>
@@ -145,11 +149,13 @@ export function PasswordStrengthMeter({
                         {requirements.map((req, index) => (
                             <div key={index} className="flex items-center gap-2">
                                 {req.met ? (
-                                    <CheckCircle className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                                    <CheckCircle className={`h-3.5 w-3.5 flex-shrink-0 ${brand ? "text-[#1a1a1a]" : "text-green-500"}`} />
                                 ) : (
-                                    <XCircle className="h-3.5 w-3.5 text-slate-500 flex-shrink-0" />
+                                    <XCircle className={`h-3.5 w-3.5 flex-shrink-0 ${brand ? "text-[#a1a1aa]" : "text-slate-500"}`} />
                                 )}
-                                <span className={`text-xs ${req.met ? 'text-green-400' : 'text-slate-400'
+                                <span className={`text-xs ${brand
+                                    ? (req.met ? "text-[#1a1a1a]" : "text-[#8d8d95]")
+                                    : (req.met ? "text-green-400" : "text-slate-400")
                                     }`}>
                                     {req.label}
                                 </span>
@@ -159,9 +165,9 @@ export function PasswordStrengthMeter({
 
                     {/* Additional Security Tips */}
                     {password && !validation.isValid && validation.errors.includes("Password is too common or easily guessable") && (
-                        <div className="flex items-start gap-2 mt-2 p-2 bg-orange-500/10 border border-orange-500/20 rounded-md">
-                            <AlertCircle className="h-3.5 w-3.5 text-orange-500 flex-shrink-0 mt-0.5" />
-                            <span className="text-xs text-orange-400">
+                        <div className={`flex items-start gap-2 mt-2 p-2 rounded-md border ${brand ? "bg-[#f3f3f5] border-[#e6e6e8]" : "bg-orange-500/10 border-orange-500/20"}`}>
+                            <AlertCircle className={`h-3.5 w-3.5 flex-shrink-0 mt-0.5 ${brand ? "text-[#1a1a1a]" : "text-orange-500"}`} />
+                            <span className={`text-xs ${brand ? "text-[#1a1a1a]" : "text-orange-400"}`}>
                                 Avoid common passwords like "password123" or "qwerty". Try using a unique combination!
                             </span>
                         </div>
@@ -170,9 +176,9 @@ export function PasswordStrengthMeter({
                     {password && !validation.isValid && validation.errors.some(err =>
                         err.includes("sequential patterns") || err.includes("repeated characters")
                     ) && (
-                            <div className="flex items-start gap-2 mt-2 p-2 bg-blue-500/10 border border-blue-500/20 rounded-md">
-                                <AlertCircle className="h-3.5 w-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
-                                <span className="text-xs text-blue-400">
+                            <div className={`flex items-start gap-2 mt-2 p-2 rounded-md border ${brand ? "bg-[#f3f3f5] border-[#e6e6e8]" : "bg-blue-500/10 border-blue-500/20"}`}>
+                                <AlertCircle className={`h-3.5 w-3.5 flex-shrink-0 mt-0.5 ${brand ? "text-[#1a1a1a]" : "text-blue-500"}`} />
+                                <span className={`text-xs ${brand ? "text-[#1a1a1a]" : "text-blue-400"}`}>
                                     Avoid patterns like "abc123" or "aaa111". Mix up your characters for better security!
                                 </span>
                             </div>
@@ -182,9 +188,9 @@ export function PasswordStrengthMeter({
 
             {/* Success Message */}
             {validation.isValid && strength === 'very-strong' && (
-                <div className="flex items-center gap-2 p-2 bg-green-500/10 border border-green-500/20 rounded-md">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    <span className="text-sm text-green-400 font-medium">
+                <div className={`flex items-center gap-2 p-2 rounded-md border ${brand ? "bg-[#f3f3f5] border-[#e6e6e8]" : "bg-green-500/10 border-green-500/20"}`}>
+                    <CheckCircle className={`h-4 w-4 ${brand ? "text-[#1a1a1a]" : "text-green-500"}`} />
+                    <span className={`text-sm font-medium ${brand ? "text-[#1a1a1a]" : "text-green-400"}`}>
                         Excellent! Your password is very secure. 🛡️
                     </span>
                 </div>

@@ -32,6 +32,8 @@ import { UsernameChipsInput } from "./UsernameChipsInput";
 
 const fieldClass = "dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500";
 const outlineDark = "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
+const inkButtonClass =
+  "border border-[#1a1a1a] bg-white text-[#1a1a1a] hover:bg-[#f3f3f5] dark:border-white/40 dark:bg-transparent dark:text-white dark:hover:bg-white/10";
 
 export type AllowlistSelection = {
   allowlistIds: string[];
@@ -106,6 +108,7 @@ type Props = {
   /** Required when an admin acts for a brand. */
   advertiserId?: string | null;
   disabled?: boolean;
+  accent?: "purple" | "ink";
 };
 
 type MembersState = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; members: AllowlistMember[] };
@@ -117,8 +120,9 @@ function stopEnter(e: KeyboardEvent<HTMLInputElement>, onEnter?: () => void) {
   onEnter?.();
 }
 
-export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Props) {
+export function AllowlistPicker({ value, onChange, advertiserId, disabled, accent = "purple" }: Props) {
   const isDark = useDashboardDark();
+  const ink = accent === "ink";
   const [lists, setLists] = useState<BrandAllowlist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -269,7 +273,12 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
               href="/dashboard/allowlists"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-[#7F39EC] hover:underline dark:text-purple-300"
+              className={cn(
+                "inline-flex items-center gap-1 text-xs hover:underline",
+                ink
+                  ? "rounded-md border border-[#1a1a1a] bg-white px-2.5 py-1 font-medium text-[#1a1a1a] hover:bg-[#f3f3f5] hover:no-underline dark:border-white/40 dark:bg-transparent dark:text-white dark:hover:bg-white/10"
+                  : "text-[#7F39EC] dark:text-purple-300",
+              )}
             >
               Manage saved lists <ExternalLink className="h-3 w-3" aria-hidden="true" />
               <span className="sr-only">(opens in a new tab)</span>
@@ -306,9 +315,16 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
                     className={cn(
                       "flex items-center gap-2 rounded-md border px-3 py-2 transition-shadow duration-700",
                       checked
-                        ? "border-[#7F39EC]/60 bg-purple-50/50 dark:bg-[#7F39EC]/10"
-                        : "border-gray-200 hover:border-purple-300 dark:border-white/10 dark:hover:border-[#7F39EC]/60",
-                      highlightId === list.id && "ring-2 ring-[#7F39EC] ring-offset-1 dark:ring-offset-transparent",
+                        ? ink
+                          ? "border-[#1a1a1a]/60 bg-[#f6f6f7] dark:border-white dark:bg-white/10"
+                          : "border-[#7F39EC]/60 bg-purple-50/50 dark:bg-[#7F39EC]/10"
+                        : ink
+                          ? "border-gray-200 hover:border-[#1a1a1a] dark:border-white/10 dark:hover:border-white/40"
+                          : "border-gray-200 hover:border-purple-300 dark:border-white/10 dark:hover:border-[#7F39EC]/60",
+                      highlightId === list.id &&
+                        (ink
+                          ? "ring-2 ring-[#1a1a1a] ring-offset-1 dark:ring-white dark:ring-offset-transparent"
+                          : "ring-2 ring-[#7F39EC] ring-offset-1 dark:ring-offset-transparent"),
                     )}
                   >
                     <Checkbox
@@ -333,8 +349,11 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
                     <Button
                       type="button"
                       size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 dark:text-gray-300 dark:hover:bg-white/10"
+                      variant="outline"
+                      className={cn(
+                        "h-7 w-7",
+                        ink ? inkButtonClass : "dark:text-gray-300 dark:hover:bg-white/10",
+                      )}
                       aria-label={`Preview ${list.name}`}
                       onClick={() => openPreview(list.id)}
                     >
@@ -363,6 +382,7 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
           onChange={(usernames) => onChange({ ...value, usernames })}
           disabled={disabled}
           allowFile
+          accent={accent}
         />
         {valid.length > 0 && (
           <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -375,7 +395,7 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
             type="button"
             size="sm"
             variant="outline"
-            className={outlineDark}
+            className={ink ? inkButtonClass : outlineDark}
             disabled={disabled}
             onClick={() => {
               setSaveOpen(true);
@@ -417,6 +437,8 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
               </div>
               <Button
                 type="button"
+                variant="outline"
+                className={ink ? inkButtonClass : undefined}
                 disabled={!saveName.trim() || valid.length === 0 || saving}
                 onClick={saveList}
               >
@@ -425,8 +447,8 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
               </Button>
               <Button
                 type="button"
-                variant="ghost"
-                className="dark:text-gray-300 dark:hover:bg-white/10"
+                variant="outline"
+                className={ink ? inkButtonClass : "dark:text-gray-300 dark:hover:bg-white/10"}
                 disabled={saving}
                 onClick={() => {
                   setSaveOpen(false);
@@ -455,7 +477,12 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
       {(selectedLists.length > 0 || valid.length > 0) && (
         <p
           role="status"
-          className="rounded-md bg-purple-50/60 px-3 py-2 text-sm text-gray-700 dark:bg-[#7F39EC]/10 dark:text-gray-200"
+          className={cn(
+            "rounded-md px-3 py-2 text-sm",
+            ink
+              ? "bg-[#f6f6f7] text-[#1a1a1a] dark:bg-white/10 dark:text-gray-200"
+              : "bg-purple-50/60 text-gray-700 dark:bg-[#7F39EC]/10 dark:text-gray-200",
+          )}
         >
           <span className="font-medium">Access will be given to: </span>
           {[
@@ -523,7 +550,7 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
                       type="button"
                       size="sm"
                       variant="outline"
-                      className={outlineDark}
+                      className={ink ? inkButtonClass : outlineDark}
                       onClick={() => loadMembers(previewList.id, true)}
                     >
                       <RotateCcw className="mr-1.5 h-4 w-4" /> Retry
@@ -558,7 +585,12 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
                     href="/dashboard/allowlists"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-sm text-[#7F39EC] hover:underline dark:text-purple-300"
+                    className={cn(
+                      "inline-flex items-center gap-1 text-sm hover:underline",
+                      ink
+                        ? "rounded-md border border-[#1a1a1a] bg-white px-2.5 py-1.5 font-medium text-[#1a1a1a] hover:bg-[#f3f3f5] hover:no-underline dark:border-white/40 dark:bg-transparent dark:text-white dark:hover:bg-white/10"
+                        : "text-[#7F39EC] dark:text-purple-300",
+                    )}
                   >
                     Edit in Manage lists <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                     <span className="sr-only">(opens in a new tab)</span>
@@ -568,8 +600,14 @@ export function AllowlistPicker({ value, onChange, advertiserId, disabled }: Pro
                 )}
                 <Button
                   type="button"
-                  variant={previewSelected ? "outline" : "default"}
-                  className={cn(previewSelected ? outlineDark : "bg-[#7F39EC] hover:bg-[#7F39EC]/90")}
+                  variant="outline"
+                  className={cn(
+                    ink
+                      ? inkButtonClass
+                      : previewSelected
+                        ? outlineDark
+                        : "bg-[#7F39EC] text-white hover:bg-[#7F39EC]/90",
+                  )}
                   aria-pressed={previewSelected}
                   disabled={disabled}
                   onClick={() => toggleList(previewList.id, !previewSelected)}

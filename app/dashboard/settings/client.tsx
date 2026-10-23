@@ -79,6 +79,7 @@ import Link from "next/link";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { formatDate } from "@/lib/date-utils";
 import { getSubscriptionPlanById } from "@/lib/subscription-utils-client";
+import BrandSettings from "@/components/dashboard/brand-settings";
 dayjs.extend(isSameOrAfter);
 
 interface SocialAccount {
@@ -123,6 +124,10 @@ interface AdvertiserProfile {
   company_name: string;
   website_url: string;
   subscription_info: any;
+  total_contests_run?: number | null;
+  total_money_spent?: number | null;
+  withdrawable_balance?: number | null;
+  available_deposit_balance?: number | null;
 }
 
 export default function SettingsPage({
@@ -178,6 +183,17 @@ export default function SettingsPage({
   const [storedReferralCode, setStoredReferralCode] = useState<string | null>(
     null,
   );
+  const [referralStats, setReferralStats] = useState<{
+    coins: number;
+    creatorsReferred: number;
+    brandsReferred: number;
+    referredBy: string | null;
+  }>({
+    coins: 0,
+    creatorsReferred: 0,
+    brandsReferred: 0,
+    referredBy: null,
+  });
   const [pageLoading, setPageLoading] = useState(true);
   const [hasPassword, setHasPassword] = useState(true); // Track if user has a password
   const supabase = createClient();
@@ -607,7 +623,9 @@ export default function SettingsPage({
         } else if (userData.user_type === "advertiser") {
           const { data, error } = await supabase
             .from("advertiser_profiles")
-            .select("company_name, website_url, subscription_info")
+            .select(
+              "company_name, website_url, subscription_info, total_contests_run, total_money_spent, withdrawable_balance, available_deposit_balance",
+            )
             .eq("id", user!.id)
             .single();
 
@@ -734,13 +752,32 @@ export default function SettingsPage({
       if (!user?.id) return;
       const { data, error } = await supabase
         .from("users")
-        .select("username, user_type, referral_code")
+        .select(
+          "username, user_type, referral_code, coins, creators_referred, advertisers_referred, referred_by",
+        )
         .eq("id", user.id)
         .maybeSingle();
       if (!error && data) {
         setUsername(data.username || null);
         setStoredReferralCode(data.referral_code || null);
         setUserType((data.user_type as any) || null);
+
+        let referredByName: string | null = null;
+        if (data.referred_by) {
+          const { data: referrerData } = await supabase
+            .from("users")
+            .select("username")
+            .eq("referral_code", data.referred_by)
+            .maybeSingle();
+          referredByName = referrerData?.username || null;
+        }
+
+        setReferralStats({
+          coins: data.coins ?? 0,
+          creatorsReferred: data.creators_referred ?? 0,
+          brandsReferred: data.advertisers_referred ?? 0,
+          referredBy: referredByName,
+        });
       }
     };
     load();
@@ -824,12 +861,15 @@ export default function SettingsPage({
     return code ? buildReferralLinks(code, origin) : null;
   };
 
-  const copyToClipboard = async (text: string) => {
+  const copyToClipboard = async (
+    text: string,
+    description = "Referral link copied to clipboard.",
+  ) => {
     try {
       await navigator.clipboard.writeText(text);
       toast({
         title: "Copied",
-        description: "Referral link copied to clipboard.",
+        description,
       });
     } catch (e) {
       toast({
@@ -1648,7 +1688,61 @@ export default function SettingsPage({
 
   return (
     <div className="space-y-6 bg-background text-foreground transition-colors duration-300 max-w-[1200px] mx-auto">
+      {userType === "advertiser" && (
+        <BrandSettings
+          user={user}
+          companyName={
+            (profile as AdvertiserProfile | null)?.company_name || null
+          }
+          websiteUrl={(profile as AdvertiserProfile | null)?.website_url || null}
+          productId={
+            (profile as AdvertiserProfile | null)?.subscription_info
+              ?.product_id || ""
+          }
+          priceId={
+            (profile as AdvertiserProfile | null)?.subscription_info?.price_id ||
+            ""
+          }
+          campaignsRun={
+            (profile as AdvertiserProfile | null)?.total_contests_run ?? 0
+          }
+          totalMoneySpentCents={
+            (profile as AdvertiserProfile | null)?.total_money_spent ?? 0
+          }
+          withdrawableBalanceCents={
+            (profile as AdvertiserProfile | null)?.withdrawable_balance ?? 0
+          }
+          availableDepositBalanceCents={
+            (profile as AdvertiserProfile | null)?.available_deposit_balance ?? 0
+          }
+          username={username}
+          referralCode={getShareReferralCode()}
+          referralLinks={getShareReferralLinks()}
+          coins={referralStats.coins}
+          creatorsReferred={referralStats.creatorsReferred}
+          brandsReferred={referralStats.brandsReferred}
+          referredBy={referralStats.referredBy}
+          hasPassword={hasPassword}
+          providers={
+            (user.app_metadata?.providers as string[] | undefined) || []
+          }
+          billingData={billingData}
+          billingLoading={billingLoading}
+          isDark={isDark}
+          onChangePassword={() => setIsPasswordModalOpen(true)}
+          onSignOut={handleSignOut}
+          onManagePlan={() =>
+            router.push("/dashboard/billing?tab=subscription")
+          }
+          onCopy={copyToClipboard}
+          onOpenLegal={(href) => router.push(href)}
+          onLoadBilling={fetchBillingDetails}
+        />
+      )}
+
       {/* Page Header */}
+      {userType !== "advertiser" && (
+      <>
       <div className="space-y-3 text-center">
         <h1
           className={cn(
@@ -2995,6 +3089,8 @@ export default function SettingsPage({
           </div>
         </CardContent>
       </div>
+      </>
+      )}
 
       {/* Connect Twitter Modal */}
       <Dialog
@@ -3512,8 +3608,25 @@ export default function SettingsPage({
             </DialogDescription>
           </DialogHeader>
           {hasPassword && (
-            <Alert className="mb-4 bg-[#D9C0FF26] border-[#7F39EC]">
-              <AlertDescription>
+            <Alert
+              className={cn(
+                "mb-4",
+                userType === "advertiser"
+                  ? isDark
+                    ? "border-white/15 bg-white/10 text-white"
+                    : "border-[#e6e6e8] bg-[#f3f3f5] text-[#1a1a1a]"
+                  : "border-[#7F39EC] bg-[#D9C0FF26]",
+              )}
+            >
+              <AlertDescription
+                className={
+                  userType === "advertiser"
+                    ? isDark
+                      ? "text-white"
+                      : "text-[#1a1a1a]"
+                    : undefined
+                }
+              >
                 <strong>Multiple Sign-in Methods:</strong> You can sign in with
                 both Google and email/password.
               </AlertDescription>
@@ -3553,6 +3666,8 @@ export default function SettingsPage({
                       isDark
                         ? "bg-[#06021d] border border-gray-600 text-white"
                         : "bg-white text-gray-900",
+                      userType === "advertiser" &&
+                        "focus-visible:ring-black focus-visible:ring-offset-0",
                     )}
                     required
                   />
@@ -3591,6 +3706,8 @@ export default function SettingsPage({
                     isDark
                       ? "bg-[#06021d] border border-gray-600 text-white"
                       : "bg-white text-gray-900",
+                    userType === "advertiser" &&
+                      "focus-visible:ring-black focus-visible:ring-offset-0",
                   )}
                   required
                 />
@@ -3611,6 +3728,7 @@ export default function SettingsPage({
                 password={newPassword}
                 className="mt-3"
                 showRequirements={true}
+                variant={userType === "advertiser" ? "brand" : "default"}
               />
             </div>
 
@@ -3634,6 +3752,8 @@ export default function SettingsPage({
                     isDark
                       ? "bg-[#06021d] border border-gray-600 text-white"
                       : "bg-white text-gray-900",
+                    userType === "advertiser" &&
+                      "focus-visible:ring-black focus-visible:ring-offset-0",
                   )}
                   required
                 />
@@ -3657,15 +3777,27 @@ export default function SettingsPage({
                 variant="outline"
                 onClick={() => setIsPasswordModalOpen(false)}
                 className={cn(
-                  "flex-1 bg-white border border-red-500 text-red-500",
-                  isDark ? "bg-[#06021d]" : "bg-white",
+                  "flex-1",
+                  userType === "advertiser"
+                    ? isDark
+                      ? "border border-white/20 bg-transparent text-white hover:bg-white/5"
+                      : "border border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]"
+                    : cn(
+                        "border border-red-500 bg-white text-red-500",
+                        isDark ? "bg-[#06021d]" : "bg-white",
+                      ),
                 )}
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                className="flex-1 bg-[#6C43D0] text-white"
+                className={cn(
+                  "flex-1 text-white",
+                  userType === "advertiser"
+                    ? "bg-[#1a1a1a] hover:bg-black"
+                    : "bg-[#6C43D0]",
+                )}
                 disabled={
                   passwordChangeLoading || !newPassword || !confirmPassword
                 }
@@ -4163,6 +4295,7 @@ export default function SettingsPage({
       </Dialog>
 
       {/* Log out button */}
+      {userType !== "advertiser" && (
       <div
         className={cn(
           "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200",
@@ -4200,6 +4333,7 @@ export default function SettingsPage({
           Logout
         </Button>
       </div>
+      )}
 
       {/* Danger Zone */}
       {/* <Card>

@@ -11,6 +11,7 @@ import {
   BarChart,
   Settings,
   LogOut,
+  ChevronsUpDown,
   Video,
   DollarSign,
   CreditCard,
@@ -34,6 +35,57 @@ import {
 import Link from "next/link";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
+function PlanUsageGauge({
+  used,
+  limit,
+  isDark,
+}: {
+  used: number;
+  limit: number;
+  isDark: boolean;
+}) {
+  const safeLimit = Math.max(limit, 1);
+  const ratio = Math.min(Math.max(used, 0) / safeLimit, 1);
+  const radius = 64;
+  const length = Math.PI * radius;
+  const progress = length * ratio;
+  const track = isDark ? "rgba(255,255,255,0.16)" : "#e6e6e8";
+  const fill = isDark ? "#ffffff" : "#1a1a1a";
+
+  return (
+    <div className="relative mx-auto h-[78px] w-[168px]">
+      <svg viewBox="0 0 160 88" className="h-full w-full" aria-hidden>
+        <path
+          d="M 16 76 A 64 64 0 0 1 144 76"
+          fill="none"
+          stroke={track}
+          strokeWidth="10"
+          strokeLinecap="round"
+        />
+        {progress > 0 && (
+          <path
+            d="M 16 76 A 64 64 0 0 1 144 76"
+            fill="none"
+            stroke={fill}
+            strokeWidth="10"
+            strokeLinecap="round"
+            strokeDasharray={`${progress} ${length}`}
+          />
+        )}
+        <circle cx="16" cy="76" r="4.5" fill={fill} />
+      </svg>
+      <div
+        className={cn(
+          "absolute inset-x-0 bottom-0 text-center text-[15px] font-semibold tracking-tight",
+          isDark ? "text-white" : "text-[#1a1a1a]",
+        )}
+      >
+        {used} / {limit} live
+      </div>
+    </div>
+  );
+}
+
 interface DashboardSidebarProps {
   userRole?: "advertiser" | "creator" | "admin";
   collapsed?: boolean;
@@ -41,6 +93,14 @@ interface DashboardSidebarProps {
   onReviewOpen: () => void;
   mode?: "light" | "dark";
   supportChatEnabled?: boolean;
+  planName?: string;
+  planLimit?: number;
+  liveCampaignCount?: number;
+  userName?: string;
+  userEmail?: string;
+  avatarUrl?: string;
+  onSignOut?: () => void;
+  isSigningOut?: boolean;
 }
 
 export function DashboardSidebar({
@@ -50,7 +110,17 @@ export function DashboardSidebar({
   collapsed = false,
   mode,
   supportChatEnabled = true,
+  planName = "Explorer",
+  planLimit = 1,
+  liveCampaignCount = 0,
+  userName = "User",
+  userEmail = "",
+  avatarUrl = "",
+  onSignOut,
+  isSigningOut = false,
 }: DashboardSidebarProps) {
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const pathname = usePathname();
   const [showScrollbar, setShowScrollbar] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -108,48 +178,63 @@ export function DashboardSidebar({
     }
   };
 
-  const advertiserLinks = [
+  const advertiserSections = [
     {
-      name: "Getting Started",
-      href: "/dashboard/getting-started",
-      icon: HelpCircle,
-      description: "How it works",
+      label: "Workspace",
+      items: [
+        {
+          name: "Overview",
+          href: "/dashboard",
+          icon: LayoutDashboard,
+          description: "Overview & analytics",
+        },
+        {
+          name: "Campaigns",
+          href: "/dashboard/contests",
+          icon: Trophy,
+          description: "Create/Manage Campaigns",
+        },
+        {
+          name: "Allowlists",
+          href: "/dashboard/allowlists",
+          icon: Users,
+          description: "Creator lists for private campaigns",
+        },
+      ],
     },
     {
-      name: "Campaigns",
-      href: "/dashboard/contests",
-      icon: Trophy,
-      description: "Create/Manage Campaigns",
+      label: "Business",
+      items: [
+        {
+          name: "Analytics",
+          href: "/dashboard/analytics",
+          icon: BarChart,
+          description: "Performance insights",
+        },
+        {
+          name: "Finance",
+          href: "/dashboard/billing",
+          icon: CreditCard,
+          description: "Balance, transactions & Subscriptions",
+        },
+      ],
     },
     {
-      name: "Saved allowlists",
-      href: "/dashboard/allowlists",
-      icon: Users,
-      description: "Creator lists for private campaigns",
-    },
-    {
-      name: "Dashboard",
-      href: "/dashboard",
-      icon: LayoutDashboard,
-      description: "Overview & analytics",
-    },
-    {
-      name: "Analytics",
-      href: "/dashboard/analytics",
-      icon: BarChart,
-      description: "Performance insights",
-    },
-    {
-      name: "Billing & Wallet",
-      href: "/dashboard/billing",
-      icon: CreditCard,
-      description: "Balance, transactions & Subscriptions",
-    },
-    {
-      name: "Settings",
-      href: "/dashboard/settings",
-      icon: Settings,
-      description: "Account preferences",
+      label: "",
+      items: [
+        {
+          name: "Settings",
+          href: "/dashboard/settings",
+          icon: Settings,
+          description: "Account preferences",
+        },
+        {
+          name: "Help",
+          href: "/dashboard/getting-started",
+          icon: HelpCircle,
+          description: "How it works",
+        },
+      ],
     },
   ];
 
@@ -160,7 +245,7 @@ export function DashboardSidebar({
       icon: LayoutDashboard,
       description: "Admin overview",
     },
-  
+
     {
       name: "Users",
       href: "/dashboard/admin/users",
@@ -302,12 +387,17 @@ export function DashboardSidebar({
     },
   ];
 
-  const links =
+  const sections =
     userRole === "advertiser"
-      ? advertiserLinks
-      : userRole === "admin"
-        ? adminLinks
-        : creatorLinks;
+      ? advertiserSections
+      : [
+          {
+            label: "",
+            items: userRole === "admin" ? adminLinks : creatorLinks,
+          },
+        ];
+
+  const links = sections.flatMap((section) => section.items);
 
   // Ensure scroll container is properly sized and can scroll
   useEffect(() => {
@@ -335,9 +425,50 @@ export function DashboardSidebar({
     }
   }, [links, userRole, collapsed]);
 
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!accountMenuRef.current?.contains(event.target as Node)) {
+        setAccountMenuOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAccountMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [accountMenuOpen]);
+
+  const initials =
+    userName
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "U";
+  const roleLabel =
+    userRole === "advertiser"
+      ? "Brand"
+      : userRole === "creator"
+        ? "Creator"
+        : "Admin";
+
+  const billingHref =
+    userRole === "creator"
+      ? "/dashboard/earnings"
+      : "/dashboard/billing?tab=subscription";
+  const helpHref =
+    userRole === "admin"
+      ? "/dashboard/admin/support"
+      : "/dashboard/getting-started";
+
   return (
     <div
-      className="dashboard-sidebar flex h-full w-full flex-col min-h-0 overflow-hidden"
+      className="dashboard-sidebar flex h-full w-full flex-col min-h-0"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       style={{
@@ -351,7 +482,7 @@ export function DashboardSidebar({
         ref={scrollContainerRef}
         className={cn(
           "flex-1 overflow-y-auto overflow-x-hidden transition-all duration-300",
-          "scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100",
+          "scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 shadow-sm",
           isMobile || showScrollbar
             ? "sidebar-scrollbar"
             : "sidebar-scrollbar-hidden",
@@ -367,431 +498,155 @@ export function DashboardSidebar({
         }}
       >
         {/* Removed Getting Started link for admin */}
-        <div className="p-4 pb-4">
-          {!collapsed && (
-            <h3
-              className="px-3 py-2 text-xs font-semibold uppercase tracking-wider"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-            >
-              Navigation
-            </h3>
-          )}
-          <nav className={cn("space-y-2", collapsed && "space-y-3")}>
+        <div className={cn("pb-4", collapsed ? "px-2 pt-2" : "pl-5 pr-3 pt-3")}>
+          <nav className={cn(collapsed && "space-y-1")}>
             {(() => {
-              const isDark = mode === "dark";
-              const activeBg = isDark
-                ? "rgba(127, 57, 236, 0.15)"
-                : "#7F39EC14";
-              const activeBorder = isDark
-                ? "rgba(127, 57, 236, 0.45)"
-                : "hsl(var(--primary) / 0.3)";
-              const activeText = isDark ? "#ffffff" : "#4A00BE";
-              const hoverShadow = "0 1px 2px 0 rgba(0, 0, 0, 0.05)";
+              const itemClass = (active: boolean) =>
+                cn(
+                  "group flex w-full items-center rounded-lg text-sm font-medium transition-colors",
+                  collapsed
+                    ? "justify-center px-2 py-2.5"
+                    : "gap-2.5 px-2.5 py-[7px]",
+                  active
+                    ? isDark
+                      ? "bg-white/10 text-white"
+                      : "bg-[#e6e6e8] text-[#1a1a1a]"
+                    : isDark
+                      ? "text-white/75 hover:bg-white/[0.06] hover:text-white"
+                      : "text-[#3a3a40] hover:bg-white hover:text-[#1a1a1a]",
+                );
 
               return (
                 <>
-                  {links.map((link) => {
-                    const isActive = pathname === link.href;
-                    return (
-                      <Link
-                        key={link.href}
-                        href={link.href}
-                        onClick={() => handleNavigation(link.href)}
-                        className={cn(
-                          "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
-                          "border border-transparent",
-                          collapsed ? "justify-center px-2 py-3" : "px-3 py-3",
-                        )}
-                        style={{
-                          backgroundColor: isActive ? activeBg : "transparent",
-                          borderColor: isActive ? activeBorder : "transparent",
-                          color: isActive
-                            ? activeText
-                            : "hsl(var(--foreground))",
-                          // boxShadow: isActive
-                          //   ? "0 4px 6px -1px hsl(var(--primary) / 0.25)"
-                          //   : "none",
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isActive) {
-                            e.currentTarget.style.borderColor = activeBorder;
-                            e.currentTarget.style.backgroundColor = activeBg;
-                            e.currentTarget.style.boxShadow = hoverShadow;
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isActive) {
-                            e.currentTarget.style.borderColor = "transparent";
-                            e.currentTarget.style.backgroundColor =
-                              "transparent";
-                            e.currentTarget.style.boxShadow = "none";
-                          }
-                        }}
-                        title={collapsed ? link.name : undefined}
-                      >
-                        <div
+                  {sections.map((section, sectionIndex) => (
+                    <div
+                      key={section.label || `section-${sectionIndex}`}
+                      className={cn(sectionIndex > 0 && "mt-6")}
+                    >
+                      {section.label && !collapsed && (
+                        <h3
                           className={cn(
-                            "flex items-center justify-center rounded-lg transition-colors",
-                            collapsed ? "w-16 h-12" : "w-10 h-10",
+                            "px-2.5 pb-1.5 pt-1 text-[13px] font-medium",
+                            isDark ? "text-white/40" : "text-[#8b8b93]",
                           )}
-                          style={{
-                            color: isActive
-                              ? isDark
-                                ? "#C9A7FF"
-                                : "#4A00BE"
-                              : "hsl(var(--primary))",
-                          }}
                         >
-                           <link.icon
-                            className={cn(collapsed ? "h-6 w-6" : "h-5 w-5")}
-                          />
-                        </div>
-                        {!collapsed && (
-                          <>
-                            <div className="flex-1 min-w-0">
-                              <div
-                                className="font-semibold text-sm"
-                                style={{
-                                  color: isActive
-                                    ? isDark
-                                      ? "#ffffff"
-                                      : "#4A00BE"
-                                    : "hsl(var(--foreground))",
-                                }}
-                              >
-                                {link.name}
-                              </div>
-                              <div
-                                className="text-xs truncate transition-colors"
-                                style={{
-                                  color: isActive
-                                    ? isDark
-                                      ? "rgba(255,255,255,0.8)"
-                                      : "#4A00BE"
-                                    : "hsl(var(--muted-foreground))",
-                                }}
-                              >
-                                {link.description}
-                              </div>
-                            </div>
-                            {navigatingLink === link.href ? (
-                            <ButtonLoadingSpinner />
-                          ) : (
-                            <ChevronRight
-                              className={cn(
-                                "h-4 w-4 transition-all duration-200",
-                                isActive && "translate-x-0.5",
+                          {section.label}
+                        </h3>
+                      )}
+                      <div className={cn(collapsed ? "space-y-1" : "space-y-1.5")}>
+                        {section.items.map((link) => {
+                          const isActive =
+                            link.href === "/dashboard"
+                              ? pathname === "/dashboard"
+                              : pathname === link.href ||
+                                pathname.startsWith(`${link.href}/`);
+                          return (
+                            <Link
+                              key={link.href}
+                              href={link.href}
+                              onClick={() => handleNavigation(link.href)}
+                              className={itemClass(isActive)}
+                              title={collapsed ? link.name : link.description}
+                            >
+                              <link.icon
+                                className={cn(
+                                  "shrink-0",
+                                  collapsed ? "h-5 w-5" : "h-[18px] w-[18px]",
+                                )}
+                                strokeWidth={1.75}
+                              />
+                              {!collapsed && (
+                                <>
+                                  <span className="min-w-0 flex-1 truncate">
+                                    {link.name}
+                                  </span>
+                                  {navigatingLink === link.href && (
+                                    <ButtonLoadingSpinner />
+                                  )}
+                                </>
                               )}
-                              style={{
-                                color: isActive
-                                  ? isDark
-                                    ? "#C9A7FF"
-                                    : "#4A00BE"
-                                  : "hsl(var(--muted-foreground))",
-                              }}
-                            />
-                          )}
-                          </>
-                        )}
-                      </Link>
-                    );
-                  })}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
 
                   {/* Others with Dropdown for Admin */}
                   {userRole === "admin" && (
-                    <div className="space-y-1 pb-2">
-                      <div className="relative">
-                        <button
-                          onClick={() =>
-                            setIsOthersDropdownOpen(!isOthersDropdownOpen)
-                          }
-                          className={cn(
-                            "group relative flex items-center gap-3 rounded-xl transition-all duration-200 w-full",
-                            "border border-transparent",
-                            collapsed
-                              ? "justify-center px-2 py-3"
-                              : "justify-start px-3 py-3",
-                          )}
-                          style={{
-                            backgroundColor:
-                              isOthersDropdownOpen ||
-                              pathname === "/dashboard/admin/manual-entry" ||
-                              pathname.startsWith(
-                                "/dashboard/admin/manual-entry",
-                              ) ||
-                              pathname === "/dashboard/admin/ratings" ||
-                              pathname.startsWith(
-                                "/dashboard/admin/ratings",
-                              ) ||
-                              pathname === "/dashboard/admin/others" ||
-                              pathname.startsWith("/dashboard/admin/others")
-                                ? activeBg
-                                : "transparent",
-                            borderColor:
-                              isOthersDropdownOpen ||
-                              pathname === "/dashboard/admin/manual-entry" ||
-                              pathname.startsWith(
-                                "/dashboard/admin/manual-entry",
-                              ) ||
-                              pathname === "/dashboard/admin/ratings" ||
-                              pathname.startsWith(
-                                "/dashboard/admin/ratings",
-                              ) ||
-                              pathname === "/dashboard/admin/others" ||
-                              pathname.startsWith("/dashboard/admin/others")
-                                ? activeBorder
-                                : "transparent",
-                            color:
-                              isOthersDropdownOpen ||
-                              pathname === "/dashboard/admin/manual-entry" ||
-                              pathname.startsWith(
-                                "/dashboard/admin/manual-entry",
-                              ) ||
-                              pathname === "/dashboard/admin/ratings" ||
-                              pathname.startsWith(
-                                "/dashboard/admin/ratings",
-                              ) ||
-                              pathname === "/dashboard/admin/others" ||
-                              pathname.startsWith("/dashboard/admin/others")
-                                ? activeText
-                                : "hsl(var(--foreground))",
-                          }}
-                          onMouseEnter={(e) => {
-                            const isActive =
-                              isOthersDropdownOpen ||
-                              pathname === "/dashboard/admin/manual-entry" ||
-                              pathname.startsWith(
-                                "/dashboard/admin/manual-entry",
-                              ) ||
-                              pathname === "/dashboard/admin/ratings" ||
-                              pathname.startsWith(
-                                "/dashboard/admin/ratings",
-                              ) ||
-                              pathname === "/dashboard/admin/others" ||
-                              pathname.startsWith("/dashboard/admin/others");
-                            if (!isActive) {
-                              e.currentTarget.style.borderColor = activeBorder;
-                              e.currentTarget.style.backgroundColor = activeBg;
-                              e.currentTarget.style.boxShadow = hoverShadow;
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            const isActive =
-                              isOthersDropdownOpen ||
-                              pathname === "/dashboard/admin/manual-entry" ||
-                              pathname.startsWith(
-                                "/dashboard/admin/manual-entry",
-                              ) ||
-                              pathname === "/dashboard/admin/ratings" ||
-                              pathname.startsWith(
-                                "/dashboard/admin/ratings",
-                              ) ||
-                              pathname === "/dashboard/admin/others" ||
-                              pathname.startsWith("/dashboard/admin/others");
-                            if (!isActive) {
-                              e.currentTarget.style.borderColor = "transparent";
-                              e.currentTarget.style.backgroundColor =
-                                "transparent";
-                              e.currentTarget.style.boxShadow = "none";
-                            }
-                          }}
-                          title={collapsed ? "Others" : undefined}
-                        >
-                          <div
-                            className={cn(
-                              "flex items-center justify-center rounded-lg transition-colors",
-                              collapsed ? "w-16 h-12" : "w-10 h-10",
-                            )}
-                            style={{
-                              color:
-                                isOthersDropdownOpen ||
-                                pathname === "/dashboard/admin/manual-entry" ||
-                                pathname.startsWith(
-                                  "/dashboard/admin/manual-entry",
-                                ) ||
-                                pathname === "/dashboard/admin/ratings" ||
-                                pathname.startsWith(
-                                  "/dashboard/admin/ratings",
-                                ) ||
-                                pathname === "/dashboard/admin/others" ||
-                                pathname.startsWith("/dashboard/admin/others")
-                                  ? isDark
-                                    ? "#C9A7FF"
-                                    : "#4A00BE"
-                                  : "hsl(var(--primary))",
-                            }}
-                          >
-                            <FileText
-                              className={cn(collapsed ? "h-6 w-6" : "h-5 w-5")}
-                            />
-                          </div>
-                          {!collapsed && (
-                            <>
-                              <div className="flex-1 min-w-0 text-left">
-                                <div
-                                  className="font-semibold text-sm text-left"
-                                  style={{
-                                    color:
-                                      isOthersDropdownOpen ||
-                                      pathname ===
-                                        "/dashboard/admin/manual-entry" ||
-                                      pathname.startsWith(
-                                        "/dashboard/admin/manual-entry",
-                                      ) ||
-                                      pathname === "/dashboard/admin/ratings" ||
-                                      pathname.startsWith(
-                                        "/dashboard/admin/ratings",
-                                      ) ||
-                                      pathname === "/dashboard/admin/others" ||
-                                      pathname.startsWith(
-                                        "/dashboard/admin/others",
-                                      )
-                                        ? isDark
-                                          ? "#ffffff"
-                                          : "#4A00BE"
-                                        : "hsl(var(--foreground))",
-                                  }}
-                                >
-                                  Others
-                                </div>
-                                <div
-                                  className="text-xs truncate transition-colors text-left"
-                                  style={{
-                                    color:
-                                      isOthersDropdownOpen ||
-                                      pathname ===
-                                        "/dashboard/admin/manual-entry" ||
-                                      pathname.startsWith(
-                                        "/dashboard/admin/manual-entry",
-                                      ) ||
-                                      pathname === "/dashboard/admin/ratings" ||
-                                      pathname.startsWith(
-                                        "/dashboard/admin/ratings",
-                                      ) ||
-                                      pathname === "/dashboard/admin/others" ||
-                                      pathname.startsWith(
-                                        "/dashboard/admin/others",
-                                      )
-                                        ? isDark
-                                          ? "rgba(255,255,255,0.8)"
-                                          : "#4A00BE"
-                                        : "hsl(var(--muted-foreground))",
-                                  }}
-                                >
-                                  Other admin functions
-                                </div>
-                              </div>
-                              {isOthersDropdownOpen ? (
-                                <ChevronUp className="h-4 w-4 transition-all duration-200" />
-                              ) : (
-                                <ChevronDown className="h-4 w-4 transition-all duration-200" />
-                              )}
-                            </>
-                          )}
-                        </button>
-
-                        {/* Manual Entry nested inside Others */}
-                        {isOthersDropdownOpen && !collapsed && (
-                          <div className="ml-4 mt-1 space-y-1 pl-4">
-                            {othersDropdownItems.map((item) => {
-                              const isItemActive = pathname === item.href;
-                              return (
-                                <Link
-                                  key={item.href}
-                                  href={item.href}
-                                  onClick={() => handleNavigation(item.href)}
-                                  className={cn(
-                                    "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
-                                    "border border-transparent",
-                                    "px-3 py-2",
-                                  )}
-                                  style={{
-                                    backgroundColor: isItemActive
-                                      ? activeBg
-                                      : "transparent",
-                                    borderColor: isItemActive
-                                      ? activeBorder
-                                      : "transparent",
-                                    color: isItemActive
-                                      ? activeText
-                                      : "hsl(var(--foreground))",
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    if (!isItemActive) {
-                                      e.currentTarget.style.borderColor =
-                                        activeBorder;
-                                      e.currentTarget.style.backgroundColor =
-                                        activeBg;
-                                      e.currentTarget.style.boxShadow =
-                                        hoverShadow;
-                                    }
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    if (!isItemActive) {
-                                      e.currentTarget.style.borderColor =
-                                        "transparent";
-                                      e.currentTarget.style.backgroundColor =
-                                        "transparent";
-                                      e.currentTarget.style.boxShadow = "none";
-                                    }
-                                  }}
-                                >
-                                  <div
-                                    className="flex items-center justify-center rounded-lg transition-colors w-8 h-8"
-                                    style={{
-                                      color: isItemActive
-                                        ? isDark
-                                          ? "#C9A7FF"
-                                          : "#4A00BE"
-                                        : "hsl(var(--primary))",
-                                    }}
-                                  >
-                                    <item.icon className="h-4 w-4" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div
-                                      className="font-semibold text-sm"
-                                      style={{
-                                        color: isItemActive
-                                          ? isDark
-                                            ? "#ffffff"
-                                            : "#4A00BE"
-                                          : "hsl(var(--foreground))",
-                                      }}
-                                    >
-                                      {item.name}
-                                    </div>
-                                    <div
-                                      className="text-xs truncate transition-colors"
-                                      style={{
-                                        color: isItemActive
-                                          ? isDark
-                                            ? "rgba(255,255,255,0.8)"
-                                            : "#4A00BE"
-                                          : "hsl(var(--muted-foreground))",
-                                      }}
-                                    >
-                                      {item.description}
-                                    </div>
-                                  </div>
-                                  {navigatingLink === item.href ? (
-                                    <ButtonLoadingSpinner />
+                    <div className="space-y-0.5">
+                      {(() => {
+                        const isOthersActive =
+                          isOthersDropdownOpen ||
+                          pathname.startsWith(
+                            "/dashboard/admin/manual-entry",
+                          ) ||
+                          pathname.startsWith("/dashboard/admin/ratings") ||
+                          pathname.startsWith("/dashboard/admin/others");
+                        return (
+                          <>
+                            <button
+                              onClick={() =>
+                                setIsOthersDropdownOpen(!isOthersDropdownOpen)
+                              }
+                              className={itemClass(isOthersActive)}
+                              title={
+                                collapsed ? "Others" : "Other admin functions"
+                              }
+                            >
+                              <FileText
+                                className={cn(
+                                  "shrink-0",
+                                  collapsed ? "h-5 w-5" : "h-[18px] w-[18px]",
+                                )}
+                                strokeWidth={1.75}
+                              />
+                              {!collapsed && (
+                                <>
+                                  <span className="min-w-0 flex-1 truncate text-left">
+                                    Others
+                                  </span>
+                                  {isOthersDropdownOpen ? (
+                                    <ChevronUp className="h-4 w-4 shrink-0 opacity-60" />
                                   ) : (
-                                    isItemActive && (
-                                      <ChevronRight
-                                        className="h-4 w-4 transition-all duration-200 translate-x-0.5"
-                                        style={{
-                                          color: isDark ? "#C9A7FF" : "#4A00BE",
-                                        }}
-                                      />
-                                    )
+                                    <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
                                   )}
-                                </Link>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
+                                </>
+                              )}
+                            </button>
+
+                            {isOthersDropdownOpen && !collapsed && (
+                              <div className="space-y-0.5 pl-4">
+                                {othersDropdownItems.map((item) => {
+                                  const isItemActive = pathname === item.href;
+                                  return (
+                                    <Link
+                                      key={item.href}
+                                      href={item.href}
+                                      onClick={() =>
+                                        handleNavigation(item.href)
+                                      }
+                                      className={itemClass(isItemActive)}
+                                      title={item.description}
+                                    >
+                                      <item.icon
+                                        className="h-4 w-4 shrink-0"
+                                        strokeWidth={1.75}
+                                      />
+                                      <span className="min-w-0 flex-1 truncate">
+                                        {item.name}
+                                      </span>
+                                      {navigatingLink === item.href && (
+                                        <ButtonLoadingSpinner />
+                                      )}
+                                    </Link>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
                 </>
@@ -799,15 +654,54 @@ export function DashboardSidebar({
             })()}
           </nav>
         </div>
-        <div className="px-4 pb-8 mb-4">
-          {/* Sidebar Content: hide chat widget for admin */}
-          {userRole !== "admin" && (
+        <div className={cn("mb-4 pb-8", collapsed ? "px-2" : "px-3")}>
+          {userRole === "advertiser" && !collapsed && (
             <div
               className={cn(
-                "chat-card p-4 rounded-2xl shadow-lg",
+                "rounded-2xl border px-4 pb-4 pt-3",
                 isDark
-                  ? "border border-purple-500 bg-[rgba(127,57,236,0.10)] shadow-purple-900/30"
-                  : "border border-purple-500 bg-purple-100 shadow-purple-200",
+                  ? "border-white/10 bg-white/5"
+                  : "border-[#e7e7ea] bg-white shadow-sm",
+              )}
+            >
+              <PlanUsageGauge
+                used={liveCampaignCount}
+                limit={planLimit}
+                isDark={isDark}
+              />
+              <div className="mt-1 flex items-center justify-center gap-2 text-[13px]">
+                <span
+                  className={cn(
+                    "h-2 w-2 rounded-full",
+                    isDark ? "bg-white" : "bg-[#1a1a1a]",
+                  )}
+                />
+                <span className={isDark ? "text-white/80" : "text-[#3a3a40]"}>
+                  On the {planName} plan
+                </span>
+              </div>
+              <Link
+                href="/dashboard/billing"
+                className={cn(
+                  "mt-4 flex items-center justify-between rounded-full border px-4 py-2 text-sm font-medium transition-colors",
+                  isDark
+                    ? "border-white/15 text-white hover:bg-white/5"
+                    : "border-[#e4e4e7] text-[#1a1a1a] hover:bg-[#fafafa]",
+                )}
+              >
+                See plans
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            </div>
+          )}
+          {/* We're here to help — commented out in favor of the plan card */}
+          {false && userRole !== "admin" && (
+            <div
+              className={cn(
+                "chat-card rounded-xl p-4",
+                isDark
+                  ? "border border-white/10 bg-white/5"
+                  : "border border-[#e6e6e8] bg-white shadow-sm",
               )}
             >
               {!collapsed ? (
@@ -815,7 +709,7 @@ export function DashboardSidebar({
                   <p
                     className={cn(
                       "text-md text-center font-medium",
-                      isDark ? "text-white" : "text-purple-800",
+                      isDark ? "text-white" : "text-[#1a1a1a]",
                     )}
                   >
                     We're here to help
@@ -937,8 +831,184 @@ export function DashboardSidebar({
             </div>
           )}
         </div>
-        {/* Spacer to ensure scroll reaches bottom */}
-        <div style={{ height: "80px", minHeight: "80px", flexShrink: 0 }} />
+        <div className="h-4 shrink-0" />
+      </div>
+
+      <div
+        ref={accountMenuRef}
+        className={cn(
+          "sticky bottom-0 z-30 shrink-0",
+          isDark ? "bg-[#06021D]" : "bg-[#f6f6f7]",
+          collapsed ? "px-2 pb-3" : "px-3 pb-3",
+        )}
+      >
+        {accountMenuOpen && (
+          <div
+            className={cn(
+              "absolute bottom-full z-40 mb-2 overflow-hidden rounded-xl border py-1 shadow-lg",
+              collapsed ? "left-0 w-64" : "left-3 right-3",
+              isDark
+                ? "border-white/10 bg-[#12082a] text-white"
+                : "border-[#e6e6e8] bg-white text-[#1a1a1a]",
+            )}
+          >
+            <div className="px-3 py-2.5">
+              <div className="truncate text-sm font-semibold">{userName}</div>
+              {userEmail && (
+                <div
+                  className={cn(
+                    "truncate text-xs",
+                    isDark ? "text-white/55" : "text-[#8b8b93]",
+                  )}
+                >
+                  {userEmail}
+                </div>
+              )}
+            </div>
+            <div
+              className={cn(
+                "mx-2 h-px",
+                isDark ? "bg-white/10" : "bg-[#eeeef0]",
+              )}
+            />
+            <Link
+              href="/dashboard/profile"
+              onClick={() => setAccountMenuOpen(false)}
+              className={cn(
+                "flex items-center gap-2.5 px-3 py-2 text-sm",
+                isDark ? "hover:bg-white/5" : "hover:bg-[#f6f6f7]",
+              )}
+            >
+              <User className="h-4 w-4" strokeWidth={1.75} />
+              Account
+            </Link>
+            <Link
+              href="/dashboard/settings"
+              onClick={() => setAccountMenuOpen(false)}
+              className={cn(
+                "flex items-center gap-2.5 px-3 py-2 text-sm",
+                isDark ? "hover:bg-white/5" : "hover:bg-[#f6f6f7]",
+              )}
+            >
+              <Settings className="h-4 w-4" strokeWidth={1.75} />
+              Settings
+            </Link>
+            {userRole !== "admin" && (
+              <Link
+                href={billingHref}
+                onClick={() => setAccountMenuOpen(false)}
+                className={cn(
+                  "flex items-center gap-2.5 px-3 py-2 text-sm",
+                  isDark ? "hover:bg-white/5" : "hover:bg-[#f6f6f7]",
+                )}
+              >
+                <CreditCard className="h-4 w-4" strokeWidth={1.75} />
+                Plan and billing
+              </Link>
+            )}
+            <Link
+              href={helpHref}
+              onClick={() => setAccountMenuOpen(false)}
+              className={cn(
+                "flex items-center gap-2.5 px-3 py-2 text-sm",
+                isDark ? "hover:bg-white/5" : "hover:bg-[#f6f6f7]",
+              )}
+            >
+              <HelpCircle className="h-4 w-4" strokeWidth={1.75} />
+              Help
+            </Link>
+            <div
+              className={cn(
+                "mx-2 my-1 h-px",
+                isDark ? "bg-white/10" : "bg-[#eeeef0]",
+              )}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setAccountMenuOpen(false);
+                onSignOut?.();
+              }}
+              disabled={isSigningOut}
+              className={cn(
+                "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm disabled:opacity-60",
+                isDark ? "hover:bg-white/5" : "hover:bg-[#f6f6f7]",
+              )}
+            >
+              <LogOut className="h-4 w-4" strokeWidth={1.75} />
+              {isSigningOut ? "Signing out…" : "Sign out"}
+            </button>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setAccountMenuOpen((open) => !open)}
+          className={cn(
+            "flex w-full items-center rounded-xl border text-left transition-colors",
+            collapsed ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-3",
+            isDark
+              ? "border-white/10 bg-white/5 hover:bg-white/10"
+              : "border-[#e6e6e8] bg-white shadow-sm hover:bg-[#fafafa]",
+          )}
+          aria-expanded={accountMenuOpen}
+          aria-label="Account menu"
+        >
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl}
+              alt=""
+              className="h-11 w-11 shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <span
+              className={cn(
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
+                isDark
+                  ? "bg-white/15 text-white"
+                  : "bg-[#ececef] text-[#3a3a40]",
+              )}
+            >
+              {initials}
+            </span>
+          )}
+          {!collapsed && (
+            <>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-base font-semibold leading-tight">
+                  {userName}
+                </span>
+                {/* <span
+                  className={cn(
+                    "mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide",
+                    isDark
+                      ? "bg-violet-500/20 text-violet-200"
+                      : "bg-violet-100 text-violet-800",
+                  )}
+                >
+                  {roleLabel}
+                </span> */}
+                {userEmail && (
+                  <span
+                    className={cn(
+                      "mt-1 block truncate text-sm",
+                      isDark ? "text-white/55" : "text-[#8b8b93]",
+                    )}
+                  >
+                    {userEmail}
+                  </span>
+                )}
+              </span>
+              <ChevronsUpDown
+                className={cn(
+                  "h-4 w-4 shrink-0",
+                  isDark ? "text-white/50" : "text-[#8b8b93]",
+                )}
+              />
+            </>
+          )}
+        </button>
       </div>
     </div>
   );

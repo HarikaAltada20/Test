@@ -16,6 +16,7 @@ type Props = {
   allowFile?: boolean;
   placeholder?: string;
   labelledBy?: string;
+  accent?: "purple" | "ink";
 };
 
 /** Adds tokens to the list, dropping "@" and case-insensitive duplicates. */
@@ -43,7 +44,9 @@ export function UsernameChipsInput({
   allowFile,
   placeholder = "Type or paste usernames",
   labelledBy,
+  accent = "purple",
 }: Props) {
+  const ink = accent === "ink";
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -86,7 +89,8 @@ export function UsernameChipsInput({
     <div className="space-y-2">
       <div
         className={cn(
-          "flex min-h-[3rem] flex-wrap items-center gap-1.5 rounded-md border border-input bg-white px-2 py-1.5 focus-within:ring-2 focus-within:ring-[#7F39EC] dark:border-white/15 dark:bg-white/5",
+          "flex min-h-[3rem] flex-wrap items-center gap-1.5 rounded-md border border-input bg-white px-2 py-1.5 focus-within:ring-2 dark:border-white/15 dark:bg-white/5",
+          ink ? "focus-within:ring-[#1a1a1a]" : "focus-within:ring-[#7F39EC]",
           disabled && "opacity-50",
         )}
         onClick={() => inputRef.current?.focus()}
@@ -100,7 +104,9 @@ export function UsernameChipsInput({
                 "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
                 bad
                   ? "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-300"
-                  : "border-purple-200 bg-purple-50 text-[#4A00BE] dark:border-[#7F39EC]/40 dark:bg-[#2B1159] dark:text-purple-200",
+                  : ink
+                    ? "border-[#e6e6ea] bg-[#f3f3f5] text-[#1a1a1a] dark:border-white/20 dark:bg-white/10 dark:text-white"
+                    : "border-purple-200 bg-purple-50 text-[#4A00BE] dark:border-[#7F39EC]/40 dark:bg-[#2B1159] dark:text-purple-200",
               )}
             >
               @{name}
@@ -109,7 +115,10 @@ export function UsernameChipsInput({
                 type="button"
                 aria-label={`Remove ${name}`}
                 disabled={disabled}
-                className="rounded-full p-0.5 hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:hover:bg-white/10"
+                className={cn(
+                  "rounded-full p-0.5 hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 dark:hover:bg-white/10",
+                  ink ? "focus-visible:ring-[#1a1a1a]" : "focus-visible:ring-[#7F39EC]",
+                )}
                 onClick={(e) => {
                   e.stopPropagation();
                   onChange(value.filter((n) => n !== name));
@@ -157,7 +166,10 @@ export function UsernameChipsInput({
               {" · "}
               <button
                 type="button"
-                className="rounded-sm underline underline-offset-2 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:hover:text-gray-200"
+                className={cn(
+                  "rounded-sm underline underline-offset-2 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 dark:hover:text-gray-200",
+                  ink ? "focus-visible:ring-[#1a1a1a]" : "focus-visible:ring-[#7F39EC]",
+                )}
                 onClick={() => onChange([])}
                 disabled={disabled}
               >
@@ -180,8 +192,13 @@ export function UsernameChipsInput({
             <Button
               type="button"
               size="sm"
-              variant="ghost"
-              className="h-8 dark:text-gray-200 dark:hover:bg-white/10"
+              variant="outline"
+              className={cn(
+                "h-8",
+                ink
+                  ? "border border-[#1a1a1a] bg-white text-[#1a1a1a] hover:bg-[#f3f3f5] dark:border-white/40 dark:bg-transparent dark:text-white dark:hover:bg-white/10"
+                  : "dark:text-gray-200 dark:hover:bg-white/10",
+              )}
               disabled={disabled}
               onClick={() => fileRef.current?.click()}
             >

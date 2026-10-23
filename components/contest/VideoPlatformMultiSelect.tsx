@@ -20,6 +20,8 @@ type VideoPlatformMultiSelectProps = {
   onChange: (platforms: VideoContestPlatform[]) => void;
   isDark?: boolean;
   disabled?: boolean;
+  variant?: "menu" | "cards";
+  allowEmpty?: boolean;
 };
 
 export function VideoPlatformMultiSelect({
@@ -27,6 +29,8 @@ export function VideoPlatformMultiSelect({
   onChange,
   isDark = false,
   disabled = false,
+  variant = "menu",
+  allowEmpty = false,
 }: VideoPlatformMultiSelectProps) {
   const toggle = (platform: VideoContestPlatform, checked: boolean) => {
     if (disabled) return;
@@ -35,7 +39,7 @@ export function VideoPlatformMultiSelect({
       onChange([...value, platform]);
       return;
     }
-    if (value.length <= 1) return;
+    if (!allowEmpty && value.length <= 1) return;
     onChange(value.filter((p) => p !== platform));
   };
 
@@ -43,6 +47,51 @@ export function VideoPlatformMultiSelect({
     value.length === 0
       ? "Select campaign platform"
       : value.map((p) => VIDEO_PLATFORM_LABELS[p]).join(", ");
+
+  if (variant === "cards") {
+    return (
+      <div className="space-y-2">
+        <div className="grid w-full grid-cols-3 gap-3">
+            {VIDEO_CONTEST_PLATFORMS.map((platform) => {
+              const selected = value.includes(platform);
+              return (
+                <button
+                  key={platform}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => toggle(platform, !selected)}
+                  className={cn(
+                    "flex w-full items-center justify-between gap-2 rounded-xl border px-4 py-3 text-base font-medium",
+                    selected
+                      ? isDark
+                        ? "border-white bg-white/10 text-white"
+                        : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]"
+                      : isDark
+                        ? "border-white/10 bg-white/5 text-white"
+                        : "border-[#e6e6ea] bg-[#f6f6f7] text-[#1a1a1a]",
+                    disabled && "opacity-60",
+                  )}
+                >
+                  {VIDEO_PLATFORM_LABELS[platform]}
+                  <span
+                    className={cn(
+                      "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px]",
+                      selected
+                        ? isDark
+                          ? "border-white bg-white text-[#1a1a1a]"
+                          : "border-[#1a1a1a] bg-[#1a1a1a] text-white"
+                        : "border-[#d4d4d8] bg-white",
+                    )}
+                  >
+                    {selected ? "✓" : ""}
+                  </span>
+                </button>
+              );
+            })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">

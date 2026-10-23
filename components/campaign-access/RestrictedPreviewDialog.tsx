@@ -24,11 +24,13 @@ type Props = {
   description: string;
   applicationsOpen: boolean;
   questions: ApplicationQuestion[];
+  accent?: "purple" | "ink";
 };
 
 /** "Preview as creator": shows the Restricted preview and apply form built from the unsaved form. */
 export function RestrictedPreviewDialog(props: Props) {
   const isDark = useDashboardDark();
+  const ink = props.accent === "ink";
   const [open, setOpen] = useState(false);
 
   const preview = useMemo<ContestPreview>(
@@ -62,7 +64,11 @@ export function RestrictedPreviewDialog(props: Props) {
         type="button"
         size="sm"
         variant="outline"
-        className="dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10"
+        className={cn(
+          ink
+            ? "border border-[#1a1a1a] bg-white text-[#1a1a1a] hover:bg-[#f3f3f5] dark:border-white/40 dark:bg-transparent dark:text-white dark:hover:bg-white/10"
+            : "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10",
+        )}
         onClick={() => setOpen(true)}
       >
         <Eye className="mr-1.5 h-4 w-4" /> Preview as creator
@@ -79,7 +85,12 @@ export function RestrictedPreviewDialog(props: Props) {
               Built from your unsaved changes. The prize shows once the campaign is saved.
             </DialogDescription>
           </DialogHeader>
-          <RestrictedCampaignPreview preview={preview} onChanged={() => {}} previewMode />
+          <RestrictedCampaignPreview
+            preview={preview}
+            onChanged={() => {}}
+            previewMode
+            accent={props.accent}
+          />
         </DialogContent>
       </Dialog>
     </>

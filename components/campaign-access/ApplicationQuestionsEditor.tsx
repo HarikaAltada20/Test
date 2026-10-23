@@ -55,6 +55,7 @@ type Props = {
   endDate?: string | null;
   /** Shows a note that edits don't change answers already submitted. */
   hasApplications?: boolean;
+  accent?: "purple" | "ink";
 };
 
 const KIND_ICONS: Record<ApplicationQuestionKind, LucideIcon> = {
@@ -67,6 +68,8 @@ const KIND_ICONS: Record<ApplicationQuestionKind, LucideIcon> = {
 
 const fieldClass = "bg-white dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500";
 const outlineDark = "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
+const inkButtonClass =
+  "border border-[#1a1a1a] bg-white text-[#1a1a1a] hover:bg-[#f3f3f5] dark:border-white/40 dark:bg-transparent dark:text-white dark:hover:bg-white/10";
 const errorClass = "border-red-500 focus-visible:ring-red-500 dark:border-red-500";
 const COLLAPSE_AFTER = 3;
 
@@ -141,8 +144,10 @@ export function ApplicationQuestionsEditor({
   showHeading = true,
   endDate,
   hasApplications,
+  accent = "purple",
 }: Props) {
   const isDark = useDashboardDark();
+  const ink = accent === "ink";
   // Stable keys for unsaved questions, kept in step with every add, remove and move below.
   const keys = useRef<string[]>([]);
   if (keys.current.length !== questions.length) {
@@ -309,7 +314,10 @@ export function ApplicationQuestionsEditor({
                     aria-expanded={isOpen}
                     aria-controls={`question-${key}-body`}
                     onClick={() => toggleExpanded(key)}
-                    className="flex min-w-0 flex-1 items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]"
+                    className={cn(
+                      "flex min-w-0 flex-1 items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2",
+                      ink ? "focus-visible:ring-[#1a1a1a]" : "focus-visible:ring-[#7F39EC]",
+                    )}
                   >
                     {isOpen ? (
                       <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
@@ -335,7 +343,14 @@ export function ApplicationQuestionsEditor({
                       {APPLICATION_QUESTION_KIND_LABELS[q.kind]}
                     </span>
                     {q.required && (
-                      <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-medium text-[#4A00BE] dark:bg-[#2B1159] dark:text-purple-200">
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                          ink
+                            ? "bg-[#f3f3f5] text-[#1a1a1a] dark:bg-white/10 dark:text-white"
+                            : "bg-purple-50 text-[#4A00BE] dark:bg-[#2B1159] dark:text-purple-200",
+                        )}
+                      >
                         Required
                       </span>
                     )}
@@ -349,8 +364,8 @@ export function ApplicationQuestionsEditor({
                 <Button
                   type="button"
                   size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 dark:text-gray-300 dark:hover:bg-white/10"
+                  variant="outline"
+                  className={cn("h-8 w-8", ink ? inkButtonClass : "dark:text-gray-300 dark:hover:bg-white/10")}
                   aria-label={`Move question ${i + 1} up`}
                   disabled={disabled || i === 0}
                   onClick={() => move(i, i - 1)}
@@ -360,8 +375,8 @@ export function ApplicationQuestionsEditor({
                 <Button
                   type="button"
                   size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 dark:text-gray-300 dark:hover:bg-white/10"
+                  variant="outline"
+                  className={cn("h-8 w-8", ink ? inkButtonClass : "dark:text-gray-300 dark:hover:bg-white/10")}
                   aria-label={`Move question ${i + 1} down`}
                   disabled={disabled || i === questions.length - 1}
                   onClick={() => move(i, i + 1)}
@@ -371,8 +386,13 @@ export function ApplicationQuestionsEditor({
                 <Button
                   type="button"
                   size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 dark:hover:bg-red-500/10"
+                  variant="outline"
+                  className={cn(
+                    "h-8 w-8",
+                    ink
+                      ? inkButtonClass
+                      : "dark:hover:bg-red-500/10",
+                  )}
                   aria-label={`Remove question ${i + 1}`}
                   disabled={disabled}
                   onClick={() => remove(i)}
@@ -419,7 +439,12 @@ export function ApplicationQuestionsEditor({
                         <RadioGroupPrimitive.Item
                           key={kind}
                           value={kind}
-                          className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 transition-colors hover:border-[#7F39EC]/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:bg-[#7F39EC] data-[state=checked]:text-white dark:border-white/15 dark:bg-transparent dark:text-gray-200"
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 dark:border-white/15 dark:bg-transparent dark:text-gray-200",
+                            ink
+                              ? "hover:border-[#d5d5db] focus-visible:ring-[#1a1a1a] data-[state=checked]:border-transparent data-[state=checked]:bg-[#ececef] data-[state=checked]:text-[#1a1a1a] data-[state=checked]:shadow-sm dark:data-[state=checked]:bg-white/20 dark:data-[state=checked]:text-white"
+                              : "hover:border-[#7F39EC]/60 focus-visible:ring-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:bg-[#7F39EC] data-[state=checked]:text-white",
+                          )}
                         >
                           <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                           {APPLICATION_QUESTION_KIND_LABELS[kind]}
@@ -452,9 +477,12 @@ export function ApplicationQuestionsEditor({
                               <Button
                                 type="button"
                                 size="icon"
-                                variant="ghost"
+                                variant="outline"
                                 aria-label={`Remove choice ${oi + 1}`}
-                                className="dark:text-gray-300 dark:hover:bg-white/10"
+                                className={cn(
+                                  "h-8 w-8",
+                                  ink ? inkButtonClass : "dark:text-gray-300 dark:hover:bg-white/10",
+                                )}
                                 disabled={disabled || (q.options ?? []).length <= 2}
                                 onClick={() => removeOption(i, oi)}
                               >
@@ -476,7 +504,7 @@ export function ApplicationQuestionsEditor({
                         type="button"
                         size="sm"
                         variant="outline"
-                        className={outlineDark}
+                        className={ink ? inkButtonClass : outlineDark}
                         disabled={disabled || (q.options ?? []).length >= MAX_CHOICE_OPTIONS}
                         onClick={() => update(i, { options: [...(q.options ?? []), ""] })}
                       >
@@ -488,11 +516,12 @@ export function ApplicationQuestionsEditor({
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                     <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-800 dark:text-gray-200">
                       <Switch
-                        variant="theme-aware"
-                        theme={isDark ? "dark" : "light"}
+                        variant={ink ? undefined : "theme-aware"}
+                        theme={ink ? undefined : isDark ? "dark" : "light"}
                         checked={q.required}
                         disabled={disabled}
                         onCheckedChange={(v) => update(i, { required: v })}
+                        className={ink ? "data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]" : undefined}
                       />
                       Required
                     </label>
@@ -512,7 +541,7 @@ export function ApplicationQuestionsEditor({
           type="button"
           size="sm"
           variant="outline"
-          className={outlineDark}
+          className={ink ? inkButtonClass : outlineDark}
           disabled={disabled || atLimit}
           onClick={() => add({ prompt: "", kind: "short_text", options: null, required: true })}
         >
@@ -523,8 +552,12 @@ export function ApplicationQuestionsEditor({
             <Button
               type="button"
               size="sm"
-              variant="ghost"
-              className="text-[#7F39EC] hover:text-[#4A00BE] dark:text-purple-300 dark:hover:bg-white/10"
+              variant="outline"
+              className={cn(
+                ink
+                  ? inkButtonClass
+                  : "border-transparent text-[#7F39EC] hover:text-[#4A00BE] dark:text-purple-300 dark:hover:bg-white/10",
+              )}
               disabled={disabled || atLimit}
             >
               <Sparkles className="mr-1 h-4 w-4" /> Add common questions
