@@ -10452,28 +10452,31 @@ export default function CreateContestPage({
       "cpm",
     );
     return (
-      <CampaignRewardPicker
-        value={contestType}
-        paidTypesLocked={paidTypesLocked}
-        onChange={setContestType}
-        onCancel={handleBackToContests}
-        onContinue={() => {
-          if (
-            (contestType === "milestone" || contestType === "dual_rewards") &&
-            contestFormat !== "video"
-          ) {
-            setContestFormat("video");
-            if (platform === "twitter") {
-              setPlatform("youtube");
-              setSelectedPlatforms(["youtube"]);
-              setActivePlatform("youtube");
-              setSectionPlatforms(createDefaultSectionPlatforms());
-              setAllSectionLive(createDefaultAllSectionLive());
+      <>
+        <CampaignRewardPicker
+          value={contestType}
+          paidTypesLocked={paidTypesLocked}
+          onChange={setContestType}
+          onCancel={handleBackToContests}
+          onContinue={() => {
+            if (
+              (contestType === "milestone" || contestType === "dual_rewards") &&
+              contestFormat !== "video"
+            ) {
+              setContestFormat("video");
+              if (platform === "twitter") {
+                setPlatform("youtube");
+                setSelectedPlatforms(["youtube"]);
+                setActivePlatform("youtube");
+                setSectionPlatforms(createDefaultSectionPlatforms());
+                setAllSectionLive(createDefaultAllSectionLive());
+              }
             }
-          }
-          setShowRewardPicker(false);
-        }}
-      />
+            setShowRewardPicker(false);
+          }}
+        />
+        {showBackModal && <BackModal />}
+      </>
     );
   }
 
