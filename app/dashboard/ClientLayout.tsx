@@ -65,6 +65,7 @@ import Image from "next/image";
 import goldLogoHorizontal from "@/public/images/gold_logo_horizontal.svg";
 import goldSquareLogo from "@/public/images/Group (4).png";
 import gocLogoInk from "@/public/images/goc-logo-ink.svg";
+import gocLogoMark from "@/public/images/goc-logo-mark.svg";
 import { AccountSwitcher } from "@/components/dashboard/switcher/AccountSwitcher";
 import { BulkModerationProgressProvider } from "@/components/BulkModerationProgressProvider";
 import { BulkPaymentProgressProvider } from "@/components/BulkPaymentProgressProvider";
@@ -1357,22 +1358,34 @@ function DashboardContent({
               href={MARKETING_HOME_AS_GUEST}
               className="flex items-center justify-center"
             >
-              <Image
-                src={
-                  currentMode === "dark"
-                    ? sidebarCollapsed
-                      ? goldSquareLogo
-                      : goldLogoHorizontal
-                    : gocLogoInk
-                }
-                alt="Game Of Creators Logo"
-                width={196}
-                height={70}
-                className={cn(
-                  "w-auto",
-                  sidebarCollapsed ? "h-10 max-w-[5.5rem] object-contain" : "h-16",
-                )}
-              />
+              {sidebarCollapsed && currentMode !== "dark" ? (
+                <Image
+                  src={gocLogoMark}
+                  alt="Game Of Creators Logo"
+                  width={24}
+                  height={24}
+                  className="h-10 w-10 object-contain"
+                />
+              ) : (
+                <Image
+                  src={
+                    currentMode === "dark"
+                      ? sidebarCollapsed
+                        ? goldSquareLogo
+                        : goldLogoHorizontal
+                      : gocLogoInk
+                  }
+                  alt="Game Of Creators Logo"
+                  width={196}
+                  height={70}
+                  className={cn(
+                    "w-auto",
+                    sidebarCollapsed
+                      ? "h-14 w-14 object-contain"
+                      : "h-16",
+                  )}
+                />
+              )}
             </Link>
             <button
               type="button"

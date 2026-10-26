@@ -83,7 +83,7 @@ export function FormField({
         </p>
       )}
       {helper && !error && (
-        <p id={helperId} className={cn("text-xs", t.muted)}>
+        <p id={helperId} className={cn("text-sm leading-relaxed", t.muted)}>
           {helper}
         </p>
       )}
@@ -93,5 +93,5 @@ export function FormField({
 
 /** A single compact note under a method's fields. */
 export function FieldNote({ isDark, children }: { isDark: boolean; children: ReactNode }) {
-  return <p className={cn("text-xs leading-relaxed", payoutDialogTheme(isDark).muted)}>{children}</p>;
+  return <p className={cn("text-sm leading-relaxed", payoutDialogTheme(isDark).muted)}>{children}</p>;
 }

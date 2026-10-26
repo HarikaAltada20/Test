@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation"; // Added for potential future use
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 // import Link from "next/link"; // Not used directly here if navigation is via router or buttons
 import {
@@ -40,8 +40,6 @@ import {
 } from "@/components/ui/select";
 import {
   ArrowDownToLine,
-  DollarSign,
-  Info,
   Trophy,
   Coins,
   Gift,
@@ -55,6 +53,7 @@ import {
   Wallet as CryptoWalletIcon, // Renamed to avoid conflict
   Wallet,
   Sparkles,
+  Ticket,
   Power,
   Loader2,
   X,
@@ -78,7 +77,11 @@ import {
   type WithdrawRequest,
   type WithdrawSubmitResult,
 } from "@/components/payouts/withdraw-dialog/WithdrawBalanceDialog";
-import { canRemoveSkydo, getSkydoStatus, isSkydoUsable } from "@/lib/skydo-payout";
+import {
+  canRemoveSkydo,
+  getSkydoStatus,
+  isSkydoUsable,
+} from "@/lib/skydo-payout";
 import {
   getSupabaseErrorMessage,
   type PayoutMethodDraft,
@@ -104,17 +107,10 @@ import { MIN_WITHDRAWAL_AMOUNT } from "@/constants/subscriptionPlans";
 import { toast } from "sonner"; // Import toast
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
-import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
 import { cn } from "@/lib/utils";
 import { WITHDRAWAL_REVIEW_TRIGGER_EVENT } from "@/lib/review-events";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 const formatCoins = (coins: number | bigint = 0): string => {
   return new Intl.NumberFormat().format(Number(coins));
@@ -124,6 +120,57 @@ const formatDateTime = (dateString?: string): string => {
   if (!dateString) return "N/A";
   return new Date(dateString).toLocaleString();
 };
+
+function EarningsStatCard({
+  isDark,
+  icon,
+  title,
+  label,
+  value,
+}: {
+  isDark: boolean;
+  icon: ReactNode;
+  title: string;
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <section
+      className={cn(
+        "flex flex-col rounded-2xl border p-5",
+        isDark
+          ? "border-slate-700 bg-slate-900"
+          : "border-neutral-200 bg-white",
+      )}
+    >
+      <div
+        className={cn(
+          "flex items-center gap-2 text-base font-semibold",
+          isDark ? "text-white" : "text-[#171717]",
+        )}
+      >
+        {icon}
+        {title}
+      </div>
+      <p
+        className={cn(
+          "mt-5 text-base font-medium",
+          isDark ? "text-slate-200" : "text-[#66666F]",
+        )}
+      >
+        {label}
+      </p>
+      <p
+        className={cn(
+          "mt-1.5 text-[34px] font-semibold leading-none tracking-tight",
+          isDark ? "text-white" : "text-[#171717]",
+        )}
+      >
+        {value}
+      </p>
+    </section>
+  );
+}
 
 interface EarningsClientPageProps {
   initialAuthUser: User | null;
@@ -158,7 +205,7 @@ export default function EarningsClientPage({
   // States derived from props, allowing client-side updates
   const [authUser, setAuthUser] = useState<User | null>(initialAuthUser);
   const [profile, setProfile] = useState<CreatorProfileData | null>(
-    initialProfile
+    initialProfile,
   );
   const [userData, setUserData] = useState<UserData | null>(initialUserData);
   // Note: Cash transactions now handled by pagination hook
@@ -179,21 +226,24 @@ export default function EarningsClientPage({
 
   // Modal States (same as before)
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
-  const [payoutDialogView, setPayoutDialogView] = useState<"list" | "add">("list");
+  const [payoutDialogView, setPayoutDialogView] = useState<"list" | "add">(
+    "list",
+  );
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+  const [coinPage, setCoinPage] = useState(1);
+  const [coinLimit, setCoinLimit] = useState(25);
 
   // Coupon/code redemption
   const [redeemCode, setRedeemCode] = useState<string>("");
   const [isRedeeming, setIsRedeeming] = useState<boolean>(false);
 
   // Payout method availability (admin can pause methods globally)
-  const [pausedPayoutMethodTypes, setPausedPayoutMethodTypes] = useState<string[]>([]);
-  const [enabledPayoutMethodTypes, setEnabledPayoutMethodTypes] = useState<string[]>([
-    "crypto",
-    "upi",
-    "bank_transfer",
-    "skydo",
-  ]);
+  const [pausedPayoutMethodTypes, setPausedPayoutMethodTypes] = useState<
+    string[]
+  >([]);
+  const [enabledPayoutMethodTypes, setEnabledPayoutMethodTypes] = useState<
+    string[]
+  >(["crypto", "upi", "bank_transfer", "skydo"]);
 
   const getInitialMode = (): "light" | "dark" => {
     if (typeof document === "undefined") return "light";
@@ -324,9 +374,9 @@ export default function EarningsClientPage({
       initialWithdrawalRequests.map((wr) => ({
         ...wr,
         payout_method_summary: getPayoutMethodSummaryById(
-          wr.payout_method_id === undefined ? null : wr.payout_method_id
+          wr.payout_method_id === undefined ? null : wr.payout_method_id,
         ),
-      }))
+      })),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -339,14 +389,18 @@ export default function EarningsClientPage({
     router,
   ]);
 
-  const [payoutFeeSettings, setPayoutFeeSettings] = useState<PayoutFeeSettings>(DEFAULT_PAYOUT_FEE_SETTINGS);
+  const [payoutFeeSettings, setPayoutFeeSettings] = useState<PayoutFeeSettings>(
+    DEFAULT_PAYOUT_FEE_SETTINGS,
+  );
 
   const loadPayoutSettings = useCallback(async () => {
     try {
       const res = await fetch("/api/payout-method-settings");
       const data = await res.json();
       setPausedPayoutMethodTypes(data.pausedMethodTypes || []);
-      setEnabledPayoutMethodTypes(data.enabledMethodTypes || ["crypto", "upi", "bank_transfer", "skydo"]);
+      setEnabledPayoutMethodTypes(
+        data.enabledMethodTypes || ["crypto", "upi", "bank_transfer", "skydo"],
+      );
       setPayoutFeeSettings(parsePayoutFeeSettings(data));
     } catch {
       setPausedPayoutMethodTypes([]);
@@ -366,7 +420,7 @@ export default function EarningsClientPage({
     skydo: "Skydo",
   };
   const availablePayoutMethodsForWithdraw = payoutMethods.filter(
-    (m) => enabledPayoutMethodTypes.includes(m.method_type) && isSkydoUsable(m)
+    (m) => enabledPayoutMethodTypes.includes(m.method_type) && isSkydoUsable(m),
   );
   const existingSkydoMethod =
     payoutMethods.find((m) => m.method_type === "skydo") ?? null;
@@ -380,11 +434,14 @@ export default function EarningsClientPage({
   };
 
   const savePayoutMethod = async (
-    draft: PayoutMethodDraft
+    draft: PayoutMethodDraft,
   ): Promise<PayoutSaveResult> => {
     if (!authUser) {
       toast.error("Authentication error.");
-      return { ok: false, message: "Authentication error. Please sign in again." };
+      return {
+        ok: false,
+        message: "Authentication error. Please sign in again.",
+      };
     }
     const methodToSave = { user_id: authUser.id, ...draft };
     setIsLoading(true);
@@ -395,7 +452,8 @@ export default function EarningsClientPage({
         .select()
         .single();
       if (error) throw error;
-      if (!data) throw new Error("No data returned after saving payout method.");
+      if (!data)
+        throw new Error("No data returned after saving payout method.");
 
       setPayoutMethods((prevMethods) => {
         const index = prevMethods.findIndex((m) => m.id === data.id);
@@ -409,7 +467,7 @@ export default function EarningsClientPage({
       toast.success(
         draft.method_type === "skydo"
           ? "Skydo payout method added. Watch for an email from Skydo Payouts within 24 hours."
-          : `Payout method ${draft.id ? "updated" : "added"} successfully!`
+          : `Payout method ${draft.id ? "updated" : "added"} successfully!`,
       );
       return { ok: true };
     } catch (error) {
@@ -425,7 +483,9 @@ export default function EarningsClientPage({
   const deletePayoutMethod = async (method: PayoutMethod): Promise<boolean> => {
     const isSkydo = method.method_type === "skydo";
     if (isSkydo && !canRemoveSkydo(method)) {
-      toast.error("Your Skydo email can't be removed after Skydo has emailed you.");
+      toast.error(
+        "Your Skydo email can't be removed after Skydo has emailed you.",
+      );
       return false;
     }
     setIsLoading(true);
@@ -443,12 +503,14 @@ export default function EarningsClientPage({
     toast.success(
       isSkydo
         ? "Skydo email removed. You can add a different one now."
-        : "Payout method deleted."
+        : "Payout method deleted.",
     );
     return true;
   };
 
-  const setDefaultPayoutMethod = async (method: PayoutMethod): Promise<boolean> => {
+  const setDefaultPayoutMethod = async (
+    method: PayoutMethod,
+  ): Promise<boolean> => {
     if (!authUser) return false;
     setIsLoading(true);
     // Set all others to false for this user
@@ -476,7 +538,9 @@ export default function EarningsClientPage({
       return false;
     }
     if (data) {
-      setPayoutMethods((prev) => prev.map((p) => ({ ...p, is_default: p.id === data.id })));
+      setPayoutMethods((prev) =>
+        prev.map((p) => ({ ...p, is_default: p.id === data.id })),
+      );
       toast.success("Default payout method updated.");
     }
     return true;
@@ -507,27 +571,32 @@ export default function EarningsClientPage({
 
     console.log(
       "Calling create_withdrawal_request with args:",
-      JSON.stringify(rpcArgs, null, 2)
+      JSON.stringify(rpcArgs, null, 2),
     );
 
     const { data: rpcResponse, error: rpcError } = await supabase.rpc(
       "create_withdrawal_request",
-      rpcArgs
+      rpcArgs,
     );
 
     if (rpcError) {
       console.error("Error creating withdrawal request via RPC:", rpcError);
       // The fee or rate changed since the dialog loaded them: show the new amounts.
-      if (rpcError.message?.includes("Fees were just updated")) void loadPayoutSettings();
+      if (rpcError.message?.includes("Fees were just updated"))
+        void loadPayoutSettings();
       return {
         ok: false,
         message: formatErrorWithCurrency(rpcError.message || "Unknown error"),
       };
     }
-    if (!rpcResponse || !Array.isArray(rpcResponse) || rpcResponse.length === 0) {
+    if (
+      !rpcResponse ||
+      !Array.isArray(rpcResponse) ||
+      rpcResponse.length === 0
+    ) {
       console.error(
         "Withdrawal request RPC returned unexpected data:",
-        rpcResponse
+        rpcResponse,
       );
       return {
         ok: false,
@@ -539,8 +608,8 @@ export default function EarningsClientPage({
     const createdRequest = rpcResponse[0] as WithdrawalRequest;
     toast.success(
       `Withdrawal request for ${formatCurrencyFromCents(
-        createdRequest.amount
-      )} submitted successfully!`
+        createdRequest.amount,
+      )} submitted successfully!`,
     );
     setWithdrawalRequests((prev) => [
       {
@@ -548,7 +617,7 @@ export default function EarningsClientPage({
         payout_method_summary: getPayoutMethodSummaryById(
           createdRequest.payout_method_id === undefined
             ? null
-            : createdRequest.payout_method_id
+            : createdRequest.payout_method_id,
         ),
       },
       ...prev,
@@ -560,7 +629,7 @@ export default function EarningsClientPage({
             withdrawable_balance:
               (prev.withdrawable_balance || 0) - createdRequest.amount,
           }
-        : null
+        : null,
     );
 
     if (typeof window !== "undefined") {
@@ -572,13 +641,13 @@ export default function EarningsClientPage({
   const handleCancelWithdrawal = async (
     requestId: string,
     amountToRestore: number,
-    amountType: "cash" | "coins"
+    amountType: "cash" | "coins",
   ) => {
     // amountCents renamed to amountToRestore
     if (!authUser || !profile || !userData) return;
     if (
       !confirm(
-        "Are you sure you want to cancel this withdrawal request? The funds will be returned to your balance."
+        "Are you sure you want to cancel this withdrawal request? The funds will be returned to your balance.",
       )
     ) {
       return;
@@ -590,7 +659,7 @@ export default function EarningsClientPage({
       {
         p_request_id: requestId,
         p_user_id: authUser.id,
-      }
+      },
     );
 
     setIsCancellingWithdrawal(null);
@@ -607,12 +676,12 @@ export default function EarningsClientPage({
                 withdrawable_balance:
                   (prev.withdrawable_balance || 0) + amountToRestore,
               }
-            : null
+            : null,
         );
       } else {
         // coins
         setUserData((prev) =>
-          prev ? { ...prev, coins: (prev.coins || 0) + amountToRestore } : null
+          prev ? { ...prev, coins: (prev.coins || 0) + amountToRestore } : null,
         );
       }
       setWithdrawalRequests((prevReqs) =>
@@ -624,24 +693,24 @@ export default function EarningsClientPage({
                 payout_method_summary: getPayoutMethodSummaryById(
                   req.payout_method_id === undefined
                     ? null
-                    : req.payout_method_id
+                    : req.payout_method_id,
                 ),
                 cancelled_at: new Date().toISOString(),
                 cancellation_reason: "Cancelled by user",
               }
-            : req
-        )
+            : req,
+        ),
       );
       toast.success(
-        "Withdrawal Cancelled: The funds have been returned to your balance."
+        "Withdrawal Cancelled: The funds have been returned to your balance.",
       );
     } else {
       console.error(
         "RPC call to cancel withdrawal did not return true. Response:",
-        rpcSuccess
+        rpcSuccess,
       );
       toast.error(
-        "Failed to cancel the withdrawal request. Please try again or contact support."
+        "Failed to cancel the withdrawal request. Please try again or contact support.",
       );
     }
   };
@@ -680,242 +749,232 @@ export default function EarningsClientPage({
 
   // Filter withdrawal requests for display
   const cashWithdrawalRequests = withdrawalRequests.filter(
-    (req) => req.amount_type === "cash"
+    (req) => req.amount_type === "cash",
   );
   const coinWithdrawalRequests = withdrawalRequests.filter(
-    (req) => req.amount_type === "coins"
+    (req) => req.amount_type === "coins",
   );
+
+  const coinTotal = coinTransactions.length;
+  const coinTotalPages = Math.ceil(coinTotal / coinLimit);
+  const safeCoinPage = Math.min(coinPage, Math.max(1, coinTotalPages || 1));
+  const visibleCoinTransactions = coinTransactions.slice(
+    (safeCoinPage - 1) * coinLimit,
+    safeCoinPage * coinLimit,
+  );
+  const balance = profile?.withdrawable_balance || 0;
+  const canOpenWithdraw =
+    !!profile && balance >= MIN_WITHDRAWAL_AMOUNT && !isLoading;
+  const hasPayoutMethods = payoutMethods.length > 0;
+  const withdrawLabel =
+    !profile || isLoading
+      ? "Loading account..."
+      : balance < MIN_WITHDRAWAL_AMOUNT
+        ? `Minimum withdrawal: ${formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}`
+        : "Withdraw Balance";
 
   return (
     <div className="container mx-auto py-8 md:px-4">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold">My Earnings</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1
+            className={cn(
+              "text-[28px] font-semibold tracking-tight",
+              isDark ? "text-white" : "text-[#171717]",
+            )}
+          >
+            My earnings
+          </h1>
+          <p
+            className={cn(
+              "mt-1.5 text-md",
+              isDark ? "text-slate-200" : "text-[#55555F]",
+            )}
+          >
+            Your cash and coins, what you can withdraw, and where it goes.
+          </p>
+        </div>
+        {activeTab === "coins" ? (
+          <Button
+            type="button"
+            disabled
+            className="h-10 shrink-0 rounded-full bg-[#d4d4d8] px-4 text-sm font-medium text-[#525252] shadow-none hover:bg-[#d4d4d8] disabled:opacity-100"
+          >
+            <Gift className="mr-1.5 h-4 w-4" />
+            Redeem coins · Coming soon
+          </Button>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            {canOpenWithdraw && hasPayoutMethods ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsWithdrawModalOpen(true)}
+                className={cn(
+                  "h-10 rounded-full px-4 text-md font-medium shadow-none",
+                  isDark
+                    ? "border-slate-600 bg-transparent text-slate-100 hover:bg-white/10"
+                    : "border-neutral-300 bg-white text-[#171717] hover:bg-neutral-50",
+                )}
+              >
+                <ArrowDownToLine className="mr-1.5 h-4 w-4" />
+                Withdraw Balance
+              </Button>
+            ) : canOpenWithdraw ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => openPayoutDialog("add")}
+                className={cn(
+                  "h-10 rounded-full px-4 text-md font-medium shadow-none",
+                  isDark
+                    ? "border-slate-600 bg-transparent text-slate-100 hover:bg-white/10"
+                    : "border-neutral-300 bg-white text-[#171717] hover:bg-neutral-50",
+                )}
+              >
+                <PlusCircle className="mr-1.5 h-4 w-4" />
+                Add Payout Method to Withdraw
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                disabled
+                className={cn(
+                  "h-10 rounded-full px-4 text-md font-medium shadow-none disabled:opacity-60",
+                  isDark
+                    ? "border-slate-600 bg-transparent text-slate-100"
+                    : "border-neutral-300 bg-white text-[#171717]",
+                )}
+              >
+                <ArrowDownToLine className="mr-1.5 h-4 w-4" />
+                {withdrawLabel}
+              </Button>
+            )}
+            <Button
+              type="button"
+              onClick={() => openPayoutDialog("list")}
+              disabled={isLoading}
+              className="h-10 rounded-full bg-[#171717] px-4 text-sm font-medium text-white shadow-none hover:bg-[#2a2a2a]"
+            >
+              <Settings2 className="mr-1.5 h-4 w-4" />
+              Manage Payout Methods
+            </Button>
+          </div>
+        )}
       </div>
-      {/* Tabs */}
-      <EnhancedTabs
-        tabs={tabs}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        className="mt-10 mb-10"
-        isDark={isDark}
-        light={!isDark}
-      />
-      {/* <Tabs defaultValue="cash" className="w-full" onValueChange={(value) => setActiveTab(value as 'cash' | 'coins')}>
-                <TabsList className="grid w-full grid-cols-2 mb-6">
-                    <TabsTrigger value="cash">
-                        <DollarSign className="h-5 w-5 mr-2" /> Cash Wallet
-                    </TabsTrigger>
-                    <TabsTrigger value="coins">
-                        <Coins className="h-5 w-5 mr-2" /> Coin Wallet
-                    </TabsTrigger>
-                </TabsList> */}
 
+      <div
+        className={cn(
+          "mt-8 flex gap-6 border-b",
+          isDark ? "border-slate-700" : "border-neutral-200",
+        )}
+      >
+        {tabs.map((tab) => {
+          const selected = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "-mb-px border-b-2 px-1 pb-2.5 text-base font-semibold transition-colors",
+                selected
+                  ? isDark
+                    ? "border-white text-white"
+                    : "border-[#171717] text-[#171717]"
+                  : isDark
+                    ? "border-transparent text-slate-200 hover:text-white"
+                    : "border-transparent text-[#292524] hover:text-[#171717]",
+              )}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
       {/* Cash Wallet Tab */}
       <TabContent activeTab={activeTab}>
         <TabPanel value="cash" activeTab={activeTab}>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-            <div
-              className={cn(
-                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337]" : "bg-white"
-              )}
-            >
-              <CardContent className="p-4 flex justify-between">
-                <div
-                  className={cn(
-                    "flex-1 space-y-3",
-                    isDark ? "text-white" : "text-black"
-                  )}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-lg font-medium">Total Cash Earned</p>
-                    <TooltipProvider delayDuration={200}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            className={cn(
-                              "inline-flex rounded-full p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
-                              isDark
-                                ? "text-white/80 focus-visible:ring-white/40"
-                                : "text-muted-foreground focus-visible:ring-[#4A00BE]/30"
-                            )}
-                            aria-label="How total cash earned is calculated"
-                          >
-                            <Info className="h-4 w-4 shrink-0" />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent
-                          side="top"
-                          className="max-w-[280px] space-y-2 p-3 text-left"
-                        >
-                          <p className="text-xs leading-snug">
-                            <span className="font-medium">
-                              Contest & opportunity winnings
-                            </span>
-                            <span className="text-muted-foreground"> — </span>
-                            {formatCurrencyFromCents(contestCashCents)}
-                          </p>
-                          <p className="text-xs leading-snug">
-                            <span className="font-medium">
-                              Affiliate earnings
-                            </span>
-                            <span className="text-muted-foreground"> — </span>
-                            {formatCurrencyFromCents(affiliateEarningsCents)}
-                          </p>
-                          <p className="text-xs leading-snug">
-                            <span className="font-medium">
-                              Other earnings (bonuses, coupons, etc.)
-                            </span>
-                            <span className="text-muted-foreground"> — </span>
-                            {formatCurrencyFromCents(otherEarningsCents)}
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <p className="text-xl font-bold">
-                    {formatCurrencyFromCents(totalCashEarnedCents)}
-                  </p>
-                  <p className="text-md">Lifetime cash earnings</p>
-                </div>
-                <div
-                  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full",
-                    isDark
-                      ? "bg-[#FFFFFF36] text-white"
-                      : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}
-                >
-                  <DollarSign className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </div>
-            {/* <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Total Cash Won</CardTitle>
-                                <DollarSign className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{formatCurrencyFromCents(profile.total_money_won)}</div>
-                                <p className="text-xs text-muted-foreground">Lifetime cash earnings</p>
-                            </CardContent>
-                        </Card> */}
-            <div
-              className={cn(
-                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337]" : "bg-white"
-              )}
-            >
-              <CardContent className="p-4 flex justify-between">
-                <div
-                  className={cn(
-                    "flex-1 space-y-3",
-                    isDark ? "text-white" : "text-black"
-                  )}
-                >
-                  <p className="text-lg font-medium">
-                    Available for Withdrawal
-                  </p>
-                  <p className="text-xl font-bold">
-                    {formatCurrencyFromCents(profile.withdrawable_balance)}
-                  </p>
-                  <p className="text-md">
-                    Minimum withdrawal:{" "}
-                    {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}
-                  </p>
-                </div>
-                <div
-                  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full",
-                    isDark
-                      ? "bg-[#FFFFFF36] text-white"
-                      : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}
-                >
-                  <ArrowDownToLine className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </div>
-            {/* <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Available for Withdrawal</CardTitle>
-                                <ArrowDownToLine className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{formatCurrencyFromCents(profile.withdrawable_balance)}</div>
-                                <p className="text-xs text-muted-foreground">Minimum withdrawal: {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}</p>
-                            </CardContent>
-                        </Card> */}
-            <div
-              className={cn(
-                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337]" : "bg-white"
-              )}
-            >
-              <CardContent className="p-4 flex justify-between">
-                <div
-                  className={cn(
-                    "flex-1 space-y-3",
-                    isDark ? "text-white" : "text-black"
-                  )}
-                >
-                  <p className="text-lg font-medium">Cash Campaigns Won</p>
-                  <p className="text-xl font-bold">
-                    {profile.total_contests_won}
-                  </p>
-                  <p className="text-md">Total cash campaign victories</p>
-                </div>
-                <div
-                  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full",
-                    isDark
-                      ? "bg-[#FFFFFF36] text-white"
-                      : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}
-                >
-                  <Trophy className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </div>
-            {/* <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Cash Contests Won</CardTitle>
-                                <Trophy className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{profile.total_contests_won}</div>
-                                <p className="text-xs text-muted-foreground">Total cash contest victories</p>
-                            </CardContent>
-                        </Card> */}
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <EarningsStatCard
+              isDark={isDark}
+              icon={<Trophy className="h-4 w-4" />}
+              title="Earned"
+              label="Total cash earned"
+              value={formatCurrencyFromCents(totalCashEarnedCents)}
+            />
+            <EarningsStatCard
+              isDark={isDark}
+              icon={<Wallet className="h-4 w-4" />}
+              title="Balance"
+              label="Available for withdrawal"
+              value={formatCurrencyFromCents(profile.withdrawable_balance)}
+            />
+            <EarningsStatCard
+              isDark={isDark}
+              icon={<Gift className="h-4 w-4" />}
+              title="Campaigns"
+              label="Cash campaigns won"
+              value={profile.total_contests_won}
+            />
           </div>
 
-          {/* Code Redemption */}
+          {payoutMethods.length === 0 &&
+            (profile.withdrawable_balance || 0) >= MIN_WITHDRAWAL_AMOUNT && (
+              <p className="mt-4 text-sm text-yellow-600 dark:text-yellow-500">
+                Please add a payout method to withdraw your balance.
+              </p>
+            )}
+
           <div
             className={cn(
-              "mb-6 p-4 rounded-md",
-              isDark ? "bg-[#170337]" : "border bg-white"
+              "mt-4 flex flex-col gap-3 rounded-2xl border px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between",
+              isDark
+                ? "border-slate-700 bg-slate-900"
+                : "border-neutral-200 bg-white",
             )}
           >
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-4">
-              <div className="flex-1 space-y-1">
-                <Label className="text-md" htmlFor="redeemCode">
-                  Redeem a Code
-                </Label>
-                <Input
-                  id="redeemCode"
-                  className={cn(
-                    isDark
-                      ? "bg-[#180438] border border-gray-600 text-white"
-                      : "bg-white text-black"
-                  )}
-                  placeholder="Enter coupon or promo code"
-                  value={redeemCode}
-                  onChange={(e) => setRedeemCode(e.target.value)}
-                  disabled={isRedeeming}
-                />
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#fff1e6] text-[#ff7a1a]">
+                <Ticket className="h-5 w-5" />
               </div>
-              <Button
+              <div className="min-w-0">
+                <p
+                  className={cn(
+                    "text-lg font-semibold",
+                    isDark ? "text-white" : "text-[#171717]",
+                  )}
+                >
+                  Redeem a code
+                </p>
+                <p
+                  className={cn(
+                    "text-md",
+                    isDark ? "text-slate-200" : "text-[#66666F]",
+                  )}
+                >
+                  Codes from Discord, email or campaigns add cash, coins or
+                  both.
+                </p>
+              </div>
+            </div>
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <Input
+                id="redeemCode"
+                className={cn(
+                  "h-10 w-full rounded-full border-0 px-4 text-sm shadow-none sm:w-[380px]",
+                  isDark
+                    ? "bg-slate-800 text-white placeholder:text-slate-400"
+                    : "bg-[#f3f3f4] text-[#171717] placeholder:text-[#a3a3a3]",
+                )}
+                placeholder="Enter coupon or promo code"
+                value={redeemCode}
+                onChange={(e) => setRedeemCode(e.target.value)}
+                disabled={isRedeeming}
+              />
+              <button
+                type="button"
                 onClick={async () => {
                   setIsRedeeming(true);
                   try {
@@ -928,7 +987,6 @@ export default function EarningsClientPage({
                     if (!res.ok || data.error) {
                       toast.error(data.error || "Failed to redeem code");
                     } else {
-                      // If server signals already redeemed, show neutral feedback
                       if (
                         typeof data.message === "string" &&
                         data.message.toLowerCase().includes("already redeemed")
@@ -950,12 +1008,10 @@ export default function EarningsClientPage({
                                   (prev.withdrawable_balance || 0) +
                                   data.cash_cents,
                               }
-                            : prev
+                            : prev,
                         );
                         creditedParts.push(
-                          `$${(data.cash_cents / 100).toFixed(
-                            2
-                          )} to withdrawable balance`
+                          `$${(data.cash_cents / 100).toFixed(2)} to withdrawable balance`,
                         );
                       }
                       if (typeof data.coins === "number" && data.coins > 0) {
@@ -968,7 +1024,7 @@ export default function EarningsClientPage({
                                   (prev.total_lifetime_coins_earned || 0) +
                                   data.coins,
                               }
-                            : prev
+                            : prev,
                         );
                         creditedParts.push(`${data.coins} coins`);
                       }
@@ -986,97 +1042,34 @@ export default function EarningsClientPage({
                   }
                 }}
                 disabled={isRedeeming || redeemCode.trim().length === 0}
+                className={cn(
+                  "shrink-0 text-sm font-semibold disabled:opacity-40",
+                  isDark ? "text-white" : "text-[#171717]",
+                )}
               >
-                {isRedeeming ? "Redeeming..." : "Redeem Code"}
-              </Button>
+                {isRedeeming ? "Redeeming..." : "Redeem"}
+              </button>
             </div>
-            <p className="text-sm text-muted-foreground mt-2">
-              Enter any valid code shared via Discord, email, or campaigns.
-            </p>
           </div>
 
-          <div className="flex flex-col md:flex-row gap-3 mb-8">
-            {(() => {
-              const balance = profile?.withdrawable_balance || 0;
-              const canOpenWithdraw =
-                !!profile && balance >= MIN_WITHDRAWAL_AMOUNT && !isLoading;
-              const hasPayoutMethods = payoutMethods.length > 0;
-              const primaryClass = "flex-1 gap-2 text-base font-semibold";
-              if (canOpenWithdraw && hasPayoutMethods) {
-                return (
-                  <Button
-                    size="lg"
-                    onClick={() => setIsWithdrawModalOpen(true)}
-                    className={primaryClass}
-                  >
-                    <ArrowDownToLine className="h-5 w-5" aria-hidden />
-                    Withdraw Balance
-                  </Button>
-                );
-              }
-              if (canOpenWithdraw && !hasPayoutMethods) {
-                return (
-                  <Button
-                    size="lg"
-                    onClick={() => openPayoutDialog("add")}
-                    className={primaryClass}
-                  >
-                    <PlusCircle className="h-5 w-5" aria-hidden />
-                    Add Payout Method to Withdraw
-                  </Button>
-                );
-              }
-              // Fallback: disabled button with reason
-              const reason =
-                !profile || isLoading
-                  ? "Loading account..."
-                  : balance < MIN_WITHDRAWAL_AMOUNT
-                  ? `Minimum withdrawal: ${formatCurrencyFromCents(
-                      MIN_WITHDRAWAL_AMOUNT
-                    )}`
-                  : "Withdraw Balance";
-              return (
-                <Button size="lg" className={primaryClass} disabled>
-                  <ArrowDownToLine className="h-5 w-5" aria-hidden />
-                  {reason}
-                </Button>
-              );
-            })()}
-
-            <Button
-              size="lg"
-              variant="outline"
-              onClick={() => openPayoutDialog("list")}
-              className={cn(
-                "flex-1 gap-2 border-2 text-base font-semibold",
-                isDark
-                  ? "border-[#7F39EC] bg-transparent text-white hover:bg-[#7F39EC]/20"
-                  : "border-[#7F39EC] bg-white text-[#4A00BE] hover:bg-[#7F39EC]/10"
-              )}
-              disabled={isLoading}
-            >
-              <Settings2 className="h-5 w-5" aria-hidden />
-              Manage Payout Methods
-            </Button>
-          </div>
-          {payoutMethods.length === 0 &&
-            profile &&
-            (profile.withdrawable_balance || 0) >= MIN_WITHDRAWAL_AMOUNT && (
-              <p className="text-sm text-yellow-600 dark:text-yellow-500 mb-4 text-center">
-                Please add a payout method to withdraw your balance.
-              </p>
-            )}
-
-          <div
+          <h2
+            id="cash-transactions"
             className={cn(
-              "rounded-xl shadow",
-              isDark ? "bg-[#170337]" : "bg-white"
+              "mb-3 mt-8 text-base font-semibold",
+              isDark ? "text-white" : "text-[#171717]",
             )}
           >
-            <CardHeader>
-              <CardTitle>Cash Transaction History</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            Cash transactions
+          </h2>
+          <div
+            className={cn(
+              "overflow-hidden rounded-2xl border",
+              isDark
+                ? "border-slate-700 bg-slate-900"
+                : "border-neutral-200 bg-white",
+            )}
+          >
+            <CardContent className="space-y-4 px-2 py-3 sm:px-4">
               {cashTransactionsError && (
                 <div className="text-center text-red-500 p-4">
                   Error loading transactions: {cashTransactionsError}
@@ -1088,12 +1081,12 @@ export default function EarningsClientPage({
                   className={cn(
                     "text-left border-b",
                     isDark
-                      ? "bg-[#391A6A] text-white"
-                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                      ? "border-b border-slate-700 text-slate-400"
+                      : "border-b border-neutral-200 text-[#737373]",
                   )}
                 >
                   <TableRow>
-                    <TableHead>Date & Time</TableHead>
+                    <TableHead>Date & time</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Amount</TableHead>
@@ -1120,7 +1113,7 @@ export default function EarningsClientPage({
                         colSpan={6}
                         className="text-center text-muted-foreground h-32"
                       >
-                        No cash transaction history yet.
+                        No transactions yet.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -1144,10 +1137,10 @@ export default function EarningsClientPage({
                               transaction.status === "success"
                                 ? "default"
                                 : transaction.status === "pending"
-                                ? "secondary"
-                                : transaction.status === "failed"
-                                ? "destructive"
-                                : "outline"
+                                  ? "secondary"
+                                  : transaction.status === "failed"
+                                    ? "destructive"
+                                    : "outline"
                             }
                             className={`capitalize px-3 py-1 rounded-full text-sm font-medium
                               ${
@@ -1158,16 +1151,16 @@ export default function EarningsClientPage({
                                     ? "bg-[#57D3034F] text-[#57D303]"
                                     : "bg-green-100 text-green-700 border-green-300"
                                   : transaction.status === "pending"
-                                  ? isDark
-                                    ? "bg-[#FDD36F61] text-[#FDD36F]"
-                                    : "bg-yellow-100 text-yellow-700 border-yellow-300"
-                                  : transaction.status === "failed"
-                                  ? isDark
-                                    ? "bg-red-900 text-red-300"
-                                    : "bg-red-100 text-red-700 border-red-300"
-                                  : isDark
-                                  ? "bg-gray-800 text-gray-300"
-                                  : "bg-gray-100 text-gray-700 border-gray-300"
+                                    ? isDark
+                                      ? "bg-[#FDD36F61] text-[#FDD36F]"
+                                      : "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                    : transaction.status === "failed"
+                                      ? isDark
+                                        ? "bg-red-900 text-red-300"
+                                        : "bg-red-100 text-red-700 border-red-300"
+                                      : isDark
+                                        ? "bg-gray-800 text-gray-300"
+                                        : "bg-gray-100 text-gray-700 border-gray-300"
                               }
                             `}
                           >
@@ -1202,23 +1195,30 @@ export default function EarningsClientPage({
           </div>
 
           {/* Cash Withdrawal Requests Section - Moved inside cash tab */}
-          <div
+          <h2
             className={cn(
-              "mt-8 rounded-xl shadow",
-              isDark ? "bg-[#170337]" : "bg-white"
+              "mb-3 mt-8 text-base font-semibold",
+              isDark ? "text-white" : "text-[#171717]",
             )}
           >
-            <CardHeader>
-              <CardTitle>Cash Withdrawal Request History</CardTitle>
-            </CardHeader>
+            Cash withdrawals
+          </h2>
+          <div
+            className={cn(
+              "overflow-hidden rounded-2xl border",
+              isDark
+                ? "border-slate-700 bg-slate-900"
+                : "border-neutral-200 bg-white",
+            )}
+          >
             <CardContent>
               <Table>
                 <TableHeader
                   className={cn(
                     "text-left border-b",
                     isDark
-                      ? "bg-[#391A6A] text-white"
-                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                      ? "border-b border-slate-700 text-slate-400"
+                      : "border-b border-neutral-200 text-[#737373]",
                   )}
                 >
                   <TableRow>
@@ -1246,11 +1246,11 @@ export default function EarningsClientPage({
                               req.status === "processed"
                                 ? "default"
                                 : req.status === "pending" ||
-                                  req.status === "approved"
-                                ? "secondary"
-                                : req.status === "cancelled"
-                                ? "outline"
-                                : "destructive"
+                                    req.status === "approved"
+                                  ? "secondary"
+                                  : req.status === "cancelled"
+                                    ? "outline"
+                                    : "destructive"
                             }
                             className="capitalize"
                           >
@@ -1269,7 +1269,7 @@ export default function EarningsClientPage({
                                 handleCancelWithdrawal(
                                   req.id,
                                   req.amount,
-                                  req.amount_type
+                                  req.amount_type,
                                 )
                               }
                               disabled={isCancellingWithdrawal === req.id}
@@ -1302,187 +1302,69 @@ export default function EarningsClientPage({
 
         {/* Coin Wallet Tab */}
         <TabPanel value="coins" activeTab={activeTab}>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-            <div
-              className={cn(
-                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337]" : "bg-white"
-              )}
-            >
-              <CardContent className="p-4 flex justify-between">
-                <div
-                  className={cn(
-                    "flex-1 space-y-3",
-                    isDark ? "text-white" : "text-black"
-                  )}
-                >
-                  <p className="text-lg font-medium">Total Coins Earned</p>
-                  <p className="text-xl font-bold">
-                    {formatCoins(userData.total_lifetime_coins_earned)}
-                  </p>
-                  <p className="text-md">Lifetime coin earnings</p>
-                </div>
-                <div
-                  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full",
-                    isDark
-                      ? "bg-[#FFFFFF36] text-white"
-                      : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}
-                >
-                  <Coins className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </div>
-            {/* <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Coins Earned
-                </CardTitle>
-                <Coins className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCoins(userData.total_lifetime_coins_earned)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Lifetime coin earnings
-                </p>
-              </CardContent>
-            </Card> */}
-            <div
-              className={cn(
-                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337]" : "bg-white"
-              )}
-            >
-              <CardContent className="p-4 flex justify-between">
-                <div
-                  className={cn(
-                    "flex-1 space-y-3",
-                    isDark ? "text-white" : "text-black"
-                  )}
-                >
-                  <p className="text-lg font-medium">Coins Available</p>
-                  <p className="text-xl font-bold">
-                    {formatCoins(userData.coins)}
-                  </p>
-                  <p className="text-md">Your current coin balance</p>
-                </div>
-                <div
-                  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full",
-                    isDark
-                      ? "bg-[#FFFFFF36] text-white"
-                      : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}
-                >
-                  <CryptoWalletIcon className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </div>
-            {/* <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Coins Available
-                </CardTitle>
-                <CryptoWalletIcon className="h-4 w-4 text-muted-foreground" />{" "}
-               
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCoins(userData.coins)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Your current coin balance
-                </p>
-              </CardContent>
-            </Card> */}
-            <div
-              className={cn(
-                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337]" : "bg-white"
-              )}
-            >
-              <CardContent className="p-4 flex justify-between">
-                <div
-                  className={cn(
-                    "flex-1 space-y-3",
-                    isDark ? "text-white" : "text-black"
-                  )}
-                >
-                  <p className="text-lg font-medium">Total Referrals</p>
-                  <p className="text-xl font-bold">{totalReferrals}</p>
-                  <p className="text-md">Successful referrals</p>
-                </div>
-                <div
-                  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full",
-                    isDark
-                      ? "bg-[#FFFFFF36] text-white"
-                      : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}
-                >
-                  <Users className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </div>
-            {/* <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Referrals
-                </CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totalReferrals}</div>
-                <p className="text-xs text-muted-foreground">
-                  Successful referrals
-                </p>
-              </CardContent>
-            </Card> */}
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <EarningsStatCard
+              isDark={isDark}
+              icon={<Coins className="h-4 w-4" />}
+              title="Earned"
+              label="Total coins earned"
+              value={formatCoins(userData.total_lifetime_coins_earned)}
+            />
+            <EarningsStatCard
+              isDark={isDark}
+              icon={<Wallet className="h-4 w-4" />}
+              title="Available"
+              label="Coins available"
+              value={formatCoins(userData.coins)}
+            />
+            <EarningsStatCard
+              isDark={isDark}
+              icon={<Users className="h-4 w-4" />}
+              title="Referrals"
+              label="Total referrals · 100 coins each"
+              value={totalReferrals}
+            />
           </div>
 
-          <div className="mb-6">
-            <Button className="w-full md:w-auto" disabled={true}>
-              {" "}
-              {/* Button disabled */}
-              <Gift className="h-4 w-4 mr-2" /> Redeem Coins (Coming Soon){" "}
-              {/* Text updated */}
-            </Button>
-          </div>
-
-          <div
+          <h2
+            id="coin-transactions"
             className={cn(
-              "rounded-xl shadow",
-              isDark ? "bg-[#170337]" : "bg-white"
+              "mb-3 mt-8 text-base font-semibold",
+              isDark ? "text-white" : "text-[#171717]",
             )}
           >
-            <CardHeader>
-              <CardTitle>Coin Transaction History</CardTitle>
-            </CardHeader>
-            <CardContent>
+            Coin transactions
+          </h2>
+          <div
+            className={cn(
+              "overflow-hidden rounded-2xl border",
+              isDark
+                ? "border-slate-700 bg-slate-900"
+                : "border-neutral-200 bg-white",
+            )}
+          >
+            <CardContent className="space-y-4 px-2 py-3 sm:px-4">
               <Table>
                 <TableHeader
                   className={cn(
                     "text-left border-b",
                     isDark
-                      ? "bg-[#391A6A] text-white"
-                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                      ? "border-b border-slate-700 text-slate-400"
+                      : "border-b border-neutral-200 text-[#737373]",
                   )}
                 >
                   <TableRow>
-                    <TableHead>Date & Time</TableHead>
+                    <TableHead>Date</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Type</TableHead>
-                    <TableHead>Amount</TableHead>
+                    <TableHead>Coins</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Request ID</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {coinTransactions.length > 0 ? (
-                    coinTransactions.map((tx) => (
+                    visibleCoinTransactions.map((tx) => (
                       <TableRow key={tx.id}>
                         <TableCell>{formatDateTime(tx.created_at)}</TableCell>
                         <TableCell>{tx.description}</TableCell>
@@ -1504,10 +1386,10 @@ export default function EarningsClientPage({
                               tx.status === "credited"
                                 ? "default"
                                 : tx.status === "pending"
-                                ? "secondary"
-                                : tx.status === "failed"
-                                ? "destructive"
-                                : "outline"
+                                  ? "secondary"
+                                  : tx.status === "failed"
+                                    ? "destructive"
+                                    : "outline"
                             }
                             className={`capitalize px-3 py-1 rounded-full text-sm font-medium
                               ${
@@ -1518,16 +1400,16 @@ export default function EarningsClientPage({
                                     ? "bg-[#57D3034F] text-[#57D303]"
                                     : "bg-green-100 text-green-700 border-green-300"
                                   : tx.status === "pending"
-                                  ? isDark
-                                    ? "bg-[#FDD36F61] text-[#FDD36F]"
-                                    : "bg-yellow-100 text-yellow-700 border-yellow-300"
-                                  : tx.status === "failed"
-                                  ? isDark
-                                    ? "bg-red-900 text-red-300"
-                                    : "bg-red-100 text-red-700 border-red-300"
-                                  : isDark
-                                  ? "bg-gray-800 text-gray-300"
-                                  : "bg-gray-100 text-gray-700 border-gray-300"
+                                    ? isDark
+                                      ? "bg-[#FDD36F61] text-[#FDD36F]"
+                                      : "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                    : tx.status === "failed"
+                                      ? isDark
+                                        ? "bg-red-900 text-red-300"
+                                        : "bg-red-100 text-red-700 border-red-300"
+                                      : isDark
+                                        ? "bg-gray-800 text-gray-300"
+                                        : "bg-gray-100 text-gray-700 border-gray-300"
                               }
                             `}
                           >
@@ -1545,33 +1427,55 @@ export default function EarningsClientPage({
                         colSpan={6}
                         className="text-center py-4 text-muted-foreground"
                       >
-                        No coin transaction history yet.
+                        No transactions yet.
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
+              {coinTotal > 0 && (
+                <PaginationControls
+                  page={safeCoinPage}
+                  limit={coinLimit}
+                  total={coinTotal}
+                  totalPages={coinTotalPages}
+                  hasNextPage={safeCoinPage < coinTotalPages}
+                  hasPreviousPage={safeCoinPage > 1}
+                  onPageChange={setCoinPage}
+                  onLimitChange={(next) => {
+                    setCoinLimit(next);
+                    setCoinPage(1);
+                  }}
+                  isDark={isDark}
+                />
+              )}
             </CardContent>
           </div>
 
-          {/* Coin Redemption Requests Section - Stays inside coin tab */}
-          <div
+          <h2
             className={cn(
-              "mt-8 rounded-xl shadow",
-              isDark ? "bg-[#170337]" : "bg-white"
+              "mb-3 mt-8 text-base font-semibold",
+              isDark ? "text-white" : "text-[#171717]",
             )}
           >
-            <CardHeader>
-              <CardTitle>Coin Redemption History</CardTitle>
-            </CardHeader>
+            Coin redemptions
+          </h2>
+          <div
+            className={cn(
+              "overflow-hidden rounded-2xl border",
+              isDark
+                ? "border-slate-700 bg-slate-900"
+                : "border-neutral-200 bg-white",
+            )}
+          >
             <CardContent>
               <Table>
                 <TableHeader
                   className={cn(
                     "text-left border-b",
                     isDark
-                      ? "bg-[#391A6A] text-white"
-                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                      ? "border-b border-slate-700 text-slate-400"
+                      : "border-b border-neutral-200 text-[#737373]",
                   )}
                 >
                   <TableRow>
@@ -1606,11 +1510,11 @@ export default function EarningsClientPage({
                               req.status === "processed"
                                 ? "default"
                                 : req.status === "pending" ||
-                                  req.status === "approved"
-                                ? "secondary"
-                                : req.status === "cancelled"
-                                ? "outline"
-                                : "destructive"
+                                    req.status === "approved"
+                                  ? "secondary"
+                                  : req.status === "cancelled"
+                                    ? "outline"
+                                    : "destructive"
                             }
                             className="capitalize"
                           >
@@ -1626,7 +1530,7 @@ export default function EarningsClientPage({
                                 handleCancelWithdrawal(
                                   req.id,
                                   req.amount,
-                                  req.amount_type
+                                  req.amount_type,
                                 )
                               }
                               disabled={isCancellingWithdrawal === req.id}

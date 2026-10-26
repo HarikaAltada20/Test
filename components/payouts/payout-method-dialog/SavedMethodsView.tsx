@@ -59,11 +59,11 @@ export function SavedMethodsView({
             <li
               key={method.id}
               className={cn(
-                "flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center",
+                "flex flex-col gap-3 rounded-2xl border p-3.5 sm:flex-row sm:items-center",
                 method.is_default
                   ? isDark
-                    ? "border-[#9B6BF2]/70 bg-[#7F39EC]/10"
-                    : "border-[#7F39EC]/50 bg-[#7F39EC]/5"
+                    ? "border-white/40 bg-white/5"
+                    : "border-[#171717] bg-[#F6F6F7]"
                   : t.border
               )}
             >
@@ -72,7 +72,7 @@ export function SavedMethodsView({
                   aria-hidden
                   className={cn(
                     "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-                    isDark ? "bg-white/10 text-[#C9A7FF]" : "bg-[#7F39EC]/10 text-[#4A00BE]"
+                    isDark ? "bg-white/10 text-white" : "bg-[#E4E4E4] text-[#171717]"
                   )}
                 >
                   <Icon className="h-4 w-4" />
@@ -82,7 +82,7 @@ export function SavedMethodsView({
                     <span className={cn("truncate text-sm font-semibold", t.text)}>{title}</span>
                     <span className={cn("text-xs", t.muted)}>{meta.label}</span>
                     {method.is_default && (
-                      <span className="rounded-full bg-[#7F39EC] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                      <span className="rounded-full bg-[#171717] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
                         Default
                       </span>
                     )}

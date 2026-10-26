@@ -19,11 +19,9 @@ import {
   DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_CREATOR,
 } from "@/lib/constants";
 import { ChallengeHero } from "@/components/daily-challenge/ChallengeHero";
-import { ChallengeFilters } from "@/components/daily-challenge/ChallengeFilters";
 import { CreatorProgressCard } from "@/components/daily-challenge/CreatorProgressCard";
 import { LeaderboardPanel } from "@/components/daily-challenge/LeaderboardPanel";
 import {
-  RewardsOverview,
   type RewardsSummaryView,
   type TopCreatorView,
 } from "@/components/daily-challenge/RewardsOverview";
@@ -653,7 +651,7 @@ export default function DailyChallengeClient({
     return (
       <div
         className={cn(
-          "max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 md:py-8 flex flex-col items-center justify-center gap-4 min-h-[52vh]",
+          "max-w-[1200px] mx-auto px-3 sm:px-4 py-4 sm:py-6 md:py-8 flex flex-col items-center justify-center gap-4 min-h-[52vh]",
           isDark ? "text-white" : "text-gray-900",
         )}
       >
@@ -666,132 +664,120 @@ export default function DailyChallengeClient({
   }
 
   const liveDashboard = (
-    <>
-      <div
-        className={cn(
-          "overflow-hidden rounded-2xl border shadow-sm",
-          isDark ? "border-white/10 bg-[#14052c]" : "border-slate-200 bg-white",
-        )}
-      >
-        <ChallengeHero
+    <div className="space-y-4">
+      <ChallengeHero
+        isDark={isDark}
+        isAdmin={isAdmin}
+        challengeTitle={challengeTitle}
+        modeHeadline={modeHeadline}
+        leaderboardPeriod={leaderboardPeriod}
+        periodOptions={periodOptions}
+        onPeriodChange={(value) => {
+          setLeaderboardPeriod(value);
+          setCurrentPage(1);
+        }}
+        totalPrizePoolLabel={totalPrizePoolLabel}
+        prizeLabel={prizeLabel}
+        config={config}
+        me={me}
+        effectiveRange={payload?.effectiveRange || null}
+        endsIn={endsIn}
+        rangeEnded={rangeEnded}
+        scopeWindowLabel={scopeWindowLabel}
+      />
+
+      {!hasActiveEvent && !loading && !error && (
+        <div
+          className={cn(
+            "flex gap-3 rounded-[22px] border p-4",
+            isDark ? "border-amber-400/25 bg-amber-500/10" : "border-amber-200 bg-amber-50/90",
+          )}
+        >
+          <AlertCircle
+            className={cn("mt-0.5 h-5 w-5 shrink-0", isDark ? "text-amber-200" : "text-amber-700")}
+          />
+          <div className="min-w-0">
+            <p className={cn("font-semibold", isDark ? "text-amber-50" : "text-amber-950")}>
+              No {challengeTitle} results
+            </p>
+            <p
+              className={cn(
+                "mt-1.5 text-sm leading-relaxed",
+                isDark ? "text-amber-100/90" : "text-amber-900/85",
+              )}
+            >
+              {isAdmin ? (
+                <>
+                  There is no selected competition event covering this mode. Open{" "}
+                  <span className="font-medium">Contest setup</span> to create or activate one.
+                </>
+              ) : (
+                <>
+                  There isn&apos;t an event for this mode yet. Try another mode or check back when the
+                  next window opens.
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!isAdmin && (
+        <CreatorProgressCard
           isDark={isDark}
-          isAdmin={isAdmin}
-          challengeTitle={challengeTitle}
-          modeHeadline={modeHeadline}
-          totalPrizePoolLabel={totalPrizePoolLabel}
+          hasActiveEvent={hasActiveEvent}
+          me={me}
+          activeBoard={activeBoard}
+          thirdPlaceViews={rows[2]?.totalViews}
+          thirdPlaceReels={rows[2]?.totalReels}
+          leaderboardPeriod={leaderboardPeriod}
           prizeLabel={prizeLabel}
           config={config}
-          effectiveRange={payload?.effectiveRange || null}
-          endsIn={endsIn}
-          rangeEnded={rangeEnded}
-          scopeWindowLabel={scopeWindowLabel}
-        />
-
-        <ChallengeFilters
-          isDark={isDark}
-          leaderboardPeriod={leaderboardPeriod}
           scope={scope}
-          periodOptions={periodOptions}
           scopeOptions={SCOPE_OPTIONS}
-          onPeriodChange={(v) => {
-            setLeaderboardPeriod(v);
-            setCurrentPage(1);
-          }}
-          onScopeChange={(v) => {
-            setScope(v);
+          onScopeChange={(value) => {
+            setScope(value);
             setCurrentPage(1);
           }}
         />
+      )}
 
-        {!hasActiveEvent && !loading && !error && (
-          <div
-            className={cn(
-              "mx-4 mt-5 flex gap-3 rounded-xl border p-4 sm:mx-6",
-              isDark
-                ? "border-amber-400/25 bg-amber-500/10"
-                : "border-amber-200 bg-amber-50/90",
-            )}
-          >
-            <AlertCircle
-              className={cn(
-                "mt-0.5 h-5 w-5 shrink-0",
-                isDark ? "text-amber-200" : "text-amber-700",
-              )}
-            />
-            <div className="min-w-0">
-              <p className={cn("font-semibold", isDark ? "text-amber-50" : "text-amber-950")}>
-                No {challengeTitle} results
-              </p>
-              <p
-                className={cn(
-                  "mt-1.5 text-sm leading-relaxed",
-                  isDark ? "text-amber-100/90" : "text-amber-900/85",
-                )}
-              >
-                {isAdmin ? (
-                  <>
-                    There is no selected competition event covering this mode. Open{" "}
-                    <span className="font-medium">Contest setup</span> to create or activate one.
-                  </>
-                ) : (
-                  <>
-                    There isn&apos;t an event for this mode yet. Try another mode or check back when
-                    the next window opens.
-                  </>
-                )}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {!isAdmin && (
-          <CreatorProgressCard
-            isDark={isDark}
-            hasActiveEvent={hasActiveEvent}
-            me={me}
-            activeBoard={activeBoard}
-            thirdPlaceViews={rows[2]?.totalViews}
-            thirdPlaceReels={rows[2]?.totalReels}
-          />
-        )}
-
-        <LeaderboardPanel
-          isDark={isDark}
-          isAdmin={isAdmin}
-          challengeTitle={challengeTitle}
-          leaderboardPeriod={leaderboardPeriod}
-          viewingPastPeriod={viewingPastPeriod}
-          hasActiveEvent={hasActiveEvent}
-          activeBoard={activeBoard}
-          onBoardChange={setActiveBoard}
-          rows={rows}
-          prizeLabel={prizeLabel}
-          loading={loading}
-          error={error}
-          refreshing={refreshing}
-          canRefresh={canRefresh}
-          cooldownRemainingMs={cooldownRemainingMs}
-          cooldownMinsCeil={cooldownMinsCeil}
-          lastManualRefreshRelative={lastManualRefreshRelative}
-          lastLeaderboardFreshIso={lastLeaderboardFreshIso}
-          onRefresh={refreshNow}
-          currentPage={currentPage}
-          limit={limit}
-          totalItems={totalItems}
-          totalPages={totalPages}
-          onPageChange={setCurrentPage}
-          onLimitChange={(n) => {
-            setLimit(n);
-            setCurrentPage(1);
-          }}
-        />
-      </div>
-
-      <RewardsOverview
+      <LeaderboardPanel
         isDark={isDark}
-        loading={summaryLoading}
-        summary={rewardsSummary}
-        topCreators={topCreators}
+        isAdmin={isAdmin}
+        challengeTitle={challengeTitle}
+        leaderboardPeriod={leaderboardPeriod}
+        viewingPastPeriod={viewingPastPeriod}
+        hasActiveEvent={hasActiveEvent}
+        activeBoard={activeBoard}
+        onBoardChange={setActiveBoard}
+        rows={rows}
+        prizeLabel={prizeLabel}
+        loading={loading}
+        error={error}
+        refreshing={refreshing}
+        canRefresh={canRefresh}
+        cooldownRemainingMs={cooldownRemainingMs}
+        cooldownMinsCeil={cooldownMinsCeil}
+        lastManualRefreshRelative={lastManualRefreshRelative}
+        lastLeaderboardFreshIso={lastLeaderboardFreshIso}
+        onRefresh={refreshNow}
+        currentPage={currentPage}
+        limit={limit}
+        totalItems={totalItems}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+        onLimitChange={(n) => {
+          setLimit(n);
+          setCurrentPage(1);
+        }}
+        showScopeControl={isAdmin}
+        scope={scope}
+        scopeOptions={SCOPE_OPTIONS}
+        onScopeChange={(value) => {
+          setScope(value);
+          setCurrentPage(1);
+        }}
       />
 
       <WinnersArchive
@@ -809,6 +795,9 @@ export default function DailyChallengeClient({
         events={archiveEvents}
         boardPrizeMinor={prizeAmountMinorUnits}
         boardCurrency={prizeCurrency}
+        summary={rewardsSummary}
+        summaryLoading={summaryLoading}
+        topCreators={topCreators}
         onPeriodFilterChange={(v) => {
           setArchivePeriod(v);
           setWinnersPage(1);
@@ -831,7 +820,7 @@ export default function DailyChallengeClient({
           setWinnersPage(1);
         }}
       />
-    </>
+    </div>
   );
 
   const setupPanel = (
@@ -1353,7 +1342,7 @@ export default function DailyChallengeClient({
   );
 
   return (
-    <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 md:py-8 space-y-6">
+    <div className="max-w-[1200px] mx-auto px-3 sm:px-4 py-4 sm:py-6 md:py-8 space-y-6">
       {isAdmin ? (
         <Tabs
           value={adminPrimaryTab}

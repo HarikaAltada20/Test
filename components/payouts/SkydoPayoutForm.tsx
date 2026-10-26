@@ -127,7 +127,7 @@ export function SkydoPayoutForm({
           aria-valuenow={Math.min(balanceCents, SKYDO_MIN_BALANCE_CENTS)}
           className={cn("h-1.5 w-full overflow-hidden rounded-full", isDark ? "bg-white/10" : "bg-gray-200")}
         >
-          <div className="h-full rounded-full bg-[#7F39EC]" style={{ width: `${progress}%` }} />
+          <div className="h-full rounded-full bg-[#171717]" style={{ width: `${progress}%` }} />
         </div>
         <p className={cn("text-xs", t.muted)}>
           {formatCurrencyFromCents(balanceCents)} of {formatCurrencyFromCents(SKYDO_MIN_BALANCE_CENTS)}
@@ -179,7 +179,7 @@ export function SkydoPayoutForm({
         <CollapsibleTrigger
           className={cn(
             "flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#171717]",
             t.text
           )}
         >
@@ -198,7 +198,7 @@ export function SkydoPayoutForm({
                   aria-hidden
                   className={cn(
                     "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
-                    isDark ? "bg-[#7F39EC]/25 text-[#C9A7FF]" : "bg-[#7F39EC]/10 text-[#4A00BE]"
+                    isDark ? "bg-white/15 text-white" : "bg-[#E4E4E4] text-[#171717]"
                   )}
                 >
                   {i + 1}
@@ -213,8 +213,8 @@ export function SkydoPayoutForm({
       <div
         className={cn(
           "rounded-lg border p-3",
-          confirmError ? "border-red-500" : confirmed ? "border-[#7F39EC]" : t.border,
-          confirmed && (isDark ? "bg-[#7F39EC]/10" : "bg-[#7F39EC]/5")
+          confirmError ? "border-red-500" : confirmed ? "border-[#171717]" : t.border,
+          confirmed && (isDark ? "bg-white/10" : "bg-[#F4F4F5]")
         )}
       >
         <label htmlFor="skydoConfirm" className={cn("flex cursor-pointer items-start gap-3 text-sm", t.text)}>
@@ -225,7 +225,7 @@ export function SkydoPayoutForm({
             disabled={isLoading}
             aria-invalid={confirmError ? true : undefined}
             aria-describedby={confirmError ? "skydoConfirm-error" : undefined}
-            className="mt-0.5 h-5 w-5"
+            className="mt-0.5 h-5 w-5 rounded-md border-neutral-300 data-[state=checked]:border-[#171717] data-[state=checked]:bg-[#171717] data-[state=checked]:text-white"
           />
           <span>
             I confirm{" "}

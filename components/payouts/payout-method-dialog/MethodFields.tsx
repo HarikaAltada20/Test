@@ -202,7 +202,7 @@ export function CryptoFields({ form, isDark, disabled }: FieldsProps) {
               <SelectTrigger
                 {...control}
                 isDark={isDark}
-                className={cn("h-11", !isDark && "border-gray-300", errorClassName)}
+                className={cn(t.input, errorClassName)}
               >
                 <SelectValue />
               </SelectTrigger>
@@ -226,7 +226,7 @@ export function CryptoFields({ form, isDark, disabled }: FieldsProps) {
               <SelectTrigger
                 {...control}
                 isDark={isDark}
-                className={cn("h-11", !isDark && "border-gray-300", errorClassName)}
+                className={cn(t.input, errorClassName)}
               >
                 <SelectValue />
               </SelectTrigger>

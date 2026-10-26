@@ -44,7 +44,7 @@ export default async function CreatorEarningsServerPage() {
   // Fetch creator profile (money fields)
   const { data: profileData, error: profileError } = await supabase
     .from("creator_profiles")
-    .select("total_money_won, total_contests_won, withdrawable_balance")
+    .select("total_money_won, total_contests_won, total_contests_participated, withdrawable_balance")
     .eq("id", authUser.id)
     .single();
 
@@ -58,6 +58,7 @@ export default async function CreatorEarningsServerPage() {
   const initialProfile: CreatorProfileData | null = profileData ? {
     total_money_won: profileData.total_money_won,
     total_contests_won: profileData.total_contests_won || 0,
+    total_contests_participated: profileData.total_contests_participated || 0,
     withdrawable_balance: profileData.withdrawable_balance,
   } : null;
 

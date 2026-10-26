@@ -1,8 +1,8 @@
 "use client";
 
-import { Archive, CalendarDays, SlidersHorizontal } from "lucide-react";
+import { useState } from "react";
+import { CalendarDays, SlidersHorizontal } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -17,6 +17,12 @@ import {
   formatCategoryLabel,
   formatPeriodLabel,
 } from "@/lib/daily-challenge-history";
+import {
+  RewardsOverview,
+  RewardsPaidSummary,
+  type RewardsSummaryView,
+  type TopCreatorView,
+} from "./RewardsOverview";
 import {
   formatPrize,
   fmtEventRange,
@@ -71,6 +77,9 @@ type WinnersArchiveProps = {
   events: ArchiveEventOption[];
   boardPrizeMinor: number;
   boardCurrency: string;
+  summary: RewardsSummaryView | null;
+  summaryLoading: boolean;
+  topCreators: TopCreatorView[];
   onPeriodFilterChange: (value: string) => void;
   onCategoryFilterChange: (value: string) => void;
   onEventFilterChange: (value: string) => void;
@@ -85,6 +94,68 @@ function formatWinnerPeriod(row: WinnerArchiveRow) {
     return `${label} · ${fmtEventRange(row.period_start, row.period_end)}`;
   }
   return `${label} · ${row.snapshot_date || "Snapshot"}`;
+}
+
+function shortDay(iso?: string | null) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    timeZone: "Asia/Kolkata",
+  });
+}
+
+const fieldTriggerClass = (isDark: boolean) =>
+  cn(
+    "h-11 w-full rounded-full px-4 text-base font-medium shadow-none [&>svg]:opacity-80",
+    isDark
+      ? "border-white/15 bg-white/5 text-white"
+      : "border-[#e7e5e4] bg-white text-[#171717] hover:bg-[#fafaf9]",
+  );
+
+function FieldSelect({
+  isDark,
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  isDark: boolean;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div className="space-y-1.5">
+      <p
+        className={cn(
+          "text-xs font-semibold uppercase tracking-[0.12em]",
+          isDark ? "text-neutral-200" : "text-[#292524]",
+        )}
+      >
+        {label}
+      </p>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger
+          isDark={isDark}
+          aria-label={label}
+          className={fieldTriggerClass(isDark)}
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent isDark={isDark}>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value} isDark={isDark}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
 }
 
 export function WinnersArchive({
@@ -102,6 +173,9 @@ export function WinnersArchive({
   events,
   boardPrizeMinor,
   boardCurrency,
+  summary,
+  summaryLoading,
+  topCreators,
   onPeriodFilterChange,
   onCategoryFilterChange,
   onEventFilterChange,
@@ -109,6 +183,7 @@ export function WinnersArchive({
   onPageChange,
   onLimitChange,
 }: WinnersArchiveProps) {
+  const [tab, setTab] = useState<"results" | "earners">("results");
   const hasActiveFilters =
     periodFilter !== "all" ||
     categoryFilter !== "all" ||
@@ -125,304 +200,360 @@ export function WinnersArchive({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-2xl border shadow-sm",
-        isDark ? "border-white/10 bg-[#14052c]" : "border-slate-200 bg-white",
+        "rounded-[22px] border px-4 py-5 shadow-[0_1px_2px_rgba(120,72,20,0.04)] sm:px-5 sm:py-6",
+        isDark ? "border-white/10 bg-[#161018]" : "border-neutral-200 bg-white",
       )}
       aria-labelledby="winner-archive-heading"
     >
-      <div className="px-5 py-6 sm:px-7">
-        <div className="flex items-start gap-3">
-          <div
-            className={cn(
-              "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-              isDark ? "bg-white/[0.06]" : "bg-slate-100",
-            )}
-          >
-            <Archive className="h-4 w-4 text-slate-500" aria-hidden />
-          </div>
-          <div>
-            <h2 id="winner-archive-heading" className="text-lg font-extrabold tracking-tight">
-              Historical results
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Explore winners from completed Daily, Weekly, and Monthly challenges.
-            </p>
-          </div>
-        </div>
-
-        <div
-          className={cn(
-            "mt-5 flex items-center justify-between border-t pt-4",
-            isDark ? "border-white/10" : "border-slate-200",
-          )}
-        >
-          <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-            <SlidersHorizontal className="h-3.5 w-3.5 text-violet-600" aria-hidden />
-            Filter results
-          </p>
-          {hasActiveFilters && (
-            <button
-              type="button"
-              className="text-xs font-semibold text-violet-600 hover:text-violet-700"
-              onClick={clearFilters}
-            >
-              Clear all
-            </button>
-          )}
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              Period
-            </p>
-            <Select value={periodFilter} onValueChange={onPeriodFilterChange}>
-              <SelectTrigger isDark={isDark} className="h-9 bg-background text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent isDark={isDark}>
-                <SelectItem value="all" isDark={isDark}>
-                  All periods
-                </SelectItem>
-                <SelectItem value="day" isDark={isDark}>
-                  Daily
-                </SelectItem>
-                <SelectItem value="week" isDark={isDark}>
-                  Weekly
-                </SelectItem>
-                <SelectItem value="month" isDark={isDark}>
-                  Monthly
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              Category
-            </p>
-            <Select value={categoryFilter} onValueChange={onCategoryFilterChange}>
-              <SelectTrigger isDark={isDark} className="h-9 bg-background text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent isDark={isDark}>
-                <SelectItem value="all" isDark={isDark}>
-                  All categories
-                </SelectItem>
-                <SelectItem value="views" isDark={isDark}>
-                  Views
-                </SelectItem>
-                <SelectItem value="reels" isDark={isDark}>
-                  Reels
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              Event
-            </p>
-            <Select value={eventFilter} onValueChange={onEventFilterChange}>
-              <SelectTrigger isDark={isDark} className="h-9 bg-background text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent isDark={isDark}>
-                <SelectItem value="all" isDark={isDark}>
-                  All events
-                </SelectItem>
-                {events.map((event) => (
-                  <SelectItem key={event.id} value={event.id} isDark={isDark}>
-                    {event.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              Month
-            </p>
-            <Input
-              type="month"
-              value={monthFilter}
-              onChange={(e) => onMonthFilterChange(e.target.value)}
-              className="h-9 bg-background text-sm"
-            />
-          </div>
-        </div>
-      </div>
+      <h2
+        id="winner-archive-heading"
+        className={cn(
+          "text-lg font-semibold",
+          isDark ? "text-white" : "text-neutral-950",
+        )}
+      >
+        Winners
+      </h2>
+      <p
+        className={cn(
+          "mt-1 text-base",
+          isDark ? "text-neutral-200" : "text-[#292524]",
+        )}
+      >
+        Historical results from completed Daily, Weekly, and Monthly challenges.
+      </p>
+      <RewardsPaidSummary
+        isDark={isDark}
+        loading={summaryLoading}
+        summary={summary}
+      />
 
       <div
         className={cn(
-          "border-t",
-          isDark ? "border-white/10" : "border-slate-200",
+          "mt-5 flex gap-6 border-b",
+          isDark ? "border-white/10" : "border-neutral-200",
         )}
+        role="tablist"
       >
-        {loading ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <div
-              key={i}
+        {(
+          [
+            ["results", "Past results"],
+            ["earners", "Top earners"],
+          ] as const
+        ).map(([value, label]) => {
+          const active = tab === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(value)}
               className={cn(
-                "mx-5 h-16 animate-pulse border-b bg-muted/20 sm:mx-7",
-                isDark ? "border-white/10" : "border-slate-100",
+                "-mb-px border-b-2 pb-2 text-base font-semibold",
+                active
+                  ? isDark
+                    ? "border-white text-white"
+                    : "border-neutral-950 text-neutral-950"
+                  : "border-transparent text-[#292524] hover:text-[#171717]",
               )}
-            />
-          ))
-        ) : winners.length === 0 ? (
-          <div className="flex flex-col items-center px-5 py-10 text-center">
-            <CalendarDays className="h-7 w-7 text-slate-400" aria-hidden />
-            <p className="mt-3 text-sm font-semibold">No matching results</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Try another period, category, event, or month.
-            </p>
-          </div>
-        ) : (
-          <div
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "earners" ? (
+        <div className="pt-5">
+          <RewardsOverview
+            embedded
+            isDark={isDark}
+            loading={summaryLoading}
+            summary={summary}
+            topCreators={topCreators}
+          />
+        </div>
+      ) : (
+        <div className="pt-4">
+          <p
             className={cn(
-              "divide-y",
-              isDark ? "divide-white/10" : "divide-slate-100",
+              "text-base",
+              isDark ? "text-neutral-100" : "text-[#292524]",
             )}
           >
-            {winners.map((w) => {
-            const verifiedViews = Number(
-              w?.metrics_json?.verifiedViews ?? w?.metrics_json?.totalViews ?? 0,
-            );
-            const verifiedReels = Number(
-              w?.metrics_json?.verifiedReels ?? w?.metrics_json?.totalReels ?? 0,
-            );
-            const hasWinner = Boolean(w?.winner_creator_id) && Boolean(w?.is_eligible);
-            const winnerName = hasWinner
-              ? w?.winner?.username ||
-                w?.metrics_json?.username ||
-                w?.metrics_json?.fullName ||
-                "Winner"
-              : "—";
-            const { minor: snapMinor, currency: snapCur } = snapshotWinnerPrize(
-              w as Record<string, unknown>,
-              boardPrizeMinor,
-              boardCurrency,
-            );
-            const rewardLabel = formatPrize(snapMinor, snapCur);
-            const metricStats =
-              w.category === "reels"
-                ? [
-                    { value: verifiedReels, label: "verified reels" },
-                    { value: verifiedViews, label: "verified views" },
-                  ]
-                : [
-                    { value: verifiedViews, label: "verified views" },
-                    { value: verifiedReels, label: "verified reels" },
-                  ];
-
-            return (
-              <div
-                key={w.id}
+            Explore winners from completed Daily, Weekly, and Monthly
+            challenges.
+          </p>
+          <div
+            className={cn(
+              "mt-4 flex items-center justify-between border-t pt-4",
+              isDark ? "border-white/10" : "border-[#f3ebe3]",
+            )}
+          >
+            <p
+              className={cn(
+                "flex items-center gap-1.5 text-sm font-semibold",
+                isDark ? "text-white" : "text-[#171717]",
+              )}
+            >
+              <SlidersHorizontal
+                className="h-3.5 w-3.5 text-[#f97316]"
+                aria-hidden
+              />
+              Filter results
+            </p>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                className="text-sm font-semibold text-[#c2410c] hover:text-[#9a3412]"
+                onClick={clearFilters}
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <FieldSelect
+              isDark={isDark}
+              label="Period"
+              value={periodFilter}
+              onChange={onPeriodFilterChange}
+              options={[
+                { value: "all", label: "All periods" },
+                { value: "day", label: "Daily" },
+                { value: "week", label: "Weekly" },
+                { value: "month", label: "Monthly" },
+              ]}
+            />
+            <FieldSelect
+              isDark={isDark}
+              label="Category"
+              value={categoryFilter}
+              onChange={onCategoryFilterChange}
+              options={[
+                { value: "all", label: "All categories" },
+                { value: "views", label: "Views" },
+                { value: "reels", label: "Reels" },
+              ]}
+            />
+            <FieldSelect
+              isDark={isDark}
+              label="Event"
+              value={eventFilter}
+              onChange={onEventFilterChange}
+              options={[
+                { value: "all", label: "All events" },
+                ...events.map((event) => ({
+                  value: event.id,
+                  label: event.name,
+                })),
+              ]}
+            />
+            <div className="space-y-1.5">
+              <p
                 className={cn(
-                  "px-5 py-4 text-sm transition-colors sm:px-7 sm:py-5",
-                  isDark ? "hover:bg-white/[0.025]" : "hover:bg-slate-50/60",
+                  "text-xs font-semibold uppercase tracking-[0.12em]",
+                  isDark ? "text-neutral-200" : "text-[#292524]",
                 )}
               >
-                <div className="flex min-w-0 items-start gap-3">
-                  {hasWinner ? (
-                    <Avatar className="mt-0.5 h-10 w-10 shrink-0 ring-2 ring-amber-200 ring-offset-2">
-                      <AvatarImage src={w.winner?.profilePictureUrl || undefined} />
-                      <AvatarFallback>
-                        {(winnerName || "W").charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                  ) : (
-                    <div
-                      className={cn(
-                        "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-medium",
-                        isDark
-                          ? "bg-white/[0.05] text-slate-500"
-                          : "bg-slate-100 text-slate-400",
-                      )}
-                    >
-                      —
-                    </div>
-                  )}
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <p className="font-bold">{formatCategoryLabel(w.category)}</p>
-                        <Badge
-                          variant="outline"
-                          className="h-5 rounded-md px-1.5 text-[10px] font-semibold text-muted-foreground"
-                        >
-                          {formatPeriodLabel(w.period)}
-                        </Badge>
-                      </div>
-                      {hasWinner && (
-                        <Badge className="shrink-0 border border-amber-200 bg-amber-50 font-bold text-amber-900 hover:bg-amber-50">
-                          {rewardLabel}
-                        </Badge>
-                      )}
-                    </div>
-
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatWinnerPeriod(w).replace(`${formatPeriodLabel(w.period)} · `, "")}
-                    </p>
-                    {w.event_name && (
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {w.event_name}
-                      </p>
-                    )}
-
-                    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
-                      <span
-                        className={cn(
-                          "font-semibold",
-                          hasWinner
-                            ? isDark
-                              ? "text-emerald-300"
-                              : "text-emerald-700"
-                            : "text-muted-foreground",
-                        )}
-                      >
-                        {hasWinner ? `Winner · ${winnerName}` : "No eligible winner"}
-                      </span>
-                      {metricStats.map((metric) => (
-                        <span key={metric.label} className="text-muted-foreground">
-                          <strong className="font-semibold text-foreground">
-                            {number(metric.value)}
-                          </strong>{" "}
-                          {metric.label}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-            })}
+                Month
+              </p>
+              <Input
+                type="month"
+                value={monthFilter}
+                onChange={(event) => onMonthFilterChange(event.target.value)}
+                aria-label="Month"
+                className={cn(
+                  "h-11 rounded-full px-4 text-base shadow-none",
+                  isDark
+                    ? "border-white/15 bg-white/5 text-white"
+                    : "border-[#e7e5e4] bg-white text-[#171717]",
+                )}
+              />
+            </div>
           </div>
-        )}
 
-        {!loading && totalItems > 0 && (
           <div
             className={cn(
-              "border-t px-5 py-4 sm:px-7",
-              isDark ? "border-white/10" : "border-gray-200",
+              "mt-2 border-t",
+              isDark ? "border-white/10" : "border-neutral-100",
             )}
           >
-            <PaginationControls
-              page={page}
-              limit={limit}
-              isDark={isDark}
-              total={totalItems}
-              totalPages={Math.max(1, totalPages)}
-              hasNextPage={page < totalPages}
-              hasPreviousPage={page > 1}
-              onPageChange={onPageChange}
-              onLimitChange={onLimitChange}
-              loading={loading}
-              hide200Option
-              pageSizeOptions={[5, 10, 25, 50]}
-            />
+            {loading ? (
+              Array.from({ length: 4 }).map((_, index) => (
+                <div
+                  key={index}
+                  className={cn(
+                    "h-14 animate-pulse border-b",
+                    isDark
+                      ? "border-white/10 bg-white/5"
+                      : "border-neutral-100 bg-neutral-50",
+                  )}
+                />
+              ))
+            ) : winners.length === 0 ? (
+              <div className="flex flex-col items-center px-5 py-10 text-center">
+                <CalendarDays
+                  className="h-7 w-7 text-neutral-400"
+                  aria-hidden
+                />
+                <p className="mt-3 text-sm font-semibold">
+                  No matching results
+                </p>
+                <p className="mt-1 text-base text-[#292524]">
+                  Try another period, category, event, or month.
+                </p>
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  "divide-y",
+                  isDark ? "divide-white/10" : "divide-neutral-100",
+                )}
+              >
+                {winners.map((winner) => {
+                  const verifiedViews = Number(
+                    winner.metrics_json?.verifiedViews ??
+                      winner.metrics_json?.totalViews ??
+                      0,
+                  );
+                  const verifiedReels = Number(
+                    winner.metrics_json?.verifiedReels ??
+                      winner.metrics_json?.totalReels ??
+                      0,
+                  );
+                  const hasWinner =
+                    Boolean(winner.winner_creator_id) &&
+                    Boolean(winner.is_eligible);
+                  const winnerName = hasWinner
+                    ? winner.winner?.username ||
+                      winner.metrics_json?.username ||
+                      winner.metrics_json?.fullName ||
+                      "Winner"
+                    : "No eligible winner";
+                  const { minor, currency } = snapshotWinnerPrize(
+                    winner as Record<string, unknown>,
+                    boardPrizeMinor,
+                    boardCurrency,
+                  );
+                  const rewardLabel = formatPrize(minor, currency);
+                  const primaryDate = shortDay(
+                    winner.period_start || winner.snapshot_date,
+                  );
+
+                  return (
+                    <div
+                      key={winner.id}
+                      className="grid gap-2 py-3.5 md:grid-cols-[210px_minmax(140px,180px)_minmax(0,1fr)_auto] md:items-center md:gap-4"
+                    >
+                      <div className="min-w-0">
+                        <p
+                          className={cn(
+                            "text-base font-medium",
+                            isDark ? "text-white" : "text-[#171717]",
+                          )}
+                        >
+                          {formatPeriodLabel(winner.period)}
+                          {primaryDate ? ` · ${primaryDate}` : ""}
+                        </p>
+                        <p
+                          className={cn(
+                            "mt-0.5 text-sm leading-6",
+                            isDark ? "text-neutral-200" : "text-[#292524]",
+                          )}
+                        >
+                          {formatWinnerPeriod(winner)}
+                        </p>
+                      </div>
+                      <div className="flex min-w-0 items-center gap-2">
+                        {hasWinner ? (
+                          <Avatar className="h-7 w-7">
+                            <AvatarImage
+                              src={
+                                winner.winner?.profilePictureUrl || undefined
+                              }
+                            />
+                            <AvatarFallback>
+                              {winnerName.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                        ) : (
+                          <span
+                            className={cn(
+                              "flex h-7 w-7 items-center justify-center rounded-full text-xs",
+                              isDark
+                                ? "bg-white/10 text-neutral-400"
+                                : "bg-neutral-100 text-neutral-400",
+                            )}
+                          >
+                            —
+                          </span>
+                        )}
+                        <p
+                          className={cn(
+                            "truncate text-base font-semibold",
+                            hasWinner
+                              ? isDark
+                                ? "text-white"
+                                : "text-[#171717]"
+                              : "font-medium text-[#292524]",
+                          )}
+                        >
+                          {winnerName}
+                        </p>
+                      </div>
+                      <p
+                        className={cn(
+                          "min-w-0 truncate text-base",
+                          isDark ? "text-neutral-100" : "text-[#292524]",
+                        )}
+                      >
+                        {formatCategoryLabel(winner.category)} ·{" "}
+                        {number(verifiedViews)} verified views ·{" "}
+                        {number(verifiedReels)} verified reels
+                        {winner.event_name ? ` · ${winner.event_name}` : ""}
+                      </p>
+                      <p
+                        className={cn(
+                          "text-base font-semibold tabular-nums md:text-right",
+                          isDark ? "text-white" : "text-[#171717]",
+                        )}
+                      >
+                        {hasWinner ? rewardLabel : "—"}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+
+          {!loading && totalItems > 0 && (
+            <div
+              className={cn(
+                "mt-2 border-t pt-4",
+                isDark ? "border-white/10" : "border-neutral-200",
+              )}
+            >
+              <PaginationControls
+                page={page}
+                limit={limit}
+                isDark={isDark}
+                total={totalItems}
+                totalPages={Math.max(1, totalPages)}
+                hasNextPage={page < totalPages}
+                hasPreviousPage={page > 1}
+                onPageChange={onPageChange}
+                onLimitChange={onLimitChange}
+                loading={loading}
+                hide200Option
+                pageSizeOptions={[5, 10, 25, 50]}
+              />
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

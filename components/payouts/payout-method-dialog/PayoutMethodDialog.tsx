@@ -11,14 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { SKYDO_MIN_BALANCE_CENTS, canRemoveSkydo } from "@/lib/skydo-payout";
@@ -70,12 +62,19 @@ const METHOD_NAMES_IN_SENTENCE: Record<string, string> = {
 };
 
 /** Lists only the methods that are switched on, e.g. "Available in India: UPI, crypto and Skydo." */
-function countryHelper(country: PayoutCountry, pausedMethodTypes: string[]): string {
+function countryHelper(
+  country: PayoutCountry,
+  pausedMethodTypes: string[],
+): string {
   const names = PAYOUT_TYPES_BY_COUNTRY[country]
     .filter((type) => !pausedMethodTypes.includes(type))
     .map((type) => METHOD_NAMES_IN_SENTENCE[type] ?? type);
-  if (names.length === 0) return "Payouts are paused for now. Please check back soon.";
-  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  if (names.length === 0)
+    return "Payouts are paused for now. Please check back soon.";
+  const list =
+    names.length === 1
+      ? names[0]
+      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
   return country === "IN"
     ? `Available in India: ${list}.`
     : `Outside India, payouts are available in ${list} only.`;
@@ -95,7 +94,8 @@ export function PayoutMethodDialog({
   onSetDefault,
 }: PayoutMethodDialogProps) {
   const t = payoutDialogTheme(isDark);
-  const existingSkydo = payoutMethods.find((m) => m.method_type === "skydo") ?? null;
+  const existingSkydo =
+    payoutMethods.find((m) => m.method_type === "skydo") ?? null;
   const skydoEligible = withdrawableBalanceCents >= SKYDO_MIN_BALANCE_CENTS;
   const minLabel = formatCurrencyFromCents(SKYDO_MIN_BALANCE_CENTS);
 
@@ -110,7 +110,8 @@ export function PayoutMethodDialog({
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [pendingSkydoRemoval, setPendingSkydoRemoval] = useState<PayoutMethod | null>(null);
+  const [pendingSkydoRemoval, setPendingSkydoRemoval] =
+    useState<PayoutMethod | null>(null);
   const wasOpen = useRef(false);
   const submittingRef = useRef(false);
 
@@ -118,7 +119,9 @@ export function PayoutMethodDialog({
     if (open && !wasOpen.current) {
       form.reset();
       setServerError(null);
-      setView(initialView === "list" && payoutMethods.length > 0 ? "list" : "form");
+      setView(
+        initialView === "list" && payoutMethods.length > 0 ? "list" : "form",
+      );
     }
     wasOpen.current = open;
     // Only react to the dialog opening.
@@ -131,7 +134,8 @@ export function PayoutMethodDialog({
 
   const isEditing = !!form.editingMethod;
   const isSkydo = form.type === "skydo";
-  const skydoBlocked = isSkydo && !isEditing && (!!existingSkydo || !skydoEligible);
+  const skydoBlocked =
+    isSkydo && !isEditing && (!!existingSkydo || !skydoEligible);
   const hasSavedMethods = payoutMethods.length > 0;
 
   const pickerOptions: MethodPickerOption[] = useMemo(
@@ -142,7 +146,11 @@ export function PayoutMethodDialog({
         const option: MethodPickerOption = {
           type,
           paused,
-          feeLabel: paused ? undefined : feeBps > 0 ? `${formatFeePercent(feeBps)} fee` : "No fee",
+          feeLabel: paused
+            ? undefined
+            : feeBps > 0
+              ? `${formatFeePercent(feeBps)} fee`
+              : "No fee",
         };
         if (type === "skydo") {
           if (existingSkydo) option.descriptor = "Already added";
@@ -153,7 +161,14 @@ export function PayoutMethodDialog({
         }
         return option;
       }),
-    [existingSkydo, feeSettings.feeBpsByMethod, form.country, minLabel, pausedMethodTypes, skydoEligible]
+    [
+      existingSkydo,
+      feeSettings.feeBpsByMethod,
+      form.country,
+      minLabel,
+      pausedMethodTypes,
+      skydoEligible,
+    ],
   );
 
   const requestClose = () => {
@@ -182,7 +197,10 @@ export function PayoutMethodDialog({
     }
   };
 
-  const runRowAction = async (method: PayoutMethod, action: (m: PayoutMethod) => Promise<boolean>) => {
+  const runRowAction = async (
+    method: PayoutMethod,
+    action: (m: PayoutMethod) => Promise<boolean>,
+  ) => {
     setBusyId(method.id);
     try {
       await action(method);
@@ -211,7 +229,11 @@ export function PayoutMethodDialog({
   };
 
   const title =
-    view === "list" ? "Payout methods" : isEditing ? "Edit payout method" : "Add payout method";
+    view === "list"
+      ? "Payout methods"
+      : isEditing
+        ? "Edit payout method"
+        : "Add payout method";
   const description =
     view === "list"
       ? "Your default method is pre-selected when you withdraw."
@@ -221,9 +243,13 @@ export function PayoutMethodDialog({
 
   const primaryLabel = isEditing ? "Save changes" : "Add payout method";
   const primaryDisabled =
-    submitting || skydoBlocked || (isSkydo && !isEditing && !form.values.skydoConfirmed);
+    submitting ||
+    skydoBlocked ||
+    (isSkydo && !isEditing && !form.values.skydoConfirmed);
   const formLevelError = serverError ?? form.formError;
-  const editingMeta = form.editingMethod ? getPayoutMethodMeta(form.editingMethod.method_type) : null;
+  const editingMeta = form.editingMethod
+    ? getPayoutMethodMeta(form.editingMethod.method_type)
+    : null;
 
   return (
     <Dialog
@@ -239,14 +265,16 @@ export function PayoutMethodDialog({
         onEscapeKeyDown={(e) => submittingRef.current && e.preventDefault()}
         onInteractOutside={(e) => submittingRef.current && e.preventDefault()}
         className={cn(
-          "flex flex-col gap-0 overflow-hidden p-0",
+          "flex flex-col gap-0 overflow-hidden p-0 sm:p-2",
           "h-[100dvh] max-h-[100dvh] w-full max-w-none rounded-none",
-          "sm:h-auto sm:max-h-[min(90vh,760px)] sm:w-[calc(100vw-2rem)] sm:max-w-[600px] sm:rounded-xl",
-          isDark ? "border-gray-800" : "border-gray-200"
+          "sm:h-auto sm:max-h-[min(92vh,820px)] sm:w-[calc(100vw-2rem)] sm:max-w-[760px] sm:rounded-3xl",
+          isDark
+            ? "border-slate-700 bg-slate-900"
+            : "border-neutral-200 bg-white",
         )}
       >
         {/* Header */}
-        <div className={cn("flex shrink-0 items-start gap-3 border-b px-4 py-4 sm:px-6", t.border)}>
+        <div className="flex shrink-0 items-start gap-3 px-4 py-4">
           {view === "form" && hasSavedMethods && (
             <Button
               type="button"
@@ -255,14 +283,26 @@ export function PayoutMethodDialog({
               onClick={backToList}
               disabled={submitting}
               aria-label="Back to your payout methods"
-              className={cn("-ml-2 h-11 w-11 shrink-0 sm:h-9 sm:w-9", t.ghostButton)}
+              className={cn(
+                "-ml-2 h-11 w-11 shrink-0 sm:h-9 sm:w-9",
+                t.ghostButton,
+              )}
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
           )}
           <div className="min-w-0 flex-1 space-y-1">
-            <DialogTitle className={cn("text-lg font-semibold leading-tight", t.text)}>{title}</DialogTitle>
-            <DialogDescription className={cn("text-sm", t.muted)}>{description}</DialogDescription>
+            <DialogTitle
+              className={cn(
+                "text-lg font-semibold leading-tight tracking-tight",
+                t.text,
+              )}
+            >
+              {title}
+            </DialogTitle>
+            <DialogDescription className={cn("text-sm", t.muted)}>
+              {description}
+            </DialogDescription>
           </div>
           <DialogClose asChild>
             <Button
@@ -271,7 +311,10 @@ export function PayoutMethodDialog({
               size="icon"
               disabled={submitting}
               aria-label="Close"
-              className={cn("-mr-2 h-11 w-11 shrink-0 sm:h-9 sm:w-9", t.ghostButton)}
+              className={cn(
+                "h-9 w-9 shrink-0 rounded-full border-0 shadow-none",
+                t.ghostButton,
+              )}
             >
               <X className="h-4 w-4" />
             </Button>
@@ -281,7 +324,7 @@ export function PayoutMethodDialog({
         {/* Body */}
         <div
           key={view}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4"
         >
           {view === "list" ? (
             <SavedMethodsView
@@ -302,123 +345,193 @@ export function PayoutMethodDialog({
                 void handleSubmit();
               }}
               id="payout-method-form"
-              className="space-y-6"
+              className="space-y-4"
             >
-              {isEditing && editingMeta ? (
-                <div className={cn("flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm", t.border, t.subtle)}>
-                  <editingMeta.icon className={cn("h-4 w-4", t.muted)} aria-hidden />
-                  <span className={cn("font-medium", t.text)}>{editingMeta.label}</span>
-                  <span className={t.muted}>· The method type can&apos;t be changed.</span>
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="payoutCountry" className={cn("text-sm font-medium", t.text)}>
-                      Country
-                    </Label>
-                    <Select
-                      value={form.country}
-                      onValueChange={(v) => form.setCountry(v as PayoutCountry)}
-                      disabled={submitting}
-                    >
-                      <SelectTrigger
-                        id="payoutCountry"
-                        aria-describedby="payoutCountry-helper"
-                        isDark={isDark}
-                        className={cn("h-11", !isDark && "border-gray-300")}
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent isDark={isDark}>
-                        <SelectItem isDark={isDark} value="IN">
-                          India
-                        </SelectItem>
-                        <SelectItem isDark={isDark} value="OTHER">
-                          Other countries
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p id="payoutCountry-helper" className={cn("text-xs", t.muted)}>
-                      {countryHelper(form.country, pausedMethodTypes)}
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <p id="payoutMethodLabel" className={cn("text-sm font-medium", t.text)}>
-                      Payout method
-                    </p>
-                    <MethodPicker
-                      options={pickerOptions}
-                      value={form.type}
-                      onChange={form.selectType}
-                      isDark={isDark}
-                      disabled={submitting}
-                      labelledBy="payoutMethodLabel"
+              <div
+                className={cn(
+                  "grid gap-4",
+                  !isEditing &&
+                    "sm:grid-cols-[260px_minmax(0,1fr)] sm:items-start",
+                )}
+              >
+                {isEditing && editingMeta ? (
+                  <div
+                    className={cn(
+                      "flex items-center gap-2 rounded-2xl px-3 py-2.5 text-sm",
+                      t.subtle,
+                    )}
+                  >
+                    <editingMeta.icon
+                      className={cn("h-4 w-4", t.muted)}
+                      aria-hidden
                     />
-                    {!pausedMethodTypes.includes(form.type) && (
+                    <span className={cn("font-medium", t.text)}>
+                      {editingMeta.label}
+                    </span>
+                    <span className={t.muted}>
+                      · The method type can&apos;t be changed.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <p className={cn("text-sm font-semibold", t.text)}>
+                        Country
+                      </p>
+                      <div
+                        role="radiogroup"
+                        aria-label="Country"
+                        className={cn(
+                          "grid grid-cols-2 gap-1 rounded-full p-1",
+                          isDark ? "bg-white/10" : "bg-[#E4E4E4]",
+                        )}
+                      >
+                        {(
+                          [
+                            { id: "IN", label: "India" },
+                            { id: "OTHER", label: "Other" },
+                          ] as const
+                        ).map((option) => {
+                          const selected = form.country === option.id;
+                          return (
+                            <button
+                              key={option.id}
+                              type="button"
+                              role="radio"
+                              aria-checked={selected}
+                              disabled={submitting}
+                              onClick={() =>
+                                form.setCountry(option.id as PayoutCountry)
+                              }
+                              className={cn(
+                                "h-9 rounded-full text-sm font-medium transition-colors",
+                                selected
+                                  ? isDark
+                                    ? "bg-white text-slate-900 shadow-sm"
+                                    : "bg-white text-[#171717] shadow-sm"
+                                  : isDark
+                                    ? "text-slate-300 hover:text-white"
+                                    : "text-[#3f3f46] hover:text-[#171717]",
+                              )}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p
+                        id="payoutCountry-helper"
+                        className={cn("text-sm leading-relaxed", t.muted)}
+                      >
+                        {countryHelper(form.country, pausedMethodTypes)}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p
+                        id="payoutMethodLabel"
+                        className={cn("text-sm font-semibold", t.text)}
+                      >
+                        Send payouts by
+                      </p>
+                      <MethodPicker
+                        options={pickerOptions}
+                        value={form.type}
+                        onChange={form.selectType}
+                        isDark={isDark}
+                        disabled={submitting}
+                        labelledBy="payoutMethodLabel"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className={cn("space-y-4 rounded-2xl p-3", t.subtle)}>
+                  {!pausedMethodTypes.includes(form.type) && !isEditing && (
+                    <div className="space-y-1">
+                      <p className={cn("text-sm font-semibold", t.text)}>
+                        {getPayoutMethodMeta(form.type).label} details
+                      </p>
                       <MethodFeeLine
                         methodType={form.type}
                         feeBps={feeSettings.feeBpsByMethod[form.type] ?? 0}
                         usdInrRate={feeSettings.usdInrRate}
                         isDark={isDark}
                       />
+                    </div>
+                  )}
+                  <section
+                    aria-label={`${getPayoutMethodMeta(form.type).label} details`}
+                  >
+                    {form.type === "upi" && (
+                      <UpiFields
+                        form={form}
+                        isDark={isDark}
+                        disabled={submitting}
+                        upiEnabled={!pausedMethodTypes.includes("upi")}
+                        usdInrRate={feeSettings.usdInrRate}
+                      />
                     )}
-                  </div>
-                </>
-              )}
-
-              <section aria-label={`${getPayoutMethodMeta(form.type).label} details`}>
-                {form.type === "upi" && (
-                  <UpiFields
-                    form={form}
-                    isDark={isDark}
-                    disabled={submitting}
-                    upiEnabled={!pausedMethodTypes.includes("upi")}
-                    usdInrRate={feeSettings.usdInrRate}
-                  />
-                )}
-                {form.type === "bank_transfer" && (
-                  <BankFields form={form} isDark={isDark} disabled={submitting} />
-                )}
-                {form.type === "crypto" && <CryptoFields form={form} isDark={isDark} disabled={submitting} />}
-                {form.type === "skydo" && (
-                  <SkydoPayoutForm
-                    isDark={isDark}
-                    isLoading={submitting}
-                    email={form.values.skydoEmail}
-                    onEmailChange={(v) => form.setField("skydoEmail", v)}
-                    onEmailBlur={() => form.markTouched("skydoEmail")}
-                    emailError={form.errors.skydoEmail}
-                    confirmed={form.values.skydoConfirmed}
-                    onConfirmedChange={(v) => {
-                      form.setField("skydoConfirmed", v);
-                      form.markTouched("skydoConfirmed");
-                    }}
-                    confirmError={form.errors.skydoConfirmed}
-                    balanceCents={withdrawableBalanceCents}
-                    existingEmail={existingSkydo?.details?.email ?? null}
-                    existingStatus={existingSkydo?.skydo_status ?? null}
-                    onRemoveExisting={
-                      existingSkydo && canRemoveSkydo(existingSkydo)
-                        ? () => setPendingSkydoRemoval(existingSkydo)
-                        : undefined
-                    }
-                    removingExisting={!!existingSkydo && busyId === existingSkydo.id}
-                  />
-                )}
-              </section>
+                    {form.type === "bank_transfer" && (
+                      <BankFields
+                        form={form}
+                        isDark={isDark}
+                        disabled={submitting}
+                      />
+                    )}
+                    {form.type === "crypto" && (
+                      <CryptoFields
+                        form={form}
+                        isDark={isDark}
+                        disabled={submitting}
+                      />
+                    )}
+                    {form.type === "skydo" && (
+                      <SkydoPayoutForm
+                        isDark={isDark}
+                        isLoading={submitting}
+                        email={form.values.skydoEmail}
+                        onEmailChange={(v) => form.setField("skydoEmail", v)}
+                        onEmailBlur={() => form.markTouched("skydoEmail")}
+                        emailError={form.errors.skydoEmail}
+                        confirmed={form.values.skydoConfirmed}
+                        onConfirmedChange={(v) => {
+                          form.setField("skydoConfirmed", v);
+                          form.markTouched("skydoConfirmed");
+                        }}
+                        confirmError={form.errors.skydoConfirmed}
+                        balanceCents={withdrawableBalanceCents}
+                        existingEmail={existingSkydo?.details?.email ?? null}
+                        existingStatus={existingSkydo?.skydo_status ?? null}
+                        onRemoveExisting={
+                          existingSkydo && canRemoveSkydo(existingSkydo)
+                            ? () => setPendingSkydoRemoval(existingSkydo)
+                            : undefined
+                        }
+                        removingExisting={
+                          !!existingSkydo && busyId === existingSkydo.id
+                        }
+                      />
+                    )}
+                  </section>
+                </div>
+              </div>
 
               {formLevelError && !skydoBlocked && (
                 <Alert
                   variant="destructive"
                   className={cn(
                     "border-red-500/60 [&>svg]:text-current",
-                    isDark ? "bg-red-950/40 text-red-200" : "bg-red-50 text-red-800"
+                    isDark
+                      ? "bg-red-950/40 text-red-200"
+                      : "bg-red-50 text-red-800",
                   )}
                 >
                   <AlertCircle className="h-4 w-4" aria-hidden />
                   <AlertDescription>
-                    <span className="font-medium">Couldn&apos;t save this payout method.</span>{" "}
+                    <span className="font-medium">
+                      Couldn&apos;t save this payout method.
+                    </span>{" "}
                     {formLevelError}
                   </AlertDescription>
                 </Alert>
@@ -430,10 +543,10 @@ export function PayoutMethodDialog({
         {/* Footer */}
         <div
           className={cn(
-            "flex shrink-0 flex-col-reverse gap-2 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6",
+            "flex shrink-0 flex-col-reverse gap-2 px-4 py-4 sm:flex-row sm:items-center sm:justify-end",
             "pb-[max(0.75rem,env(safe-area-inset-bottom))]",
             t.border,
-            t.surface
+            t.surface,
           )}
         >
           {view === "list" ? (
@@ -442,11 +555,15 @@ export function PayoutMethodDialog({
                 type="button"
                 variant="ghost"
                 onClick={requestClose}
-                className={cn("h-11 sm:h-10", t.ghostButton)}
+                className={cn(t.cancelButton)}
               >
                 Close
               </Button>
-              <Button type="button" onClick={openAddForm} className="h-11 gap-1.5 sm:h-10">
+              <Button
+                type="button"
+                onClick={openAddForm}
+                className={cn("gap-1.5", t.primaryButton)}
+              >
                 <Plus className="h-4 w-4" aria-hidden />
                 Add payout method
               </Button>
@@ -458,7 +575,7 @@ export function PayoutMethodDialog({
                 variant="ghost"
                 onClick={requestClose}
                 disabled={submitting}
-                className={cn("h-11 sm:h-10", t.ghostButton)}
+                className={cn(t.cancelButton)}
               >
                 {isSkydo && !!existingSkydo && !isEditing ? "Close" : "Cancel"}
               </Button>
@@ -469,9 +586,11 @@ export function PayoutMethodDialog({
                   loading={submitting}
                   loadingText="Saving..."
                   disabled={primaryDisabled}
-                  className="h-11 sm:h-10 sm:min-w-[180px]"
+                  className={cn("sm:min-w-[180px]", t.primaryButton)}
                 >
-                  {isSkydo && !skydoEligible && !isEditing ? `Unlocks at ${minLabel}` : primaryLabel}
+                  {isSkydo && !skydoEligible && !isEditing
+                    ? `Unlocks at ${minLabel}`
+                    : primaryLabel}
                 </Button>
               )}
             </>
@@ -511,9 +630,16 @@ function MethodFeeLine({
         ? `Paid in USD. ${SKYDO_CONVERSION_NOTE}`
         : "Paid in USD.";
   return (
-    <p className={cn("flex flex-wrap items-center gap-x-1 text-xs", t.muted)}>
+    <p
+      className={cn(
+        "flex flex-wrap items-center gap-x-1 text-xs leading-relaxed",
+        t.muted,
+      )}
+    >
       <span className={cn("inline-flex items-center font-medium", t.text)}>
-        {feeBps > 0 ? `Processing fee: ${formatFeePercent(feeBps)}` : "No processing fee"}
+        {feeBps > 0
+          ? `Processing fee: ${formatFeePercent(feeBps)}`
+          : "No processing fee"}
         {feeBps > 0 && <ProcessingFeeInfo feeBps={feeBps} isDark={isDark} />}
       </span>
       <span>{paidIn}</span>

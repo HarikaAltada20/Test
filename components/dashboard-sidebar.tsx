@@ -12,7 +12,6 @@ import {
   Settings,
   LogOut,
   ChevronsUpDown,
-  Video,
   DollarSign,
   CreditCard,
   ChevronRight,
@@ -30,6 +29,10 @@ import {
   Newspaper,
   Star,
   Flame,
+  Home,
+  Compass,
+  Clapperboard,
+  Wallet,
   ClipboardList,
 } from "lucide-react";
 import Link from "next/link";
@@ -86,6 +89,74 @@ function PlanUsageGauge({
   );
 }
 
+function CreatorTrustGauge({
+  score,
+  rated,
+  loading,
+  isDark,
+}: {
+  score: number | null;
+  rated: boolean;
+  loading: boolean;
+  isDark: boolean;
+}) {
+  const radius = 62;
+  const length = Math.PI * radius;
+  const ratio =
+    rated && score != null ? Math.min(Math.max(score, 0) / 100, 1) : 0;
+  const progress = length * ratio;
+  const track = isDark ? "rgba(255,255,255,0.16)" : "#d9d9de";
+  const fill = isDark ? "#ffffff" : "#1a1a1a";
+  const valueLabel = loading
+    ? ""
+    : rated && score != null
+      ? String(Math.round(score))
+      : "Not rated";
+
+  return (
+    <div className="relative mx-auto h-[108px] w-[188px]">
+      <svg viewBox="0 0 160 96" className="h-full w-full" aria-hidden>
+        <path
+          d="M 18 78 A 62 62 0 0 1 142 78"
+          fill="none"
+          stroke={track}
+          strokeWidth="11"
+          strokeLinecap="round"
+        />
+        {progress > 0 && (
+          <path
+            d="M 18 78 A 62 62 0 0 1 142 78"
+            fill="none"
+            stroke={fill}
+            strokeWidth="11"
+            strokeLinecap="round"
+            strokeDasharray={`${progress} ${length}`}
+          />
+        )}
+      </svg>
+      <div className="absolute inset-x-0 bottom-1 text-center">
+        <div
+          className={cn(
+            "text-[15px] font-semibold leading-tight tracking-tight",
+            isDark ? "text-white" : "text-[#1a1a1a]",
+            loading && "mx-auto h-4 w-16 animate-pulse rounded bg-current/10",
+          )}
+        >
+          {valueLabel}
+        </div>
+        <div
+          className={cn(
+            "mt-0.5 text-[12px]",
+            isDark ? "text-white/50" : "text-[#8b8b93]",
+          )}
+        >
+          Trust score
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface DashboardSidebarProps {
   userRole?: "advertiser" | "creator" | "admin";
   collapsed?: boolean;
@@ -121,6 +192,11 @@ export function DashboardSidebar({
 }: DashboardSidebarProps) {
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const accountButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [collapsedMenuStyle, setCollapsedMenuStyle] = useState<{
+    left: number;
+    bottom: number;
+  } | null>(null);
   const pathname = usePathname();
   const [showScrollbar, setShowScrollbar] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -128,6 +204,11 @@ export function DashboardSidebar({
   const [showChat, setShowChat] = useState(false);
   const [isOthersDropdownOpen, setIsOthersDropdownOpen] = useState(false);
   const [navigatingLink, setNavigatingLink] = useState<string | null>(null);
+  const [creatorTrust, setCreatorTrust] = useState<{
+    status: "loading" | "ready";
+    rated: boolean;
+    score: number | null;
+  }>({ status: "loading", rated: false, score: null });
 
   const handleNavigation = (href: string) => {
     setNavigatingLink(href);
@@ -136,6 +217,40 @@ export function DashboardSidebar({
   useEffect(() => {
     setNavigatingLink(null);
   }, [pathname]);
+
+  useEffect(() => {
+    if (userRole !== "creator") return;
+    let cancelled = false;
+    setCreatorTrust({ status: "loading", rated: false, score: null });
+
+    fetch("/api/creators/stats")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Failed to load creator stats");
+        return response.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+        const verified = Number(data?.verifiedReels ?? 0);
+        const rejected = Number(data?.rejectedReels ?? 0);
+        const score = Number(data?.trustScorePct);
+        const hasScore = Number.isFinite(score);
+        setCreatorTrust({
+          status: "ready",
+          rated: verified + rejected > 0 && hasScore,
+          score: hasScore ? score : null,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCreatorTrust({ status: "ready", rated: false, score: null });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userRole]);
+
   const isDark = mode === "dark";
 
   // Auto-open Others dropdown if current path matches any dropdown item
@@ -329,73 +444,89 @@ export function DashboardSidebar({
     },
   ];
 
-  const creatorLinks = [
+  const creatorSections = [
     {
-      name: "Getting Started",
-      href: "/dashboard/getting-started",
-      icon: HelpCircle,
-      description: "How it works",
+      label: "Create",
+      items: [
+        {
+          name: "Home",
+          href: "/dashboard",
+          icon: Home,
+          description: "Your overview",
+        },
+        {
+          name: "Discover",
+          href: "/dashboard/opportunities",
+          icon: Compass,
+          description: "Find campaigns",
+        },
+        {
+          name: "My submissions",
+          href: "/dashboard/submissions",
+          icon: Clapperboard,
+          description: "Content submissions",
+        },
+        {
+          name: "My Applications",
+          href: "/dashboard/my-applications",
+          icon: ClipboardList,
+          description: "Campaigns you applied to",
+        },
+        {
+          name: "Wallet",
+          href: "/dashboard/earnings",
+          icon: Wallet,
+          description: "Earnings and transactions",
+        },
+      ],
     },
     {
-      name: "Campaigns",
-      href: "/dashboard/opportunities",
-      icon: Trophy,
-      description: "Available contests",
+      label: "Compete",
+      items: [
+        {
+          name: "Leaderboard",
+          href: "/dashboard/leaderboard",
+          icon: User,
+          description: "Top creators",
+        },
+        {
+          name: "Daily challenge",
+          href: "/dashboard/daily-challenge",
+          icon: Flame,
+          description: "Daily competition",
+        },
+      ],
     },
     {
-      name: "Dashboard",
-      href: "/dashboard",
-      icon: LayoutDashboard,
-      description: "Your overview",
-    },
-    {
-      name: "My Submissions",
-      href: "/dashboard/submissions",
-      icon: Video,
-      description: "Content submissions",
-    },
-    {
-      name: "My Applications",
-      href: "/dashboard/my-applications",
-      icon: ClipboardList,
-      description: "Campaigns you applied to",
-    },
-
-    {
-      name: "Leaderboard",
-      href: "/dashboard/leaderboard",
-      icon: Award,
-      description: "Top creators",
-    },
-    {
-      name: "Daily Challenge",
-      href: "/dashboard/daily-challenge",
-      icon: Flame,
-      description: "Daily competition engine",
-    },
-    {
-      name: "Wallet",
-      href: "/dashboard/earnings",
-      icon: DollarSign,
-      description: "Earnings & Transactions",
-    },
-    {
-      name: "Settings",
-      href: "/dashboard/settings",
-      icon: Settings,
-      description: "Account preferences",
+      label: "",
+      items: [
+        {
+          name: "Settings",
+          href: "/dashboard/settings",
+          icon: Settings,
+          description: "Account preferences",
+        },
+        {
+          name: "Help",
+          href: "/dashboard/getting-started",
+          icon: HelpCircle,
+          description: "How it works",
+        },
+      ],
     },
   ];
 
   const sections =
     userRole === "advertiser"
       ? advertiserSections
-      : [
-          {
-            label: "",
-            items: userRole === "admin" ? adminLinks : creatorLinks,
-          },
-        ];
+      : userRole === "creator"
+        ? creatorSections
+        : [
+            {
+              label: "",
+              items: adminLinks,
+            },
+          ];
 
   const links = sections.flatMap((section) => section.items);
 
@@ -424,6 +555,24 @@ export function DashboardSidebar({
       };
     }
   }, [links, userRole, collapsed]);
+
+  useEffect(() => {
+    if (!accountMenuOpen || !collapsed) {
+      setCollapsedMenuStyle(null);
+      return;
+    }
+    const placeMenu = () => {
+      const rect = accountButtonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setCollapsedMenuStyle({
+        left: rect.left,
+        bottom: window.innerHeight - rect.top + 8,
+      });
+    };
+    placeMenu();
+    window.addEventListener("resize", placeMenu);
+    return () => window.removeEventListener("resize", placeMenu);
+  }, [accountMenuOpen, collapsed]);
 
   useEffect(() => {
     if (!accountMenuOpen) return;
@@ -521,7 +670,12 @@ export function DashboardSidebar({
                   {sections.map((section, sectionIndex) => (
                     <div
                       key={section.label || `section-${sectionIndex}`}
-                      className={cn(sectionIndex > 0 && "mt-6")}
+                      className={cn(
+                        sectionIndex > 0 &&
+                          (userRole === "creator" && section.label === "Compete"
+                            ? "mt-2"
+                            : "mt-6"),
+                      )}
                     >
                       {section.label && !collapsed && (
                         <h3
@@ -654,7 +808,42 @@ export function DashboardSidebar({
             })()}
           </nav>
         </div>
-        <div className={cn("mb-4 pb-8", collapsed ? "px-2" : "px-3")}>
+        <div
+          className={cn(
+            userRole === "creator" ? "pb-2" : "mb-4 pb-8",
+            collapsed ? "px-2" : "px-3",
+          )}
+        >
+          {userRole === "creator" && !collapsed && (
+            <div
+              className={cn(
+                "rounded-2xl border px-4 pb-4 pt-3",
+                isDark
+                  ? "border-white/10 bg-white/5"
+                  : "border-[#ececef] bg-white shadow-[0_1px_2px_rgba(16,16,20,0.04)]",
+              )}
+            >
+              <CreatorTrustGauge
+                score={creatorTrust.score}
+                rated={creatorTrust.rated}
+                loading={creatorTrust.status === "loading"}
+                isDark={isDark}
+              />
+              <Link
+                href="/dashboard/profile"
+                onClick={() => handleNavigation("/dashboard/profile")}
+                className={cn(
+                  "mt-2 flex items-center justify-between gap-2 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-colors",
+                  isDark
+                    ? "border-white/15 text-white hover:bg-white/5"
+                    : "border-[#e4e4e7] text-[#1a1a1a] hover:bg-[#fafafa]",
+                )}
+              >
+                Your creator stats
+                <ChevronRight className="h-4 w-4 shrink-0" />
+              </Link>
+            </div>
+          )}
           {userRole === "advertiser" && !collapsed && (
             <div
               className={cn(
@@ -842,15 +1031,25 @@ export function DashboardSidebar({
           collapsed ? "px-2 pb-3" : "px-3 pb-3",
         )}
       >
-        {accountMenuOpen && (
+        {accountMenuOpen && (!collapsed || collapsedMenuStyle) && (
           <div
             className={cn(
-              "absolute bottom-full z-40 mb-2 overflow-hidden rounded-xl border py-1 shadow-lg",
-              collapsed ? "left-0 w-64" : "left-3 right-3",
+              "z-50 overflow-hidden rounded-xl border py-1 shadow-lg",
+              collapsed
+                ? "fixed w-64"
+                : "absolute bottom-full left-3 right-3 mb-2",
               isDark
                 ? "border-white/10 bg-[#12082a] text-white"
                 : "border-[#e6e6e8] bg-white text-[#1a1a1a]",
             )}
+            style={
+              collapsed && collapsedMenuStyle
+                ? {
+                    left: collapsedMenuStyle.left,
+                    bottom: collapsedMenuStyle.bottom,
+                  }
+                : undefined
+            }
           >
             <div className="px-3 py-2.5">
               <div className="truncate text-sm font-semibold">{userName}</div>
@@ -942,6 +1141,7 @@ export function DashboardSidebar({
         )}
 
         <button
+          ref={accountButtonRef}
           type="button"
           onClick={() => setAccountMenuOpen((open) => !open)}
           className={cn(
@@ -959,12 +1159,20 @@ export function DashboardSidebar({
             <img
               src={avatarUrl}
               alt=""
-              className="h-11 w-11 shrink-0 rounded-full object-cover"
+              className={cn(
+                "shrink-0 object-cover",
+                userRole === "creator"
+                  ? "h-9 w-9 rounded-lg"
+                  : "h-11 w-11 rounded-full",
+              )}
             />
           ) : (
             <span
               className={cn(
-                "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
+                "flex shrink-0 items-center justify-center text-sm font-semibold",
+                userRole === "creator"
+                  ? "h-9 w-9 rounded-lg text-[13px]"
+                  : "h-11 w-11 rounded-full",
                 isDark
                   ? "bg-white/15 text-white"
                   : "bg-[#ececef] text-[#3a3a40]",
@@ -976,7 +1184,12 @@ export function DashboardSidebar({
           {!collapsed && (
             <>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-base font-semibold leading-tight">
+                <span
+                  className={cn(
+                    "block truncate font-semibold leading-tight",
+                    userRole === "creator" ? "text-sm" : "text-base",
+                  )}
+                >
                   {userName}
                 </span>
                 {/* <span
@@ -992,7 +1205,8 @@ export function DashboardSidebar({
                 {userEmail && (
                   <span
                     className={cn(
-                      "mt-1 block truncate text-sm",
+                      "mt-0.5 block truncate",
+                      userRole === "creator" ? "text-xs" : "mt-1 text-sm",
                       isDark ? "text-white/55" : "text-[#8b8b93]",
                     )}
                   >

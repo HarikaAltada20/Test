@@ -34,7 +34,7 @@ export function ProcessingFeeInfo({ feeBps, isDark }: { feeBps: number; isDark: 
           onPointerLeave={hoverClose}
           className={cn(
             "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full align-middle transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#171717]",
             isDark ? "text-gray-400 hover:text-white" : "text-gray-500 hover:text-gray-900"
           )}
         >

@@ -49,7 +49,9 @@ export interface WithdrawRequest {
   expectedUsdInrRate: number;
 }
 
-export type WithdrawSubmitResult = { ok: true } | { ok: false; message: string };
+export type WithdrawSubmitResult =
+  | { ok: true }
+  | { ok: false; message: string };
 
 export interface WithdrawBalanceDialogProps {
   open: boolean;
@@ -102,10 +104,15 @@ export function WithdrawBalanceDialog({
   const wasOpen = useRef(false);
 
   const sortedMethods = useMemo(
-    () => [...payoutMethods].sort((a, b) => Number(!!b.is_default) - Number(!!a.is_default)),
-    [payoutMethods]
+    () =>
+      [...payoutMethods].sort(
+        (a, b) => Number(!!b.is_default) - Number(!!a.is_default),
+      ),
+    [payoutMethods],
   );
-  const availableMethods = sortedMethods.filter((m) => availableMethodIds.includes(m.id));
+  const availableMethods = sortedMethods.filter((m) =>
+    availableMethodIds.includes(m.id),
+  );
 
   useEffect(() => {
     if (open && !wasOpen.current) {
@@ -114,7 +121,10 @@ export function WithdrawBalanceDialog({
       setAmountTouched(false);
       setSubmitted(false);
       setServerError(null);
-      const preferred = availableMethods.find((m) => m.is_default) ?? availableMethods[0] ?? null;
+      const preferred =
+        availableMethods.find((m) => m.is_default) ??
+        availableMethods[0] ??
+        null;
       setMethodId(preferred?.id ?? null);
       onOpenRefresh?.();
     }
@@ -136,11 +146,16 @@ export function WithdrawBalanceDialog({
     availableCents: availableBalanceCents,
     minLabel,
   });
-  const amountError = amountTouched || submitted ? (amountCheck.error ?? undefined) : undefined;
+  const amountError =
+    amountTouched || submitted ? (amountCheck.error ?? undefined) : undefined;
   const methodError =
-    submitted && !methodId && availableMethods.length > 0 ? "Choose where to send this withdrawal." : undefined;
-  const selectedMethod = availableMethods.find((m) => m.id === methodId) ?? null;
-  const feeBpsFor = (methodType: string) => feeSettings.feeBpsByMethod[methodType] ?? 0;
+    submitted && !methodId && availableMethods.length > 0
+      ? "Choose where to send this withdrawal."
+      : undefined;
+  const selectedMethod =
+    availableMethods.find((m) => m.id === methodId) ?? null;
+  const feeBpsFor = (methodType: string) =>
+    feeSettings.feeBpsByMethod[methodType] ?? 0;
   const quote =
     amountCheck.cents !== null && selectedMethod
       ? quotePayout({
@@ -167,7 +182,11 @@ export function WithdrawBalanceDialog({
       return;
     }
     if (!methodId) {
-      document.querySelector<HTMLElement>(`[aria-labelledby="${METHOD_LABEL_ID}"] [role="radio"]:not([disabled])`)?.focus();
+      document
+        .querySelector<HTMLElement>(
+          `[aria-labelledby="${METHOD_LABEL_ID}"] [role="radio"]:not([disabled])`,
+        )
+        ?.focus();
       return;
     }
     submittingRef.current = true;
@@ -195,7 +214,8 @@ export function WithdrawBalanceDialog({
   };
 
   const unavailableReason = (method: PayoutMethod) => {
-    if (pausedMethodTypes.includes(method.method_type)) return "Paused for withdrawals";
+    if (pausedMethodTypes.includes(method.method_type))
+      return "Paused for withdrawals";
     if (method.method_type === "skydo") return null;
     return "Not available for withdrawals right now";
   };
@@ -214,16 +234,20 @@ export function WithdrawBalanceDialog({
         onEscapeKeyDown={(e) => submittingRef.current && e.preventDefault()}
         onInteractOutside={(e) => submittingRef.current && e.preventDefault()}
         className={cn(
-          "flex flex-col gap-0 overflow-hidden p-0",
+          "flex flex-col gap-0 overflow-hidden p-0 sm:p-2",
           "h-[100dvh] max-h-[100dvh] w-full max-w-none rounded-none",
-          "sm:h-auto sm:max-h-[min(90vh,720px)] sm:w-[calc(100vw-2rem)] sm:max-w-[480px] sm:rounded-xl",
-          t.border
+          "sm:h-auto sm:max-h-[min(90vh,720px)] sm:w-[calc(100vw-2rem)] sm:max-w-[480px] sm:rounded-2xl",
+          isDark
+            ? "border-slate-700 bg-slate-900"
+            : "border-neutral-200 bg-white",
         )}
       >
         {/* Header */}
-        <div className={cn("flex shrink-0 items-start gap-3 border-b px-4 py-4 sm:px-6", t.border)}>
+        <div className="flex shrink-0 items-start gap-3 px-4 py-4">
           <div className="min-w-0 flex-1 space-y-1">
-            <DialogTitle className={cn("text-lg font-semibold leading-tight", t.text)}>
+            <DialogTitle
+              className={cn("text-lg font-semibold leading-tight", t.text)}
+            >
               Withdraw balance
             </DialogTitle>
             <DialogDescription className={cn("text-sm", t.muted)}>
@@ -237,7 +261,10 @@ export function WithdrawBalanceDialog({
               size="icon"
               disabled={submitting}
               aria-label="Close"
-              className={cn("-mr-2 h-11 w-11 shrink-0 sm:h-9 sm:w-9", t.ghostButton)}
+              className={cn(
+                "h-9 w-9 shrink-0 rounded-full border-0 shadow-none",
+                t.ghostButton,
+              )}
             >
               <X className="h-4 w-4" />
             </Button>
@@ -245,7 +272,7 @@ export function WithdrawBalanceDialog({
         </div>
 
         {/* Body */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
           <form
             id="withdraw-form"
             noValidate
@@ -253,17 +280,31 @@ export function WithdrawBalanceDialog({
               e.preventDefault();
               void handleSubmit();
             }}
-            className="space-y-6"
+            className="space-y-4"
           >
             {/* Balance */}
-            <div className={cn("rounded-lg border px-4 py-3", t.border, t.subtle)}>
-              <p className={cn("text-xs font-medium uppercase tracking-wide", t.muted)}>
+            <div
+              className={cn("rounded-lg border px-4 py-3", t.border, t.subtle)}
+            >
+              <p
+                className={cn(
+                  "text-xs font-medium uppercase tracking-wide",
+                  t.muted,
+                )}
+              >
                 Available to withdraw
               </p>
-              <p className={cn("mt-1 text-2xl font-semibold tabular-nums", t.text)}>
+              <p
+                className={cn(
+                  "mt-1 text-2xl font-semibold tabular-nums",
+                  t.text,
+                )}
+              >
                 {formatCurrencyFromCents(availableBalanceCents)}
               </p>
-              <p className={cn("mt-0.5 text-xs", t.muted)}>Minimum {minLabel}</p>
+              <p className={cn("mt-0.5 text-xs", t.muted)}>
+                Minimum {minLabel}
+              </p>
             </div>
 
             {/* Amount */}
@@ -272,13 +313,20 @@ export function WithdrawBalanceDialog({
               label="Amount (USD)"
               isDark={isDark}
               error={amountError}
-              helper={belowMinimum ? `You need at least ${minLabel} to withdraw.` : undefined}
+              helper={
+                belowMinimum
+                  ? `You need at least ${minLabel} to withdraw.`
+                  : undefined
+              }
             >
               {(control) => (
                 <div className="relative">
                   <span
                     aria-hidden
-                    className={cn("pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base", t.muted)}
+                    className={cn(
+                      "pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base",
+                      t.muted,
+                    )}
                   >
                     $
                   </span>
@@ -291,10 +339,16 @@ export function WithdrawBalanceDialog({
                     autoComplete="off"
                     placeholder="0.00"
                     value={amount}
-                    onChange={(e) => setAmount(sanitizeAmountInput(e.target.value))}
+                    onChange={(e) =>
+                      setAmount(sanitizeAmountInput(e.target.value))
+                    }
                     onBlur={() => setAmountTouched(true)}
                     disabled={submitting}
-                    className={cn(t.input, "pl-7 pr-20 text-base tabular-nums", control.errorClassName)}
+                    className={cn(
+                      t.input,
+                      "pl-7 pr-20 text-base tabular-nums",
+                      control.errorClassName,
+                    )}
                   />
                   <Button
                     type="button"
@@ -307,7 +361,9 @@ export function WithdrawBalanceDialog({
                     disabled={submitting || availableBalanceCents <= 0}
                     className={cn(
                       "absolute right-1 top-1/2 h-9 -translate-y-1/2 px-3 font-semibold",
-                      isDark ? "text-[#C9A7FF] hover:bg-white/10" : "text-[#4A00BE] hover:bg-[#7F39EC]/10"
+                      isDark
+                        ? "text-white hover:bg-white/10"
+                        : "text-[#171717] hover:bg-[#F4F4F5]",
                     )}
                   >
                     Max
@@ -319,7 +375,10 @@ export function WithdrawBalanceDialog({
             {/* Method */}
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <p id={METHOD_LABEL_ID} className={cn("text-sm font-medium", t.text)}>
+                <p
+                  id={METHOD_LABEL_ID}
+                  className={cn("text-sm font-medium", t.text)}
+                >
                   Send to
                 </p>
                 {payoutMethods.length > 0 && (
@@ -330,7 +389,7 @@ export function WithdrawBalanceDialog({
                     disabled={submitting}
                     className={cn(
                       "h-auto min-h-[44px] gap-1 p-0 text-sm hover:underline sm:min-h-0",
-                      isDark ? "text-[#C9A7FF]" : "text-[#4A00BE]"
+                      isDark ? "text-slate-200" : "text-[#171717]",
                     )}
                   >
                     <Settings2 className="h-3.5 w-3.5" aria-hidden />
@@ -340,9 +399,20 @@ export function WithdrawBalanceDialog({
               </div>
 
               {payoutMethods.length === 0 ? (
-                <div className={cn("rounded-lg border border-dashed px-4 py-6 text-center", t.border)}>
-                  <p className={cn("text-sm", t.text)}>Add a payout method to withdraw.</p>
-                  <Button type="button" onClick={onManageMethods} className="mt-3 h-11 gap-1.5 sm:h-10">
+                <div
+                  className={cn(
+                    "rounded-lg border border-dashed px-4 py-6 text-center",
+                    t.border,
+                  )}
+                >
+                  <p className={cn("text-sm", t.text)}>
+                    Add a payout method to withdraw.
+                  </p>
+                  <Button
+                    type="button"
+                    onClick={onManageMethods}
+                    className={cn("mt-3 gap-1.5", t.primaryButton)}
+                  >
                     <Plus className="h-4 w-4" aria-hidden />
                     Add payout method
                   </Button>
@@ -363,59 +433,76 @@ export function WithdrawBalanceDialog({
                       const { title, detail } = describeSavedMethod(method);
                       const available = availableMethodIds.includes(method.id);
                       const selected = method.id === methodId;
-                      const reason = available ? null : unavailableReason(method);
+                      const reason = available
+                        ? null
+                        : unavailableReason(method);
                       return (
                         <RadioGroupPrimitive.Item
                           key={method.id}
                           value={method.id}
                           disabled={!available}
                           className={cn(
-                            "flex min-h-[60px] w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
-                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] focus-visible:ring-offset-2",
-                            isDark ? "focus-visible:ring-offset-[#06021D]" : "focus-visible:ring-offset-white",
+                            "flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#171717]",
                             "disabled:cursor-not-allowed",
                             !available && "opacity-70",
                             selected
                               ? isDark
-                                ? "border-[#9B6BF2] bg-[#7F39EC]/15"
-                                : "border-[#7F39EC] bg-[#7F39EC]/5"
+                                ? "bg-white/10"
+                                : "bg-[#E8E8EA]"
                               : isDark
-                                ? "border-gray-700 enabled:hover:border-gray-500 enabled:hover:bg-white/5"
-                                : "border-gray-200 enabled:hover:border-gray-300 enabled:hover:bg-gray-50"
+                                ? "enabled:hover:bg-white/5"
+                                : "enabled:hover:bg-[#F6F6F7]",
                           )}
                         >
                           <span
                             className={cn(
-                              "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+                              "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
                               selected
                                 ? isDark
-                                  ? "bg-[#7F39EC]/30 text-[#C9A7FF]"
-                                  : "bg-[#7F39EC]/10 text-[#7F39EC]"
-                                : cn(t.subtle, t.muted)
+                                  ? "bg-white text-slate-900"
+                                  : "bg-[#171717] text-white"
+                                : isDark
+                                  ? "bg-white/10 text-slate-200"
+                                  : "bg-white text-[#171717] shadow-[0_0_0_1px_rgba(0,0,0,0.06)]",
                             )}
                           >
                             <Icon className="h-4 w-4" aria-hidden />
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="flex flex-wrap items-center gap-1.5">
-                              <span className={cn("truncate text-sm font-semibold", t.text)}>{title}</span>
+                              <span
+                                className={cn(
+                                  "truncate text-sm font-semibold",
+                                  t.text,
+                                )}
+                              >
+                                {title}
+                              </span>
                               {method.is_default && (
                                 <span
                                   className={cn(
                                     "rounded px-1.5 py-0.5 text-[10px] font-medium",
-                                    isDark ? "bg-[#7F39EC]/25 text-[#E4D4FF]" : "bg-[#7F39EC]/10 text-[#4A00BE]"
+                                    "bg-[#171717] text-white",
                                   )}
                                 >
                                   Default
                                 </span>
                               )}
                             </span>
-                            <span className={cn("block truncate text-xs", t.muted)}>
+                            <span
+                              className={cn(
+                                "block whitespace-normal text-sm",
+                                t.muted,
+                              )}
+                            >
                               {meta.label}
                               {detail ? ` · ${detail}` : ""}
                             </span>
                             {available && (
-                              <span className={cn("mt-0.5 block text-xs", t.muted)}>
+                              <span
+                                className={cn("mt-0.5 block text-xs", t.muted)}
+                              >
                                 {feeBpsFor(method.method_type) > 0
                                   ? `${formatFeePercent(feeBpsFor(method.method_type))} processing fee`
                                   : "No processing fee"}
@@ -427,13 +514,17 @@ export function WithdrawBalanceDialog({
                                   <span
                                     className={cn(
                                       "rounded px-1.5 py-0.5 text-[10px] font-medium",
-                                      isDark ? "bg-amber-950/60 text-amber-200" : "bg-amber-100 text-amber-900"
+                                      isDark
+                                        ? "bg-amber-950/60 text-amber-200"
+                                        : "bg-amber-100 text-amber-900",
                                     )}
                                   >
                                     {reason}
                                   </span>
                                 ) : (
-                                  <SkydoStatusBadge status={getSkydoStatus(method)} />
+                                  <SkydoStatusBadge
+                                    status={getSkydoStatus(method)}
+                                  />
                                 )}
                               </span>
                             )}
@@ -443,13 +534,15 @@ export function WithdrawBalanceDialog({
                             className={cn(
                               "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors",
                               selected
-                                ? "border-[#7F39EC] bg-[#7F39EC] text-white"
+                                ? "border-[#171717] bg-[#171717] text-white"
                                 : isDark
-                                  ? "border-gray-600"
-                                  : "border-gray-300"
+                                  ? "border-slate-500"
+                                  : "border-neutral-300 bg-white",
                             )}
                           >
-                            {selected && <Check className="h-3 w-3" strokeWidth={3} />}
+                            {selected && (
+                              <Check className="h-3 w-3" strokeWidth={3} />
+                            )}
                           </span>
                         </RadioGroupPrimitive.Item>
                       );
@@ -457,13 +550,23 @@ export function WithdrawBalanceDialog({
                   </RadioGroupPrimitive.Root>
                   {!canWithdraw && (
                     <p className={cn("text-sm", t.muted)}>
-                      None of your payout methods can receive withdrawals right now. Try again later or add
-                      another method.
+                      None of your payout methods can receive withdrawals right
+                      now. Try again later or add another method.
                     </p>
                   )}
                   {methodError && (
-                    <p id={METHOD_ERROR_ID} role="alert" className={cn("flex items-start gap-1.5 text-sm", t.error)}>
-                      <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                    <p
+                      id={METHOD_ERROR_ID}
+                      role="alert"
+                      className={cn(
+                        "flex items-start gap-1.5 text-sm",
+                        t.error,
+                      )}
+                    >
+                      <AlertCircle
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                        aria-hidden
+                      />
                       {methodError}
                     </p>
                   )}
@@ -479,12 +582,7 @@ export function WithdrawBalanceDialog({
                 placeholder="Anything we should know about this withdrawal?"
                 disabled={submitting}
                 rows={2}
-                className={cn(
-                  "min-h-[72px] resize-none",
-                  isDark
-                    ? "border-gray-600 bg-[#06021D] text-white placeholder:text-gray-500"
-                    : "border-gray-300 bg-white text-gray-900"
-                )}
+                className={cn("min-h-[72px] resize-none rounded-xl", t.input)}
               />
             </FormField>
 
@@ -492,34 +590,55 @@ export function WithdrawBalanceDialog({
             {quote && selectedMethod && (
               <div
                 aria-live="polite"
-                className={cn("rounded-lg border px-4 py-3 text-sm", t.border, t.subtle, t.text)}
+                className={cn(
+                  "rounded-lg border px-4 py-3 text-sm",
+                  t.border,
+                  t.subtle,
+                  t.text,
+                )}
               >
                 <dl className="space-y-1.5">
                   <div className="flex items-center justify-between gap-3">
                     <dt className={t.muted}>Amount</dt>
-                    <dd className="tabular-nums">{formatCurrencyFromCents(amountCheck.cents)}</dd>
+                    <dd className="tabular-nums">
+                      {formatCurrencyFromCents(amountCheck.cents)}
+                    </dd>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <dt className={cn("flex items-center gap-0.5", t.muted)}>
                       {quote.feeBps > 0 ? (
                         <>
                           Processing fee ({formatFeePercent(quote.feeBps)})
-                          <ProcessingFeeInfo feeBps={quote.feeBps} isDark={isDark} />
+                          <ProcessingFeeInfo
+                            feeBps={quote.feeBps}
+                            isDark={isDark}
+                          />
                         </>
                       ) : (
                         "Processing fee"
                       )}
                     </dt>
                     <dd className="tabular-nums">
-                      {quote.feeCents > 0 ? `−${formatCurrencyFromCents(quote.feeCents)}` : "None"}
+                      {quote.feeCents > 0
+                        ? `−${formatCurrencyFromCents(quote.feeCents)}`
+                        : "None"}
                     </dd>
                   </div>
-                  <div className={cn("flex items-center justify-between gap-3 border-t pt-2", t.border)}>
+                  <div
+                    className={cn(
+                      "flex items-center justify-between gap-3 border-t pt-2",
+                      t.border,
+                    )}
+                  >
                     <dt className="font-semibold">You&apos;ll receive</dt>
                     <dd className="text-base font-semibold tabular-nums">
                       {netTooSmall ? "—" : formatQuoteReceive(quote)}
                       {quote.currency === "USD" && !netTooSmall && (
-                        <span className={cn("ml-1 text-xs font-normal", t.muted)}>USD</span>
+                        <span
+                          className={cn("ml-1 text-xs font-normal", t.muted)}
+                        >
+                          USD
+                        </span>
                       )}
                     </dd>
                   </div>
@@ -541,12 +660,17 @@ export function WithdrawBalanceDialog({
                 variant="destructive"
                 className={cn(
                   "border-red-500/60 [&>svg]:text-current",
-                  isDark ? "bg-red-950/40 text-red-200" : "bg-red-50 text-red-800"
+                  isDark
+                    ? "bg-red-950/40 text-red-200"
+                    : "bg-red-50 text-red-800",
                 )}
               >
                 <AlertCircle className="h-4 w-4" aria-hidden />
                 <AlertDescription>
-                  <span className="font-medium">Withdrawal request failed.</span> {serverError}
+                  <span className="font-medium">
+                    Withdrawal request failed.
+                  </span>{" "}
+                  {serverError}
                 </AlertDescription>
               </Alert>
             )}
@@ -556,10 +680,10 @@ export function WithdrawBalanceDialog({
         {/* Footer */}
         <div
           className={cn(
-            "flex shrink-0 flex-col-reverse gap-2 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6",
+            "flex shrink-0 flex-col-reverse gap-2 px-4 py-4 sm:flex-row sm:items-center sm:justify-end",
             "pb-[max(0.75rem,env(safe-area-inset-bottom))]",
             t.border,
-            t.surface
+            t.surface,
           )}
         >
           <Button
@@ -567,7 +691,7 @@ export function WithdrawBalanceDialog({
             variant="outline"
             onClick={requestClose}
             disabled={submitting}
-            className={cn("h-11 sm:h-10", t.outlineButton)}
+            className={t.cancelButton}
           >
             Cancel
           </Button>
@@ -577,7 +701,7 @@ export function WithdrawBalanceDialog({
             loading={submitting}
             loadingText="Processing..."
             disabled={submitting || !canWithdraw || netTooSmall}
-            className="h-11 sm:h-10 sm:min-w-[180px]"
+            className={cn("sm:min-w-[180px]", t.primaryButton)}
           >
             Request withdrawal
           </Button>

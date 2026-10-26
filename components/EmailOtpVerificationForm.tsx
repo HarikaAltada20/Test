@@ -255,7 +255,7 @@ export function EmailOtpVerificationForm({
       <div className="space-y-2">
         <Label
           htmlFor="otp"
-          className={cn(isDark ? "text-white" : "text-gray-900")}
+          className={cn("text-sm font-medium", isDark ? "text-white" : "text-[#171717]")}
         >
           Verification Code
         </Label>
@@ -273,16 +273,16 @@ export function EmailOtpVerificationForm({
           }}
           placeholder="000000"
           className={cn(
-            "text-center text-2xl tracking-widest",
+            "h-11 rounded-xl border text-center text-lg tracking-[0.3em] shadow-none focus-visible:ring-1 focus-visible:ring-offset-0",
             isDark
-              ? "bg-[#06021d] border border-gray-600 text-white"
-              : "bg-white text-black"
+              ? "border-white/15 bg-transparent text-white focus-visible:ring-white"
+              : "border-neutral-200 bg-white text-[#171717] focus-visible:ring-[#171717]"
           )}
           required
         />
         <p
           className={cn(
-            "text-xs text-center",
+            "text-sm text-center",
             isDark ? "text-gray-400" : "text-gray-500"
           )}
         >
@@ -301,22 +301,14 @@ export function EmailOtpVerificationForm({
             variant="outline"
             onClick={onBack}
             disabled={isSubmitting}
-            className={cn(
-              isDark
-                ? "border-gray-600 text-white hover:bg-[#2a0a5a]"
-                : "text-black"
-            )}
+            className="h-10 rounded-full border-neutral-300 bg-white px-4 text-[#171717] shadow-none hover:bg-[#F6F6F7]"
           >
             Back
           </Button>
           <Button
             type="submit"
             disabled={isSubmitting}
-            className={cn(
-              isDark
-                ? "bg-[#7F39EC] hover:bg-[#6B2FC7] text-white"
-                : "bg-[#7F39EC] hover:bg-[#6B2FC7] text-white"
-            )}
+            className="h-10 rounded-full bg-[#171717] px-5 text-white shadow-none hover:bg-[#171717]/90"
           >
             {isSubmitting ? (
               <>
@@ -334,8 +326,8 @@ export function EmailOtpVerificationForm({
           onClick={handleResendOtp}
           disabled={isSendingOtp || isSubmitting}
           className={cn(
-            "text-sm",
-            isDark ? "text-gray-400 hover:text-white" : "text-gray-600"
+            "h-10 rounded-full text-sm text-[#171717] hover:bg-[#F6F6F7]",
+            isDark && "text-white hover:bg-white/10"
           )}
         >
           {isSendingOtp ? (

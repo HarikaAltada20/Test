@@ -12,7 +12,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { touchAccountSwitchSessionIfNeeded } from "@/lib/account-switch-session-touch";
-import { Loader2, MonitorSmartphone, RefreshCw } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 type SessionRow = {
   id: string;
@@ -29,7 +29,13 @@ function formatSeen(iso: string) {
   }
 }
 
-export function DeviceSessionsPanel({ isDark }: { isDark: boolean }) {
+export function DeviceSessionsPanel({
+  isDark,
+  onLogOut,
+}: {
+  isDark: boolean;
+  onLogOut?: () => void;
+}) {
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<null | "others" | "all">(null);
@@ -114,23 +120,30 @@ export function DeviceSessionsPanel({ isDark }: { isDark: boolean }) {
   return (
     <Card
       className={cn(
-        "rounded-2xl border",
-        isDark ? "border-slate-800 bg-[#07031E]" : "border-slate-200 bg-white",
+        "rounded-2xl border shadow-none",
+        isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white",
       )}
     >
-      <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
-        <div>
+      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 px-5 py-4">
+        <div className="min-w-0">
           <CardTitle
             className={cn(
-              "text-lg flex items-center gap-2",
-              isDark ? "text-white" : "text-slate-900",
+              "text-base font-semibold",
+              isDark ? "text-white" : "text-[#171717]",
             )}
           >
-            <MonitorSmartphone className="h-5 w-5 text-violet-500" />
             Active sessions
+            <span
+              className={cn(
+                "ml-2 text-base font-normal",
+                isDark ? "text-slate-400" : "text-[#737373]",
+              )}
+            >
+              Up to three at a time.
+            </span>
           </CardTitle>
           <CardDescription
-            className={cn(isDark ? "text-slate-400" : "text-slate-600")}
+            className={cn("mt-1 text-base", isDark ? "text-slate-400" : "text-[#44403c]")}
           >
             Up to three recent browsers are remembered. Use sign-out options if
             you no longer trust a device.
@@ -139,27 +152,27 @@ export function DeviceSessionsPanel({ isDark }: { isDark: boolean }) {
         <Button
           type="button"
           variant="outline"
-          size="sm"
-          className="shrink-0 rounded-lg"
+          className={cn(
+            "h-9 shrink-0 rounded-full px-4 text-sm font-medium shadow-none",
+            isDark
+              ? "border-slate-600 bg-transparent text-white hover:bg-white/10"
+              : "border border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
+          )}
           onClick={() => void refresh(true)}
           disabled={loading}
         >
-          {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
         </Button>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 px-5 pb-5">
         {loading ? (
           <div className="flex justify-center py-6">
-            <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+            <Loader2 className="h-6 w-6 animate-spin text-[#171717]" />
           </div>
         ) : rows.length === 0 ? (
           <p
             className={cn(
-              "text-sm text-center py-4",
+              "text-base text-center py-4",
               isDark ? "text-slate-500" : "text-slate-500",
             )}
           >
@@ -172,10 +185,8 @@ export function DeviceSessionsPanel({ isDark }: { isDark: boolean }) {
               <li
                 key={row.id}
                 className={cn(
-                  "rounded-xl border p-3 text-sm",
-                  isDark
-                    ? "border-slate-800 bg-slate-900/40"
-                    : "border-slate-200 bg-slate-50",
+                  "border-t py-3 text-base first:border-t-0 first:pt-0",
+                  isDark ? "border-slate-700" : "border-neutral-200",
                 )}
               >
                 <p
@@ -188,7 +199,7 @@ export function DeviceSessionsPanel({ isDark }: { isDark: boolean }) {
                 </p>
                 <p
                   className={cn(
-                    "text-xs mt-1",
+                    "text-base mt-1",
                     isDark ? "text-slate-500" : "text-slate-500",
                   )}
                 >
@@ -200,11 +211,16 @@ export function DeviceSessionsPanel({ isDark }: { isDark: boolean }) {
           </ul>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-2 pt-2">
+        <div className={cn("flex flex-col gap-2 border-t pt-4 sm:flex-row sm:flex-wrap", isDark ? "border-slate-700" : "border-neutral-200")}>
           <Button
             type="button"
             variant="outline"
-            className="rounded-xl flex-1"
+            className={cn(
+              "h-9 rounded-full px-4 text-sm font-medium shadow-none",
+              isDark
+                ? "border-slate-600 bg-transparent text-white hover:bg-white/10"
+                : "border border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
+            )}
             disabled={!!busy || loading}
             onClick={() => void revokeOthers()}
           >
@@ -215,8 +231,13 @@ export function DeviceSessionsPanel({ isDark }: { isDark: boolean }) {
           </Button>
           <Button
             type="button"
-            variant="destructive"
-            className="rounded-xl flex-1"
+            variant="outline"
+            className={cn(
+              "h-9 rounded-full px-4 text-sm font-medium shadow-none",
+              isDark
+                ? "border-slate-600 bg-transparent text-white hover:bg-white/10"
+                : "border border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
+            )}
             disabled={!!busy || loading}
             onClick={() => void revokeAll()}
           >
@@ -225,6 +246,21 @@ export function DeviceSessionsPanel({ isDark }: { isDark: boolean }) {
             ) : null}
             Sign out everywhere
           </Button>
+          {onLogOut ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={cn(
+                "h-9 rounded-full px-4 text-sm font-medium shadow-none",
+                isDark
+                  ? "border-slate-600 bg-transparent text-white hover:bg-white/10"
+                  : "border border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
+              )}
+              onClick={onLogOut}
+            >
+              Log out
+            </Button>
+          ) : null}
         </div>
       </CardContent>
     </Card>

@@ -3,11 +3,13 @@
 import { useState, useEffect } from "react";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EmailChangeForm } from "./EmailChangeForm";
 import { EmailOtpVerificationForm } from "./EmailOtpVerificationForm";
@@ -96,13 +98,17 @@ export function EmailChangeModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose} isdark={isDark}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle className={cn(isDark ? "text-white" : "text-gray-900")}>
+      <DialogContent hideCloseButton className="max-w-xl gap-5 rounded-2xl border-neutral-200 p-5 sm:max-w-xl sm:rounded-2xl sm:p-5">
+        <DialogClose className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]">
+          <X className="h-4 w-4" />
+          <span className="sr-only">Close</span>
+        </DialogClose>
+        <DialogHeader className="pr-10">
+          <DialogTitle className={cn("text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>
             {showOtpStep ? "Verify Email" : "Change Email"}
           </DialogTitle>
           <DialogDescription
-            className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+            className={cn("text-sm", isDark ? "text-slate-300" : "text-[#44403c]")}
           >
             {showOtpStep
               ? `Enter the 6-digit verification code sent to ${newEmail.trim()}`

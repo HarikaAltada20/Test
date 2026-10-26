@@ -99,7 +99,7 @@ function AccountCardEmailRow({
           }
         }}
         className={cn(
-          "shrink-0 inline-flex p-1 rounded-md transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1",
+          "shrink-0 inline-flex p-1 rounded-md transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#171717] focus-visible:ring-offset-1",
           isDark
             ? "hover:bg-white/10 text-slate-400 hover:text-slate-200 focus-visible:ring-offset-[#07031E]"
             : "hover:bg-slate-200/80 text-slate-500 hover:text-slate-800 focus-visible:ring-offset-white",
@@ -420,8 +420,8 @@ export function AccountSwitcher({
           "flex justify-between items-center border rounded-lg px-4 py-3 w-full transition-all group",
           userType === "creator"
             ? (isDark 
-              ? "border-[#7F39EC] bg-[#D9C0FF26] hover:bg-[#D9C0FF40]" 
-              : "border-[#7F39EC] bg-[#D9C0FF26] hover:bg-[#D9C0FF40]")
+              ? "border-slate-600 bg-white/5 hover:bg-white/10"
+              : "border-neutral-200 bg-[#F6F6F7] hover:bg-[#E8E8EA]")
             : (isDark 
               ? "border-slate-700 bg-slate-800/50 cursor-not-allowed opacity-60" 
               : "border-slate-300 bg-slate-100 cursor-not-allowed opacity-60")
@@ -505,8 +505,8 @@ export function AccountSwitcher({
             : "bg-white border-slate-200"
         )}>
           <DialogHeader>
-            <div className="mx-auto bg-violet-500/10 p-4 rounded-full w-fit mb-2">
-              <Users className="h-8 w-8 text-violet-500" />
+            <div className={cn("mx-auto mb-2 w-fit rounded-full p-4", isDark ? "bg-white/10" : "bg-[#F4F4F5]")}>
+              <Users className={cn("h-8 w-8", isDark ? "text-white" : "text-[#171717]")} />
             </div>
             <DialogTitle className="text-2xl text-center font-bold">Account Switcher</DialogTitle>
             <DialogDescription className="text-center">
@@ -525,7 +525,7 @@ export function AccountSwitcher({
 
           {isAccountsRefreshing && (
             <div className="flex justify-center py-1">
-              <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
+              <Loader2 className={cn("h-4 w-4 animate-spin", isDark ? "text-white" : "text-[#171717]")} />
             </div>
           )}
 
@@ -562,14 +562,14 @@ export function AccountSwitcher({
               className={cn(
                 "w-full flex items-start justify-between gap-2 p-3 rounded-xl border",
                 isDark 
-                  ? "bg-violet-500/10 border-violet-500/30" 
-                  : "bg-violet-50 border-violet-200"
+                  ? "bg-white/10 border-slate-600" 
+                  : "bg-[#F6F6F7] border-neutral-200"
               )}
             >
               <div className="flex items-start gap-3 min-w-0 flex-1">
                  <div className="relative shrink-0">
-                    <Avatar className="h-10 w-10 border-2 border-violet-500">
-                      <AvatarFallback className="bg-violet-600 text-[10px] text-white font-bold">
+                    <Avatar className={cn("h-10 w-10 border-2", isDark ? "border-white" : "border-[#171717]")}>
+                      <AvatarFallback className="bg-[#171717] text-[10px] text-white font-bold">
                         {currentUsername.slice(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
@@ -581,7 +581,7 @@ export function AccountSwitcher({
                     <p className={cn("text-sm font-bold", isDark ? "text-white" : "text-slate-900")}>
                        @{currentUsername}
                     </p>
-                    <p className="text-xs text-violet-500 font-medium tracking-tight">Active Now</p>
+                    <p className="text-xs font-medium tracking-tight text-emerald-600">Active Now</p>
                     <AccountCardEmailRow
                       email={currentUserEmail}
                       revealed={isEmailShown("current")}
@@ -595,7 +595,7 @@ export function AccountSwitcher({
                     />
                  </div>
               </div>
-              <Check className="h-5 w-5 text-violet-500 shrink-0 mt-1" />
+              <Check className={cn("h-5 w-5 shrink-0 mt-1", isDark ? "text-white" : "text-[#171717]")} />
             </div>
 
             {/* Saved Accounts */}
@@ -614,8 +614,8 @@ export function AccountSwitcher({
                           : "border-amber-300 bg-amber-50/80"),
                       !isStaleRow &&
                         (isDark
-                          ? "bg-slate-900/40 border-slate-800 hover:border-violet-500/40 hover:bg-violet-500/5"
-                          : "bg-white border-slate-200 hover:border-violet-300 hover:bg-slate-50"),
+                          ? "bg-slate-900/40 border-slate-800 hover:border-white/30 hover:bg-white/5"
+                          : "bg-white border-neutral-200 hover:border-neutral-400 hover:bg-[#F6F6F7]"),
                     )}
                   >
                     <div
@@ -640,7 +640,7 @@ export function AccountSwitcher({
                         "flex min-w-0 flex-1 items-start gap-3 rounded-lg outline-none",
                         switchDisabled
                           ? "cursor-not-allowed opacity-80"
-                          : "cursor-pointer focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2",
+                          : "cursor-pointer focus-visible:ring-2 focus-visible:ring-[#171717] focus-visible:ring-offset-2",
                         isDark
                           ? "focus-visible:ring-offset-[#07031E]"
                           : "focus-visible:ring-offset-white",
@@ -748,10 +748,10 @@ export function AccountSwitcher({
                         </DropdownMenuContent>
                       </DropdownMenu>
                       {isSwitching === acc.id ? (
-                        <Loader2 className="h-5 w-5 shrink-0 animate-spin text-violet-500" />
+                        <Loader2 className={cn("h-5 w-5 shrink-0 animate-spin", isDark ? "text-white" : "text-[#171717]")} />
                       ) : !isStaleRow ? (
                         <ChevronRight
-                          className="h-4 w-4 shrink-0 text-slate-400 transition-colors group-hover:text-violet-500 opacity-70 group-hover:opacity-100"
+                          className={cn("h-4 w-4 shrink-0 opacity-70 transition-colors group-hover:opacity-100", isDark ? "text-slate-400 group-hover:text-white" : "text-neutral-400 group-hover:text-[#171717]")}
                           aria-hidden
                         />
                       ) : null}
@@ -807,7 +807,7 @@ export function AccountSwitcher({
             
             {isListLoading && (
               <div className="flex justify-center py-6">
-                <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+                <Loader2 className={cn("h-6 w-6 animate-spin", isDark ? "text-white" : "text-[#171717]")} />
               </div>
             )}
           </div>
@@ -822,10 +822,10 @@ export function AccountSwitcher({
                 }}
                 variant="outline" 
                 className={cn(
-                  "w-full h-11 rounded-xl font-semibold transition-all",
+                  "w-full h-11 rounded-full font-medium shadow-none transition-all",
                   isDark 
-                    ? "border-violet-500/30 text-violet-400 hover:bg-violet-500/10 hover:text-violet-300" 
-                    : "border-violet-200 text-violet-600 hover:bg-violet-50 hover:text-violet-700"
+                    ? "border-slate-600 text-white hover:bg-white/10" 
+                    : "rounded-full border-neutral-300 text-[#171717] hover:bg-[#F6F6F7]"
                 )}
               >
                 <Plus className="h-4 w-4 mr-2" />
@@ -938,8 +938,8 @@ export function AccountSwitcher({
             : "bg-white border-slate-200"
         )}>
           <DialogHeader>
-            <div className="mx-auto bg-violet-500/10 p-4 rounded-full w-fit mb-2">
-              <Users className="h-8 w-8 text-violet-500" />
+            <div className={cn("mx-auto mb-2 w-fit rounded-full p-4", isDark ? "bg-white/10" : "bg-[#F4F4F5]")}>
+              <Users className={cn("h-8 w-8", isDark ? "text-white" : "text-[#171717]")} />
             </div>
             <DialogTitle className="text-2xl text-center font-bold">Link New Account</DialogTitle>
             <DialogDescription className="text-center">
@@ -996,8 +996,8 @@ export function AccountSwitcher({
                  className={cn(
                    "h-11 rounded-xl px-4",
                    isDark 
-                     ? "bg-white/[0.03] border-white/10 focus:ring-violet-500" 
-                     : "bg-slate-50 border-slate-200 focus:ring-violet-400"
+                     ? "bg-white/[0.03] border-white/10 focus:ring-[#171717]"
+                     : "rounded-xl border-neutral-200 bg-white focus:ring-[#171717]"
                  )}
                  required 
                />
@@ -1014,8 +1014,8 @@ export function AccountSwitcher({
                    className={cn(
                      "h-11 rounded-xl px-4 pr-12",
                      isDark 
-                       ? "bg-white/[0.03] border-white/10 focus:ring-violet-500" 
-                       : "bg-slate-50 border-slate-200 focus:ring-violet-400"
+                     ? "bg-white/[0.03] border-white/10 focus:ring-[#171717]"
+                     : "rounded-xl border-neutral-200 bg-white focus:ring-[#171717]"
                    )}
                    required 
                  />
@@ -1060,7 +1060,7 @@ export function AccountSwitcher({
                 <Button 
                   type="submit" 
                   disabled={isLinking} 
-                  className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-8 h-11 font-bold shadow-lg shadow-violet-500/20 active:scale-95 transition-all"
+                  className="h-11 rounded-full bg-[#171717] px-8 font-medium text-white shadow-none hover:bg-[#2a2a2a]"
                 >
                   {isLinking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Link"}
                 </Button>
