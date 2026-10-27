@@ -139,7 +139,7 @@ export default function ContestAnalytics({
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#171717]" />
       </div>
     );
   }
@@ -150,7 +150,7 @@ export default function ContestAnalytics({
         <p className="text-red-600 mb-4">{error}</p>
         <button
           onClick={fetchContests}
-          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+          className="px-4 py-2 h-10 rounded-full bg-[#171717] px-5 text-sm text-white hover:bg-[#171717]/90"
         >
           Retry
         </button>

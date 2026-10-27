@@ -4,18 +4,20 @@ import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { EnhancedTabs, Tab } from "@/components/ui/enhancedTabs";
 import { toast } from "sonner";
-import {
-  Lock,
-  ShieldCheck,
-  Wallet,
-} from "lucide-react";
+import { Check, Lock, ShieldCheck, Wallet } from "lucide-react";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
-import { WALLET_TOP_UP_MAX_AMOUNT, WALLET_TOP_UP_MIN_AMOUNT } from "@/constants/subscriptionPlans";
+import {
+  WALLET_TOP_UP_MAX_AMOUNT,
+  WALLET_TOP_UP_MIN_AMOUNT,
+} from "@/constants/subscriptionPlans";
 import { cn } from "@/lib/utils";
-import { SolanaPaymentFlow, type SolanaTopUpSuccessResult } from "./SolanaPaymentModal";
+import {
+  SolanaPaymentFlow,
+  type SolanaTopUpSuccessResult,
+} from "./SolanaPaymentModal";
 import { SolanaWalletProvider } from "@/components/solana/SolanaWalletProvider";
+import { payoutDialogTheme } from "@/components/payouts/payout-method-dialog/theme";
 
 interface WalletTopUpProps {
   currentBalance: number;
@@ -27,6 +29,7 @@ interface WalletTopUpProps {
   onClose?: () => void;
   onTransactionUpdate?: () => void;
   onProcessingChange?: (isProcessing: boolean) => void;
+  isDark?: boolean;
 }
 
 const formatDollarAmount = (amount: number): string => {
@@ -102,6 +105,7 @@ export function WalletTopUp({
   onClose,
   onTransactionUpdate,
   onProcessingChange,
+  isDark: isDarkProp,
 }: WalletTopUpProps) {
   const [amount, setAmount] = useState<number>(50);
   const [isRedirecting, setIsRedirecting] = useState(false);
@@ -110,38 +114,10 @@ export function WalletTopUp({
     "stripe",
   );
 
-  const isDark = useDashboardMode() === "dark";
+  const detectedDark = useDashboardMode() === "dark";
+  const isDark = isDarkProp ?? detectedDark;
+  const t = payoutDialogTheme(isDark);
   const predefinedAmounts = [25, 50, 100, 200, 500];
-
-  const paymentTabs: Tab[] = [
-    {
-      id: "stripe",
-      label: (
-        <>
-          <ShieldCheck className="h-4 w-4" />
-          <span className="text-xs sm:text-sm leading-tight whitespace-normal">
-            Stripe
-          </span>
-        </>
-      ),
-    },
-    {
-      id: "solana",
-      label: (
-        <>
-          <Wallet className="h-4 w-4" />
-          <span className="text-xs sm:text-sm leading-tight whitespace-normal">
-            Solana (USDC/USDT)
-          </span>
-        </>
-      ),
-    },
-  ];
-
-  const handleTabChange = (id: string) => {
-    setPaymentMethod(id as "stripe" | "solana");
-    setShowSolanaFlow(false);
-  };
 
   const isBelowMinimum =
     Number.isFinite(amount) && amount > 0 && amount < WALLET_TOP_UP_MIN_AMOUNT;
@@ -201,73 +177,78 @@ export function WalletTopUp({
 
   const amountSelector = (
     <>
-      <div className="space-y-4">
-        <Label
-          className={cn(
-            "text-sm font-medium",
-            isDark ? "text-white" : "text-gray-700",
-          )}
-        >
+      <div className="space-y-2.5">
+        <Label className={cn("text-sm font-medium", t.text)}>
           Quick amounts
         </Label>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {predefinedAmounts.map((presetAmount) => (
-            <Button
-              className={cn(
-                "border font-semibold",
-                amount === presetAmount
-                  ? "bg-[#7F39EC] hover:bg-[#6929D1] text-white border-[#7F39EC]"
-                  : isDark
-                    ? "text-white border-gray-600 bg-transparent hover:bg-white/5"
-                    : "text-[#4A00BE] border-[#4A00BE] bg-white hover:bg-purple-50",
-              )}
-              key={presetAmount}
-              variant={amount === presetAmount ? "default" : "outline"}
-              size="sm"
-              onClick={() => setAmount(presetAmount)}
-            >
-              ${presetAmount}
-            </Button>
-          ))}
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+          {predefinedAmounts.map((presetAmount) => {
+            const selected = amount === presetAmount;
+            return (
+              <Button
+                key={presetAmount}
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAmount(presetAmount)}
+                className={cn(
+                  "h-10 rounded-full border font-semibold shadow-none",
+                  selected
+                    ? "border-[#171717] bg-[#171717] text-white hover:bg-[#2a2a2a] hover:text-white"
+                    : isDark
+                      ? "border-slate-600 bg-transparent text-slate-100 hover:bg-white/10"
+                      : "border-neutral-200 bg-white text-[#171717] hover:bg-[#F6F6F7]",
+                )}
+              >
+                ${presetAmount}
+              </Button>
+            );
+          })}
         </div>
       </div>
 
       <div className="space-y-2">
         <Label
           htmlFor="custom-amount"
-          className={cn(isDark ? "text-white" : "text-gray-700")}
+          className={cn("text-sm font-medium", t.text)}
         >
           Or enter custom amount
         </Label>
-        <Input
-          id="custom-amount"
-          type="number"
-          min={WALLET_TOP_UP_MIN_AMOUNT}
-          max={WALLET_TOP_UP_MAX_AMOUNT}
-          step="0.01"
-          value={amount}
-          onChange={(e) => setAmount(Number(e.target.value))}
-          placeholder="Enter amount"
-          className={cn(
-            isBelowMinimum && "border-red-500 focus-visible:ring-red-500",
-            isDark
-              ? "bg-[#06021D] border-gray-600 text-white"
-              : "bg-white text-black border-gray-300",
-          )}
-        />
+        <div className="relative">
+          <span
+            aria-hidden
+            className={cn(
+              "pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base",
+              t.muted,
+            )}
+          >
+            $
+          </span>
+          <Input
+            id="custom-amount"
+            type="number"
+            min={WALLET_TOP_UP_MIN_AMOUNT}
+            max={WALLET_TOP_UP_MAX_AMOUNT}
+            step="0.01"
+            value={amount}
+            onChange={(e) => setAmount(Number(e.target.value))}
+            placeholder="0.00"
+            className={cn(
+              t.input,
+              "pl-7 text-base tabular-nums",
+              isBelowMinimum && t.inputError,
+            )}
+          />
+        </div>
         {isBelowMinimum ? (
-          <p className="text-sm text-red-500 font-medium">
+          <p className={cn("text-sm font-medium", t.error)}>
             Minimum top-up is ${WALLET_TOP_UP_MIN_AMOUNT}. Please enter at least
             $1.00.
           </p>
         ) : (
-          <p
-            className={cn(
-              "text-xs",
-              isDark ? "text-gray-400" : "text-gray-500",
-            )}
-          >
-            Minimum ${WALLET_TOP_UP_MIN_AMOUNT}.00
+          <p className={cn("text-xs", t.muted)}>
+            Minimum ${WALLET_TOP_UP_MIN_AMOUNT}.00 · Max $
+            {WALLET_TOP_UP_MAX_AMOUNT.toLocaleString()}
           </p>
         )}
       </div>
@@ -276,52 +257,77 @@ export function WalletTopUp({
 
   return (
     <div className="space-y-5">
-      <EnhancedTabs
-        tabs={paymentTabs}
-        activeTab={paymentMethod}
-        onTabChange={handleTabChange}
-        isDark={isDark}
-        light={!isDark}
-        className="w-full"
-      />
-
-      <p
+      <div
         className={cn(
-          "text-xs -mt-2",
-          isDark ? "text-gray-400" : "text-gray-500",
+          "grid grid-cols-2 gap-1 rounded-xl border p-1",
+          t.border,
+          t.subtle,
         )}
+        role="tablist"
+        aria-label="Payment method"
       >
+        {(
+          [
+            {
+              id: "stripe" as const,
+              label: "Stripe",
+              icon: ShieldCheck,
+            },
+            {
+              id: "solana" as const,
+              label: "Solana",
+              icon: Wallet,
+            },
+          ] as const
+        ).map((tab) => {
+          const active = paymentMethod === tab.id;
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => {
+                setPaymentMethod(tab.id);
+                setShowSolanaFlow(false);
+              }}
+              className={cn(
+                "inline-flex h-10 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors",
+                active
+                  ? isDark
+                    ? "bg-white text-[#171717] shadow-sm"
+                    : "bg-white text-[#171717] shadow-sm ring-1 ring-black/5"
+                  : isDark
+                    ? "text-slate-300 hover:text-white"
+                    : "text-[#55555F] hover:text-[#171717]",
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="truncate">{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <p className={cn("text-xs leading-relaxed -mt-2", t.muted)}>
         {paymentMethod === "stripe"
           ? "Pay with Stripe — debit card, credit card, UPI, and other local methods where available."
           : "Pay with any crypto wallet on the Solana network using USDC or USDT."}
       </p>
 
-      <div
-        className={cn(
-          "p-4 rounded-xl border",
-          isDark
-            ? "border-gray-600 bg-[#0F0A27]/60"
-            : "border-gray-200 bg-gray-50/80 shadow-sm",
-        )}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <span
-            className={cn(
-              "text-sm font-medium",
-              isDark ? "text-gray-300" : "text-gray-600",
-            )}
-          >
-            Current Balance
-          </span>
-          <span
-            className={cn(
-              "text-xl font-bold tabular-nums",
-              isDark ? "text-white" : "text-gray-900",
-            )}
-          >
-            {formatCurrencyFromCents(currentBalance)}
-          </span>
-        </div>
+      <div className={cn("rounded-xl border px-4 py-3", t.border, t.subtle)}>
+        <p
+          className={cn(
+            "text-xs font-medium uppercase tracking-wide",
+            t.muted,
+          )}
+        >
+          Current balance
+        </p>
+        <p className={cn("mt-1 text-2xl font-semibold tabular-nums", t.text)}>
+          {formatCurrencyFromCents(currentBalance)}
+        </p>
       </div>
 
       {paymentMethod === "stripe" ? (
@@ -330,60 +336,45 @@ export function WalletTopUp({
 
           <div
             className={cn(
-              "rounded-lg border p-3 flex gap-3 items-start",
-              isDark
-                ? "border-[#2F2754] bg-[#120A30]/80"
-                : "border-purple-100 bg-purple-50/60",
+              "flex items-start gap-3 rounded-xl border px-4 py-3",
+              t.border,
+              t.subtle,
             )}
           >
-            <ShieldCheck
+            <div
               className={cn(
-                "h-5 w-5 shrink-0 mt-0.5",
-                isDark ? "text-green-400" : "text-green-600",
+                "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                isDark ? "bg-emerald-500/15" : "bg-emerald-50",
               )}
-            />
-            <div className="space-y-1">
-              <p
+            >
+              <ShieldCheck
                 className={cn(
-                  "text-sm font-medium",
-                  isDark ? "text-white" : "text-gray-900",
+                  "h-4 w-4",
+                  isDark ? "text-emerald-400" : "text-emerald-700",
                 )}
-              >
+              />
+            </div>
+            <div className="space-y-1">
+              <p className={cn("text-sm font-medium", t.text)}>
                 Secured by Stripe
               </p>
-              <p
-                className={cn(
-                  "text-xs leading-relaxed",
-                  isDark ? "text-gray-400" : "text-gray-600",
-                )}
-              >
-                You&apos;ll pay on Stripe&apos;s secure checkout. Use debit card,
-                credit card, UPI, or other methods supported in your region.
-                Payment details never touch our servers.
+              <p className={cn("text-xs leading-relaxed", t.muted)}>
+                You&apos;ll pay on Stripe&apos;s secure checkout. Payment details
+                never touch our servers.
               </p>
             </div>
           </div>
 
           <div
             className={cn(
-              "flex items-center justify-between rounded-lg border px-4 py-3",
-              isDark ? "border-gray-600" : "border-gray-200",
+              "flex items-center justify-between rounded-xl border px-4 py-3",
+              t.border,
             )}
           >
-            <span
-              className={cn(
-                "text-sm font-medium",
-                isDark ? "text-gray-300" : "text-gray-600",
-              )}
-            >
+            <span className={cn("text-sm font-medium", t.muted)}>
               Amount to add
             </span>
-            <span
-              className={cn(
-                "text-lg font-bold tabular-nums",
-                isDark ? "text-white" : "text-gray-900",
-              )}
-            >
+            <span className={cn("text-lg font-semibold tabular-nums", t.text)}>
               {formatDollarAmount(amount || 0)}
             </span>
           </div>
@@ -393,38 +384,23 @@ export function WalletTopUp({
               className={cn(
                 "flex items-start gap-3 rounded-xl border px-4 py-3",
                 isDark
-                  ? "border-[#7F39EC]/30 bg-[#7F39EC]/10"
-                  : "border-[#7F39EC]/20 bg-gradient-to-r from-[#7F39EC]/5 to-purple-50",
+                  ? "border-slate-600 bg-white/5"
+                  : "border-neutral-200 bg-[#F6F6F7]",
               )}
             >
               <div
                 className={cn(
                   "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-                  isDark ? "bg-[#7F39EC]/25" : "bg-[#7F39EC]/15",
+                  isDark ? "bg-white/10" : "bg-white",
                 )}
               >
-                <ShieldCheck
-                  className={cn(
-                    "h-4 w-4",
-                    isDark ? "text-[#C4A8FF]" : "text-[#7F39EC]",
-                  )}
-                />
+                <ShieldCheck className={cn("h-4 w-4", t.text)} />
               </div>
               <div className="space-y-0.5">
-                <p
-                  className={cn(
-                    "text-sm font-medium",
-                    isDark ? "text-[#E8DEFF]" : "text-[#5B21B6]",
-                  )}
-                >
+                <p className={cn("text-sm font-medium", t.text)}>
                   Opening secure checkout
                 </p>
-                <p
-                  className={cn(
-                    "text-xs leading-relaxed",
-                    isDark ? "text-gray-400" : "text-gray-500",
-                  )}
-                >
+                <p className={cn("text-xs leading-relaxed", t.muted)}>
                   You&apos;ll be redirected to Stripe to complete your payment
                   safely.
                 </p>
@@ -438,21 +414,17 @@ export function WalletTopUp({
             loading={isRedirecting}
             loadingText="Opening secure checkout..."
             className={cn(
-              "w-full bg-[#7F39EC] hover:bg-[#6929D1] text-white py-6 text-base font-semibold",
+              "w-full gap-2",
+              t.primaryButton,
               isRedirecting && "disabled:opacity-100",
             )}
             size="lg"
           >
-            <Lock className="mr-2 h-4 w-4" />
+            <Lock className="h-4 w-4" />
             Continue to secure checkout
           </Button>
 
-          <p
-            className={cn(
-              "text-[11px] text-center",
-              isDark ? "text-gray-500" : "text-gray-400",
-            )}
-          >
+          <p className={cn("text-center text-[11px]", t.muted)}>
             Secured by Stripe · Encrypted payment processing
           </p>
         </div>
@@ -468,79 +440,70 @@ export function WalletTopUp({
         <div className="space-y-4">
           <div
             className={cn(
-              "rounded-xl border p-5 text-center space-y-3",
-              isDark
-                ? "border-[#2F2754] bg-[#110927]/50"
-                : "border-gray-200 bg-white",
+              "space-y-4 rounded-xl border px-4 py-5",
+              t.border,
+              t.subtle,
             )}
           >
-            <div
-              className={cn(
-                "mx-auto flex h-12 w-12 items-center justify-center rounded-full",
-                isDark ? "bg-[#7F39EC]/20" : "bg-purple-100",
-              )}
-            >
-              <Wallet
+            <div className="flex items-start gap-3">
+              <div
                 className={cn(
-                  "h-6 w-6",
-                  isDark ? "text-purple-300" : "text-[#7F39EC]",
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+                  isDark ? "bg-white/10" : "bg-white",
                 )}
-              />
+              >
+                <Wallet className={cn("h-5 w-5", t.text)} />
+              </div>
+              <div className="min-w-0 space-y-1">
+                <h3 className={cn("text-base font-semibold", t.text)}>
+                  Pay with Solana
+                </h3>
+                <p className={cn("text-sm leading-relaxed", t.muted)}>
+                  Top up with USDC or USDT on Solana mainnet using Phantom,
+                  Trust Wallet, MetaMask, and others.
+                </p>
+              </div>
             </div>
-            <h3
-              className={cn(
-                "text-lg font-semibold",
-                isDark ? "text-white" : "text-gray-900",
-              )}
-            >
-              Pay with Solana
-            </h3>
-            <p
-              className={cn(
-                "text-sm max-w-md mx-auto leading-relaxed",
-                isDark ? "text-gray-300" : "text-gray-600",
-              )}
-            >
-              Pay with any crypto wallet on the Solana network. Top up using
-              USDC or USDT on Solana mainnet — Phantom, Trust Wallet, MetaMask,
-              and others.
-            </p>
-            <ul
-              className={cn(
-                "text-sm space-y-1.5 text-left max-w-xs mx-auto",
-                isDark ? "text-gray-300" : "text-gray-600",
-              )}
-            >
-              <li className="flex items-center gap-2">
-                <span className="text-green-500">✓</span>
-                Instant processing (1–2 minutes)
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-green-500">✓</span>
-                Low transaction fees
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-green-500">✓</span>
-                USDC &amp; USDT supported
-              </li>
+
+            <ul className="space-y-2">
+              {[
+                "Instant processing (1–2 minutes)",
+                "Low transaction fees",
+                "USDC & USDT supported",
+              ].map((item) => (
+                <li
+                  key={item}
+                  className={cn("flex items-center gap-2 text-sm", t.text)}
+                >
+                  <span
+                    className={cn(
+                      "grid h-5 w-5 shrink-0 place-items-center rounded-full",
+                      isDark ? "bg-emerald-500/15" : "bg-emerald-50",
+                    )}
+                  >
+                    <Check
+                      className={cn(
+                        "h-3 w-3",
+                        isDark ? "text-emerald-400" : "text-emerald-700",
+                      )}
+                    />
+                  </span>
+                  {item}
+                </li>
+              ))}
             </ul>
           </div>
 
           <Button
             onClick={() => setShowSolanaFlow(true)}
-            className="w-full bg-[#7F39EC] hover:bg-[#6929D1] text-white py-6 text-base font-semibold"
+            className={cn("w-full gap-2", t.primaryButton)}
             size="lg"
           >
-            <Wallet className="mr-2 h-4 w-4" />
+            <Wallet className="h-4 w-4" />
             Continue with Solana (USDC/USDT)
           </Button>
 
-          <p
-            className={cn(
-              "text-[11px] text-center",
-              isDark ? "text-gray-500" : "text-gray-400",
-            )}
-          >
+          <p className={cn("text-center text-[11px]", t.muted)}>
             Solana mainnet · USDC or USDT only · Verify amount and token before
             sending
           </p>

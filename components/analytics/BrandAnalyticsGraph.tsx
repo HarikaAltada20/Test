@@ -73,7 +73,7 @@ function AnalyticsChartTooltip({
       )}
     >
       <p className="font-medium mb-1.5">{String(label)}</p>
-      <p className="text-[#7F39EC] mb-1">
+      <p className="mb-1 font-medium" style={{ color: "#7F39EC" }}>
         {metricLabel} : {metricValue.toLocaleString()}
       </p>
       {chartMetric === "views" && (
@@ -162,7 +162,7 @@ export default function BrandAnalyticsGraph({
             <p
               className={cn(
                 "text-sm font-medium",
-                isDark ? "text-white/55" : "text-black/55",
+                isDark ? "text-slate-200" : "text-[#44403c]",
               )}
             >
               All Campaigns
@@ -172,12 +172,10 @@ export default function BrandAnalyticsGraph({
             </p>
           </div>
 
-          <div
+            <div
             className={cn(
-              "inline-flex flex-wrap gap-1 rounded-full border p-1",
-              isDark
-                ? "border-white/10 bg-[#0d0d0d]"
-                : "border-black/10 bg-[#f5f5f5]",
+              "inline-flex flex-wrap gap-0.5 rounded-full p-1",
+              isDark ? "bg-white/10" : "bg-[#E4E4E4]",
             )}
           >
             {CHART_TABS.map((tab) => (
@@ -186,12 +184,14 @@ export default function BrandAnalyticsGraph({
                 type="button"
                 onClick={() => setChartMetric(tab.id)}
                 className={cn(
-                  "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                  "inline-flex h-9 items-center rounded-full px-3.5 text-sm font-medium leading-none outline-none ring-0 transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-0",
                   chartMetric === tab.id
-                    ? "bg-[#7F39EC] text-white"
+                    ? isDark
+                      ? "bg-white/15 text-white shadow-sm"
+                      : "bg-white text-[#1a1a1a] shadow-sm"
                     : isDark
-                      ? "text-white/60 hover:text-white"
-                      : "text-black/55 hover:text-black",
+                      ? "text-white/80 hover:text-white"
+                      : "text-[#292524] hover:bg-white/70",
                 )}
               >
                 {tab.label}
@@ -203,7 +203,7 @@ export default function BrandAnalyticsGraph({
         <div className="relative h-[320px] w-full sm:h-[380px]">
           {loading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-inherit/40">
-              <Loader2 className="h-7 w-7 animate-spin text-[#7F39EC]" />
+              <Loader2 className="h-7 w-7 animate-spin text-[#171717]" />
             </div>
           )}
           {!loading && series.length === 0 ? (

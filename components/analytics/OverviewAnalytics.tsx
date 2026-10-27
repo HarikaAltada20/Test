@@ -126,7 +126,7 @@ export default function OverviewAnalytics({
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#171717]"></div>
       </div>
     );
   }
@@ -139,7 +139,7 @@ export default function OverviewAnalytics({
         </p>
         <button
           onClick={fetchOverviewData}
-          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+          className="px-4 py-2 h-10 rounded-full bg-[#171717] px-5 text-sm text-white hover:bg-[#171717]/90"
         >
           Retry
         </button>

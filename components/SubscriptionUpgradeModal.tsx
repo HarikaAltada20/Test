@@ -2,40 +2,22 @@
 
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { usePathname } from "next/navigation";
 import { toast } from "sonner";
-import {
-  Crown,
-  Star,
-  Zap,
-  Calendar,
-  AlertTriangle,
-  CheckCircle2,
-  Loader2,
-  TrendingUp,
-  Clock,
-  DollarSign,
-  Users,
-  Trophy,
-  TrendingDown,
-} from "lucide-react";
+import { ArrowRight, DollarSign, Users, Trophy, X } from "lucide-react";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
-import { subscriptionPlans } from "@/constants/subscriptionPlans";
 import type { SubscriptionPlan } from "@/lib/subscription-types";
+import { cn } from "@/lib/utils";
 
 interface SubscriptionUpgradeModalProps {
   isOpen: boolean;
@@ -62,15 +44,14 @@ export function SubscriptionUpgradeModal({
   const pathname = usePathname();
   const [mode, setMode] = useState<"light" | "dark">("light");
   const isDark = mode === "dark";
+  const isPricingDark = pathname === "/pricing" || isDark;
 
   const isUpgrade = targetPlan.price > currentPlan.price;
   const priceDifference = targetPlan.price - currentPlan.price;
-  const monthlyDifference = priceDifference;
 
-  // Calculate next billing date (approximate - 30 days from now)
   const nextBillingDate = new Date();
   nextBillingDate.setDate(nextBillingDate.getDate() + 30);
-  // Read mode from data attribute
+
   useEffect(() => {
     const checkMode = () => {
       const modeElement = document.querySelector("[data-mode]");
@@ -86,7 +67,6 @@ export function SubscriptionUpgradeModal({
 
     checkMode();
 
-    // Watch for changes in the data attribute
     const observer = new MutationObserver(checkMode);
     const targetNode = document.querySelector("[data-mode]");
     if (targetNode) {
@@ -101,9 +81,8 @@ export function SubscriptionUpgradeModal({
 
   useEffect(() => {
     if (isOpen) {
-      // Default scheduled date to next billing cycle
       setScheduledDate(nextBillingDate.toISOString().split("T")[0]);
-      setUpgradeType("scheduled"); // Default to scheduled (recommended)
+      setUpgradeType("scheduled");
     }
   }, [isOpen]);
 
@@ -111,7 +90,6 @@ export function SubscriptionUpgradeModal({
     setIsProcessing(true);
 
     try {
-      // Get the monthly price ID for the target plan
       const targetPriceId = targetPlan.prices?.monthly?.id;
       if (!targetPriceId) {
         throw new Error("Price ID not found for target plan");
@@ -133,15 +111,12 @@ export function SubscriptionUpgradeModal({
       console.log("[Client] 📋 Subscription upgrade result:", result);
 
       if (!response.ok) {
-        console.log("response is not okay", response);
         throw new Error(result.error || "Upgrade failed");
       }
 
       if (result.checkoutUrl) {
-        // Redirect to Stripe checkout for immediate upgrades
         window.location.href = result.checkoutUrl;
       } else {
-        // Show success message for scheduled upgrades or free plan upgrades
         toast.success(result.message || "Upgrade processed successfully");
         onUpgradeSuccess();
         onClose();
@@ -157,22 +132,6 @@ export function SubscriptionUpgradeModal({
     }
   };
 
-  const getPlanIcon = (planName: string) => {
-    const name = planName.toUpperCase();
-    if (name === "CHAMPION") return <Crown className="h-6 w-6" />;
-    if (name === "BUILDER") return <Star className="h-6 w-6" />;
-    if (name === "STARTER") return <Zap className="h-6 w-6" />;
-    return <Trophy className="h-6 w-6" />;
-  };
-
-  const getPlanColor = (planName: string) => {
-    const name = planName.toUpperCase();
-    if (name === "CHAMPION") return "from-yellow-500 to-orange-600";
-    if (name === "BUILDER") return "from-purple-500 to-blue-600";
-    if (name === "STARTER") return "from-orange-500 to-red-600";
-    return "from-gray-500 to-gray-600";
-  };
-
   const getFeatureDifferences = () => {
     const differences = [];
 
@@ -184,7 +143,7 @@ export function SubscriptionUpgradeModal({
         label: "Active Contests",
         current: currentPlan.features.maxActiveContests,
         target: targetPlan.features.maxActiveContests,
-        icon: <Users className="h-4 w-4" />,
+        icon: <Users className="h-4 w-4 shrink-0" />,
       });
     }
 
@@ -196,7 +155,7 @@ export function SubscriptionUpgradeModal({
         label: "Commission Rate",
         current: `${currentPlan.features.commissionPercentage}%`,
         target: `${targetPlan.features.commissionPercentage}%`,
-        icon: <DollarSign className="h-4 w-4" />,
+        icon: <DollarSign className="h-4 w-4 shrink-0" />,
       });
     }
 
@@ -208,172 +167,162 @@ export function SubscriptionUpgradeModal({
         label: "Max Winners",
         current: currentPlan.features.maxWinnersPerContest,
         target: targetPlan.features.maxWinnersPerContest,
-        icon: <Trophy className="h-4 w-4" />,
+        icon: <Trophy className="h-4 w-4 shrink-0" />,
       });
     }
 
     return differences;
   };
 
-  // 👇 conditional color based on route and dark mode
-  const dialogBg =
-    pathname === "/pricing" || isDark
-      ? "bg-black border-gray-600 text-white"
-      : "bg-white border-gray-200 text-black";
+  const mutedText = isPricingDark ? "text-slate-400" : "text-[#66666F]";
+  const strongText = isPricingDark ? "text-white" : "text-[#171717]";
+  const softBorder = isPricingDark ? "border-slate-700" : "border-neutral-200";
+  const featureDiffs = getFeatureDifferences();
+  const changeVerb = isUpgrade ? "upgrade" : "downgrade";
 
-
+  const optionCardClass = (selected: boolean) =>
+    cn(
+      "cursor-pointer rounded-xl border p-3.5 transition-colors",
+      selected
+        ? isPricingDark
+          ? "border-white/40 bg-white/10"
+          : "border-[#171717] bg-[#F6F6F7]"
+        : isPricingDark
+          ? "border-slate-700 bg-transparent hover:bg-white/5"
+          : "border-neutral-200 bg-white hover:bg-[#FAFAFA]",
+    );
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose} isdark={isDark}>
       <DialogContent
-        className={`max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto ${dialogBg} ${
-          pathname === "/pricing" || isDark ? "pricing-scroll" : ""
-        }`}
+        hideCloseButton
+        className={cn(
+          "max-h-[90vh] w-[95vw] max-w-xl overflow-y-auto rounded-2xl p-0 sm:p-0",
+          isPricingDark
+            ? "border-slate-700 bg-slate-900 text-white pricing-scroll"
+            : "border-neutral-200 bg-white text-[#171717]",
+        )}
       >
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
-            {/* {isUpgrade ? (
-                            <TrendingUp className="h-5 w-5 text-green-600" />
-                        ) : (
-                            <TrendingDown className="h-5 w-5 text-orange-600" />
-                        )} */}
-            {isUpgrade ? "Upgrade" : "Downgrade"} Your Subscription
-          </DialogTitle>
-          <DialogDescription
-            className={`text-sm sm:text-base ${
-              pathname === "/pricing" || isDark || isDark
-                ? "text-[#8E8E8E]"
-                : "text-gray-600"
-            }`}
-          >
-            Choose how you'd like to {isUpgrade ? "upgrade" : "downgrade"} from{" "}
-            {currentPlan.displayName || currentPlan.name} to{" "}
-            {targetPlan.displayName || targetPlan.name}.
-            {isUpgrade
-              ? " You'll get access to more features and higher limits."
-              : " Your features and limits will be adjusted to the new plan."}
-          </DialogDescription>
-        </DialogHeader>
+        <div className="space-y-5 p-4 sm:p-5">
+          {/* Header */}
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1 space-y-1">
+              <DialogTitle
+                className={cn("text-base font-semibold sm:text-lg", strongText)}
+              >
+                {isUpgrade ? "Upgrade" : "Downgrade"} Your Subscription
+              </DialogTitle>
+              <DialogDescription
+                className={cn("text-md leading-relaxed", mutedText)}
+              >
+                {currentPlan.displayName || currentPlan.name}
+                {" → "}
+                {targetPlan.displayName || targetPlan.name}. Features and
+                limits will update to match the new plan.
+              </DialogDescription>
+            </div>
+            <DialogClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                disabled={isProcessing}
+                aria-label="Close"
+                className={cn(
+                  "h-8 w-8 shrink-0 rounded-full border-0 shadow-none",
+                  isPricingDark
+                    ? "text-slate-200 hover:bg-white/10 hover:text-white"
+                    : "text-[#171717] hover:bg-[#F4F4F5]",
+                )}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogClose>
+          </div>
 
-        <div className="space-y-4 sm:space-y-6">
-          {/* Plan Comparison */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            {/* Current Plan */}
-            <div className={`border rounded-2xl ${
-              pathname === "/pricing" || isDark
-                ? " bg-[#171717] shadow-[inset_0px_0px_4px_rgba(255,255,255,0.25)]"
-                : "border-gray-300 bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)]"
-            }`}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  {/* <div
-                    className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(
-                      currentPlan.name
-                    )} text-white`}
-                  >
-                    {getPlanIcon(currentPlan.name)}
-                  </div> */}
-                  <div className="min-w-0 flex-1">
-                    <CardTitle className="text-sm font-bold mb-1.5">
-                      Current Plan
-                    </CardTitle>
-                    <div className="inline-flex px-3.5 py-1.5 bg-[linear-gradient(90deg,#212121_0%,#131313_100%)] shadow-[inset_0px_-4px_8px_rgba(255,255,255,0.08)] rounded-[103px] border border-black/60 items-center justify-center gap-2">
-                      <span className="text-white text-xs sm:text-sm font-semibold font-sans leading-[16.8px] truncate">
-                        {currentPlan.displayName || currentPlan.name}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-xl sm:text-2xl font-bold">
-                  {formatCurrencyFromCents(currentPlan.price)}
-                  <span
-                    className={`text-sm font-normal ${
-                      pathname === "/pricing" || isDark
-                        ? "text-white"
-                        : "text-gray-600"
-                    }`}
-                  >
-                    /month
-                  </span>
-                </div>
-              </CardContent>
+          {/* Plan comparison */}
+          <div
+            className={cn(
+              "grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-xl border p-3 sm:gap-3 sm:p-4",
+              softBorder,
+              isPricingDark ? "bg-white/5" : "bg-[#F6F6F7]",
+            )}
+          >
+            <div className="min-w-0 space-y-1.5">
+              <p className={cn("text-[11px] font-medium uppercase tracking-wide", mutedText)}>
+                Current
+              </p>
+              <p className={cn("truncate text-sm font-semibold", strongText)}>
+                {currentPlan.displayName || currentPlan.name}
+              </p>
+              <p className={cn("text-sm font-medium tabular-nums", mutedText)}>
+                {formatCurrencyFromCents(currentPlan.price)}
+                <span className="text-xs font-normal">/mo</span>
+              </p>
             </div>
 
-            {/* Target Plan */}
             <div
-             className={`border rounded-2xl ${
-              pathname === "/pricing" || isDark
-                ? " bg-[#171717] shadow-[inset_0px_0px_4px_rgba(255,255,255,0.25)]"
-                : "border-gray-300 bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)]"
-            }`}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  {/* <div
-                    className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(
-                      targetPlan.name
-                    )} text-white`}
-                  >
-                    {getPlanIcon(targetPlan.name)}
-                  </div> */}
-                  <div className="min-w-0 flex-1">
-                    <CardTitle className="text-sm font-bold mb-1.5">New Plan</CardTitle>
-                    <div className="inline-flex px-3.5 py-1.5 bg-[linear-gradient(90deg,#212121_0%,#131313_100%)] shadow-[inset_0px_-4px_8px_rgba(255,255,255,0.08)] rounded-[103px] border border-black/60 items-center justify-center gap-2">
-                      <span className="text-white text-xs sm:text-sm font-semibold font-sans leading-[16.8px] truncate">
-                        {targetPlan.displayName || targetPlan.name}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-xl sm:text-2xl font-bold text-[#00FF6C]">
-                  {formatCurrencyFromCents(targetPlan.price)}
-                  <span
-                    className={`text-sm font-normal ${
-                      pathname === "/pricing" || isDark
-                        ? "text-white"
-                        : "text-gray-600"
-                    }`}
-                  >
-                    /month
-                  </span>
-                </div>
-                {priceDifference !== 0 && (
-                  <div
-                    className={`text-sm ${
-                      pathname === "/pricing" || isDark
-                        ? "text-white"
-                        : "text-gray-600"
-                    } mt-1`}
-                  >
-                    {priceDifference > 0 ? "+" : ""}
-                    {formatCurrencyFromCents(priceDifference)} difference
-                  </div>
-                )}
-              </CardContent>
+              className={cn(
+                "flex h-8 w-8 items-center justify-center rounded-full",
+                isPricingDark ? "bg-white/10" : "bg-white",
+              )}
+            >
+              <ArrowRight className={cn("h-3.5 w-3.5", mutedText)} />
+            </div>
+
+            <div className="min-w-0 space-y-1.5 text-right">
+              <p className={cn("text-[11px] font-medium uppercase tracking-wide", mutedText)}>
+                New
+              </p>
+              <p className={cn("truncate text-sm font-semibold", strongText)}>
+                {targetPlan.displayName || targetPlan.name}
+              </p>
+              <p className="text-sm font-semibold tabular-nums text-[#16a34a]">
+                {formatCurrencyFromCents(targetPlan.price)}
+                <span className={cn("text-xs font-normal", mutedText)}>/mo</span>
+              </p>
+              {priceDifference !== 0 && (
+                <p className={cn("text-[11px]", mutedText)}>
+                  {priceDifference > 0 ? "+" : ""}
+                  {formatCurrencyFromCents(priceDifference)} /mo
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Feature Differences */}
-          {getFeatureDifferences().length > 0 && (
-            <div>
-              <h4 className="font-semibold mb-3">What's changing:</h4>
-              <div className="space-y-3">
-                {getFeatureDifferences().map((diff, index) => (
+          {/* Feature differences */}
+          {featureDiffs.length > 0 && (
+            <div className="space-y-2">
+              <h4 className={cn("text-md font-semibold", strongText)}>
+                What&apos;s changing
+              </h4>
+              <div
+                className={cn(
+                  "divide-y overflow-hidden rounded-xl border",
+                  softBorder,
+                  isPricingDark ? "divide-slate-700" : "divide-neutral-200",
+                )}
+              >
+                {featureDiffs.map((diff) => (
                   <div
-                    key={index}
-                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 border rounded-lg gap-2"
+                    key={diff.label}
+                    className="flex items-center justify-between gap-3 px-3.5 py-2.5"
                   >
-                    <div className="flex items-center text-md gap-2 min-w-0">
+                    <div className={cn("flex min-w-0 items-center gap-2 text-sm", mutedText)}>
                       {diff.icon}
-                      <span className="font-medium truncate">{diff.label}</span>
+                      <span className={cn("truncate font-medium", strongText)}>
+                        {diff.label}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2 text-md flex-shrink-0">
-                      <p>{diff.current}</p>
-                      <span>→</span>
-                      <p>{diff.target}</p>
+                    <div
+                      className={cn(
+                        "flex shrink-0 items-center gap-1.5 text-sm font-medium tabular-nums",
+                        strongText,
+                      )}
+                    >
+                      <span className={mutedText}>{diff.current}</span>
+                      <span className={mutedText}>→</span>
+                      <span>{diff.target}</span>
                     </div>
                   </div>
                 ))}
@@ -381,272 +330,144 @@ export function SubscriptionUpgradeModal({
             </div>
           )}
 
-          {/* Change Options */}
-          <div>
-            <h4 className="font-semibold mb-4">
-              Choose your {isUpgrade ? "upgrade" : "downgrade"} option:
+          {/* Options */}
+          <div className="space-y-2">
+            <h4 className={cn("text-md font-semibold", strongText)}>
+              Choose your {changeVerb} option
             </h4>
             <RadioGroup
               value={upgradeType}
               onValueChange={(value) => setUpgradeType(value as UpgradeType)}
+              className="gap-2.5"
             >
-              {/* Scheduled Change Option */}
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="scheduled" id="scheduled" />
-                  <Label
-                    htmlFor="scheduled"
-                    className="flex flex-col sm:flex-row sm:items-center gap-2 cursor-pointer flex-1"
-                  >
-                    <div className="flex items-center gap-2">
-                      {/* <Calendar className="h-4 w-4 text-blue-600 flex-shrink-0" /> */}
-                      <span className="font-medium text-md">
-                        Scheduled {isUpgrade ? "Upgrade" : "Downgrade"}{" "}
-                        (Recommended)
+              <Label htmlFor="scheduled" className={optionCardClass(upgradeType === "scheduled")}>
+                <div className="flex items-start gap-3">
+                  <RadioGroupItem
+                    value="scheduled"
+                    id="scheduled"
+                    className={cn(
+                      "mt-0.5 shrink-0",
+                      isPricingDark
+                        ? "border-slate-500 text-white data-[state=checked]:border-white"
+                        : "border-neutral-300 text-[#171717] data-[state=checked]:border-[#171717]",
+                    )}
+                  />
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={cn("text-md font-medium", strongText)}>
+                        Scheduled {isUpgrade ? "Upgrade" : "Downgrade"}
                       </span>
+                      <Badge
+                        className={cn(
+                          "rounded-full border-0 px-2 py-0 text-[11px] font-medium shadow-none",
+                          isPricingDark
+                            ? "bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/15"
+                            : "bg-emerald-50 text-emerald-800 hover:bg-emerald-50",
+                        )}
+                      >
+                        Recommended
+                      </Badge>
                     </div>
-                    <Badge className="bg-blue-100 hover:bg-blue-100 text-blue-800 w-fit">
-                      {isUpgrade ? "No time lost" : "Keep current benefits"}
-                    </Badge>
-                  </Label>
+                    <p className={cn("text-sm leading-relaxed", mutedText)}>
+                      Keep your current plan until the billing period ends, then
+                      switch automatically. No time or money lost.
+                    </p>
+                    {upgradeType === "scheduled" && (
+                      <p className={cn("text-sm", mutedText)}>
+                        Starts{" "}
+                        <span className={cn("font-medium", strongText)}>
+                          {new Date(scheduledDate).toLocaleDateString()}
+                        </span>
+                        {" · "}
+                        Next charge{" "}
+                        <span className={cn("font-medium", strongText)}>
+                          {formatCurrencyFromCents(targetPlan.price)}
+                        </span>
+                      </p>
+                    )}
+                  </div>
                 </div>
-                {upgradeType === "scheduled" && (
-                  <Alert
-                    className={`ml-2 ${
-                      pathname === "/pricing" || isDark
-                        ? "border-gray-700 border text-white"
-                        : "bg-white text-black border border-gray-200"
-                    }`}
-                  >
-                    {/* <Clock className="h-4 w-4" /> */}
-                    <AlertDescription>
-                      <strong>Recommended:</strong>
-                      <div className="space-y-2 mt-2">
-                        <div>
-                          • Your current plan will{" "}
-                          <strong>continue until its natural end</strong>
-                        </div>
-                        <div>
-                          • You <strong>keep all current benefits</strong> until
-                          then
-                        </div>
-                        <div>
-                          • Your new plan will{" "}
-                          <strong>start automatically</strong> after current
-                          period ends
-                        </div>
-                        <div>
-                          • You will be charged{" "}
-                          <strong>
-                            {formatCurrencyFromCents(targetPlan.price)}
-                          </strong>{" "}
-                          for the new billing cycle
-                        </div>
-                        <div className="text-green-600 font-medium mt-2">
-                          No loss of time or money - you get full value from
-                          your current plan.
-                        </div>
-                      </div>
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </div>
+              </Label>
 
-              {/* Immediate Change Option */}
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
+              <Label htmlFor="immediate" className={optionCardClass(upgradeType === "immediate")}>
+                <div className="flex items-start gap-3">
                   <RadioGroupItem
                     value="immediate"
                     id="immediate"
-                    className=""
+                    className={cn(
+                      "mt-0.5 shrink-0",
+                      isPricingDark
+                        ? "border-slate-500 text-white data-[state=checked]:border-white"
+                        : "border-neutral-300 text-[#171717] data-[state=checked]:border-[#171717]",
+                    )}
                   />
-                  <Label
-                    htmlFor="immediate"
-                    className="flex flex-col sm:flex-row sm:items-center gap-2 cursor-pointer flex-1"
-                  >
-                    <div className="flex items-center gap-2">
-                      {/* <Zap className="h-4 w-4 text-orange-600 flex-shrink-0" /> */}
-                      <span className="font-medium text-md">
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={cn("text-md font-medium", strongText)}>
                         Immediate {isUpgrade ? "Upgrade" : "Downgrade"}
                       </span>
+                      <Badge
+                        className={cn(
+                          "rounded-full border-0 px-2 py-0 text-[11px] font-medium shadow-none",
+                          isPricingDark
+                            ? "bg-amber-500/15 text-amber-300 hover:bg-amber-500/15"
+                            : "bg-amber-50 text-amber-800 hover:bg-amber-50",
+                        )}
+                      >
+                        Lose remaining time
+                      </Badge>
                     </div>
-                    <Badge className="bg-orange-100 hover:bg-orange-100 text-orange-800 w-fit">
+                    <p className={cn("text-sm leading-relaxed", mutedText)}>
                       {isUpgrade
-                        ? "Instant access - lose time"
-                        : "Instant change - lose time"}
-                    </Badge>
-                  </Label>
+                        ? "Cancel now and start the new plan immediately. Remaining time on your current plan is forfeited."
+                        : targetPlan.price === 0
+                          ? "Cancel your paid plan now and return to the free plan. Remaining time is forfeited."
+                          : "Switch to the new plan immediately. Remaining time on your current plan is forfeited."}
+                    </p>
+                  </div>
                 </div>
-                {upgradeType === "immediate" && (
-                  <Alert
-                    className={`ml-2 ${
-                      pathname === "/pricing" || isDark
-                        ? "border border-gray-700 text-white"
-                        : "bg-white text-black border border-gray-200"
-                    }`}
-                  >
-                    {/* <AlertTriangle className="h-4 w-4" /> */}
-                    <AlertDescription>
-                      <strong>Important:</strong>{" "}
-                      {isUpgrade ? (
-                        <>
-                          <div className="space-y-2">
-                            <div>
-                              • Your current subscription will be{" "}
-                              <strong>cancelled immediately</strong>
-                            </div>
-                            <div>
-                              • You will{" "}
-                              <strong>lose any remaining time</strong> on your
-                              current plan
-                            </div>
-                            <div>
-                              • A new subscription for{" "}
-                              <strong>
-                                {formatCurrencyFromCents(targetPlan.price)}
-                              </strong>{" "}
-                              will be created immediately
-                            </div>
-                            <div>
-                              • You get <strong>instant access</strong> to new
-                              plan features
-                            </div>
-                            <div className="text-orange-600 font-medium mt-2">
-                              This means you lose money/time from your current
-                              plan but gain immediate benefits.
-                            </div>
-                          </div>
-                        </>
-                      ) : targetPlan.price === 0 ? (
-                        <>
-                          <div className="space-y-2">
-                            <div>
-                              • Your paid subscription will be{" "}
-                              <strong>cancelled immediately</strong>
-                            </div>
-                            <div>
-                              • You will{" "}
-                              <strong>lose any remaining time</strong> on your
-                              current plan
-                            </div>
-                            <div>
-                              • You will return to the{" "}
-                              <strong>free plan immediately</strong>
-                            </div>
-                            <div>• No new charges will be made</div>
-                            <div className="text-orange-600 font-medium mt-2">
-                              This means you lose money/time from your current
-                              plan.
-                            </div>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="space-y-2">
-                            <div>
-                              • Your current subscription will be{" "}
-                              <strong>cancelled immediately</strong>
-                            </div>
-                            <div>
-                              • You will{" "}
-                              <strong>lose any remaining time</strong> on your
-                              current plan
-                            </div>
-                            <div>
-                              • A new subscription for{" "}
-                              <strong>
-                                {formatCurrencyFromCents(targetPlan.price)}
-                              </strong>{" "}
-                              will be created immediately
-                            </div>
-                            <div>
-                              • You get <strong>immediate access</strong> to new
-                              plan features
-                            </div>
-                            <div className="text-orange-600 font-medium mt-2">
-                              This means you lose money/time from your current
-                              plan.
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </div>
+              </Label>
             </RadioGroup>
           </div>
 
-          {/* Success Info */}
-          <Alert
-            className={`${
-              isUpgrade
-                ? "bg-green-50 border-green-200"
-                : "bg-[#D9C0FF26] border-[#7F39EC]"
-            }`}
-          >
-            {/* <CheckCircle2
-               className={`h-4 w-4 ${
-                isUpgrade ? "text-green-600" : "text-[#7F39EC]"
-              } ${pathname === "/pricing" || isDark ? "text-white" : "text-black"}`}
-            /> */}
-            <AlertDescription
-              className={`${isUpgrade ? "text-green-800" : "text-black"} ${
-                pathname === "/pricing" || isDark ? "text-white" : "text-black"
-              }`}
+          {/* Actions — scroll with content, not sticky */}
+          <div className="flex flex-col gap-2 pt-1">
+            <Button
+              onClick={handleUpgrade}
+              loading={isProcessing}
+              loadingText="Processing..."
+              className={cn(
+                "h-11 w-full rounded-full text-sm font-medium shadow-none",
+                isPricingDark
+                  ? "border border-white/20 bg-white text-[#171717] hover:bg-neutral-100"
+                  : "bg-[#171717] text-white hover:bg-[#2a2a2a]",
+              )}
             >
-              {upgradeType === "scheduled"
-                ? `Your ${
-                    isUpgrade ? "upgrade" : "downgrade"
-                  } is scheduled for ${new Date(
-                    scheduledDate
-                  ).toLocaleDateString()}. You can cancel this scheduled change anytime before it takes effect.`
-                : `Your ${
-                    isUpgrade ? "upgrade" : "downgrade"
-                  } will take effect immediately after confirmation.`}
-            </AlertDescription>
-          </Alert>
+              {upgradeType === "scheduled" ? (
+                <>Schedule {isUpgrade ? "Upgrade" : "Downgrade"}</>
+              ) : (
+                <>
+                  {isUpgrade ? "Upgrade" : "Downgrade"} Now
+                  {targetPlan.price > 0 &&
+                    ` · ${formatCurrencyFromCents(targetPlan.price)}`}
+                </>
+              )}
+            </Button>
+            <Button
+              onClick={onClose}
+              disabled={isProcessing}
+              variant="ghost"
+              className={cn(
+                "h-10 w-full rounded-full border border-neutral-400 rounded-full text-sm font-medium shadow-none",
+                isPricingDark
+                  ? "text-slate-100 hover:bg-white/10"
+                  : "text-[#171717] hover:bg-[#F4F4F5]",
+              )}
+            >
+              Cancel
+            </Button>
+          </div>
         </div>
-
-        <DialogFooter className="flex flex-col gap-4">
-          <Button
-            onClick={handleUpgrade}
-            loading={isProcessing}
-            loadingText="Processing..."
-            className={`w-full py-6 rounded-full text-md 
-                ${
-                  pathname === "/pricing" || isDark
-                    ? "bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] border border-white/25 text-white hover:bg-white/10 hover:border-white/40"
-                    : "bg-[#D9C0FF61] text-[#7F39EC] hover:bg-[#D9C0FF61]"
-                }`}
-          >
-            {upgradeType === "scheduled" ? (
-              <>
-                {/* <Calendar className="h-4 w-4 mr-2" /> */}
-                Schedule {isUpgrade ? "Upgrade" : "Downgrade"}
-              </>
-            ) : (
-              <>
-                {/* <Zap className="h-4 w-4 mr-2" /> */}
-                {isUpgrade ? "Upgrade" : "Downgrade"} Now
-                {targetPlan.price > 0 &&
-                  ` - ${formatCurrencyFromCents(targetPlan.price)}`}
-              </>
-            )}
-          </Button>
-          <Button
-            onClick={onClose}
-            disabled={isProcessing}
-            className={`py-6 rounded-full text-md 
-                ${
-                  pathname === "/pricing" || isDark
-                    ? "bg-white text-black"
-                    : "bg-[#FF323224] text-[#E50000]"
-                }`}
-          >
-            Cancel
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

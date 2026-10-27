@@ -3509,7 +3509,7 @@ export default function ProfilePage({
             </div>
             <div className="grid grid-cols-[13rem_1fr_auto] items-center gap-3 py-3">
               <p className="text-base text-[#737373]">Username</p>
-              <p className={cn("truncate text-base", isDark ? "text-white" : "text-[#171717]")}>@{userData.username} · also your referral code</p>
+              <p className={cn("truncate text-base", isDark ? "text-white" : "text-[#171717]")}>@{userData.username}</p>
               <Button type="button" variant="outline" className="h-9 rounded-full border-neutral-300 bg-white px-4 text-[#171717]" onClick={handleCopyUsername}>
                 <Copy className="h-4 w-4" />
                 Copy
