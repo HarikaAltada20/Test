@@ -97,19 +97,25 @@ function Sparkles({ count = SPARKS.length }: { count?: number }) {
 
 export function ConnectStage({
   connected = [],
+  focus,
   interval = 2400,
   className,
 }: {
   connected?: ConnectPlatform[];
+  /** Pin the stage on one platform (no cycling), e.g. on a connect prompt. */
+  focus?: ConnectPlatform;
   interval?: number;
   className?: string;
 }) {
   const reduce = useReducedMotion();
-  const [index, setIndex] = useState(0);
+  const start = focus ? Math.max(0, ALL.indexOf(focus)) : 0;
+  const [index, setIndex] = useState(start);
   const done = ALL.filter((platform) => connected.includes(platform));
-  const row = done.length > 0;
+  const row = !focus && done.length > 0;
   const complete = done.length === ALL.length;
-  const moving = !row && !reduce;
+  const moving = !focus && !row && !reduce;
+
+  useEffect(() => setIndex(start), [start]);
 
   useEffect(() => {
     if (!moving) return;

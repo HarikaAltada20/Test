@@ -22,6 +22,7 @@ import {
   Briefcase,
   Shield,
   User,
+  UserCircle,
   Phone,
   HelpCircle,
   Award,
@@ -508,9 +509,9 @@ export function DashboardSidebar({
         },
         {
           name: "Help",
-          href: "/dashboard/getting-started",
+          href: "/dashboard/help",
           icon: HelpCircle,
-          description: "How it works",
+          description: "Support & how it works",
         },
       ],
     },
@@ -613,7 +614,9 @@ export function DashboardSidebar({
   const helpHref =
     userRole === "admin"
       ? "/dashboard/admin/support"
-      : "/dashboard/getting-started";
+      : userRole === "creator"
+        ? "/dashboard/help"
+        : "/dashboard/getting-started";
 
   return (
     <div
@@ -1092,7 +1095,19 @@ export function DashboardSidebar({
               <Settings className="h-4 w-4" strokeWidth={1.75} />
               Settings
             </Link>
-            {userRole !== "admin" && (
+            {userRole === "creator" ? (
+              <Link
+                href="/dashboard/profile"
+                onClick={() => setAccountMenuOpen(false)}
+                className={cn(
+                  "flex items-center gap-2.5 px-3 py-2 text-sm",
+                  isDark ? "hover:bg-white/5" : "hover:bg-[#f6f6f7]",
+                )}
+              >
+                <UserCircle className="h-4 w-4" strokeWidth={1.75} />
+                Profile
+              </Link>
+            ) : userRole !== "admin" ? (
               <Link
                 href={billingHref}
                 onClick={() => setAccountMenuOpen(false)}
@@ -1104,7 +1119,7 @@ export function DashboardSidebar({
                 <CreditCard className="h-4 w-4" strokeWidth={1.75} />
                 Plan and billing
               </Link>
-            )}
+            ) : null}
             <Link
               href={helpHref}
               onClick={() => setAccountMenuOpen(false)}

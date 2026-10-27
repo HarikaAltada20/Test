@@ -397,6 +397,15 @@ function DashboardContent({
     setIsChatOpen(true);
   };
 
+  // Lets pages (e.g. the creator Help page) open the support chat popup.
+  useEffect(() => {
+    if (!userRole || userRole === "admin" || !supportChatEnabled) return;
+    const handleOpenChat = () => setIsChatOpen(true);
+    window.addEventListener("go:open-support-chat", handleOpenChat);
+    return () =>
+      window.removeEventListener("go:open-support-chat", handleOpenChat);
+  }, [userRole, supportChatEnabled]);
+
   const openAdminSupportThread = (threadId: string) => {
     setIsChatOpen(false);
     setSupportThreadId(null);
@@ -659,6 +668,19 @@ function DashboardContent({
       showEligibilityToasts: true,
     });
   };
+
+  // Lets pages (e.g. the creator Help page) open the review modal.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleOpenReview = () => {
+      void openReviewModalIfEligible({
+        enforceWithdrawalCooldown: false,
+        showEligibilityToasts: true,
+      });
+    };
+    window.addEventListener("go:open-review", handleOpenReview);
+    return () => window.removeEventListener("go:open-review", handleOpenReview);
+  }, [openReviewModalIfEligible]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

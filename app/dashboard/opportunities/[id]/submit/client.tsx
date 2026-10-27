@@ -29,6 +29,7 @@ import {
   CheckCheck,
   CalendarDays,
   Film,
+  Lightbulb,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -60,6 +61,7 @@ import {
 } from "@/components/CreatorContestRequirementsGate";
 import { useCreatorContestEligibility } from "@/hooks/useCreatorContestEligibility";
 import { getPlatformIcon } from "@/lib/platform-icons";
+import { ConnectStage } from "@/components/dashboard/settings/ConnectStage";
 import {
   parseVideoContestPlatforms,
   resolveMaxEarningsCentsForSubmission,
@@ -1347,7 +1349,7 @@ export default function SubmitContentPage({
       const { data: contestData, error: contestError } = await supabase
         .from("contests")
         .select(
-          "id, title, platform, contest_type, contest_format, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details, trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_quality_score, min_platform_earnings, min_platform_views",
+          "id, title, thumbnail_url, platform, contest_type, contest_format, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details, trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_quality_score, min_platform_earnings, min_platform_views",
         )
         .eq("id", contestId)
         .single();
@@ -3313,29 +3315,172 @@ export default function SubmitContentPage({
     contestPlatform,
   );
 
-  return (
-    <div className="container mx-auto py-8 md:px-4 max-w-[1200px]">
-      <div className="flex items-baseline gap-2 mb-6">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => router.push(`/dashboard/opportunities/${contestId}`)}
-          className="flex-shrink-0"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <h1 className="text-xl sm:text-2xl font-bold leading-none">
-          Submit Content from {platformDisplayLabel(contestPlatform)}
-        </h1>
-      </div>
+  const isMultiSubmit = Boolean(contest?.multiple_submissions_enabled);
+  const maxSubmissionsAllowed = contest?.max_submissions_per_creator || 1;
+  const remainingSubmissionSlots = Math.max(
+    0,
+    maxSubmissionsAllowed - submissionProgress.submitted,
+  );
+  const selectedSubmissionCount = isMultiSubmit
+    ? selectedVideosFromTabs.length +
+      selectedReelsFromTabs.length +
+      selectedVideos.length +
+      selectedReels.length +
+      selectedTiktokVideosFromTabs.length +
+      selectedTiktokVideosFromLinks.length
+    : selectedVideo ||
+        videoPreview ||
+        selectedReel ||
+        instagramMediaPreview ||
+        selectedTiktokVideo ||
+        tiktokVideoPreview
+      ? 1
+      : 0;
 
-      <div
+  const isSubmitDisabled =
+    isRequirementsBlocked ||
+    isLoading ||
+    isFetchingVideo ||
+    isFetchingInstagramMedia ||
+    isFetchingTiktokVideo ||
+    (isMultiSubmit
+      ? (contestPlatform === "youtube" &&
+          selectedVideosFromTabs.length === 0 &&
+          selectedVideos.length === 0) ||
+        (contestPlatform === "instagram" &&
+          selectedReelsFromTabs.length === 0 &&
+          selectedReels.length === 0) ||
+        (contestPlatform === "tiktok" &&
+          selectedTiktokVideosFromTabs.length === 0 &&
+          selectedTiktokVideosFromLinks.length === 0)
+      : (contestPlatform === "youtube" && !selectedVideo && !videoPreview) ||
+        (contestPlatform === "instagram" &&
+          !selectedReel &&
+          !instagramMediaPreview) ||
+        (contestPlatform === "tiktok" &&
+          !tiktokVideoPreview &&
+          !selectedTiktokVideo));
+
+  const contestTypeLabel =
+    contest?.contest_type === "cpm"
+      ? "Performance Based"
+      : contest?.contest_type === "dual_rewards"
+        ? "Dual Rewards"
+        : contest?.contest_type === "milestone"
+          ? "Milestone Based"
+          : "Competition Based";
+
+  const surfaceClass = isDark
+    ? "bg-[#180438] border-white/10"
+    : "bg-white border-neutral-200";
+
+  const platformTitle = (
+    <div className="flex min-w-0 items-center gap-3">
+      <span className="inline-flex shrink-0">
+        {getPlatformIcon(contestPlatform, "lg")}
+      </span>
+      <h2
         className={cn(
-          "max-w-[1200px] rounded-xl shadow-lg mx-auto p-2 md:p-4 overflow-hidden",
-          isDark ? "bg-[#180438]" : "bg-white",
+          "truncate text-2xl font-semibold",
+          isDark ? "text-white" : "text-neutral-900",
         )}
       >
-        <CardContent className="overflow-x-hidden">
+        Submit Content
+      </h2>
+    </div>
+  );
+
+  const showConnectPrompt =
+    (contestPlatform === "youtube" && !youtubeAccount && !isTokenExpired) ||
+    (contestPlatform === "instagram" &&
+      !instagramAccount &&
+      !isInstagramTokenExpired) ||
+    (contestPlatform === "tiktok" && !tiktokAccount && !isTiktokTokenExpired);
+
+  const showTopPlatformHeader =
+    !showConnectPrompt &&
+    !(contestPlatform === "youtube" && youtubeAccount && !isTokenExpired);
+
+  const renderConnectPrompt = (platform: "youtube" | "instagram" | "tiktok") => {
+    const label = VIDEO_PLATFORM_LABELS[platform];
+
+    return (
+      <div className="pb-2 text-center">
+        <ConnectStage focus={platform} className="mb-4" />
+
+        <h3
+          className={cn(
+            "text-xl font-medium",
+            isDark ? "text-white" : "text-neutral-900",
+          )}
+        >
+          Connect your {label} account
+        </h3>
+        <p
+          className={cn(
+           "mx-auto mt-3 w-full max-w-md text-center text-base leading-7",
+            isDark ? "text-gray-300" : "text-neutral-600",
+          )}
+        >
+          We read your recent posts and their views from it, so only your own
+          content is submitted. You&apos;ll come back here after.
+        </p>
+        <Link href={settingsConnectHref} className="mt-6 inline-block">
+          <Button
+            type="button"
+            className="h-11 rounded-full border-0 bg-gradient-to-b from-[#FF9A1F] to-[#FF7A00] px-6 text-base font-medium text-white hover:from-[#FFA53A] hover:to-[#FF8410]"
+          >
+            Connect {label}
+          </Button>
+        </Link>
+      </div>
+    );
+  };
+
+  return (
+    <div className="container mx-auto py-8 px-3 md:px-4 max-w-[1200px]">
+      <div className="mb-6">
+        <button
+          type="button"
+          onClick={() => router.push(`/dashboard/opportunities/${contestId}`)}
+          className={cn(
+            "inline-flex items-center gap-1.5 text-base transition-colors",
+            isDark
+              ? "text-gray-300 hover:text-white"
+              : "text-neutral-600 hover:text-neutral-900",
+          )}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to campaign
+        </button>
+        <h1
+          className={cn(
+            "mt-4 text-3xl sm:text-4xl font-bold tracking-tight",
+            isDark ? "text-white" : "text-neutral-900",
+          )}
+        >
+          Submit content from {platformDisplayLabel(contestPlatform)}
+        </h1>
+        {/* {contest?.title && (
+          <p
+            className={cn(
+              "mt-1 text-base",
+              isDark ? "text-gray-400" : "text-neutral-500",
+            )}
+          >
+            {contest.title}
+          </p>
+        )} */}
+      </div>
+
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div
+          className={cn(
+            "min-w-0 overflow-hidden rounded-2xl border p-4 shadow-sm md:p-6",
+            surfaceClass,
+          )}
+        >
+        <CardContent className="overflow-x-hidden p-0">
           {error && (
             <Alert variant="destructive" className="mb-4">
               <AlertDescription>{error}</AlertDescription>
@@ -3355,71 +3500,13 @@ export default function SubmitContentPage({
             />
           )}
 
-          {/* Submit and Cancel Buttons - Moved to top */}
-          <div className="flex flex-col gap-4 sm:flex-row items-center justify-between py-6 mb-6">
-            <div>
-              <CardTitle>Content Submission</CardTitle>
-              <CardDescription>
-                Submit your {platformContentDescription(contestPlatform)} for
-                this contest.
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-3 flex-row">
-              <Button
-                variant="outline"
-                onClick={() => router.back()}
-                className="w-full bg-[#C90808] text-white sm:w-auto"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                onClick={handleSubmit}
-                disabled={
-                  isRequirementsBlocked ||
-                  isLoading ||
-                  isFetchingVideo ||
-                  isFetchingInstagramMedia ||
-                  isFetchingTiktokVideo ||
-                  (contest?.multiple_submissions_enabled
-                    ? (contestPlatform === "youtube" &&
-                      selectedVideosFromTabs.length === 0 &&
-                      selectedVideos.length === 0) ||
-                    (contestPlatform === "instagram" &&
-                      selectedReelsFromTabs.length === 0 &&
-                      selectedReels.length === 0) ||
-                    (contestPlatform === "tiktok" &&
-                      selectedTiktokVideosFromTabs.length === 0 &&
-                      selectedTiktokVideosFromLinks.length === 0)
-                    : (contestPlatform === "youtube" &&
-                      !selectedVideo &&
-                      !videoPreview) ||
-                    (contestPlatform === "instagram" &&
-                      !selectedReel &&
-                      !instagramMediaPreview) ||
-                    (contestPlatform === "tiktok" &&
-                      !tiktokVideoPreview &&
-                      !selectedTiktokVideo))
-                }
-                className={cn(
-                  "w-full sm:w-auto",
-                  isRequirementsBlocked &&
-                  "bg-[#4A00BE] text-white opacity-60 hover:bg-[#4A00BE]",
-                )}
-              >
-                {isLoading ? (
-                  <RefreshCw className="animate-spin mr-2 h-4 w-4" />
-                ) : null}
-                Submit Content
-              </Button>
-            </div>
-          </div>
+          {showTopPlatformHeader && <div className="mb-6">{platformTitle}</div>}
 
           {availablePlatforms.length > 1 && (
             <div className="mb-6 space-y-2">
               <p
                 className={cn(
-                  "text-sm font-medium",
+                  "text-base font-medium",
                   isDark ? "text-white" : "text-foreground",
                 )}
               >
@@ -3434,12 +3521,12 @@ export default function SubmitContentPage({
                       type="button"
                       onClick={() => handleSubmitPlatformChange(platform)}
                       className={cn(
-                        "flex-1 min-w-[7.5rem] min-h-12 inline-flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-medium border transition-colors whitespace-nowrap",
+                        "flex-1 min-w-[7.5rem] min-h-12 inline-flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-base font-medium border transition-colors whitespace-nowrap",
                         isActive
-                          ? "bg-[#7F39EC] text-white border-[#7F39EC] shadow-sm"
+                          ? "bg-neutral-900 text-white border-neutral-900 shadow-sm"
                           : isDark
-                            ? "bg-transparent text-white border-gray-400 hover:bg-[#D9C0FF26]"
-                            : "bg-white text-[#7F39EC] border-[#7F39EC] hover:bg-purple-50",
+                            ? "bg-transparent text-white border-gray-400 hover:bg-white/10"
+                            : "bg-white text-neutral-900 border-neutral-300 hover:bg-neutral-100",
                       )}
                     >
                       <span className="shrink-0 inline-flex [&_svg]:text-current">
@@ -3450,7 +3537,7 @@ export default function SubmitContentPage({
                   );
                 })}
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-base text-muted-foreground">
                 This contest accepts{" "}
                 {availablePlatforms
                   .map((p) => VIDEO_PLATFORM_LABELS[p])
@@ -3498,21 +3585,7 @@ export default function SubmitContentPage({
                   </div>
                 </Alert>
               )}
-              {!youtubeAccount && !isTokenExpired && (
-                <Alert
-                  variant="default"
-                  className="mb-4 text-center border border-[#7F39EC] bg-[#D9C0FF26]"
-                >
-                  <AlertDescription className="text-md">
-                    Connect your YouTube account to submit content.
-                  </AlertDescription>
-                  <Link href={settingsConnectHref}>
-                    <Button variant="link" className="mt-1 text-[#7F39EC]">
-                      Connect YouTube in Settings
-                    </Button>
-                  </Link>
-                </Alert>
-              )}
+              {!youtubeAccount && !isTokenExpired && renderConnectPrompt("youtube")}
 
               {youtubeAccount && !isTokenExpired && (
                 // <Tabs defaultValue="youtube-library" className="w-full">
@@ -3541,70 +3614,73 @@ export default function SubmitContentPage({
                 // </TabsList>
 
                 <Tabs defaultValue="youtube-library" className="w-full">
-                  <TabsList
-                    className={`flex w-full p-1.5 rounded-full shadow-sm ${isDark ? "bg-gray-700" : "bg-[#E4E4E4]"
-                      }`}
-                  >
-                    {["youtube-library", "youtube-link"].map(
-                      (tab, index, arr) => {
-                        const isFirst = index === 0;
-                        const isLast = index === arr.length - 1;
-
-                        return (
-                          <TabsTrigger
-                            key={tab}
-                            value={tab}
-                            className={`
-                          flex items-center justify-center px-4 sm:px-6 py-2 sm:py-3 text-md font-medium 
-                          transition-all duration-200
-                          data-[state=active]:bg-[#662EBD] data-[state=active]:text-white 
-                          data-[state=active]:shadow-sm
-                          ${isDark
-                                ? "text-gray-300 hover:text-white hover:bg-gray-600"
-                                : "text-gray-700 hover:text-gray-800 hover:bg-gray-200"
-                              }
-                          ${isFirst ? "data-[state=active]:rounded-l-full" : ""}
-                          ${isLast ? "data-[state=active]:rounded-r-full" : ""}
-                          ${arr.length === 1
-                                ? "data-[state=active]:rounded-full"
-                                : ""
-                              }
-                        `}
-                          >
-                            {tab === "youtube-library" ? (
-                              <>
-                                <span className="hidden sm:inline">
-                                  Your Videos & Shorts
-                                </span>
-                                <span className="sm:hidden">Library</span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="hidden sm:inline">Link</span>
-                                <span className="sm:hidden">Link</span>
-                              </>
-                            )}
-                          </TabsTrigger>
-                        );
-                      },
-                    )}
-                  </TabsList>
-
-                  {/* Informational text for creators */}
-                  <div className="mt-8 p-3 bg-[#D9C0FF26] border border-[#7F39EC] rounded-lg">
-                    <p
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    {platformTitle}
+                    <TabsList
                       className={cn(
-                        "text-md text-center",
-                        isDark ? "text-white" : "text-[#7F39EC]",
+                        "w-auto min-h-0 gap-1 rounded-full border p-1",
+                        isDark
+                          ? "border-white/10 bg-white/5"
+                          : "border-neutral-200 bg-neutral-100",
                       )}
                     >
-                      💡 <strong>Tip for creators:</strong> You can fetch videos
-                      from your YouTube account by entering their URL in the
-                      "Link" tab.
-                    </p>
+                      {[
+                        { value: "youtube-library", label: "Your Videos & Shorts" },
+                        { value: "youtube-link", label: "Link" },
+                      ].map((tab) => (
+                        <TabsTrigger
+                          key={tab.value}
+                          value={tab.value}
+                          className={cn(
+                            "flex-none rounded-full px-4 py-2 text-md font-medium",
+                            isDark
+                              ? "text-gray-300 hover:text-white data-[state=active]:bg-white/15 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                              : "text-neutral-500 hover:text-neutral-900 data-[state=active]:bg-white data-[state=active]:text-neutral-900 data-[state=active]:shadow-sm",
+                          )}
+                        >
+                          {tab.label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
                   </div>
 
-                  <TabsContent value="youtube-library" className="mt-8">
+                  {/* Informational text for creators */}
+                  <div
+                    className={cn(
+                      "mt-6 flex items-start gap-3 rounded-xl border p-4",
+                      isDark
+                        ? "border-white/10 bg-white/5"
+                        : "border-neutral-200 bg-[#FAFAFA]",
+                    )}
+                  >
+                    <Lightbulb
+                      className={cn(
+                        "mt-0.5 h-4 w-4 shrink-0",
+                        isDark ? "text-gray-300" : "text-neutral-600",
+                      )}
+                    />
+                    <div>
+                      <p
+                        className={cn(
+                          "text-base font-semibold",
+                          isDark ? "text-white" : "text-neutral-900",
+                        )}
+                      >
+                        Tip for creators
+                      </p>
+                      <p
+                        className={cn(
+                          "text-base",
+                          isDark ? "text-gray-400" : "text-neutral-500",
+                        )}
+                      >
+                        You can fetch videos from your YouTube account by
+                        entering their URL in the &quot;Link&quot; tab.
+                      </p>
+                    </div>
+                  </div>
+
+                  <TabsContent value="youtube-library" className="mt-6">
                     {isLoadingVideos ? (
                       <div className="text-center py-4">
                         <PageLoadingSpinner mode="light" />
@@ -3615,10 +3691,10 @@ export default function SubmitContentPage({
                         <Alert
                           variant="default"
                           className={cn(
-                            "text-center border border-[#7F39EC] bg-[#D9C0FF26]",
+                            "text-center border border-neutral-200 bg-[#FAFAFA] text-neutral-900",
                             isDark
-                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                              : "bg-[#D9C0FF26] border-[#7F39EC] texxt-black",
+                              ? "bg-white/5 border-white/20 text-white"
+                              : "bg-[#FAFAFA] border-neutral-200 text-neutral-900",
                           )}
                         >
                           <AlertDescription>{libraryMessage}</AlertDescription>
@@ -3636,7 +3712,7 @@ export default function SubmitContentPage({
                           <Button
                             variant="outline"
                             onClick={() => fetchYouTubeVideos()}
-                            className="mt-2 bg-[#4A00BE] text-white"
+                            className="mt-2 bg-neutral-900 text-white hover:bg-neutral-800"
                             disabled={isLoadingVideos}
                           >
                             <RefreshCw
@@ -3649,113 +3725,7 @@ export default function SubmitContentPage({
                       )
                     ) : (
                       <>
-                        {/* YouTube Pagination Controls */}
-                        {totalYoutubePages > 1 && (
-                          <div className="flex flex-col sm:flex-row justify-between items-center mb-4 p-3 sm:p-4 bg-muted/30 rounded-lg border space-y-2 sm:space-y-0">
-                            <Button
-                              variant="outline"
-                              size="default"
-                              className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-sm sm:text-base hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
-                              onClick={() =>
-                                setYoutubeCurrentPage((prev) =>
-                                  Math.max(1, prev - 1),
-                                )
-                              }
-                              disabled={
-                                youtubeCurrentPage === 1 || isLoadingVideos
-                              }
-                            >
-                              ← Previous
-                            </Button>
-                            <span className="text-sm sm:text-base font-medium text-foreground bg-background px-3 sm:px-4 py-2 rounded-md border shadow-sm">
-                              Page {youtubeCurrentPage} of{" "}
-                              {totalYoutubePages > 0 ? totalYoutubePages : 1}
-                            </span>
-                            <Button
-                              variant="outline"
-                              size="default"
-                              className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-sm sm:text-base hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
-                              onClick={() =>
-                                setYoutubeCurrentPage((prev) =>
-                                  Math.min(totalYoutubePages, prev + 1),
-                                )
-                              }
-                              disabled={
-                                youtubeCurrentPage === totalYoutubePages ||
-                                totalYoutubePages === 0 ||
-                                isLoadingVideos
-                              }
-                            >
-                              Next →
-                            </Button>
-                          </div>
-                        )}
-
-                        {/* Multiple Submissions Counter - YouTube */}
-                        {contest?.multiple_submissions_enabled &&
-                          contestPlatform === "youtube" && (
-                            <div
-                              className={cn(
-                                "mt-4 p-3 border rounded-lg",
-                                isDark
-                                  ? "bg-[#C9A7FF26] border-[#C9A7FF]"
-                                  : "bg-purple-50 border-purple-200",
-                              )}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <CheckCheck
-                                    className={cn(
-                                      "h-4 w-4",
-                                      isDark
-                                        ? "text-purple-400"
-                                        : "text-purple-600",
-                                    )}
-                                  />
-                                  <span
-                                    className={cn(
-                                      "text-sm font-medium",
-                                      isDark ? "text-white" : "text-purple-800",
-                                    )}
-                                  >
-                                    Multiple Submissions Enabled
-                                  </span>
-                                </div>
-                                <div
-                                  className={cn(
-                                    "text-sm font-semibold",
-                                    isDark
-                                      ? "text-gray-300"
-                                      : "text-purple-800",
-                                  )}
-                                >
-                                  Selected:{" "}
-                                  {selectedVideosFromTabs.length +
-                                    selectedReelsFromTabs.length +
-                                    selectedVideos.length +
-                                    selectedReels.length}{" "}
-                                  /{" "}
-                                  {Math.max(
-                                    0,
-                                    (contest.max_submissions_per_creator || 1) -
-                                    submissionProgress.submitted,
-                                  )}{" "}
-                                  remaining videos
-                                </div>
-                              </div>
-                              <p
-                                className={cn(
-                                  "text-xs mt-1",
-                                  isDark ? "text-gray-300" : "text-purple-600",
-                                )}
-                              >
-                                Click on videos below to select them. You can
-                                mix videos from your channel and custom links.
-                              </p>
-                            </div>
-                          )}
-
-                        <div className="space-y-4 max-h-96 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800 px-2 pb-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                           {paginatedUserVideos.map((video, index) => {
                             const isMultiSelect =
                               contest?.multiple_submissions_enabled;
@@ -3865,22 +3835,41 @@ export default function SubmitContentPage({
                               ) ||
                               `https://i.ytimg.com/vi/${video.id.videoId}/hqdefault.jpg`;
 
+                            const alreadySubmitted = isVideoAlreadySubmitted(
+                              video.id.videoId,
+                              `https://www.youtube.com/watch?v=${video.id.videoId}`,
+                            );
+                            const viewCount = video.statistics?.viewCount;
+                            const likeCount = video.statistics?.likeCount;
+                            const commentCount = video.statistics?.commentCount;
+
                             return (
                               <div
                                 key={video.id.videoId}
-                                className={`cursor-pointer max-w-[1200px] mx-auto ${index === 0 ? "mt-4" : ""
-                                  } ${index === paginatedUserVideos.length - 1
-                                    ? "mb-4"
-                                    : ""
-                                  } ${isSelected
-                                    ? "border-2 border-[#7F39EC] rounded-lg bg-purple-700/20"
-                                    : "border-2 border-[#7F39EC] rounded-lg"
-                                  }`}
-                                onClick={() =>
-                                  handleSelectionChange(!isSelected)
-                                }
+                                className={cn(
+                                  "cursor-pointer rounded-2xl border p-2 transition-all",
+                                  alreadySubmitted
+                                    ? isDark
+                                      ? "border-red-500/60 bg-red-950/30"
+                                      : "border-red-300 bg-red-50"
+                                    : isSelected
+                                      ? isDark
+                                        ? "border-white bg-white/5 ring-1 ring-white"
+                                        : "border-neutral-900 bg-white ring-1 ring-neutral-900"
+                                      : isDark
+                                        ? "border-white/10 bg-white/5 hover:border-white/30"
+                                        : "border-neutral-200 bg-[#FAFAFA] hover:border-neutral-400",
+                                )}
+                                onClick={() => handleSelectionChange(!isSelected)}
                               >
-                                <CardContent className="p-4 sm:p-6 relative">
+                                <div className="relative aspect-video overflow-hidden rounded-xl bg-neutral-200">
+                                  <Image
+                                    src={thumbnailUrl}
+                                    alt={video.snippet.title}
+                                    fill
+                                    sizes="(min-width: 1024px) 260px, (min-width: 640px) 45vw, 100vw"
+                                    className="object-cover"
+                                  />
                                   <Checkbox
                                     aria-label="Select YouTube video"
                                     checked={isSelected}
@@ -3888,129 +3877,133 @@ export default function SubmitContentPage({
                                       handleSelectionChange(Boolean(checked))
                                     }
                                     onClick={(event) => event.stopPropagation()}
-                                    className={cn(
-                                      "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
-                                      isDark
-                                        ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                        : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
-                                    )}
+                                    className="absolute right-2 top-2 h-6 w-6 rounded-full border-2 border-white bg-black/20 text-white shadow-sm data-[state=checked]:border-white data-[state=checked]:bg-black data-[state=checked]:text-white"
                                   />
-                                  <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
-                                    {/* Thumbnail */}
-                                    <div className="flex-shrink-0 mx-auto sm:mx-0">
-                                      <Image
-                                        src={thumbnailUrl}
-                                        alt={video.snippet.title}
-                                        width={160}
-                                        height={90}
-                                        className="rounded-lg object-cover aspect-video shadow-sm w-full max-w-[160px]"
-                                      />
+                                </div>
+
+                                <div className="space-y-2 px-1.5 pb-1.5 pt-3">
+                                  <h3
+                                    className={cn(
+                                      "line-clamp-2 text-base font-semibold leading-5",
+                                      isDark ? "text-white" : "text-neutral-900",
+                                    )}
+                                    title={video.snippet.title}
+                                  >
+                                    {video.snippet.title}
+                                  </h3>
+                                  <a
+                                    href={`https://www.youtube.com/watch?v=${video.id.videoId}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={cn(
+                                      "inline-flex items-center text-sm hover:underline",
+                                      isDark ? "text-gray-300" : "text-neutral-600",
+                                    )}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <ExternalLink className="mr-1 h-3 w-3" />
+                                    Open on YouTube
+                                  </a>
+                                  {alreadySubmitted && (
+                                    <div>
+                                      <span className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-100 px-2 py-0.5 text-sm font-medium text-red-600">
+                                        <AlertTriangle className="h-3 w-3" />
+                                        Already Submitted
+                                      </span>
                                     </div>
-
-                                    {/* Content */}
-                                    <div className="flex-1 min-w-0 space-y-2 sm:space-y-3">
-                                      {/* Title */}
-                                      <div className="space-y-2">
-                                        <h3
-                                          className={cn(
-                                            "font-medium text-lg leading-5 text-center sm:text-left line-clamp-2",
-                                            isDark
-                                              ? "text-white"
-                                              : "text-gray-900",
-                                          )}
-                                          title={video.snippet.title}
-                                        >
-                                          {video.snippet.title}
-                                        </h3>
-                                        <div className="flex justify-center sm:justify-start">
-                                          <a
-                                            href={`https://www.youtube.com/watch?v=${video.id.videoId}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className={cn(
-                                              "inline-flex items-center text-sm hover:underline",
-                                              isDark
-                                                ? "text-purple-400"
-                                                : "text-[#4A00BE]",
-                                            )}
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            <ExternalLink className="h-3 w-3 mr-1" />
-                                            Open on YouTube
-                                          </a>
-                                        </div>
-                                      </div>
-
-                                      {/* Date */}
-                                      <p
-                                        className={cn(
-                                          "text-md text-center sm:text-left",
-                                          isDark
-                                            ? "text-white"
-                                            : "text-gray-600",
-                                        )}
-                                      >
-                                        Published:{" "}
-                                        {dayjs(
-                                          video.snippet.publishedAt,
-                                        ).format("MMM D, YYYY [at] h:mm A")}
-                                      </p>
-
-                                      {/* Statistics */}
-                                      {video.statistics && (
-                                        <div
-                                          className={cn(
-                                            "flex flex-wrap justify-center sm:justify-start gap-x-3 gap-y-1 text-md",
-                                            isDark
-                                              ? "text-white"
-                                              : "text-gray-600",
-                                          )}
-                                        >
-                                          {video.statistics.viewCount && (
-                                            <div className="flex items-center gap-1">
-                                              <Eye className="h-4 w-4" />
-                                              <span className="font-medium">
-                                                {parseInt(
-                                                  video.statistics.viewCount.toString(),
-                                                ).toLocaleString()}
-                                              </span>
-                                              <span>views</span>
-                                            </div>
-                                          )}
-                                          {video.statistics.likeCount && (
-                                            <div className="flex items-center gap-1">
-                                              <ThumbsUp className="h-4 w-4" />
-                                              <span className="font-medium">
-                                                {parseInt(
-                                                  video.statistics.likeCount.toString(),
-                                                ).toLocaleString()}
-                                              </span>
-                                              <span>likes</span>
-                                            </div>
-                                          )}
-                                          {video.statistics.commentCount && (
-                                            <div className="flex items-center gap-1">
-                                              <MessageSquare className="h-4 w-4" />
-                                              <span className="font-medium">
-                                                {" "}
-                                                {parseInt(
-                                                  video.statistics.commentCount.toString(),
-                                                ).toLocaleString()}
-                                              </span>
-                                              <span className="ml-1">
-                                                comments
-                                              </span>
-                                            </div>
-                                          )}
-                                        </div>
+                                  )}
+                                  <p
+                                    className={cn(
+                                      "text-sm",
+                                      isDark ? "text-gray-400" : "text-neutral-500",
+                                    )}
+                                  >
+                                    Published:{" "}
+                                    {dayjs(video.snippet.publishedAt).format(
+                                      "MMM D, YYYY [at] h:mm A",
+                                    )}
+                                  </p>
+                                  {video.statistics && (
+                                    <div
+                                      className={cn(
+                                        "flex flex-wrap items-center gap-x-3 gap-y-1 text-sm",
+                                        isDark ? "text-gray-300" : "text-neutral-600",
+                                      )}
+                                    >
+                                      {viewCount && (
+                                        <span className="inline-flex items-center gap-1">
+                                          <Eye className="h-3.5 w-3.5" />
+                                          {parseInt(viewCount).toLocaleString()}
+                                        </span>
+                                      )}
+                                      {likeCount && (
+                                        <span className="inline-flex items-center gap-1">
+                                          <ThumbsUp className="h-3.5 w-3.5" />
+                                          {parseInt(likeCount).toLocaleString()}
+                                        </span>
+                                      )}
+                                      {commentCount && (
+                                        <span className="inline-flex items-center gap-1">
+                                          <MessageSquare className="h-3.5 w-3.5" />
+                                          {parseInt(commentCount).toLocaleString()}
+                                        </span>
                                       )}
                                     </div>
-                                  </div>
-                                </CardContent>
+                                  )}
+                                </div>
                               </div>
                             );
                           })}
                         </div>
+
+                        {/* YouTube Pagination Controls */}
+                        {totalYoutubePages > 1 && (
+                          <div className="mt-6 flex items-center justify-center gap-3">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="rounded-full px-4"
+                              onClick={() =>
+                                setYoutubeCurrentPage((prev) =>
+                                  Math.max(1, prev - 1),
+                                )
+                              }
+                              disabled={
+                                youtubeCurrentPage === 1 || isLoadingVideos
+                              }
+                            >
+                              ← Previous
+                            </Button>
+                            <span
+                              className={cn(
+                                "rounded-full border px-4 py-1.5 text-base font-medium",
+                                isDark
+                                  ? "border-white/20 text-white"
+                                  : "border-neutral-300 text-neutral-900",
+                              )}
+                            >
+                              Page {youtubeCurrentPage} of{" "}
+                              {totalYoutubePages > 0 ? totalYoutubePages : 1}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="rounded-full px-4"
+                              onClick={() =>
+                                setYoutubeCurrentPage((prev) =>
+                                  Math.min(totalYoutubePages, prev + 1),
+                                )
+                              }
+                              disabled={
+                                youtubeCurrentPage === totalYoutubePages ||
+                                totalYoutubePages === 0 ||
+                                isLoadingVideos
+                              }
+                            >
+                              Next →
+                            </Button>
+                          </div>
+                        )}
 
                         {/* Load More button — only on last page, fetches next 50 from YouTube API */}
                         {youtubeNextPageToken &&
@@ -4023,8 +4016,8 @@ export default function SubmitContentPage({
                                 className={cn(
                                   "px-6 py-2 font-medium border-2",
                                   isDark
-                                    ? "border-[#C9A7FF] text-[#C9A7FF] hover:bg-[#C9A7FF] hover:text-black"
-                                    : "border-[#7F39EC] text-[#7F39EC] hover:bg-[#7F39EC] hover:text-white",
+                                    ? "border-white/30 text-white hover:bg-white hover:text-black"
+                                    : "border-neutral-300 text-neutral-900 hover:bg-neutral-900 hover:text-white",
                                 )}
                               >
                                 {isLoadingMoreVideos ? (
@@ -4053,7 +4046,7 @@ export default function SubmitContentPage({
                           value={contentLink}
                           onChange={(e) => setContentLink(e.target.value)}
                           className={cn(
-                            "flex-1 text-base font-medium border",
+                            "flex-1 text-lg font-medium border",
                             isDark
                               ? "bg-[#180438] border border-gray-600"
                               : "bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200",
@@ -4063,7 +4056,7 @@ export default function SubmitContentPage({
                           onClick={handleFetchVideo}
                           disabled={isFetchingVideo || isLoadingVideos}
                           size="default"
-                          className="px-4 sm:px-6 py-2 font-medium text-sm sm:text-base hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md w-full sm:w-auto"
+                          className="px-4 sm:px-6 py-2 font-medium text-base sm:text-lg hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md w-full sm:w-auto"
                         >
                           {isFetchingVideo ? (
                             <RefreshCw className="animate-spin mr-2 h-4 w-4" />
@@ -4106,13 +4099,13 @@ export default function SubmitContentPage({
                         return (
                           <Card
                             className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${isSelected
-                              ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                              : "border-2 border-[#7F39EC] rounded-lg "
+                              ? (isDark ? "border-2 border-white rounded-lg bg-white/10" : "border-2 border-neutral-900 rounded-lg bg-[#FAFAFA]")
+                              : (isDark ? "border-2 border-white/20 rounded-lg" : "border-2 border-neutral-200 rounded-lg bg-[#FAFAFA]")
                               }`}
                             onClick={() => handleSelectionChange(!isSelected)}
                           >
                             <div className="p-3 md:p-4">
-                              <CardTitle className="text-base">
+                              <CardTitle className="text-lg">
                                 Video Preview
                               </CardTitle>
                             </div>
@@ -4127,8 +4120,8 @@ export default function SubmitContentPage({
                                 className={cn(
                                   "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
                                   isDark
-                                    ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                    : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
+                                    ? "border-gray-500 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
+                                    : "border-gray-300 data-[state=checked]:border-neutral-900 data-[state=checked]:bg-neutral-900 data-[state=checked]:text-white",
                                 )}
                               />
                               <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
@@ -4149,7 +4142,7 @@ export default function SubmitContentPage({
                                   <div className="space-y-1">
                                     <h3
                                       className={cn(
-                                        "font-medium text-lg leading-5 text-center sm:text-left line-clamp-2",
+                                        "font-medium text-xl leading-5 text-center sm:text-left line-clamp-2",
                                         isDark ? "text-white" : "text-gray-900",
                                       )}
                                       title={videoPreview.snippet.title}
@@ -4162,10 +4155,10 @@ export default function SubmitContentPage({
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className={cn(
-                                          "inline-flex items-center text-sm hover:underline",
+                                          "inline-flex items-center text-base hover:underline",
                                           isDark
-                                            ? "text-purple-400"
-                                            : "text-purple-600",
+                                            ? "text-gray-300"
+                                            : "text-neutral-600",
                                         )}
                                         onClick={(e) => e.stopPropagation()}
                                       >
@@ -4273,21 +4266,7 @@ export default function SubmitContentPage({
                   </div>
                 </Alert>
               )}
-              {!instagramAccount && !isInstagramTokenExpired && (
-                <Alert
-                  variant="default"
-                  className="mb-4 border border-[#7F39EC] bg-[#D9C0FF26] text-center"
-                >
-                  <AlertDescription className="text-md">
-                    Connect your Instagram account to submit content.
-                  </AlertDescription>
-                  <Link href={settingsConnectHref}>
-                    <Button variant="link" className="mt-1 text-[#7F39EC]">
-                      Connect Instagram in Settings
-                    </Button>
-                  </Link>
-                </Alert>
-              )}
+              {!instagramAccount && !isInstagramTokenExpired && renderConnectPrompt("instagram")}
 
               {instagramAccount && !isInstagramTokenExpired && (
                 // <Tabs defaultValue="instagram-library" className="w-full">
@@ -4309,7 +4288,7 @@ export default function SubmitContentPage({
                 //   </TabsList>
                 <Tabs defaultValue="instagram-library" className="w-full">
                   <TabsList
-                    className={`flex w-full p-1.5 rounded-full shadow-sm ${isDark ? "bg-black" : "bg-[#E4E4E4]"
+                    className={`flex w-full p-1.5 rounded-full shadow-sm ${isDark ? "bg-black" : "bg-neutral-100 border border-neutral-200"
                       }`}
                   >
                     {["instagram-library", "instagram-link"].map(
@@ -4323,7 +4302,7 @@ export default function SubmitContentPage({
                             value={tab}
                             className={`
                          flex items-center justify-center px-4 sm:px-6 py-2 sm:py-3 text-md font-medium transition-all duration-200 
-                            data-[state=active]:bg-[#662EBD] data-[state=active]:text-white 
+                            data-[state=active]:bg-neutral-900 data-[state=active]:text-white 
                             data-[state=active]:shadow-sm ${isDark
                                 ? "text-gray-300 hover:text-white"
                                 : "text-gray-700 hover:text-gray-800 hover:bg-gray-200"
@@ -4362,11 +4341,11 @@ export default function SubmitContentPage({
                   </TabsList>
 
                   {/* Informational text for creators */}
-                  <div className="mt-6 p-3 bg-[#D9C0FF26] border border-[#7F39EC] rounded-lg">
+                  <div className="mt-6 p-3 bg-[#FAFAFA] border border-neutral-200 rounded-lg">
                     <p
                       className={cn(
                         "text-md text-center",
-                        isDark ? "text-white" : "text-[#7F39EC]",
+                        isDark ? "text-white" : "text-neutral-900",
                       )}
                     >
                       💡 <strong>Tip for creators:</strong> You can fetch reels
@@ -4393,7 +4372,7 @@ export default function SubmitContentPage({
                           </p>
                           <Button
                             variant="outline"
-                            className="mt-3 bg-[#4A00BE] text-white"
+                            className="mt-3 bg-neutral-900 text-white hover:bg-neutral-800"
                             onClick={() =>
                               fetchInstagramReels(
                                 instagramAccount.access_token,
@@ -4418,7 +4397,7 @@ export default function SubmitContentPage({
                             <Button
                               variant="outline"
                               size="default"
-                              className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-sm sm:text-base hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
+                              className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-base sm:text-lg hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
                               onClick={() =>
                                 setInstagramCurrentPage((prev) =>
                                   Math.max(1, prev - 1),
@@ -4430,7 +4409,7 @@ export default function SubmitContentPage({
                             >
                               ← Previous
                             </Button>
-                            <span className="text-sm sm:text-base font-medium text-foreground bg-background px-3 sm:px-4 py-2 rounded-md border shadow-sm">
+                            <span className="text-base sm:text-lg font-medium text-foreground bg-background px-3 sm:px-4 py-2 rounded-md border shadow-sm">
                               Page {instagramCurrentPage} of{" "}
                               {totalInstagramPages > 0
                                 ? totalInstagramPages
@@ -4439,7 +4418,7 @@ export default function SubmitContentPage({
                             <Button
                               variant="outline"
                               size="default"
-                              className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-sm sm:text-base hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
+                              className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-base sm:text-lg hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
                               onClick={() =>
                                 setInstagramCurrentPage((prev) =>
                                   Math.min(totalInstagramPages, prev + 1),
@@ -4463,17 +4442,17 @@ export default function SubmitContentPage({
                               className={cn(
                                 "mt-4 p-3 border rounded-lg",
                                 isDark
-                                  ? "bg-[#C9A7FF26] border-[#C9A7FF]"
-                                  : "bg-purple-50 border-purple-200",
+                                  ? "bg-white/5 border-white/10"
+                                  : "bg-[#FAFAFA] border-neutral-200",
                               )}
                             >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <CheckCheck className="h-4 w-4 text-purple-600" />
+                                  <CheckCheck className="h-4 w-4 text-neutral-600" />
                                   <span
                                     className={cn(
-                                      "text-sm font-medium",
-                                      isDark ? "text-white" : "text-purple-800",
+                                      "text-base font-medium",
+                                      isDark ? "text-white" : "text-neutral-900",
                                     )}
                                   >
                                     Multiple Submissions Enabled
@@ -4481,8 +4460,8 @@ export default function SubmitContentPage({
                                 </div>
                                 <div
                                   className={cn(
-                                    "text-sm font-semibold",
-                                    isDark ? "text-white" : "text-purple-800",
+                                    "text-base font-semibold",
+                                    isDark ? "text-white" : "text-neutral-900",
                                   )}
                                 >
                                   Selected:{" "}
@@ -4501,8 +4480,8 @@ export default function SubmitContentPage({
                               </div>
                               <p
                                 className={cn(
-                                  "text-xs mt-1",
-                                  isDark ? "text-gray-300" : "text-purple-600",
+                                  "text-sm mt-1",
+                                  isDark ? "text-gray-300" : "text-neutral-600",
                                 )}
                               >
                                 Click on videos below to select them. You can
@@ -4615,8 +4594,8 @@ export default function SubmitContentPage({
                                     ? "mb-4"
                                     : ""
                                   } ${isSelected
-                                    ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                                    : "border-2 border-[#7F39EC] rounded-lg "
+                                    ? (isDark ? "border-2 border-white rounded-lg bg-white/10" : "border-2 border-neutral-900 rounded-lg bg-[#FAFAFA]")
+                                    : (isDark ? "border-2 border-white/20 rounded-lg" : "border-2 border-neutral-200 rounded-lg bg-[#FAFAFA]")
                                   }`}
                                 onClick={() =>
                                   handleSelectionChange(!isSelected)
@@ -4633,8 +4612,8 @@ export default function SubmitContentPage({
                                     className={cn(
                                       "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
                                       isDark
-                                        ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                        : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
+                                        ? "border-gray-500 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
+                                        : "border-gray-300 data-[state=checked]:border-neutral-900 data-[state=checked]:bg-neutral-900 data-[state=checked]:text-white",
                                     )}
                                   />
                                   <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
@@ -4651,7 +4630,7 @@ export default function SubmitContentPage({
                                           className="rounded-lg object-cover aspect-square shadow-sm w-full max-w-[120px]"
                                         />
                                       ) : (
-                                        <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
+                                        <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-sm text-muted-foreground border">
                                           📷 No thumbnail
                                         </div>
                                       )}
@@ -4675,7 +4654,7 @@ export default function SubmitContentPage({
                                             href={reel.permalink}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="inline-flex items-center text-sm text-purple-600 hover:text-purple-800 hover:underline"
+                                            className="inline-flex items-center text-base text-neutral-700 hover:text-neutral-900 hover:underline"
                                             onClick={(e) => e.stopPropagation()}
                                           >
                                             <ExternalLink className="h-3 w-3 mr-1" />
@@ -4686,14 +4665,14 @@ export default function SubmitContentPage({
 
                                       {/* Date and Type */}
                                       <div className="space-y-3">
-                                        <p className="text-sm text-muted-foreground text-center sm:text-left">
+                                        <p className="text-base text-muted-foreground text-center sm:text-left">
                                           Posted:{" "}
                                           {dayjs(reel.timestamp).format(
                                             "MMM D, YYYY [at] h:mm A",
                                           )}
                                         </p>
                                         <div className="flex justify-center sm:justify-start">
-                                          <span className="inline-flex items-center px-2 py-1 rounded-full text-sm font-medium border border-gray-500">
+                                          <span className="inline-flex items-center px-2 py-1 rounded-full text-base font-medium border border-gray-500">
                                             🎬{" "}
                                             {reel.media_type === "REEL"
                                               ? "Instagram Reel"
@@ -4720,7 +4699,7 @@ export default function SubmitContentPage({
                           value={instagramLink}
                           onChange={(e) => setInstagramLink(e.target.value)}
                           className={cn(
-                            "flex-1 text-base font-medium border",
+                            "flex-1 text-lg font-medium border",
                             isDark
                               ? "bg-[#180438] border border-gray-600"
                               : "bg-white",
@@ -4730,7 +4709,7 @@ export default function SubmitContentPage({
                           onClick={handleFetchInstagramByLink}
                           disabled={isFetchingInstagramMedia || isLoadingReels}
                           size="default"
-                          className="px-4 sm:px-6 py-2 font-medium text-sm sm:text-base shadow-sm w-full sm:w-auto"
+                          className="px-4 sm:px-6 py-2 font-medium text-base sm:text-lg shadow-sm w-full sm:w-auto"
                         >
                           {isFetchingInstagramMedia ? (
                             <RefreshCw className="animate-spin mr-2 h-4 w-4" />
@@ -4764,13 +4743,13 @@ export default function SubmitContentPage({
                         return (
                           <div
                             className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${isSelected
-                              ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                              : "border-2 border-[#7F39EC] rounded-lg "
+                              ? (isDark ? "border-2 border-white rounded-lg bg-white/10" : "border-2 border-neutral-900 rounded-lg bg-[#FAFAFA]")
+                              : (isDark ? "border-2 border-white/20 rounded-lg" : "border-2 border-neutral-200 rounded-lg bg-[#FAFAFA]")
                               }`}
                             onClick={() => handleSelectionChange(!isSelected)}
                           >
                             <CardHeader>
-                              <CardTitle className="text-base">
+                              <CardTitle className="text-lg">
                                 Media Preview
                               </CardTitle>
                             </CardHeader>
@@ -4785,8 +4764,8 @@ export default function SubmitContentPage({
                                 className={cn(
                                   "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
                                   isDark
-                                    ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                    : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
+                                    ? "border-gray-500 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
+                                    : "border-gray-300 data-[state=checked]:border-neutral-900 data-[state=checked]:bg-neutral-900 data-[state=checked]:text-white",
                                 )}
                               />
                               <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
@@ -4804,7 +4783,7 @@ export default function SubmitContentPage({
                                       className="rounded-lg object-cover aspect-square shadow-sm w-full max-w-[120px]"
                                     />
                                   ) : (
-                                    <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
+                                    <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-sm text-muted-foreground border">
                                       📷 No thumbnail
                                     </div>
                                   )}
@@ -4829,7 +4808,7 @@ export default function SubmitContentPage({
                                         href={instagramMediaPreview.permalink}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="inline-flex items-center text-sm text-purple-600 hover:text-purple-800 hover:underline"
+                                        className="inline-flex items-center text-base text-neutral-700 hover:text-neutral-900 hover:underline"
                                         onClick={(e) => e.stopPropagation()}
                                       >
                                         <ExternalLink className="h-3 w-3 mr-1" />
@@ -4840,14 +4819,14 @@ export default function SubmitContentPage({
 
                                   {/* Date and Type */}
                                   <div className="space-y-2">
-                                    <p className="text-sm text-muted-foreground text-center sm:text-left">
+                                    <p className="text-base text-muted-foreground text-center sm:text-left">
                                       Posted:{" "}
                                       {dayjs(
                                         instagramMediaPreview.timestamp,
                                       ).format("MMM D, YYYY [at] h:mm A")}
                                     </p>
                                     <div className="flex justify-center sm:justify-start">
-                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-sm font-medium border border-gray-500">
+                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-base font-medium border border-gray-500">
                                         🎬{" "}
                                         {instagramMediaPreview.media_type ===
                                           "REEL"
@@ -4888,26 +4867,12 @@ export default function SubmitContentPage({
                   </div>
                 </Alert>
               )}
-              {!tiktokAccount && !isTiktokTokenExpired && (
-                <Alert
-                  variant="default"
-                  className="mb-4 border border-[#7F39EC] bg-[#D9C0FF26] text-center"
-                >
-                  <AlertDescription className="text-md">
-                    Connect your TikTok account to submit content.
-                  </AlertDescription>
-                  <Link href={settingsConnectHref}>
-                    <Button variant="link" className="mt-1 text-[#7F39EC]">
-                      Connect TikTok in Settings
-                    </Button>
-                  </Link>
-                </Alert>
-              )}
+              {!tiktokAccount && !isTiktokTokenExpired && renderConnectPrompt("tiktok")}
 
               {tiktokAccount && !isTiktokTokenExpired && (
                 <Tabs defaultValue="tiktok-library" className="w-full">
                   <TabsList
-                    className={`flex w-full p-1.5 rounded-full shadow-sm ${isDark ? "bg-black" : "bg-[#E4E4E4]"
+                    className={`flex w-full p-1.5 rounded-full shadow-sm ${isDark ? "bg-black" : "bg-neutral-100 border border-neutral-200"
                       }`}
                   >
                     {["tiktok-library", "tiktok-link"].map(
@@ -4921,7 +4886,7 @@ export default function SubmitContentPage({
                             value={tab}
                             className={`
                          flex items-center justify-center px-4 sm:px-6 py-2 sm:py-3 text-md font-medium transition-all duration-200 
-                            data-[state=active]:bg-[#662EBD] data-[state=active]:text-white 
+                            data-[state=active]:bg-neutral-900 data-[state=active]:text-white 
                             data-[state=active]:shadow-sm ${isDark
                                 ? "text-gray-300 hover:text-white"
                                 : "text-gray-700 hover:text-gray-800 hover:bg-gray-200"
@@ -4960,11 +4925,11 @@ export default function SubmitContentPage({
                   </TabsList>
 
                   {/* Informational text for creators */}
-                  <div className="mt-6 p-3 bg-[#D9C0FF26] border border-[#7F39EC] rounded-lg">
+                  <div className="mt-6 p-3 bg-[#FAFAFA] border border-neutral-200 rounded-lg">
                     <p
                       className={cn(
                         "text-md text-center",
-                        isDark ? "text-white" : "text-[#7F39EC]",
+                        isDark ? "text-white" : "text-neutral-900",
                       )}
                     >
                       💡 <strong>Tip for creators:</strong> You can fetch videos
@@ -4998,7 +4963,7 @@ export default function SubmitContentPage({
                           </p>
                           <Button
                             variant="outline"
-                            className="mt-3 bg-[#4A00BE] text-white"
+                            className="mt-3 bg-neutral-900 text-white hover:bg-neutral-800"
                             onClick={() => fetchTikTokVideos()}
                             disabled={isLoadingTiktokVideos}
                           >
@@ -5018,7 +4983,7 @@ export default function SubmitContentPage({
                             <Button
                               variant="outline"
                               size="default"
-                              className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-sm sm:text-base hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
+                              className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-base sm:text-lg hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
                               onClick={() =>
                                 setTiktokCurrentPage((prev) =>
                                   Math.max(1, prev - 1),
@@ -5030,14 +4995,14 @@ export default function SubmitContentPage({
                             >
                               ← Previous
                             </Button>
-                            <span className="text-sm sm:text-base font-medium text-foreground bg-background px-3 sm:px-4 py-2 rounded-md border shadow-sm">
+                            <span className="text-base sm:text-lg font-medium text-foreground bg-background px-3 sm:px-4 py-2 rounded-md border shadow-sm">
                               Page {tiktokCurrentPage} of{" "}
                               {totalTiktokPages > 0 ? totalTiktokPages : 1}
                             </span>
                             <Button
                               variant="outline"
                               size="default"
-                              className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-sm sm:text-base hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
+                              className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-base sm:text-lg hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
                               onClick={() =>
                                 setTiktokCurrentPage((prev) =>
                                   Math.min(totalTiktokPages, prev + 1),
@@ -5061,17 +5026,17 @@ export default function SubmitContentPage({
                               className={cn(
                                 "mt-4 p-3 border rounded-lg",
                                 isDark
-                                  ? "bg-[#C9A7FF26] border-[#C9A7FF]"
-                                  : "bg-purple-50 border-purple-200",
+                                  ? "bg-white/5 border-white/10"
+                                  : "bg-[#FAFAFA] border-neutral-200",
                               )}
                             >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <CheckCheck className="h-4 w-4 text-purple-600" />
+                                  <CheckCheck className="h-4 w-4 text-neutral-600" />
                                   <span
                                     className={cn(
-                                      "text-sm font-medium",
-                                      isDark ? "text-white" : "text-purple-800",
+                                      "text-base font-medium",
+                                      isDark ? "text-white" : "text-neutral-900",
                                     )}
                                   >
                                     Multiple Submissions Enabled
@@ -5079,8 +5044,8 @@ export default function SubmitContentPage({
                                 </div>
                                 <div
                                   className={cn(
-                                    "text-sm font-semibold",
-                                    isDark ? "text-white" : "text-purple-800",
+                                    "text-base font-semibold",
+                                    isDark ? "text-white" : "text-neutral-900",
                                   )}
                                 >
                                   Selected:{" "}
@@ -5095,8 +5060,8 @@ export default function SubmitContentPage({
                               </div>
                               <p
                                 className={cn(
-                                  "text-xs mt-1",
-                                  isDark ? "text-gray-300" : "text-purple-600",
+                                  "text-sm mt-1",
+                                  isDark ? "text-gray-300" : "text-neutral-600",
                                 )}
                               >
                                 Click on videos below to select them. You can
@@ -5194,8 +5159,8 @@ export default function SubmitContentPage({
                                     ? "mb-4"
                                     : ""
                                   } ${isSelected
-                                    ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                                    : "border-2 border-[#7F39EC] rounded-lg "
+                                    ? (isDark ? "border-2 border-white rounded-lg bg-white/10" : "border-2 border-neutral-900 rounded-lg bg-[#FAFAFA]")
+                                    : (isDark ? "border-2 border-white/20 rounded-lg" : "border-2 border-neutral-200 rounded-lg bg-[#FAFAFA]")
                                   }`}
                                 onClick={() =>
                                   handleTiktokSelectionChange(!isSelected)
@@ -5214,8 +5179,8 @@ export default function SubmitContentPage({
                                     className={cn(
                                       "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
                                       isDark
-                                        ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                        : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
+                                        ? "border-gray-500 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
+                                        : "border-gray-300 data-[state=checked]:border-neutral-900 data-[state=checked]:bg-neutral-900 data-[state=checked]:text-white",
                                     )}
                                   />
                                   <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
@@ -5230,7 +5195,7 @@ export default function SubmitContentPage({
                                           className="rounded-lg object-cover aspect-square shadow-sm w-full max-w-[120px]"
                                         />
                                       ) : (
-                                        <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
+                                        <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-sm text-muted-foreground border">
                                           🎬 No thumbnail
                                         </div>
                                       )}
@@ -5253,7 +5218,7 @@ export default function SubmitContentPage({
                                             href={video.share_url}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="inline-flex items-center text-sm text-purple-600 hover:text-purple-800 hover:underline"
+                                            className="inline-flex items-center text-base text-neutral-700 hover:text-neutral-900 hover:underline"
                                             onClick={(e) => e.stopPropagation()}
                                           >
                                             <ExternalLink className="h-3 w-3 mr-1" />
@@ -5265,17 +5230,17 @@ export default function SubmitContentPage({
                                       {/* Date, Type, and Metrics */}
                                       <div className="space-y-3">
                                         {publishedDate && (
-                                          <p className="text-sm text-muted-foreground text-center sm:text-left">
+                                          <p className="text-base text-muted-foreground text-center sm:text-left">
                                             Posted: {publishedDate}
                                           </p>
                                         )}
                                         <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
-                                          <span className="inline-flex items-center px-2 py-1 rounded-full text-sm font-medium border border-gray-500">
+                                          <span className="inline-flex items-center px-2 py-1 rounded-full text-base font-medium border border-gray-500">
                                             🎬 TikTok Video
                                           </span>
                                           <div
                                             className={cn(
-                                              "flex items-center gap-3 text-xs",
+                                              "flex items-center gap-3 text-sm",
                                               isDark
                                                 ? "text-gray-300"
                                                 : "text-gray-600",
@@ -5327,8 +5292,8 @@ export default function SubmitContentPage({
                                 className={cn(
                                   "px-6 py-2 font-medium border-2",
                                   isDark
-                                    ? "border-[#C9A7FF] text-[#C9A7FF] hover:bg-[#C9A7FF] hover:text-black"
-                                    : "border-[#7F39EC] text-[#7F39EC] hover:bg-[#7F39EC] hover:text-white",
+                                    ? "border-white/30 text-white hover:bg-white hover:text-black"
+                                    : "border-neutral-300 text-neutral-900 hover:bg-neutral-900 hover:text-white",
                                 )}
                               >
                                 {isLoadingMoreTiktokVideos ? (
@@ -5355,7 +5320,7 @@ export default function SubmitContentPage({
                           value={tiktokVideoLink}
                           onChange={(e) => setTiktokVideoLink(e.target.value)}
                           className={cn(
-                            "flex-1 text-base font-medium border",
+                            "flex-1 text-lg font-medium border",
                             isDark
                               ? "bg-[#180438] border border-gray-600"
                               : "bg-white",
@@ -5510,7 +5475,7 @@ export default function SubmitContentPage({
                             isFetchingTiktokVideo || !tiktokVideoLink.trim()
                           }
                           size="default"
-                          className="px-4 sm:px-6 py-2 font-medium text-sm sm:text-base shadow-sm w-full sm:w-auto"
+                          className="px-4 sm:px-6 py-2 font-medium text-base sm:text-lg shadow-sm w-full sm:w-auto"
                         >
                           {isFetchingTiktokVideo ? (
                             <RefreshCw className="animate-spin mr-2 h-4 w-4" />
@@ -5540,13 +5505,13 @@ export default function SubmitContentPage({
                         return (
                           <div
                             className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${isSelected
-                              ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                              : "border-2 border-[#7F39EC] rounded-lg "
+                              ? (isDark ? "border-2 border-white rounded-lg bg-white/10" : "border-2 border-neutral-900 rounded-lg bg-[#FAFAFA]")
+                              : (isDark ? "border-2 border-white/20 rounded-lg" : "border-2 border-neutral-200 rounded-lg bg-[#FAFAFA]")
                               }`}
                             onClick={() => handleSelectionChange(!isSelected)}
                           >
                             <CardHeader>
-                              <CardTitle className="text-base">
+                              <CardTitle className="text-lg">
                                 Video Preview
                               </CardTitle>
                             </CardHeader>
@@ -5561,8 +5526,8 @@ export default function SubmitContentPage({
                                 className={cn(
                                   "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
                                   isDark
-                                    ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                    : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
+                                    ? "border-gray-500 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
+                                    : "border-gray-300 data-[state=checked]:border-neutral-900 data-[state=checked]:bg-neutral-900 data-[state=checked]:text-white",
                                 )}
                               />
                               <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
@@ -5580,7 +5545,7 @@ export default function SubmitContentPage({
                                       className="rounded-lg object-cover aspect-square shadow-sm w-full max-w-[120px]"
                                     />
                                   ) : (
-                                    <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
+                                    <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-sm text-muted-foreground border">
                                       🎬 No thumbnail
                                     </div>
                                   )}
@@ -5609,7 +5574,7 @@ export default function SubmitContentPage({
                                         }
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="inline-flex items-center text-sm text-purple-600 hover:text-purple-800 hover:underline"
+                                        className="inline-flex items-center text-base text-neutral-700 hover:text-neutral-900 hover:underline"
                                         onClick={(e) => e.stopPropagation()}
                                       >
                                         <ExternalLink className="h-3 w-3 mr-1" />
@@ -5621,7 +5586,7 @@ export default function SubmitContentPage({
                                   {/* Metrics */}
                                   <div className="space-y-2">
                                     {tiktokVideoPreview.create_time && (
-                                      <p className="text-sm text-muted-foreground text-center sm:text-left">
+                                      <p className="text-base text-muted-foreground text-center sm:text-left">
                                         Posted:{" "}
                                         {dayjs(
                                           new Date(
@@ -5632,12 +5597,12 @@ export default function SubmitContentPage({
                                       </p>
                                     )}
                                     <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
-                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-sm font-medium border border-gray-500">
+                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-base font-medium border border-gray-500">
                                         🎬 TikTok Video
                                       </span>
                                       <div
                                         className={cn(
-                                          "flex items-center gap-3 text-xs",
+                                          "flex items-center gap-3 text-sm",
                                           isDark
                                             ? "text-gray-300"
                                             : "text-gray-600",
@@ -5693,17 +5658,17 @@ export default function SubmitContentPage({
               <div className="mt-8">
                 <Card
                   className={cn(
-                    "border",
+                    "rounded-2xl border shadow-none",
                     isDark
-                      ? "bg-[#C9A7FF26] border-[#C9A7FF]"
-                      : "border-purple-200 bg-purple-50/50",
+                      ? "bg-white/5 border-white/10"
+                      : "border-neutral-200 bg-[#FAFAFA]",
                   )}
                 >
                   <CardHeader>
                     <CardTitle
                       className={cn(
-                        "flex items-center gap-2",
-                        isDark ? "text-white" : "text-purple-800",
+                        "flex items-center gap-2 text-lg font-semibold",
+                        isDark ? "text-white" : "text-neutral-900",
                       )}
                     >
                       <CheckCheck className="h-5 w-5" />
@@ -5711,8 +5676,8 @@ export default function SubmitContentPage({
                     </CardTitle>
                     <CardDescription
                       className={cn(
-                        "text-purple-700",
-                        isDark ? "text-gray-300" : "text-purple-700",
+                        "text-base",
+                        isDark ? "text-gray-300" : "text-neutral-500",
                       )}
                     >
                       You can submit up to{" "}
@@ -5726,15 +5691,17 @@ export default function SubmitContentPage({
                       {/* Submission Counter */}
                       <div
                         className={cn(
-                          "flex items-center justify-between p-3 rounded-lg",
-                          isDark ? "bg-[#C9A7FF26]" : "bg-purple-100",
+                          "flex flex-col gap-3 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between",
+                          isDark
+                            ? "border-white/10 bg-white/5"
+                            : "border-neutral-200 bg-white",
                         )}
                       >
                         <div>
                           <span
                             className={cn(
-                              "text-sm font-medium",
-                              isDark ? "text-white" : "text-purple-800",
+                              "text-base font-semibold",
+                              isDark ? "text-white" : "text-neutral-900",
                             )}
                           >
                             Selected:{" "}
@@ -5752,17 +5719,16 @@ export default function SubmitContentPage({
                             )}{" "}
                             remaining submissions
                           </span>
-                          {submissionProgress.submitted > 0 && (
-                            <div
-                              className={cn(
-                                "text-xs",
-                                isDark ? "text-gray-300" : "text-purple-600",
-                              )}
-                            >
-                              Already submitted: {submissionProgress.submitted}{" "}
-                              / {submissionProgress.maxAllowed} videos
-                            </div>
-                          )}
+                          <div
+                            className={cn(
+                              "text-sm",
+                              isDark ? "text-gray-400" : "text-neutral-500",
+                            )}
+                          >
+                            Already submitted: {submissionProgress.submitted} /{" "}
+                            {submissionProgress.maxAllowed || maxSubmissionsAllowed}{" "}
+                            videos
+                          </div>
                         </div>
                         <div className="flex gap-2">
                           <Button
@@ -5781,9 +5747,10 @@ export default function SubmitContentPage({
                               (contest.max_submissions_per_creator || 1)
                             }
                             className={cn(
+                              "rounded-lg",
                               isDark
-                                ? "bg-[#7F39EC] border-[#7F39EC] text-white"
-                                : "border text-purple-700 border-purple-300 hover:bg-purple-100",
+                                ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                                : "border-neutral-300 bg-white text-neutral-900 hover:bg-neutral-100",
                             )}
                           >
                             <Plus className="h-4 w-4 mr-1" />
@@ -5799,9 +5766,10 @@ export default function SubmitContentPage({
                                 setSubmissionLinks(newLinks);
                               }}
                               className={cn(
+                                "rounded-lg",
                                 isDark
-                                  ? "bg-[#7F39EC] border-[#7F39EC] text-white"
-                                  : "border text-purple-700 border-purple-300 hover:bg-purple-100",
+                                  ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                                  : "border-neutral-300 bg-white text-neutral-900 hover:bg-neutral-100",
                               )}
                             >
                               <Minus className="h-4 w-4 mr-1" />
@@ -5815,13 +5783,20 @@ export default function SubmitContentPage({
                       <div className="space-y-3">
                         {submissionLinks.map((link, index) => (
                           <div key={index} className="flex items-center gap-3">
-                            <div className="flex-shrink-0 w-8 h-8 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-sm font-medium">
+                            <div
+                              className={cn(
+                                "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-base font-medium",
+                                isDark
+                                  ? "bg-white/10 text-white"
+                                  : "bg-neutral-200 text-neutral-700",
+                              )}
+                            >
                               {index + 1}
                             </div>
                             <Input
                               type="text"
                               className={cn(
-                                "flex-1",
+                                "h-11 flex-1 rounded-lg",
                                 isDark
                                   ? "bg-[#180438] border border-gray-700 text-white"
                                   : "bg-white text-black",
@@ -5859,7 +5834,14 @@ export default function SubmitContentPage({
                                 !link.trim() ||
                                 linkFetchStatus[index] === "fetching"
                               }
-                              className="bg-purple-600 hover:bg-purple-700 text-white"
+                              className={cn(
+                                "h-11 min-w-[4.5rem] rounded-lg",
+                                fetchedLinkIndices.has(index)
+                                  ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
+                                  : isDark
+                                    ? "bg-white text-black hover:bg-gray-200"
+                                    : "bg-neutral-900 text-white hover:bg-neutral-800",
+                              )}
                             >
                               {linkFetchStatus[index] === "fetching" ? (
                                 <RefreshCw className="h-4 w-4 animate-spin" />
@@ -5874,6 +5856,7 @@ export default function SubmitContentPage({
                               variant="outline"
                               onClick={() => handleIndividualRemove(index)}
                               className={cn(
+                                "h-11 rounded-lg",
                                 isDark
                                   ? "text-red-400 border-red-500 hover:bg-red-900"
                                   : "text-red-600 border-red-300 hover:bg-red-50",
@@ -5894,7 +5877,7 @@ export default function SubmitContentPage({
                               isFetchingVideo ||
                               submissionLinks.every((link) => !link.trim())
                             }
-                            className="bg-purple-600 hover:bg-purple-700 text-white px-8"
+                            className="bg-neutral-900 hover:bg-neutral-800 text-white px-8"
                           >
                             {isFetchingVideo ? (
                               <>
@@ -5926,8 +5909,8 @@ export default function SubmitContentPage({
                           <div className="mt-6">
                             <h4
                               className={cn(
-                                "text-lg font-semibold",
-                                isDark ? "text-white" : "text-purple-800",
+                                "text-xl font-semibold",
+                                isDark ? "text-white" : "text-neutral-900",
                               )}
                             >
                               Fetched Videos - Select the ones you want to submit:
@@ -5958,11 +5941,11 @@ export default function SubmitContentPage({
                                           : "border-2 border-red-300 bg-red-50 opacity-75"
                                         : selectedVideoIndices.includes(index)
                                           ? isDark
-                                            ? "border-2 border-purple-400 bg-[#2B184A]"
-                                            : "border-2 border-purple-500 bg-purple-50"
+                                            ? "border-2 border-white/60 bg-white/10"
+                                            : "border-2 border-neutral-900 bg-[#FAFAFA]"
                                           : isDark
-                                            ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
-                                            : "border border-gray-200 hover:border-purple-300 bg-white",
+                                            ? "border border-white/10 hover:border-white/40 bg-white/5"
+                                            : "border border-neutral-200 hover:border-neutral-400 bg-[#FAFAFA]",
                                     )}
                                     onClick={() =>
                                       handleVideoSelection(
@@ -5992,8 +5975,8 @@ export default function SubmitContentPage({
                                             className={cn(
                                               "h-5 w-5 border-2",
                                               isDark
-                                                ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                                : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
+                                                ? "border-gray-500 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
+                                                : "border-gray-300 data-[state=checked]:border-neutral-900 data-[state=checked]:bg-neutral-900 data-[state=checked]:text-white",
                                             )}
                                           />
                                         </div>
@@ -6012,14 +5995,14 @@ export default function SubmitContentPage({
                                           <div className="flex flex-col items-start gap-2">
                                             <div className="flex-1 min-w-0 w-full">
                                               <div className="flex flex-col sm:flex-row items-start gap-2 mb-2">
-                                                <h5 className="font-medium text-sm line-clamp-2 flex-1 min-w-0">
+                                                <h5 className="font-medium text-base line-clamp-2 flex-1 min-w-0">
                                                   {video.snippet.title}
                                                 </h5>
                                                 {isVideoAlreadySubmitted(
                                                   video.id.videoId,
                                                   `https://www.youtube.com/watch?v=${video.id.videoId}`,
                                                 ) && (
-                                                    <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
+                                                    <div className="flex items-center gap-1 text-sm text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
                                                       <AlertTriangle className="h-3 w-3" />
                                                       Already Submitted
                                                     </div>
@@ -6027,7 +6010,7 @@ export default function SubmitContentPage({
                                               </div>
                                               <div
                                                 className={cn(
-                                                  "flex flex-wrap items-center gap-2 sm:gap-4 text-xs",
+                                                  "flex flex-wrap items-center gap-2 sm:gap-4 text-sm",
                                                   isDark
                                                     ? "text-gray-300"
                                                     : "text-gray-600",
@@ -6107,11 +6090,11 @@ export default function SubmitContentPage({
                                             : "border-2 border-red-300 bg-red-50 opacity-75"
                                           : selectedReelIndices.includes(index)
                                             ? isDark
-                                              ? "border-2 border-purple-400 bg-[#2B184A]"
-                                              : "border-2 border-purple-500 bg-purple-50"
+                                              ? "border-2 border-white/60 bg-white/10"
+                                              : "border-2 border-neutral-900 bg-[#FAFAFA]"
                                             : isDark
-                                              ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
-                                              : "border border-gray-200 hover:border-purple-300 bg-white",
+                                              ? "border border-white/10 hover:border-white/40 bg-white/5"
+                                              : "border border-neutral-200 hover:border-neutral-400 bg-[#FAFAFA]",
                                       )}
                                       onClick={() =>
                                         handleVideoSelection(
@@ -6142,7 +6125,7 @@ export default function SubmitContentPage({
                                                 <div className="flex items-start gap-2 mb-2">
                                                   <h5
                                                     className={cn(
-                                                      "font-medium text-sm line-clamp-2 flex-1",
+                                                      "font-medium text-base line-clamp-2 flex-1",
                                                       isDark
                                                         ? "text-white"
                                                         : "text-gray-900",
@@ -6157,7 +6140,7 @@ export default function SubmitContentPage({
                                                   ) && (
                                                       <div
                                                         className={cn(
-                                                          "flex items-center gap-1 text-xs px-2 py-1 rounded-full flex-shrink-0",
+                                                          "flex items-center gap-1 text-sm px-2 py-1 rounded-full flex-shrink-0",
                                                           isDark
                                                             ? "text-red-300 bg-red-900/60 border border-red-500/40"
                                                             : "text-red-600 bg-red-100",
@@ -6170,7 +6153,7 @@ export default function SubmitContentPage({
                                                 </div>
                                                 <div
                                                   className={cn(
-                                                    "flex items-center gap-4 text-xs",
+                                                    "flex items-center gap-4 text-sm",
                                                     isDark
                                                       ? "text-gray-300"
                                                       : "text-gray-600",
@@ -6208,8 +6191,8 @@ export default function SubmitContentPage({
                                                   className={cn(
                                                     "h-5 w-5 border-2",
                                                     isDark
-                                                      ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                                      : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
+                                                      ? "border-gray-500 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
+                                                      : "border-gray-300 data-[state=checked]:border-neutral-900 data-[state=checked]:bg-neutral-900 data-[state=checked]:text-white",
                                                   )}
                                                 />
                                               </div>
@@ -6240,11 +6223,11 @@ export default function SubmitContentPage({
                                             index,
                                           )
                                             ? isDark
-                                              ? "border-2 border-purple-400 bg-[#2B184A]"
-                                              : "border-2 border-purple-500 bg-purple-50"
+                                              ? "border-2 border-white/60 bg-white/10"
+                                              : "border-2 border-neutral-900 bg-[#FAFAFA]"
                                             : isDark
-                                              ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
-                                              : "border border-gray-200 hover:border-purple-300 bg-white",
+                                              ? "border border-white/10 hover:border-white/40 bg-white/5"
+                                              : "border border-neutral-200 hover:border-neutral-400 bg-[#FAFAFA]",
                                       )}
                                       onClick={() =>
                                         handleTiktokVideoSelection(
@@ -6269,7 +6252,7 @@ export default function SubmitContentPage({
                                                 className="rounded-lg object-cover aspect-square"
                                               />
                                             ) : (
-                                              <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
+                                              <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-sm text-muted-foreground border">
                                                 🎬 No thumbnail
                                               </div>
                                             )}
@@ -6280,7 +6263,7 @@ export default function SubmitContentPage({
                                                 <div className="flex items-start gap-2 mb-2">
                                                   <h5
                                                     className={cn(
-                                                      "font-medium text-sm line-clamp-2 flex-1",
+                                                      "font-medium text-base line-clamp-2 flex-1",
                                                       isDark
                                                         ? "text-white"
                                                         : "text-gray-900",
@@ -6296,7 +6279,7 @@ export default function SubmitContentPage({
                                                   ) && (
                                                       <div
                                                         className={cn(
-                                                          "flex items-center gap-1 text-xs px-2 py-1 rounded-full flex-shrink-0",
+                                                          "flex items-center gap-1 text-sm px-2 py-1 rounded-full flex-shrink-0",
                                                           isDark
                                                             ? "text-red-300 bg-red-900/60 border border-red-500/40"
                                                             : "text-red-600 bg-red-100",
@@ -6309,7 +6292,7 @@ export default function SubmitContentPage({
                                                 </div>
                                                 <div
                                                   className={cn(
-                                                    "flex flex-wrap items-center gap-4 text-xs",
+                                                    "flex flex-wrap items-center gap-4 text-sm",
                                                     isDark
                                                       ? "text-gray-300"
                                                       : "text-gray-600",
@@ -6375,8 +6358,8 @@ export default function SubmitContentPage({
                                                   className={cn(
                                                     "h-5 w-5 border-2",
                                                     isDark
-                                                      ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                                      : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
+                                                      ? "border-gray-500 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
+                                                      : "border-gray-300 data-[state=checked]:border-neutral-900 data-[state=checked]:bg-neutral-900 data-[state=checked]:text-white",
                                                   )}
                                                 />
                                               </div>
@@ -6391,37 +6374,184 @@ export default function SubmitContentPage({
                           </div>
                         )}
 
-                      {/* Earnings Cap Warning */}
-                      {earningsCapCents != null && earningsCapCents > 0 && (
-                        <Alert
-                          className={cn(
-                            isDark
-                              ? "border-[#C9A7FF] bg-[#C9A7FF26]"
-                              : "border-amber-200 bg-amber-50",
-                          )}
-                        >
-                          <AlertTriangle
-                            className={cn(
-                              isDark ? "text-purple-400" : "text-amber-600",
-                            )}
-                          />
-                          <AlertDescription
-                            className={cn(
-                              isDark ? "text-white" : "text-amber-800",
-                            )}
-                          >
-                            <strong>Earnings Cap:</strong> You can earn up to $
-                            {(earningsCapCents / 100).toFixed(2)}{" "}
-                            total from this contest.
-                          </AlertDescription>
-                        </Alert>
-                      )}
                     </div>
                   </CardContent>
                 </Card>
               </div>
             )}
         </CardContent>
+        </div>
+
+        <aside className="min-w-0 lg:sticky lg:top-6">
+          <div
+            className={cn(
+              "space-y-5 rounded-2xl border p-4 shadow-sm md:p-5",
+              surfaceClass,
+            )}
+          >
+            <div
+              className={cn(
+                "flex items-center gap-3 rounded-xl border p-2",
+                isDark
+                  ? "border-white/10 bg-white/5"
+                  : "border-neutral-200 bg-[#FAFAFA]",
+              )}
+            >
+              <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-neutral-200">
+                {contest?.thumbnail_url && (
+                  <Image
+                    src={contest.thumbnail_url}
+                    alt={`${contest.title ?? "Campaign"} thumbnail`}
+                    fill
+                    sizes="80px"
+                    className="object-cover"
+                  />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p
+                  className={cn(
+                    "line-clamp-2 text-base font-semibold leading-5",
+                    isDark ? "text-white" : "text-neutral-900",
+                  )}
+                >
+                  {contest?.title}
+                </p>
+                <p
+                  className={cn(
+                    "mt-0.5 truncate text-sm",
+                    isDark ? "text-gray-400" : "text-neutral-500",
+                  )}
+                >
+                  {contestTypeLabel} · {platformDisplayLabel(contestPlatform)}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "Selected", value: selectedSubmissionCount },
+                { label: "Remaining", value: remainingSubmissionSlots },
+                { label: "Submitted", value: submissionProgress.submitted },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className={cn(
+                    "rounded-xl border p-3",
+                    isDark
+                      ? "border-white/10 bg-white/5"
+                      : "border-neutral-200 bg-[#FAFAFA]",
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-sm",
+                      isDark ? "text-gray-400" : "text-neutral-500",
+                    )}
+                  >
+                    {stat.label}
+                  </p>
+                  <p
+                    className={cn(
+                      "mt-1 text-3xl font-semibold leading-none",
+                      isDark ? "text-white" : "text-neutral-900",
+                    )}
+                  >
+                    {stat.value}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div>
+              <h3
+                className={cn(
+                  "text-xl font-semibold",
+                  isDark ? "text-white" : "text-neutral-900",
+                )}
+              >
+                Content Submission
+              </h3>
+              <p
+                className={cn(
+                  "mt-1 text-base",
+                  isDark ? "text-gray-400" : "text-neutral-500",
+                )}
+              >
+                Submit your {platformContentDescription(contestPlatform)} for
+                this contest.
+              </p>
+              <ul
+                className={cn(
+                  "mt-4 list-disc space-y-2 border-t pl-5 pt-4 text-base marker:text-current",
+                  isDark
+                    ? "border-white/10 text-gray-300"
+                    : "border-neutral-200 text-neutral-600",
+                )}
+              >
+                <li>Published in the last {SUBMISSION_WINDOW_UNIT_DISPLAY}</li>
+                <li>Your own content, from your connected account</li>
+                {/* <li>Each post once per campaign</li> */}
+              </ul>
+            </div>
+
+            {earningsCapCents != null && earningsCapCents > 0 && (
+              <div
+                className={cn(
+                  "flex items-start gap-2 rounded-xl border p-3 text-base",
+                  isDark
+                    ? "border-amber-400/40 bg-amber-400/10 text-amber-100"
+                    : "border-amber-200 bg-amber-50 text-amber-800",
+                )}
+              >
+                <AlertTriangle
+                  className={cn(
+                    "mt-0.5 h-4 w-4 shrink-0",
+                    isDark ? "text-amber-300" : "text-amber-600",
+                  )}
+                />
+                <p>
+                  <strong>Earnings Cap:</strong> You can earn up to $
+                  {(earningsCapCents / 100).toFixed(2)} total from this contest.
+                </p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.back()}
+                className={cn(
+                  "h-11 rounded-full bg-transparent",
+                  isDark
+                    ? "border-red-400/60 text-red-300 hover:bg-red-500/10 hover:text-red-200"
+                    : "border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700",
+                )}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSubmit}
+                disabled={isSubmitDisabled}
+                className={cn(
+                  "h-11 rounded-full",
+                  isDark
+                    ? "bg-white text-black hover:bg-gray-200"
+                    : "bg-neutral-900 text-white hover:bg-neutral-800",
+                  isRequirementsBlocked &&
+                    "bg-neutral-900 text-white opacity-60 hover:bg-neutral-900",
+                )}
+              >
+                {isLoading ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Submit Content
+              </Button>
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   );
