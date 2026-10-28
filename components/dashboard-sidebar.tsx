@@ -346,9 +346,9 @@ export function DashboardSidebar({
         },
         {
           name: "Help",
-          href: "/dashboard/getting-started",
+          href: "/dashboard/help",
           icon: HelpCircle,
-          description: "How it works",
+          description: "Support & how it works",
         },
       ],
     },
@@ -612,11 +612,7 @@ export function DashboardSidebar({
       ? "/dashboard/earnings"
       : "/dashboard/billing?tab=subscription";
   const helpHref =
-    userRole === "admin"
-      ? "/dashboard/admin/support"
-      : userRole === "creator"
-        ? "/dashboard/help"
-        : "/dashboard/getting-started";
+    userRole === "admin" ? "/dashboard/admin/support" : "/dashboard/help";
 
   return (
     <div

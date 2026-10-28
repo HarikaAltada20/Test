@@ -136,7 +136,7 @@ export function ContestCreationModal({
       disabled={isNavigating}
       className={cn(
         "group flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-btn-base)] disabled:opacity-60",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a1a1a]/30 disabled:opacity-60 dark:focus-visible:ring-white/40",
         isDark
           ? "border-white/10 bg-[#0e0e0e] hover:border-white/20 hover:bg-white/5"
           : "border-[#ececef] bg-white hover:border-[#d5d5db] hover:bg-[#f6f6f7]",
@@ -182,7 +182,7 @@ export function ContestCreationModal({
 
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-[var(--accent-btn-base)]" />
+              <Loader2 className={cn("h-6 w-6 animate-spin", isDark ? "text-white" : "text-[#1a1a1a]")} />
             </div>
           ) : (
             <div className="space-y-4">
@@ -227,7 +227,12 @@ export function ContestCreationModal({
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Button
                       onClick={() => handleContinueDraft(recentDraft.id)}
-                      className="flex-1 rounded-full goc-btn-primary"
+                      className={cn(
+                        "flex-1 rounded-full",
+                        isDark
+                          ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+                          : "bg-[#1a1a1a] text-white hover:bg-black",
+                      )}
                       disabled={isNavigating}
                     >
                       {navigatingTo === "draft" ? (

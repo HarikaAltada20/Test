@@ -220,10 +220,10 @@ export default function GettingStartedModal({
             <button
               onClick={handleNext}
               className={cn(
-                "w-full text-lg py-3 sm:py-4 rounded-full font-semibold",
+                "w-full rounded-full py-3 text-lg font-semibold sm:py-4",
                 isDark
-                  ? "bg-[#5F2BB1]"
-                  : "bg-[#D9C0FF61] text-purple-500 hover:from-purple-500 hover:to-purple-700",
+                  ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+                  : "bg-[#1a1a1a] text-white hover:bg-black",
               )}
             >
               Let’s Start
@@ -579,10 +579,10 @@ export default function GettingStartedModal({
                 >
                   <Button
                     className={cn(
-                      "text-md text-white w-full",
+                      "w-full rounded-full text-md",
                       isDark
-                        ? "bg-[#5F2BB1] hover:bg-[#4A1F8A]"
-                        : "bg-purple-600 hover:bg-purple-700",
+                        ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+                        : "bg-[#1a1a1a] text-white hover:bg-black",
                     )}
                   >
                     {isNavigating ? (
@@ -774,10 +774,10 @@ export default function GettingStartedModal({
                 >
                   <Button
                     className={cn(
-                      "text-md text-white w-full",
+                      "w-full rounded-full text-md",
                       isDark
-                        ? "bg-[#5F2BB1] hover:bg-[#4A1F8A]"
-                        : "bg-purple-600 hover:bg-purple-700",
+                        ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+                        : "bg-[#1a1a1a] text-white hover:bg-black",
                     )}
                   >
                     {isNavigating ? (
@@ -959,10 +959,10 @@ export default function GettingStartedModal({
                 >
                   <Button
                     className={cn(
-                      "text-md text-white w-full",
+                      "w-full rounded-full text-md",
                       isDark
-                        ? "bg-[#5F2BB1] hover:bg-[#4A1F8A]"
-                        : "bg-purple-600 hover:bg-purple-700",
+                        ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+                        : "bg-[#1a1a1a] text-white hover:bg-black",
                     )}
                   >
                     {isNavigating ? (
@@ -1147,10 +1147,10 @@ export default function GettingStartedModal({
                 >
                   <Button
                     className={cn(
-                      "text-md text-white w-full",
+                      "w-full rounded-full text-md",
                       isDark
-                        ? "bg-[#5F2BB1] hover:bg-[#4A1F8A]"
-                        : "bg-purple-600 hover:bg-purple-700",
+                        ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+                        : "bg-[#1a1a1a] text-white hover:bg-black",
                     )}
                   >
                     {isNavigating ? (
@@ -1258,10 +1258,10 @@ export default function GettingStartedModal({
             <Link href="/dashboard/contests/create" onClick={handleNavigation}>
               <Button
                 className={cn(
-                  "w-full py-3 px-8 text-lg flex items-center justify-center gap-2",
+                  "flex w-full items-center justify-center gap-2 rounded-full px-8 py-3 text-lg",
                   isDark
-                    ? "bg-[#5F2BB1] hover:bg-[#4A1F8A] text-white"
-                    : "bg-purple-600 hover:bg-purple-700 text-white",
+                    ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+                    : "bg-[#1a1a1a] text-white hover:bg-black",
                 )}
               >
                 {isNavigating ? (

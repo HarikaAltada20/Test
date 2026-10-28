@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { getSessionUser } from "@/utils/supabase/auth-server";
 import HelpClient from "./client";
+import BrandHelpClient from "./BrandHelpClient";
 
 export const metadata: Metadata = {
   title: "Help - Game Of Creators",
@@ -17,7 +18,6 @@ export default async function HelpPage() {
     redirect("/auth/signin");
   }
 
-  // The Help page is the creator experience; brands keep the getting-started guide.
   const { data: advertiserProfile } = await supabase
     .from("advertiser_profiles")
     .select("id")
@@ -25,7 +25,7 @@ export default async function HelpPage() {
     .maybeSingle();
 
   if (advertiserProfile) {
-    redirect("/dashboard/getting-started");
+    return <BrandHelpClient />;
   }
 
   return <HelpClient />;
