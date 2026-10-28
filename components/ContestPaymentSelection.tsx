@@ -792,10 +792,7 @@ export function ContestPaymentSelection({
             : "Opening secure checkout…"
         }
         className={cn(
-          "w-full rounded-lg py-6 text-base font-semibold",
-          isDark
-            ? "bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]"
-            : "bg-[#1a1a1a] text-white hover:bg-black",
+          "w-full rounded-full py-6 text-base font-semibold goc-btn-primary",
           (isRedirecting || isProcessingWallet) && "disabled:opacity-100",
         )}
         size="lg"

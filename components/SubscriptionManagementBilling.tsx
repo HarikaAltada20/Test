@@ -678,7 +678,9 @@ export const SubscriptionManagementBilling = memo(
           <Badge
             className={cn(
               statusBadgeClass,
-              "bg-[#57D3034F] text-[#2e7d32] hover:bg-[#57D3034F]",
+              isDark
+                ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/15"
+                : "bg-[#57D3034F] text-[#2e7d32] hover:bg-[#57D3034F]",
             )}
           >
             Active
@@ -769,13 +771,13 @@ export const SubscriptionManagementBilling = memo(
       );
     }
 
-    const mutedLabel = isDark ? "text-slate-300" : "text-[#66666F]";
+    const mutedLabel = isDark ? "text-white/50" : "text-[#66666F]";
     const strongText = isDark ? "text-white" : "text-[#171717]";
     const softCard = cn(
       "rounded-2xl border",
-      isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white",
+      isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white",
     );
-    const divider = isDark ? "border-slate-700" : "border-neutral-200";
+    const divider = isDark ? "border-white/10" : "border-neutral-200";
 
     return (
       <div className="space-y-8">
@@ -832,7 +834,7 @@ export const SubscriptionManagementBilling = memo(
                       className={cn(
                         "h-11 w-full shrink-0 rounded-full px-5 text-base font-medium shadow-none sm:w-auto",
                         isDark
-                          ? "border-slate-600 bg-transparent text-slate-100 hover:bg-white/10"
+                          ? "border-white/20 bg-transparent text-white hover:bg-white/10"
                           : "border-neutral-300 bg-white text-[#171717] hover:bg-neutral-50",
                       )}
                     >
@@ -923,7 +925,7 @@ export const SubscriptionManagementBilling = memo(
                     className={cn(
                       "rounded-2xl border",
                       isDark
-                        ? "border-slate-700 bg-slate-900 text-slate-100"
+                        ? "border-white/10 bg-[#161616] text-white"
                         : "border-[#ECEDEF] bg-[#F7F7F8] text-[#171717]",
                     )}
                   >
@@ -1029,7 +1031,7 @@ export const SubscriptionManagementBilling = memo(
                               className={cn(
                                 "p-5 rounded-xl border",
                                 isDark
-                                  ? "bg-[linear-gradient(180deg,rgba(201,167,255,0.1225)_2%,rgba(201,167,255,0.03)_100%)] border-gray-700"
+                                  ? "border-white/10 bg-[#161616]"
                                   : "bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)] border-gray-300"
                               )}>
                                 <h4 className={cn(
@@ -1113,7 +1115,7 @@ export const SubscriptionManagementBilling = memo(
                               className={cn(
                                 "p-5 rounded-xl border",
                                 isDark
-                                  ? "bg-[linear-gradient(180deg,rgba(201,167,255,0.1225)_2%,rgba(201,167,255,0.03)_100%)] border-gray-700"
+                                  ? "border-white/10 bg-[#161616]"
                                   : "bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)] border-gray-300"
                               )}>
                                 <h4 className={cn(
@@ -1192,7 +1194,7 @@ export const SubscriptionManagementBilling = memo(
                               className={cn(
                                 "border rounded-lg py-5 px-4",
                                 isDark
-                                  ? "border-gray-600"
+                                  ? "border-white/10"
                                   : "border-gray-300"
                               )}>
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -1332,7 +1334,7 @@ export const SubscriptionManagementBilling = memo(
                     className={cn(
                       "rounded-lg p-4 border",
                       isDark
-                        ? "border-gray-600"
+                        ? "border-white/10"
                         : "border-gray-300"
                     )}>
                       <div className="flex items-center gap-3">
@@ -1428,7 +1430,7 @@ export const SubscriptionManagementBilling = memo(
                     className={cn(
                       "border rounded-lg py-4 px-5",
                       isDark
-                        ? "border-gray-600"
+                        ? "border-white/10"
                         : "border-gray-400"
                     )}>
                       <div className="flex items-center gap-3">
@@ -1516,7 +1518,7 @@ export const SubscriptionManagementBilling = memo(
               className={cn(
                 "rounded-xl border p-4",
                 isDark
-                  ? "border-slate-700 bg-slate-800/50"
+                  ? "border-white/10 bg-[#0e0e0e]"
                   : "border-neutral-200 bg-[#f8f8f9]",
               )}
             >
@@ -1563,17 +1565,21 @@ export const SubscriptionManagementBilling = memo(
                 <li
                   key={plan.id}
                   className={cn(
-                    "relative flex w-full flex-col gap-[20px] rounded-[22px] border px-4 pb-4 pt-[22px] shadow-sm",
+                    "relative flex w-full flex-col gap-[20px] rounded-[22px] border px-4 pb-4 pt-[22px]",
                     isMostPopular
                       ? "rounded-t-none border-2 border-[#8b5cf6]"
                       : isCurrentPlan
-                        ? "border-[rgb(74_222_128_/_0.35)]"
+                        ? isDark
+                          ? "border-[#22c55e]/50"
+                          : "border-[rgb(74_222_128_/_0.35)]"
                         : isDark
-                          ? "border-slate-600"
+                          ? "border-white/[0.08]"
                           : "border-neutral-300",
                     isDark
-                      ? "bg-[linear-gradient(0deg,#0f172a_0%,#1e293b_100%)]"
-                      : "bg-[linear-gradient(0deg,#f3f4f6_0%,#ffffff_100%)]",
+                      ? isCurrentPlan && !isMostPopular
+                        ? "bg-[#141414] shadow-[inset_0_0_28px_rgba(34,197,94,0.12),inset_0_1px_0_rgba(255,255,255,0.06)]"
+                        : "bg-[#141414] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                      : "bg-[linear-gradient(0deg,#f3f4f6_0%,#ffffff_100%)] shadow-sm",
                   )}
                 >
                   {isMostPopular && (
@@ -1592,7 +1598,7 @@ export const SubscriptionManagementBilling = memo(
                       className={cn(
                         "mb-1.5 rounded-full border px-3.5 py-[7px] text-[11.5px] font-semibold leading-snug",
                         isDark
-                          ? "border-slate-700 bg-[linear-gradient(90deg,#1e293b,#0f172a)] text-white shadow-[inset_0_-4px_8px_rgb(255_255_255_/_0.06)]"
+                          ? "border-white/10 bg-[linear-gradient(90deg,#212121,#131313)] text-white shadow-[inset_0_-4px_8px_rgba(255,255,255,0.08)]"
                           : "border-neutral-200 bg-[linear-gradient(90deg,#f4f4f5,#ffffff)] text-[#171717] shadow-[inset_0_-4px_8px_rgb(0_0_0_/_0.04)]",
                       )}
                     >
@@ -1609,7 +1615,7 @@ export const SubscriptionManagementBilling = memo(
                       <small
                         className={cn(
                           "text-[13px] font-medium tracking-normal",
-                          isDark ? "text-slate-400" : "text-[#737373]",
+                          isDark ? "text-white/50" : "text-[#737373]",
                         )}
                       >
                         /month
@@ -1625,7 +1631,7 @@ export const SubscriptionManagementBilling = memo(
                     <p
                       className={cn(
                         "m-0 max-w-[240px] text-[13px] leading-[1.65]",
-                        isDark ? "text-slate-400" : "text-[#55555F]",
+                        isDark ? "text-white/50" : "text-[#55555F]",
                       )}
                     >
                       {plan.features.description}
@@ -1636,7 +1642,7 @@ export const SubscriptionManagementBilling = memo(
                     className={cn(
                       "mx-[-16px] h-px",
                       isDark
-                        ? "bg-[linear-gradient(90deg,transparent,#334155_50%,transparent)]"
+                        ? "bg-white/10"
                         : "bg-[linear-gradient(90deg,transparent,#d4d4d8_50%,transparent)]",
                     )}
                     aria-hidden="true"
@@ -1652,7 +1658,7 @@ export const SubscriptionManagementBilling = memo(
                       <Gem
                         className={cn(
                           "h-4 w-4 shrink-0",
-                          isDark ? "text-slate-300" : "text-[#55555F]",
+                          isDark ? "text-white" : "text-[#55555F]",
                         )}
                         strokeWidth={1.75}
                         aria-hidden="true"
@@ -1664,7 +1670,7 @@ export const SubscriptionManagementBilling = memo(
                   <ul
                     className={cn(
                       "m-0 flex flex-1 list-none flex-col gap-5 p-0 text-[14px]",
-                      isDark ? "text-slate-300" : "text-[#55555F]",
+                      isDark ? "text-white/70" : "text-[#55555F]",
                     )}
                   >
                     {listFeatures.map((feature) => (
@@ -1673,7 +1679,12 @@ export const SubscriptionManagementBilling = memo(
                         className="flex items-center gap-2"
                       >
                         <span
-                          className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full bg-[rgb(34_197_94_/_0.15)] text-[#16a34a]"
+                          className={cn(
+                            "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full",
+                            isDark
+                              ? "bg-[#22c55e] text-[#052e16]"
+                              : "bg-[rgb(34_197_94_/_0.15)] text-[#16a34a]",
+                          )}
                           aria-hidden="true"
                         >
                           <Check className="h-[11px] w-[11px]" strokeWidth={3} />
@@ -1685,7 +1696,14 @@ export const SubscriptionManagementBilling = memo(
 
                   <div className="mt-auto flex flex-col gap-2">
                     {isCurrentPlan ? (
-                      <span className="mt-1 inline-flex h-[42px] w-full items-center justify-center rounded-full border border-[rgb(74_222_128_/_0.3)] bg-[rgb(34_197_94_/_0.12)] text-sm font-semibold text-[#16a34a]">
+                      <span
+                        className={cn(
+                          "mt-1 inline-flex h-[42px] w-full items-center justify-center rounded-full text-sm font-semibold",
+                          isDark
+                            ? "bg-[#22c55e] text-[#052e16]"
+                            : "border border-[rgb(74_222_128_/_0.3)] bg-[rgb(34_197_94_/_0.12)] text-[#16a34a]",
+                        )}
+                      >
                         Your active plan
                       </span>
                     ) : (
@@ -1696,7 +1714,7 @@ export const SubscriptionManagementBilling = memo(
                         className={cn(
                           "group mt-1 inline-flex h-[42px] w-full items-center justify-center gap-1.5 rounded-full border text-sm font-semibold transition-[border-color,transform,background] duration-150 disabled:opacity-60 active:scale-[0.98]",
                           isDark
-                            ? "border-slate-600 bg-[linear-gradient(0deg,#0f172a,#1e293b)] text-white hover:bg-[linear-gradient(0deg,#1e293b,#334155)]"
+                            ? "border-white/10 bg-[linear-gradient(180deg,#2a2a2a_0%,#121212_100%)] text-white hover:brightness-110"
                             : "border-neutral-300 bg-[linear-gradient(0deg,#f3f4f6,#ffffff)] text-[#171717] hover:bg-[linear-gradient(0deg,#ffffff,#f4f4f5)]",
                         )}
                         aria-label={`${actionLabel} to ${plan.displayName || plan.name}`}

@@ -285,7 +285,7 @@ export default function CreatorAnalytics({
         className={cn(
           "grid grid-cols-1 overflow-hidden rounded-2xl border sm:grid-cols-2 lg:grid-cols-4",
           isDark
-            ? "border-white/10 bg-[#170337] text-white"
+            ? "border-white/10 bg-[#161616] text-white"
             : "border-neutral-200 bg-white text-[#171717]",
         )}
       >
@@ -345,7 +345,7 @@ export default function CreatorAnalytics({
         className={cn(
           "grid grid-cols-1 overflow-hidden rounded-xl border md:grid-cols-2",
           isDark
-            ? "border-white/10 bg-[#170337] text-white"
+            ? "border-white/10 bg-[#161616] text-white"
             : "border-[#E8E8EC] bg-white text-[#171717]",
         )}
       >
@@ -459,7 +459,7 @@ export default function CreatorAnalytics({
       <div
         className={cn(
           "overflow-hidden rounded-2xl border shadow-none",
-          isDark ? "border-white/10 bg-white/5 text-white" : "border-[#e8e8ec] bg-white text-[#1a1a1a]",
+          isDark ? "border-white/10 bg-[#161616] text-white" : "border-[#e8e8ec] bg-white text-[#1a1a1a]",
         )}
       >
         <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -521,17 +521,20 @@ export default function CreatorAnalytics({
                         rank === 3 && "order-3 sm:order-none sm:col-start-3",
                         isFirst
                           ? isDark
-                            ? "border-[#c4a15a]/50 bg-[linear-gradient(180deg,rgba(196,161,90,0.22)_0%,rgba(18,10,40,0.15)_46%,#120a28_78%)] py-8"
+                            ? "border-[#c4a15a]/50 bg-[linear-gradient(180deg,rgba(196,161,90,0.22)_0%,rgba(14,14,14,0.35)_46%,#161616_78%)] py-8"
                             : "border-[#f0d7a8] bg-[linear-gradient(180deg,#fff6ea_0%,#fffdf8_40%,#ffffff_70%)] py-8"
                           : isDark
-                            ? "border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.07)_0%,#120a28_46%)] py-7"
+                            ? "border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.07)_0%,#161616_46%)] py-7"
                             : "border-[#e6e6ea] bg-[linear-gradient(180deg,#f3f3f5_0%,#fafafa_34%,#ffffff_68%)] py-7",
                       )}
                     >
                       <RankPlate rank={rank} size={isFirst ? 56 : 46} />
                       <div
                         className={cn(
-                          "mt-4 flex items-center justify-center rounded-full bg-[#E8E8EA] font-semibold text-[#171717]",
+                          "mt-4 flex items-center justify-center rounded-full font-semibold",
+                          isDark
+                            ? "bg-white/10 text-white"
+                            : "bg-[#E8E8EA] text-[#171717]",
                           isFirst ? "h-16 w-16 text-lg" : "h-14 w-14 text-base",
                         )}
                       >
@@ -590,7 +593,7 @@ export default function CreatorAnalytics({
           className={cn(
             "flex flex-col gap-5 rounded-2xl border px-6 py-5 sm:flex-row sm:items-center sm:justify-between",
             isDark
-              ? "border-[#c4a15a]/50 bg-[linear-gradient(180deg,rgba(196,161,90,0.22)_0%,rgba(18,10,40,0.15)_46%,#120a28_78%)] text-white"
+              ? "border-[#c4a15a]/50 bg-[linear-gradient(180deg,rgba(196,161,90,0.22)_0%,rgba(14,14,14,0.35)_46%,#161616_78%)] text-white"
               : "border-[#f0d7a8] bg-[linear-gradient(180deg,#fff6ea_0%,#fffdf8_40%,#ffffff_70%)] text-[#18181b]",
           )}
         >

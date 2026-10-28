@@ -167,7 +167,7 @@ export default function OverviewAnalytics({
       {/* Key Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card
-          className={cn(isDark ? "bg-[#170337] border-[#170337]" : "bg-white")}
+          className={cn(isDark ? "bg-[#161616] border-[#161616]" : "bg-white")}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle
@@ -212,7 +212,7 @@ export default function OverviewAnalytics({
         </Card>
 
         <Card
-          className={cn(isDark ? "bg-[#170337] border-[#170337]" : "bg-white")}
+          className={cn(isDark ? "bg-[#161616] border-[#161616]" : "bg-white")}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle
@@ -257,7 +257,7 @@ export default function OverviewAnalytics({
         </Card>
 
         <Card
-          className={cn(isDark ? "bg-[#170337] border-[#170337]" : "bg-white")}
+          className={cn(isDark ? "bg-[#161616] border-[#161616]" : "bg-white")}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle
@@ -299,7 +299,7 @@ export default function OverviewAnalytics({
         </Card>
 
         <Card
-          className={cn(isDark ? "bg-[#170337] border-[#170337]" : "bg-white")}
+          className={cn(isDark ? "bg-[#161616] border-[#161616]" : "bg-white")}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle
@@ -344,7 +344,7 @@ export default function OverviewAnalytics({
       {/* Performance Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card
-          className={cn(isDark ? "bg-[#170337] border-[#170337]" : "bg-white")}
+          className={cn(isDark ? "bg-[#161616] border-[#161616]" : "bg-white")}
         >
           <CardHeader>
             <CardTitle
@@ -372,7 +372,7 @@ export default function OverviewAnalytics({
         </Card>
 
         <Card
-          className={cn(isDark ? "bg-[#170337] border-[#170337]" : "bg-white")}
+          className={cn(isDark ? "bg-[#161616] border-[#161616]" : "bg-white")}
         >
           <CardHeader>
             <CardTitle
@@ -402,7 +402,7 @@ export default function OverviewAnalytics({
         </Card>
 
         <Card
-          className={cn(isDark ? "bg-[#170337] border-[#170337]" : "bg-white")}
+          className={cn(isDark ? "bg-[#161616] border-[#161616]" : "bg-white")}
         >
           <CardHeader>
             <CardTitle
@@ -433,7 +433,7 @@ export default function OverviewAnalytics({
       {/* Top Performing Contest */}
       {overview.topContest && (
         <Card
-          className={cn(isDark ? "bg-[#170337] border-[#170337]" : "bg-white")}
+          className={cn(isDark ? "bg-[#161616] border-[#161616]" : "bg-white")}
         >
           <CardHeader>
             <CardTitle
@@ -479,7 +479,7 @@ export default function OverviewAnalytics({
       {/* Platform Performance */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card
-          className={cn(isDark ? "bg-[#170337] border-[#170337]" : "bg-white")}
+          className={cn(isDark ? "bg-[#161616] border-[#161616]" : "bg-white")}
         >
           <CardHeader>
             <CardTitle
@@ -539,7 +539,7 @@ export default function OverviewAnalytics({
         </Card>
 
         <Card
-          className={cn(isDark ? "bg-[#170337] border-[#170337]" : "bg-white")}
+          className={cn(isDark ? "bg-[#161616] border-[#161616]" : "bg-white")}
         >
           <CardHeader>
             <CardTitle
@@ -588,7 +588,7 @@ export default function OverviewAnalytics({
 
       {/* Monthly Trends */}
       <Card
-        className={cn(isDark ? "bg-[#170337] border-[#170337]" : "bg-white")}
+        className={cn(isDark ? "bg-[#161616] border-[#161616]" : "bg-white")}
       >
         <CardHeader>
           <CardTitle

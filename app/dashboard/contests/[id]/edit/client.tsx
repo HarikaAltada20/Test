@@ -9678,17 +9678,21 @@ export default function EditContestPage({
     <div
       className={cn(
         "fixed inset-0 bg-opacity-65 flex items-center justify-center z-50",
-        isDark ? "bg-[#100A33]" : "bg-black",
+        isDark ? "bg-black/70" : "bg-black/50",
       )}
     >
       <div
         className={cn(
-          "rounded-lg p-6 max-w-md w-full shadow-xl",
-          isDark ? "bg-[#06021D] border border-gray-800" : "bg-white",
+          "w-full max-w-md rounded-2xl p-6 shadow-xl",
+          isDark
+            ? "border border-white/10 bg-[#161616] text-white"
+            : "border border-[#ececef] bg-white text-[#1a1a1a]",
         )}
       >
-        <h2 className="text-xl font-bold mb-4">Leave Campaign Creation?</h2>
-        <p className="mb-6">
+        <h2 className={cn("mb-2 text-xl font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+          Leave Campaign Creation?
+        </h2>
+        <p className={cn("mb-6 text-sm leading-relaxed", isDark ? "text-white/60" : "text-[#55555F]")}>
           Do you want to save this campaign as a draft or delete it? All
           progress will be lost if you delete.
         </p>
@@ -9697,6 +9701,12 @@ export default function EditContestPage({
             variant="outline"
             onClick={() => setShowBackModal(false)}
             disabled={isDeleting}
+            className={cn(
+              "h-10 rounded-full px-4 shadow-none",
+              isDark
+                ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                : "border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
+            )}
           >
             Cancel
           </Button>
@@ -9704,10 +9714,15 @@ export default function EditContestPage({
             variant="destructive"
             onClick={handleDeleteAndBack}
             disabled={isDeleting}
+            className="h-10 rounded-full px-4 shadow-none"
           >
             {isDeleting ? "Deleting..." : "Delete"}
           </Button>
-          <Button onClick={handleSaveDraftAndBack} disabled={isDeleting}>
+          <Button
+            onClick={handleSaveDraftAndBack}
+            disabled={isDeleting}
+            className="h-10 rounded-full px-4 goc-btn-primary"
+          >
             Save as Draft
           </Button>
         </div>
@@ -9781,7 +9796,7 @@ export default function EditContestPage({
         className={cn(
           "border font-semibold px-4 py-2 rounded-lg text-md",
           isDark
-            ? "border-gray-300 text-gray-300"
+            ? "border-white/20 text-white hover:bg-white/10"
             : "border-[#d5d5db] text-[#1a1a1a]",
         )}
       >
@@ -9796,7 +9811,7 @@ export default function EditContestPage({
             className={cn(
               "border font-semibold px-4 py-2 rounded-lg text-md",
               isDark
-                ? "border-gray-300 text-gray-300"
+                ? "border-white/20 text-white hover:bg-white/10"
                 : "border-[#d5d5db] text-[#1a1a1a]",
             )}
           >
@@ -10208,7 +10223,7 @@ export default function EditContestPage({
                 className={cn(
                   "rounded-xl p-4 shadow-lg border transition-colors duration-300",
                   isDark
-                    ? "bg-[#180438] border-[#3A2C63]"
+                    ? "bg-[#161616] border-white/10"
                     : "bg-white border-slate-200",
                 )}
               >
@@ -10270,7 +10285,7 @@ export default function EditContestPage({
                 className={cn(
                   "p-6 border-b rounded-tl-xl rounded-tr-xl shadow-xl space-y-6",
                   isDark
-                    ? "bg-[#180438] border-gray-600"
+                    ? "bg-[#161616] border-gray-600"
                     : "bg-white border-[#D0D0D0]",
                 )}
               >
@@ -10286,7 +10301,7 @@ export default function EditContestPage({
               <div
                 className={cn(
                   "space-y-6 p-6 rounded-bl-xl rounded-br-xl shadow-xl",
-                  isDark ? "bg-[#180438]" : "bg-white",
+                  isDark ? "bg-[#161616]" : "bg-white",
                 )}
               >
               {step === "basics" && (
@@ -10296,7 +10311,7 @@ export default function EditContestPage({
                 className={cn(
                   "space-y-2 rounded-2xl border p-4",
                   isDark
-                    ? "border-white/10 bg-[#180438]"
+                    ? "border-white/10 bg-[#161616]"
                     : "border-[#e6e6ea] bg-white",
                 )}
               >
@@ -10460,7 +10475,7 @@ export default function EditContestPage({
                 className={cn(
                   "space-y-2 rounded-2xl border p-4",
                   isDark
-                    ? "border-white/10 bg-[#180438]"
+                    ? "border-white/10 bg-[#161616]"
                     : "border-[#e6e6ea] bg-white",
                 )}
               >
@@ -10497,7 +10512,7 @@ export default function EditContestPage({
                         id="platform"
                         className={cn(
                           isDark
-                            ? "bg-[#180438] border border-gray-600"
+                            ? "bg-[#0e0e0e] border border-white/10"
                             : "bg-white",
                         )}
                       >
@@ -10533,7 +10548,7 @@ export default function EditContestPage({
                 className={cn(
                   "space-y-2 rounded-2xl border p-4",
                   isDark
-                    ? "border-white/10 bg-[#180438]"
+                    ? "border-white/10 bg-[#161616]"
                     : "border-[#e6e6ea] bg-white",
                 )}
               >
@@ -10659,7 +10674,7 @@ export default function EditContestPage({
                 className={cn(
                   "space-y-2 rounded-2xl border p-4",
                   isDark
-                    ? "border-white/10 bg-[#180438]"
+                    ? "border-white/10 bg-[#161616]"
                     : "border-[#e6e6ea] bg-white",
                 )}
               >
@@ -10687,7 +10702,7 @@ export default function EditContestPage({
                   <SelectTrigger
                     className={cn(
                       isDark
-                        ? "bg-[#180438] border border-gray-600"
+                        ? "bg-[#0e0e0e] border border-white/10"
                         : "bg-white",
                     )}
                   >
@@ -10743,7 +10758,7 @@ export default function EditContestPage({
                   value={title}
                   className={cn(
                     isDark
-                      ? "bg-[#180438] border border-gray-600"
+                      ? "bg-[#0e0e0e] border border-white/10"
                       : "bg-white",
                   )}
                   onChange={(e) => {
@@ -10766,7 +10781,7 @@ export default function EditContestPage({
                     isDragActive
                       ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
                       : isDark
-                        ? "border-slate-600 bg-[#170337]"
+                        ? "border-white/15 bg-[#161616]"
                         : "border-gray-300 bg-white"
                   }`}
                   onClick={() => fileInputRef.current?.click()}
@@ -10808,7 +10823,9 @@ export default function EditContestPage({
                       <Upload className="mx-auto text-gray-500 text-3xl mb-2" />
                       <p className="text-md font-medium mb-1">
                         Drag, drop or browse{" "}
-                        <span className="text-[#1a1a1a]">thumbnail</span>
+                        <span className={isDark ? "text-white" : "text-[#1a1a1a]"}>
+                          thumbnail
+                        </span>
                       </p>
                       <p className="text-sm text-gray-500 mb-4">
                         Max file size: 5MB
@@ -10849,7 +10866,7 @@ export default function EditContestPage({
                 className={cn(
                   "space-y-4 rounded-2xl border p-5",
                   isDark
-                    ? "border-white/10 bg-[#180438]"
+                    ? "border-white/10 bg-[#161616]"
                     : "border-[#e6e6ea] bg-white",
                 )}
               >
@@ -11044,7 +11061,7 @@ export default function EditContestPage({
                   className={cn(
                     "space-y-3 rounded-2xl border p-5",
                     isDark
-                      ? "border-white/10 bg-[#180438]"
+                      ? "border-white/10 bg-[#161616]"
                       : "border-[#e6e6ea] bg-white",
                   )}
                 >
@@ -11145,7 +11162,7 @@ export default function EditContestPage({
                             className={cn(
                               "h-11 pr-10",
                               isDark
-                                ? "border-white/40 bg-[#180438] text-white"
+                                ? "border-white/40 bg-[#161616] text-white"
                                 : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                             )}
                             placeholder="0–100"
@@ -11246,7 +11263,7 @@ export default function EditContestPage({
                           className={cn(
                             "h-11",
                             isDark
-                              ? "border-white/40 bg-[#180438] text-white"
+                              ? "border-white/40 bg-[#161616] text-white"
                               : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                           )}
                           placeholder="Enter minimum trust score"
@@ -11345,7 +11362,7 @@ export default function EditContestPage({
                               className={cn(
                                 "h-11",
                                 isDark
-                                  ? "border-white/40 bg-[#180438] text-white"
+                                  ? "border-white/40 bg-[#161616] text-white"
                                   : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                               )}
                             />
@@ -11426,7 +11443,7 @@ export default function EditContestPage({
                               className={cn(
                                 "h-11",
                                 isDark
-                                  ? "border-white/40 bg-[#180438] text-white"
+                                  ? "border-white/40 bg-[#161616] text-white"
                                   : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                               )}
                             />
@@ -11505,7 +11522,7 @@ export default function EditContestPage({
                               className={cn(
                                 "h-11",
                                 isDark
-                                  ? "border-white/40 bg-[#180438] text-white"
+                                  ? "border-white/40 bg-[#161616] text-white"
                                   : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                               )}
                             />
@@ -11579,7 +11596,7 @@ export default function EditContestPage({
                               className={cn(
                                 "h-11",
                                 isDark
-                                  ? "border-white/40 bg-[#180438] text-white"
+                                  ? "border-white/40 bg-[#161616] text-white"
                                   : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                               )}
                             />
@@ -11652,7 +11669,7 @@ export default function EditContestPage({
                               className={cn(
                                 "h-11",
                                 isDark
-                                  ? "border-white/40 bg-[#180438] text-white"
+                                  ? "border-white/40 bg-[#161616] text-white"
                                   : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                               )}
                             />
@@ -11668,7 +11685,7 @@ export default function EditContestPage({
                 className={cn(
                   "space-y-3 rounded-2xl border p-5",
                   isDark
-                    ? "border-white/10 bg-[#180438]"
+                    ? "border-white/10 bg-[#161616]"
                     : "border-[#e6e6ea] bg-white",
                 )}
               >
@@ -11752,7 +11769,7 @@ export default function EditContestPage({
                         className={cn(
                           "h-11",
                           isDark
-                            ? "border-white/40 bg-[#180438] text-white"
+                            ? "border-white/40 bg-[#161616] text-white"
                             : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                         )}
                         placeholder="Enter number between 2-100"
@@ -11776,7 +11793,7 @@ export default function EditContestPage({
                 className={cn(
                   "space-y-3 rounded-2xl border p-5",
                   isDark
-                    ? "border-white/10 bg-[#180438]"
+                    ? "border-white/10 bg-[#161616]"
                     : "border-[#e6e6ea] bg-white",
                 )}
               >
@@ -11881,7 +11898,7 @@ export default function EditContestPage({
                       className={cn(
                         "rounded-lg border",
                         isDark
-                          ? "bg-[#180438] border-gray-300"
+                          ? "bg-[#161616] border-gray-300"
                           : "bg-white border-gray-300",
                       )}
                     >
@@ -12058,7 +12075,7 @@ export default function EditContestPage({
                       className={cn(
                         "rounded-lg border",
                         isDark
-                          ? "bg-[#180438] border-gray-300"
+                          ? "bg-[#161616] border-gray-300"
                           : "bg-white border-gray-300",
                       )}
                     >
@@ -12260,7 +12277,7 @@ export default function EditContestPage({
                       className={cn(
                         "rounded-lg border",
                         isDark
-                          ? "bg-[#180438] border-gray-300"
+                          ? "bg-[#161616] border-gray-300"
                           : "bg-white border-gray-300",
                       )}
                     >
@@ -12397,7 +12414,7 @@ export default function EditContestPage({
                       className={cn(
                         "rounded-lg border",
                         isDark
-                          ? "bg-[#180438] border-gray-300"
+                          ? "bg-[#161616] border-gray-300"
                           : "bg-white border-gray-300",
                       )}
                     >
@@ -12647,7 +12664,7 @@ export default function EditContestPage({
                 className={cn(
                   "p-6 border-b rounded-tl-xl rounded-tr-xl shadow-xl space-y-6",
                   isDark
-                    ? "bg-[#180438] border-gray-600"
+                    ? "bg-[#161616] border-gray-600"
                     : "border-[#D0D0D0] bg-white",
                 )}
               >
@@ -12663,7 +12680,7 @@ export default function EditContestPage({
               <div
                 className={cn(
                   "space-y-6 p-6 rounded-bl-xl rounded-br-xl shadow-xl",
-                  isDark ? "bg-[#180438]" : "bg-white",
+                  isDark ? "bg-[#161616]" : "bg-white",
                 )}
               >
             <div className="space-y-2">
@@ -12761,7 +12778,7 @@ export default function EditContestPage({
                 <div
                   className={`border rounded-lg p-4 min-h-[300px] transition-colors duration-200 ${
                     isDark
-                      ? "text-white bg-[#170337] border-gray-600"
+                      ? "text-white bg-[#161616] border-white/10"
                       : "bg-white"
                   }`}
                 >
@@ -12841,7 +12858,7 @@ export default function EditContestPage({
                               placeholder="Add keyword"
                               className={cn(
                                 isDark
-                                  ? "bg-[#180438] border border-gray-600"
+                                  ? "bg-[#0e0e0e] border border-white/10"
                                   : "bg-white",
                               )}
                             />
@@ -12910,7 +12927,7 @@ export default function EditContestPage({
                               placeholder="@username"
                               className={cn(
                                 isDark
-                                  ? "bg-[#180438] border border-gray-600"
+                                  ? "bg-[#0e0e0e] border border-white/10"
                                   : "bg-white",
                               )}
                             />
@@ -12987,7 +13004,7 @@ export default function EditContestPage({
                         placeholder="No limit (leave empty)"
                         className={cn(
                           isDark
-                            ? "bg-[#180438] border border-gray-600"
+                            ? "bg-[#0e0e0e] border border-white/10"
                             : "bg-white",
                         )}
                       />
@@ -13084,7 +13101,7 @@ export default function EditContestPage({
                 <div
                   className={`border rounded-lg p-4 min-h-[300px] transition-colors duration-200 ${
                     isDark
-                      ? "text-white bg-[#170337] border-gray-600"
+                      ? "text-white bg-[#161616] border-white/10"
                       : "bg-white"
                   }`}
                 >
@@ -13149,7 +13166,7 @@ export default function EditContestPage({
                 className={cn(
                   "p-6 border-b rounded-tl-xl rounded-tr-xl shadow-xl space-y-6",
                   isDark
-                    ? "bg-[#180438] border-gray-600"
+                    ? "bg-[#161616] border-gray-600"
                     : "border-[#D0D0D0] bg-white",
                 )}
               >
@@ -13165,7 +13182,7 @@ export default function EditContestPage({
               <div
                 className={cn(
                   "space-y-6 p-6 rounded-bl-xl rounded-br-xl shadow-xl",
-                  isDark ? "bg-[#180438]" : "bg-white",
+                  isDark ? "bg-[#161616]" : "bg-white",
                 )}
               >
             <div className="mb-12">
@@ -13231,7 +13248,7 @@ export default function EditContestPage({
                       isDragActive
                         ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
                         : isDark
-                          ? "border-slate-600 bg-[#170337]"
+                          ? "border-white/15 bg-[#161616]"
                           : "border-[#d5d5db] bg-[#fafafa]"
                     }`}
                     onClick={() => resourceFileRef.current?.click()}
@@ -13347,7 +13364,7 @@ export default function EditContestPage({
                           placeholder="Describe this asset"
                           className={cn(
                             isDark
-                              ? "bg-[#180438] border border-gray-600"
+                              ? "bg-[#0e0e0e] border border-white/10"
                               : "bg-white",
                           )}
                           value={resourceDescription}
@@ -13399,7 +13416,7 @@ export default function EditContestPage({
                       }
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-600"
+                          ? "bg-[#0e0e0e] border border-white/10"
                           : "bg-white",
                       )}
                     />
@@ -13429,7 +13446,7 @@ export default function EditContestPage({
                       }
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-600"
+                          ? "bg-[#0e0e0e] border border-white/10"
                           : "bg-white",
                       )}
                     />
@@ -13494,7 +13511,7 @@ export default function EditContestPage({
                           className={cn(
                             "flex flex-col sm:flex-row sm:items-center gap-4 border rounded-xl p-4 shadow-sm",
                             isDark
-                              ? "bg-[#180438] border-gray-600"
+                              ? "bg-[#161616] border-gray-600"
                               : "bg-white dark:bg-gray-800 border border-gray-200",
                           )}
                         >
@@ -13904,7 +13921,7 @@ export default function EditContestPage({
                       className={cn(
                         "text-sm",
                         isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
+                          ? "bg-[#0e0e0e] border border-white/10 text-white"
                           : "bg-white text-black",
                       )}
                     />
@@ -13926,7 +13943,7 @@ export default function EditContestPage({
                       className={cn(
                         "text-sm",
                         isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
+                          ? "bg-[#0e0e0e] border border-white/10 text-white"
                           : "bg-white text-black",
                       )}
                     />
@@ -13950,7 +13967,7 @@ export default function EditContestPage({
                       className={cn(
                         "text-sm",
                         isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
+                          ? "bg-[#0e0e0e] border border-white/10 text-white"
                           : "bg-white text-black",
                       )}
                     />
@@ -13974,7 +13991,7 @@ export default function EditContestPage({
                       className={cn(
                         "text-sm",
                         isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
+                          ? "bg-[#0e0e0e] border border-white/10 text-white"
                           : "bg-white text-black",
                       )}
                     />
@@ -14053,7 +14070,7 @@ export default function EditContestPage({
                       onChange={(e) => setTwitterTargetUrl(e.target.value)}
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
+                          ? "bg-[#0e0e0e] border border-white/10 text-white"
                           : "bg-white text-black",
                       )}
                     />
@@ -14069,7 +14086,7 @@ export default function EditContestPage({
                       }
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
+                          ? "bg-[#0e0e0e] border border-white/10 text-white"
                           : "bg-white text-black",
                       )}
                     />
@@ -14094,7 +14111,7 @@ export default function EditContestPage({
                         onChange={(e) => setNewInspirationUrl(e.target.value)}
                         className={cn(
                           isDark
-                            ? "bg-[#180438] border border-gray-600 text-white"
+                            ? "bg-[#0e0e0e] border border-white/10 text-white"
                             : "bg-white text-black",
                         )}
                       />
@@ -14111,7 +14128,7 @@ export default function EditContestPage({
                         }
                         className={cn(
                           isDark
-                            ? "bg-[#180438] border border-gray-600 text-white"
+                            ? "bg-[#0e0e0e] border border-white/10 text-white"
                             : "bg-white text-black",
                         )}
                       />
@@ -14142,7 +14159,7 @@ export default function EditContestPage({
                           className={cn(
                             "flex flex-col sm:flex-row sm:items-center gap-4 border rounded-xl p-4 shadow-sm",
                             isDark
-                              ? "bg-[#180438] border-gray-600"
+                              ? "bg-[#161616] border-gray-600"
                               : "bg-white dark:bg-gray-800 border border-gray-200",
                           )}
                         >
@@ -14233,7 +14250,7 @@ export default function EditContestPage({
                       onChange={(e) => setNewTrackingUrl(e.target.value)}
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
+                          ? "bg-[#0e0e0e] border border-white/10 text-white"
                           : "bg-white text-black",
                       )}
                     />
@@ -14251,7 +14268,7 @@ export default function EditContestPage({
                       }
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
+                          ? "bg-[#0e0e0e] border border-white/10 text-white"
                           : "bg-white text-black",
                       )}
                     />
@@ -14272,7 +14289,7 @@ export default function EditContestPage({
                           className={cn(
                             "flex items-center gap-3 rounded-lg p-4 shadow-sm",
                             isDark
-                              ? "bg-[#180438] border border-gray-600"
+                              ? "bg-[#0e0e0e] border border-white/10"
                               : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700",
                           )}
                         >
@@ -14350,7 +14367,7 @@ export default function EditContestPage({
                 className={cn(
                   "p-6 border-b rounded-tl-xl rounded-tr-xl shadow-xl space-y-6",
                   isDark
-                    ? "bg-[#180438] border-gray-600"
+                    ? "bg-[#161616] border-gray-600"
                     : "border-[#D0D0D0] bg-white",
                 )}
               >
@@ -14366,7 +14383,7 @@ export default function EditContestPage({
               <div
                 className={cn(
                   "space-y-6 p-6 rounded-bl-xl rounded-br-xl shadow-xl",
-                  isDark ? "bg-[#180438]" : "bg-white",
+                  isDark ? "bg-[#161616]" : "bg-white",
                 )}
               >
           {/* Campaign Type Display (Read-Only) */}
@@ -14388,7 +14405,7 @@ export default function EditContestPage({
                 className={cn(
                   "cursor-not-allowed",
                   isDark
-                    ? "bg-[#180438] border border-gray-600 text-gray-400"
+                    ? "bg-[#0e0e0e] border border-white/10 text-gray-400"
                     : "bg-gray-100",
                 )}
               />
@@ -14408,7 +14425,7 @@ export default function EditContestPage({
                   className={cn(
                     "w-full",
                     isDark
-                      ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
+                      ? "bg-[#0e0e0e] border border-white/10 [&::-webkit-calendar-picker-indicator]:invert"
                       : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                   )}
                   onChange={(e) => setStartDate(e.target.value)}
@@ -14425,7 +14442,7 @@ export default function EditContestPage({
                   className={cn(
                     "w-full",
                     isDark
-                      ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
+                      ? "bg-[#0e0e0e] border border-white/10 [&::-webkit-calendar-picker-indicator]:invert"
                       : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                   )}
                 />
@@ -14441,7 +14458,7 @@ export default function EditContestPage({
                   className={cn(
                     "w-full",
                     isDark
-                      ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
+                      ? "bg-[#0e0e0e] border border-white/10 [&::-webkit-calendar-picker-indicator]:invert"
                       : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                   )}
                 />
@@ -14459,7 +14476,7 @@ export default function EditContestPage({
                   className={cn(
                     "w-full",
                     isDark
-                      ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
+                      ? "bg-[#0e0e0e] border border-white/10 [&::-webkit-calendar-picker-indicator]:invert"
                       : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                   )}
                 />
@@ -14515,7 +14532,7 @@ export default function EditContestPage({
                   className={cn(
                     "flex items-center gap-2  px-4 py-2 rounded-full",
                     isDark
-                      ? "bg-[#180438] text-gray-300"
+                      ? "bg-[#161616] text-gray-300"
                       : "bg-gray-100 text-black",
                   )}
                 >
@@ -14582,7 +14599,7 @@ export default function EditContestPage({
 
               <div
                 className={cn(
-                  isDark ? "bg-[#180438] p-4" : "bg-gray-50 p-4 rounded-lg",
+                  isDark ? "bg-[#161616] p-4" : "bg-gray-50 p-4 rounded-lg",
                 )}
               >
                 <div className="flex items-center gap-4 mb-4">
@@ -14719,7 +14736,7 @@ export default function EditContestPage({
                       className={cn(
                         "w-full sm:w-40 md:w-48",
                         isDark
-                          ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
+                          ? "bg-[#0e0e0e] border border-white/10 [&::-webkit-calendar-picker-indicator]:invert"
                           : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                       )}
                     />
@@ -14824,7 +14841,7 @@ export default function EditContestPage({
                             }}
                             className={cn(
                               isDark
-                                ? "bg-[#180438] border border-gray-600"
+                                ? "bg-[#0e0e0e] border border-white/10"
                                 : "",
                             )}
                             placeholder="e.g. 1000"
@@ -14848,7 +14865,7 @@ export default function EditContestPage({
                             }}
                             className={cn(
                               isDark
-                                ? "bg-[#180438] border border-gray-600"
+                                ? "bg-[#0e0e0e] border border-white/10"
                                 : "",
                             )}
                             placeholder="e.g. 5.00"
@@ -14879,7 +14896,7 @@ export default function EditContestPage({
                             }
                             className={cn(
                               isDark
-                                ? "bg-[#180438] border border-gray-600"
+                                ? "bg-[#0e0e0e] border border-white/10"
                                 : "",
                             )}
                             placeholder="Unlimited if empty"
@@ -14893,7 +14910,7 @@ export default function EditContestPage({
                                 className={cn(
                                   "h-10 rounded-md border px-3 flex items-center text-sm",
                                   isDark
-                                    ? "bg-[#180438] border-gray-600 text-white"
+                                    ? "bg-[#161616] border-gray-600 text-white"
                                     : "bg-muted/40 border-input",
                                 )}
                               >
@@ -14960,7 +14977,7 @@ export default function EditContestPage({
                       step="0.01"
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
+                          ? "bg-[#0e0e0e] border border-white/10 text-white"
                           : "bg-white",
                       )}
                       placeholder="Maximum amount reserved for this campaign"
@@ -15019,7 +15036,7 @@ export default function EditContestPage({
                       type="number"
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
+                          ? "bg-[#0e0e0e] border border-white/10 text-white"
                           : "bg-white",
                       )}
                       value={cpmRate}
@@ -15082,7 +15099,7 @@ export default function EditContestPage({
                       value={totalBudget}
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-600"
+                          ? "bg-[#0e0e0e] border border-white/10"
                           : "bg-white",
                       )}
                       onChange={(e) => {
@@ -15133,7 +15150,7 @@ export default function EditContestPage({
                               placeholder="e.g., 1"
                               className={cn(
                                 isDark
-                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  ? "bg-[#0e0e0e] border border-white/10 text-white"
                                   : "bg-white",
                               )}
                             />
@@ -15161,7 +15178,7 @@ export default function EditContestPage({
                               placeholder="e.g., 1"
                               className={cn(
                                 isDark
-                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  ? "bg-[#0e0e0e] border border-white/10 text-white"
                                   : "bg-white",
                               )}
                             />
@@ -15209,7 +15226,7 @@ export default function EditContestPage({
                                   }
                                   className={cn(
                                     isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      ? "bg-[#0e0e0e] border border-white/10 text-white"
                                       : "bg-white",
                                   )}
                                 />
@@ -15235,7 +15252,7 @@ export default function EditContestPage({
                                   }
                                   className={cn(
                                     isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      ? "bg-[#0e0e0e] border border-white/10 text-white"
                                       : "bg-white",
                                   )}
                                 />
@@ -15261,7 +15278,7 @@ export default function EditContestPage({
                                   }
                                   className={cn(
                                     isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      ? "bg-[#0e0e0e] border border-white/10 text-white"
                                       : "bg-white",
                                   )}
                                 />
@@ -15287,7 +15304,7 @@ export default function EditContestPage({
                                   }
                                   className={cn(
                                     isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      ? "bg-[#0e0e0e] border border-white/10 text-white"
                                       : "bg-white",
                                   )}
                                 />
@@ -15313,7 +15330,7 @@ export default function EditContestPage({
                                   }
                                   className={cn(
                                     isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      ? "bg-[#0e0e0e] border border-white/10 text-white"
                                       : "bg-white",
                                   )}
                                 />
@@ -15343,7 +15360,7 @@ export default function EditContestPage({
                               placeholder="e.g., 5"
                               className={cn(
                                 isDark
-                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  ? "bg-[#0e0e0e] border border-white/10 text-white"
                                   : "bg-white",
                               )}
                             />
@@ -15391,7 +15408,7 @@ export default function EditContestPage({
                                   }
                                   className={cn(
                                     isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      ? "bg-[#0e0e0e] border border-white/10 text-white"
                                       : "bg-white",
                                   )}
                                 />
@@ -15417,7 +15434,7 @@ export default function EditContestPage({
                                   }
                                   className={cn(
                                     isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      ? "bg-[#0e0e0e] border border-white/10 text-white"
                                       : "bg-white",
                                   )}
                                 />
@@ -15443,7 +15460,7 @@ export default function EditContestPage({
                                   }
                                   className={cn(
                                     isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      ? "bg-[#0e0e0e] border border-white/10 text-white"
                                       : "bg-white",
                                   )}
                                 />
@@ -15469,7 +15486,7 @@ export default function EditContestPage({
                                   }
                                   className={cn(
                                     isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      ? "bg-[#0e0e0e] border border-white/10 text-white"
                                       : "bg-white",
                                   )}
                                 />
@@ -15495,7 +15512,7 @@ export default function EditContestPage({
                                   }
                                   className={cn(
                                     isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      ? "bg-[#0e0e0e] border border-white/10 text-white"
                                       : "bg-white",
                                   )}
                                 />
@@ -15525,7 +15542,7 @@ export default function EditContestPage({
                               placeholder="e.g., 10"
                               className={cn(
                                 isDark
-                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  ? "bg-[#0e0e0e] border border-white/10 text-white"
                                   : "bg-white",
                               )}
                             />
@@ -15574,7 +15591,7 @@ export default function EditContestPage({
                                   }
                                   className={cn(
                                     isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      ? "bg-[#0e0e0e] border border-white/10 text-white"
                                       : "bg-white",
                                   )}
                                 />
@@ -15600,7 +15617,7 @@ export default function EditContestPage({
                                   }
                                   className={cn(
                                     isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      ? "bg-[#0e0e0e] border border-white/10 text-white"
                                       : "bg-white",
                                   )}
                                 />
@@ -15626,7 +15643,7 @@ export default function EditContestPage({
                                   }
                                   className={cn(
                                     isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      ? "bg-[#0e0e0e] border border-white/10 text-white"
                                       : "bg-white",
                                   )}
                                 />
@@ -15652,7 +15669,7 @@ export default function EditContestPage({
                                   }
                                   className={cn(
                                     isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      ? "bg-[#0e0e0e] border border-white/10 text-white"
                                       : "bg-white",
                                   )}
                                 />
@@ -15678,7 +15695,7 @@ export default function EditContestPage({
                                   }
                                   className={cn(
                                     isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      ? "bg-[#0e0e0e] border border-white/10 text-white"
                                       : "bg-white",
                                   )}
                                 />
@@ -15708,7 +15725,7 @@ export default function EditContestPage({
                               placeholder="e.g., 0.001"
                               className={cn(
                                 isDark
-                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  ? "bg-[#0e0e0e] border border-white/10 text-white"
                                   : "bg-white",
                               )}
                             />
@@ -15745,7 +15762,7 @@ export default function EditContestPage({
                         value={minViews}
                         className={cn(
                           isDark
-                            ? "bg-[#180438] border border-gray-600"
+                            ? "bg-[#0e0e0e] border border-white/10"
                             : "bg-white",
                         )}
                         onChange={(e) => {
@@ -15817,7 +15834,7 @@ export default function EditContestPage({
                         value={maxViews}
                         className={cn(
                           isDark
-                            ? "bg-[#180438] border border-gray-600"
+                            ? "bg-[#0e0e0e] border border-white/10"
                             : "bg-white",
                         )}
                         onChange={(e) => {
@@ -15891,7 +15908,7 @@ export default function EditContestPage({
                     value={termsConditions}
                     className={cn(
                       isDark
-                        ? "bg-[#180438] border border-gray-600"
+                        ? "bg-[#0e0e0e] border border-white/10"
                         : "bg-white",
                     )}
                     onChange={(e) => setTermsConditions(e.target.value)}
@@ -16025,7 +16042,7 @@ export default function EditContestPage({
                 className={cn(
                   "space-y-3 rounded-2xl border p-5",
                   isDark
-                    ? "border-white/10 bg-[#180438]"
+                    ? "border-white/10 bg-[#161616]"
                     : "border-[#e6e6ea] bg-white",
                 )}
               >
@@ -16131,7 +16148,7 @@ export default function EditContestPage({
                               className={cn(
                                 "h-11",
                                 isDark
-                                  ? "border-white/40 bg-[#180438] text-white"
+                                  ? "border-white/40 bg-[#161616] text-white"
                                   : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                               )}
                               onChange={(e) => setFlatFeeBonus(e.target.value)}
@@ -16185,7 +16202,7 @@ export default function EditContestPage({
                                   className={cn(
                                     "h-11",
                                     isDark
-                                      ? "border-white/40 bg-[#180438] text-white"
+                                      ? "border-white/40 bg-[#161616] text-white"
                                       : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                                   )}
                                   onChange={(e) =>
@@ -16240,7 +16257,7 @@ export default function EditContestPage({
                                   className={cn(
                                     "h-11",
                                     isDark
-                                      ? "border-white/40 bg-[#180438] text-white"
+                                      ? "border-white/40 bg-[#161616] text-white"
                                       : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                                   )}
                                 />
@@ -16342,7 +16359,7 @@ export default function EditContestPage({
                           className={cn(
                             "h-11",
                             isDark
-                              ? "border-white/40 bg-[#180438] text-white"
+                              ? "border-white/40 bg-[#161616] text-white"
                               : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                           )}
                         />
@@ -16449,7 +16466,7 @@ export default function EditContestPage({
                                 className={cn(
                                   "h-11",
                                   isDark
-                                    ? "border-white/40 bg-[#180438] text-white"
+                                    ? "border-white/40 bg-[#161616] text-white"
                                     : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                                 )}
                                 placeholder="e.g. 200000"
@@ -16478,7 +16495,7 @@ export default function EditContestPage({
                                 className={cn(
                                   "h-11",
                                   isDark
-                                    ? "border-white/40 bg-[#180438] text-white"
+                                    ? "border-white/40 bg-[#161616] text-white"
                                     : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                                 )}
                                 placeholder="e.g. 5"
@@ -16506,7 +16523,7 @@ export default function EditContestPage({
                                 className={cn(
                                   "h-11",
                                   isDark
-                                    ? "border-white/40 bg-[#180438] text-white"
+                                    ? "border-white/40 bg-[#161616] text-white"
                                     : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                                 )}
                                 placeholder="e.g. 100"
@@ -16547,7 +16564,7 @@ export default function EditContestPage({
                                 className={cn(
                                   "h-11",
                                   isDark
-                                    ? "border-white/40 bg-[#180438] text-white"
+                                    ? "border-white/40 bg-[#161616] text-white"
                                     : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                                 )}
                                 placeholder="e.g. 200000"
@@ -16576,7 +16593,7 @@ export default function EditContestPage({
                                 className={cn(
                                   "h-11",
                                   isDark
-                                    ? "border-white/40 bg-[#180438] text-white"
+                                    ? "border-white/40 bg-[#161616] text-white"
                                     : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                                 )}
                                 placeholder="e.g. 5"
@@ -16604,7 +16621,7 @@ export default function EditContestPage({
                                 className={cn(
                                   "h-11",
                                   isDark
-                                    ? "border-white/40 bg-[#180438] text-white"
+                                    ? "border-white/40 bg-[#161616] text-white"
                                     : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                                 )}
                                 placeholder="e.g. 50"
@@ -16698,7 +16715,7 @@ export default function EditContestPage({
                           className={cn(
                             "prose max-w-none p-4 border rounded-lg min-h-[200px]",
                             isDark
-                              ? "bg-[#180438] border-gray-700 prose-invert prose-headings:text-white prose-p:text-white prose-strong:text-white prose-em:text-white prose-code:text-white"
+                              ? "bg-[#161616] border-gray-700 prose-invert prose-headings:text-white prose-p:text-white prose-strong:text-white prose-em:text-white prose-code:text-white"
                               : "bg-white border-gray-200",
                           )}
                         >
@@ -16875,7 +16892,7 @@ export default function EditContestPage({
               className={cn(
                 "border font-semibold px-4 py-2 rounded-lg text-md w-full sm:w-auto",
                 isDark
-                  ? "border-gray-300 text-gray-300"
+                  ? "border-white/20 text-white hover:bg-white/10"
                   : "border-[#d5d5db] text-[#1a1a1a]",
               )}
             >
@@ -17156,7 +17173,7 @@ export default function EditContestPage({
             const card = cn(
               "overflow-hidden rounded-2xl border",
               isDark
-                ? "border-white/10 bg-[#180438]"
+                ? "border-white/10 bg-[#161616]"
                 : "border-[#e6e6ea] bg-white",
             );
             const ink = isDark ? "text-white" : "text-[#1a1a1a]";
@@ -17167,7 +17184,7 @@ export default function EditContestPage({
                   <div
                     className={cn(
                       "relative flex aspect-[16/10] w-full items-center justify-center overflow-hidden",
-                      isDark ? "bg-[#12082c]" : "bg-[#f3f4f7]",
+                      isDark ? "bg-[#0e0e0e]" : "bg-[#f3f4f7]",
                     )}
                     style={
                       thumbnailPreview && thumbnailPreview !== "uploading"
@@ -17295,7 +17312,7 @@ export default function EditContestPage({
             className={cn(
               "relative flex w-full max-w-lg max-h-[90vh] flex-col overflow-hidden rounded-2xl shadow-2xl",
               isDark
-                ? "border border-gray-800 bg-[#06021D] text-white"
+                ? "border border-white/10 bg-[#161616] text-white"
                 : "border border-gray-200 bg-white text-gray-900",
             )}
             role="dialog"

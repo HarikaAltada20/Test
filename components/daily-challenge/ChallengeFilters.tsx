@@ -38,7 +38,7 @@ export function ScopeControl({
         className={cn(
           "h-auto w-[156px] min-w-[156px] justify-start gap-2 rounded-xl px-3 py-2 text-left shadow-sm [&>span]:line-clamp-none [&>span]:whitespace-normal [&>svg]:h-4 [&>svg]:w-4 [&>svg]:text-[#292524] [&>svg]:opacity-100",
           isDark
-            ? "border-white/10 bg-[#1c1422] text-white"
+            ? "border-white/10 bg-[#1a1a1a] text-white"
             : "border-[#e7e5e4] bg-white text-[#171717]",
           className,
         )}

@@ -98,8 +98,16 @@ export function EmailChangeModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose} isdark={isDark}>
-      <DialogContent hideCloseButton className="max-w-xl gap-5 rounded-2xl border-neutral-200 p-5 sm:max-w-xl sm:rounded-2xl sm:p-5">
-        <DialogClose className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]">
+      <DialogContent hideCloseButton className={cn(
+        "max-w-xl gap-5 rounded-2xl p-5 sm:max-w-xl sm:rounded-2xl sm:p-5",
+        isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200",
+      )}>
+        <DialogClose className={cn(
+          "absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-lg border",
+          isDark
+            ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+            : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
+        )}>
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>
         </DialogClose>

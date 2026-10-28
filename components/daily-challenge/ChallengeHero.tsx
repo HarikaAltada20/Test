@@ -162,7 +162,7 @@ function CountdownDial({
               cx={dotX}
               cy={dotY}
               r="8"
-              fill={isDark ? "#1c1422" : "#fff7f2"}
+              fill={isDark ? "#0e0e0e" : "#fff7f2"}
             />
             <circle cx={dotX} cy={dotY} r="5" fill="#f97316" />
           </>
@@ -293,7 +293,7 @@ export function ChallengeHero({
     <header
       className={cn(
         "rounded-[22px] border px-4 py-4 shadow-[0_1px_2px_rgba(120,72,20,0.04)] sm:px-5 sm:py-5",
-        isDark ? "border-white/10 bg-[#161018]" : "border-[#f0e2d2] bg-white",
+        isDark ? "border-white/10 bg-[#161616]" : "border-[#f0e2d2] bg-white",
       )}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -303,7 +303,9 @@ export function ChallengeHero({
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium",
                 statusIsLive
-                  ? "bg-[#e7f8ee] text-[#178a45]"
+                  ? isDark
+                    ? "bg-emerald-500/15 text-emerald-400"
+                    : "bg-[#e7f8ee] text-[#178a45]"
                   : isDark
                     ? "bg-white/10 text-neutral-300"
                     : "bg-neutral-100 text-[#292524]",
@@ -358,7 +360,7 @@ export function ChallengeHero({
                   "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
                   active
                     ? isDark
-                      ? "bg-white text-neutral-950 shadow-sm"
+                      ? "bg-white/15 text-white shadow-sm"
                       : "bg-white text-neutral-950 shadow-sm"
                     : isDark
                       ? "text-neutral-300 hover:text-white"
@@ -377,7 +379,7 @@ export function ChallengeHero({
           className={cn(
             "flex min-h-[280px] items-center justify-center rounded-2xl border px-4 py-6",
             isDark
-              ? "border-white/10 bg-white/[0.03]"
+              ? "border-white/10 bg-[#0e0e0e]"
               : "border-[#f3e6d8] bg-gradient-to-b from-white to-[#fff8f3]",
           )}
         >
@@ -402,7 +404,7 @@ export function ChallengeHero({
               className={cn(
                 "flex min-h-[280px] flex-col justify-between rounded-2xl border p-5 sm:p-6",
                 isDark
-                  ? "border-white/10 bg-white/[0.03]"
+                  ? "border-[#c4a15a]/30 bg-[linear-gradient(180deg,rgba(196,161,90,0.22)_0%,rgba(14,14,14,0.55)_52%,#0e0e0e_100%)]"
                   : "border-[#f3e6d8] bg-gradient-to-b from-white to-[#fff8f3]",
               )}
             >
@@ -413,7 +415,7 @@ export function ChallengeHero({
                     isDark ? "text-white" : "text-[#171717]",
                   )}
                 >
-                  <Icon className="h-4 w-4 text-[#78716c]" aria-hidden />
+                  <Icon className={cn("h-4 w-4", isDark ? "text-[#c4a15a]" : "text-[#78716c]")} aria-hidden />
                   {card.title}
                 </p>
                 <button

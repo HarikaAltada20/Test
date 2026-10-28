@@ -201,7 +201,7 @@ export function WinnersArchive({
     <section
       className={cn(
         "rounded-[22px] border px-4 py-5 shadow-[0_1px_2px_rgba(120,72,20,0.04)] sm:px-5 sm:py-6",
-        isDark ? "border-white/10 bg-[#161018]" : "border-neutral-200 bg-white",
+        isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white",
       )}
       aria-labelledby="winner-archive-heading"
     >

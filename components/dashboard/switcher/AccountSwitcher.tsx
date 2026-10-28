@@ -101,7 +101,7 @@ function AccountCardEmailRow({
         className={cn(
           "shrink-0 inline-flex p-1 rounded-md transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#171717] focus-visible:ring-offset-1",
           isDark
-            ? "hover:bg-white/10 text-slate-400 hover:text-slate-200 focus-visible:ring-offset-[#07031E]"
+            ? "hover:bg-white/10 text-slate-400 hover:text-slate-200 focus-visible:ring-offset-[#0e0e0e]"
             : "hover:bg-slate-200/80 text-slate-500 hover:text-slate-800 focus-visible:ring-offset-white",
         )}
         aria-label={revealed ? "Hide email" : "Show email"}
@@ -501,7 +501,7 @@ export function AccountSwitcher({
         <DialogContent className={cn(
           "max-w-[95vw] sm:max-w-[540px] max-h-[600px] rounded-3xl p-6 overflow-y-auto", 
           isDark 
-            ? "bg-[#07031E] border-slate-800 text-white" 
+            ? "bg-[#0e0e0e] border-white/10 text-white" 
             : "bg-white border-slate-200"
         )}>
           <DialogHeader>
@@ -573,7 +573,7 @@ export function AccountSwitcher({
                         {currentUsername.slice(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full h-3.5 w-3.5 border-2 border-white dark:border-[#07031E] flex items-center justify-center">
+                    <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full h-3.5 w-3.5 border-2 border-white dark:border-[#0e0e0e] flex items-center justify-center">
                        <div className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
                     </div>
                  </div>
@@ -642,7 +642,7 @@ export function AccountSwitcher({
                           ? "cursor-not-allowed opacity-80"
                           : "cursor-pointer focus-visible:ring-2 focus-visible:ring-[#171717] focus-visible:ring-offset-2",
                         isDark
-                          ? "focus-visible:ring-offset-[#07031E]"
+                          ? "focus-visible:ring-offset-[#0e0e0e]"
                           : "focus-visible:ring-offset-white",
                       )}
                     >
@@ -857,7 +857,7 @@ export function AccountSwitcher({
           className={cn(
             "rounded-2xl sm:rounded-2xl max-w-md",
             isDark
-              ? "border-slate-800 bg-[#07031E] text-white"
+              ? "border-white/10 bg-[#0e0e0e] text-white"
               : "border-slate-200 bg-white",
           )}
         >
@@ -934,7 +934,7 @@ export function AccountSwitcher({
         <DialogContent className={cn(
           "max-w-[95vw] sm:max-w-[400px] h-[80vh] max-h-[600px] rounded-3xl p-6 overflow-y-auto", 
           isDark 
-            ? "bg-[#07031E] border-slate-800 text-white" 
+            ? "bg-[#0e0e0e] border-white/10 text-white" 
             : "bg-white border-slate-200"
         )}>
           <DialogHeader>

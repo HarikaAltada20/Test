@@ -8,7 +8,7 @@ export function AnswerValue({ kind, answer }: { kind: string; answer: string }) 
         href={answer}
         target="_blank"
         rel="noopener noreferrer nofollow"
-        className="break-all text-[#7F39EC] underline dark:text-purple-300"
+        className="break-all text-[#1a1a1a] underline dark:text-white"
       >
         {answer}
       </a>
@@ -26,7 +26,7 @@ export function LinkChip({ url }: { url: string }) {
       target="_blank"
       rel="noopener noreferrer nofollow"
       onClick={(e) => e.stopPropagation()}
-      className="inline-flex max-w-full items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-xs font-medium text-[#4A00BE] hover:underline dark:border-[#7F39EC]/40 dark:bg-[#2B1159] dark:text-purple-200"
+      className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#ececef] bg-[#f3f3f5] px-2 py-0.5 text-xs font-medium text-[#1a1a1a] hover:underline dark:border-white/15 dark:bg-white/10 dark:text-white"
     >
       <Link2 className="h-3 w-3 shrink-0" aria-hidden="true" />
       <span className="truncate">{linkLabel(url)}</span>
@@ -45,9 +45,9 @@ export function AnswersList({ answers }: { answers: readonly ApplicationAnswer[]
   return (
     <dl className="space-y-4">
       {answers.map((ans) => (
-        <div key={ans.question_id}>
-          <dt className="text-sm font-medium text-gray-900 dark:text-gray-100">{ans.prompt}</dt>
-          <dd className="mt-1 text-sm text-gray-700 dark:text-gray-300">
+        <div key={ans.question_id} className="min-w-0 max-w-xl">
+          <dt className="text-sm font-semibold text-[#1a1a1a] dark:text-gray-100">{ans.prompt}</dt>
+          <dd className="mt-1 text-sm text-[#55555E] dark:text-gray-300">
             {ans.answer.trim() ? (
               <AnswerValue kind={ans.kind} answer={ans.answer} />
             ) : (

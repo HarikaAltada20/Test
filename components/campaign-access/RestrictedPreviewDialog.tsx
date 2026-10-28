@@ -75,7 +75,7 @@ export function RestrictedPreviewDialog(props: Props) {
       </Button>
       <Dialog isdark={isDark} open={open} onOpenChange={setOpen}>
         <DialogContent
-          className={cn("max-h-[90vh] overflow-y-auto sm:max-w-3xl", isDark && "dark text-white")}
+          className={cn("max-h-[90vh] overflow-y-auto sm:max-w-7xl", isDark && "dark text-white")}
           // Keep focus off the badge tooltip so it doesn't pop open on its own.
           onOpenAutoFocus={(e) => e.preventDefault()}
         >

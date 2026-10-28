@@ -86,7 +86,7 @@ export function CreatorStatsCard({
   ];
 
   return (
-    <Card className={cn("overflow-hidden rounded-2xl shadow-none", isDark ? "border-slate-700 bg-[#180438]" : "border-neutral-200 bg-white", className)}>
+    <Card className={cn("overflow-hidden rounded-2xl shadow-none", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white", className)}>
       <CardContent className="p-0">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-5 pb-4 pt-5">
           <h3 className={cn("text-base font-semibold", ink)}>Creator stats</h3>

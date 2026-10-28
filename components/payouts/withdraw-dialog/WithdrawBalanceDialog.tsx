@@ -69,6 +69,7 @@ export interface WithdrawBalanceDialogProps {
   onManageMethods: () => void;
   /** Creates the request. Shows its own success toast; returns the error message on failure. */
   onSubmit: (request: WithdrawRequest) => Promise<WithdrawSubmitResult>;
+  brandAccent?: boolean;
 }
 
 const AMOUNT_ID = "withdrawAmount";
@@ -89,8 +90,9 @@ export function WithdrawBalanceDialog({
   onOpenRefresh,
   onManageMethods,
   onSubmit,
+  brandAccent = false,
 }: WithdrawBalanceDialogProps) {
-  const t = payoutDialogTheme(isDark);
+  const t = payoutDialogTheme(isDark, { brand: brandAccent });
   const minLabel = formatCurrencyFromCents(minWithdrawalCents);
 
   const [amount, setAmount] = useState("");
@@ -238,7 +240,7 @@ export function WithdrawBalanceDialog({
           "h-[100dvh] max-h-[100dvh] w-full max-w-none rounded-none",
           "sm:h-auto sm:max-h-[min(90vh,720px)] sm:w-[calc(100vw-2rem)] sm:max-w-[480px] sm:rounded-2xl",
           isDark
-            ? "border-slate-700 bg-slate-900"
+            ? "border-white/10 bg-[#161616]"
             : "border-neutral-200 bg-white",
         )}
       >
@@ -389,7 +391,7 @@ export function WithdrawBalanceDialog({
                     disabled={submitting}
                     className={cn(
                       "h-auto min-h-[44px] gap-1 p-0 text-sm hover:underline sm:min-h-0",
-                      isDark ? "text-slate-200" : "text-[#171717]",
+                      isDark ? "text-[#ff7a1a]" : "text-[#171717]",
                     )}
                   >
                     <Settings2 className="h-3.5 w-3.5" aria-hidden />
@@ -443,7 +445,10 @@ export function WithdrawBalanceDialog({
                           disabled={!available}
                           className={cn(
                             "flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors",
-                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#171717]",
+                            "focus-visible:outline-none focus-visible:ring-2",
+                            isDark
+                              ? "focus-visible:ring-[#ff7a1a]"
+                              : "focus-visible:ring-[#171717]",
                             "disabled:cursor-not-allowed",
                             !available && "opacity-70",
                             selected
@@ -460,10 +465,10 @@ export function WithdrawBalanceDialog({
                               "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
                               selected
                                 ? isDark
-                                  ? "bg-white text-slate-900"
+                                  ? "bg-white text-[#171717]"
                                   : "bg-[#171717] text-white"
                                 : isDark
-                                  ? "bg-white/10 text-slate-200"
+                                  ? "bg-white/10 text-white"
                                   : "bg-white text-[#171717] shadow-[0_0_0_1px_rgba(0,0,0,0.06)]",
                             )}
                           >
@@ -482,8 +487,8 @@ export function WithdrawBalanceDialog({
                               {method.is_default && (
                                 <span
                                   className={cn(
-                                    "rounded px-1.5 py-0.5 text-[10px] font-medium",
-                                    "bg-[#171717] text-white",
+                                    "rounded px-1.5 py-0.5 text-[10px] font-medium text-white",
+                                    "bg-[var(--accent-btn-base)]",
                                   )}
                                 >
                                   Default
@@ -533,11 +538,13 @@ export function WithdrawBalanceDialog({
                             aria-hidden
                             className={cn(
                               "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors",
-                              selected
-                                ? "border-[#171717] bg-[#171717] text-white"
-                                : isDark
-                                  ? "border-slate-500"
-                                  : "border-neutral-300 bg-white",
+                            selected
+                              ? isDark
+                                ? "border-[var(--accent-btn-base)] bg-[var(--accent-btn-base)] text-white"
+                                : "border-[#171717] bg-[#171717] text-white"
+                              : isDark
+                                ? "border-white/25"
+                                : "border-neutral-300 bg-white",
                             )}
                           >
                             {selected && (

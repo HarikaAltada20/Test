@@ -34,8 +34,10 @@ export function ProcessingFeeInfo({ feeBps, isDark }: { feeBps: number; isDark: 
           onPointerLeave={hoverClose}
           className={cn(
             "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full align-middle transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#171717]",
-            isDark ? "text-gray-400 hover:text-white" : "text-gray-500 hover:text-gray-900"
+            "focus-visible:outline-none focus-visible:ring-2",
+            isDark
+              ? "text-white/50 hover:text-white focus-visible:ring-[#ff7a1a]"
+              : "text-gray-500 hover:text-gray-900 focus-visible:ring-[#171717]",
           )}
         >
           <Info className="h-3.5 w-3.5" aria-hidden />
@@ -49,7 +51,7 @@ export function ProcessingFeeInfo({ feeBps, isDark }: { feeBps: number; isDark: 
         onOpenAutoFocus={(e) => e.preventDefault()}
         className={cn(
           "w-72 p-3 text-xs leading-relaxed",
-          isDark ? "border-gray-700 bg-[#0d0730] text-gray-200" : "border-gray-200 bg-white text-gray-700"
+          isDark ? "border-white/10 bg-[#161616] text-white/70" : "border-gray-200 bg-white text-gray-700"
         )}
       >
         <p className={cn("mb-1 text-sm font-semibold", isDark ? "text-white" : "text-gray-900")}>Processing fee</p>

@@ -1030,7 +1030,7 @@ export function DashboardSidebar({
         ref={accountMenuRef}
         className={cn(
           "sticky bottom-0 z-30 shrink-0",
-          isDark ? "bg-[#06021D]" : "bg-[#f6f6f7]",
+          isDark ? "bg-[#0e0e0e]" : "bg-[#f6f6f7]",
           collapsed ? "px-2 pb-3" : "px-3 pb-3",
         )}
       >
@@ -1042,7 +1042,7 @@ export function DashboardSidebar({
                 ? "fixed w-64"
                 : "absolute bottom-full left-3 right-3 mb-2",
               isDark
-                ? "border-white/10 bg-[#12082a] text-white"
+                ? "border-white/10 bg-[#161616] text-white"
                 : "border-[#e6e6e8] bg-white text-[#1a1a1a]",
             )}
             style={

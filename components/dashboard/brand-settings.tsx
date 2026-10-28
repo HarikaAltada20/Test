@@ -388,7 +388,7 @@ export default function BrandSettings({
 
   const cardClass = cn(
     "overflow-hidden rounded-2xl border",
-    isDark ? "border-white/10 bg-[#180438]" : "border-[#ececef] bg-white",
+    isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white",
   );
   const muted = isDark ? "text-white/50" : "text-[#8d8d95]";
   const ink = isDark ? "text-white" : "text-[#1a1a1a]";
@@ -401,7 +401,7 @@ export default function BrandSettings({
       : "border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
   );
   const saveButton =
-    "inline-flex shrink-0 items-center justify-center rounded-full bg-[#7c3aed] px-4 py-1.5 text-[15px] font-medium text-white shadow-[0_6px_16px_rgba(124,58,237,0.35)] hover:bg-[#6d28d9] disabled:opacity-60";
+    "inline-flex shrink-0 items-center justify-center rounded-full goc-btn-primary px-4 py-1.5 text-[15px] font-medium disabled:opacity-60";
 
   return (
     <div className="w-full max-w-[820px] space-y-6">
@@ -414,7 +414,7 @@ export default function BrandSettings({
         >
           Settings
         </h1>
-        <p className={cn("text-base text-[#55555E]")}>
+        <p className={cn("text-base", isDark ? "text-white/55" : "text-[#55555E]")}>
           Your account, team, sign-in, plan and preferences.
         </p>
       </div>
@@ -735,13 +735,27 @@ export default function BrandSettings({
               </h2>
               {billingDetails?.status === "active" &&
                 !billingDetails?.cancelAtPeriodEnd && (
-                  <span className="rounded-full bg-[#e7f6ee] px-2.5 py-0.5 text-xs font-medium text-[#178a45]">
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-xs font-medium",
+                      isDark
+                        ? "bg-emerald-500/15 text-emerald-400"
+                        : "bg-[#e7f6ee] text-[#178a45]",
+                    )}
+                  >
                     Active
                   </span>
                 )}
               {billingDetails?.status === "active" &&
                 billingDetails?.cancelAtPeriodEnd && (
-                  <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-xs font-medium",
+                      isDark
+                        ? "bg-amber-500/15 text-amber-300"
+                        : "bg-amber-100 text-amber-800",
+                    )}
+                  >
                     Canceling
                   </span>
                 )}
@@ -802,7 +816,12 @@ export default function BrandSettings({
               <button
                 type="button"
                 onClick={onManagePlan}
-                className="rounded-full bg-black px-4 py-2 text-sm font-medium text-white"
+                className={cn(
+                  "rounded-full px-4 py-2 text-sm font-medium",
+                  isDark
+                    ? "border border-white/20 bg-transparent text-white hover:bg-white/10"
+                    : "bg-black text-white",
+                )}
               >
                 Manage plan
               </button>

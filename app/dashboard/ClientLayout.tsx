@@ -62,8 +62,7 @@ import { subscriptionPlans } from "@/constants/subscriptionPlans";
 import { MARKETING_HOME_AS_GUEST } from "@/constants/marketingHome";
 import Link from "next/link";
 import Image from "next/image";
-import goldLogoHorizontal from "@/public/images/gold_logo_horizontal.svg";
-import goldSquareLogo from "@/public/images/Group (4).png";
+import landingLogoWhite from "@/public/images/Primary_Logo_white.png";
 import gocLogoInk from "@/public/images/goc-logo-ink.svg";
 import gocLogoMark from "@/public/images/goc-logo-mark.svg";
 import { AccountSwitcher } from "@/components/dashboard/switcher/AccountSwitcher";
@@ -161,9 +160,9 @@ const modeConfigurations = {
   dark: {
     name: "Dark Mode",
     background: {
-      primary: "15, 23, 42", // slate-900
-      secondary: "30, 41, 59", // slate-800
-      tertiary: "51, 65, 85", // slate-700
+      primary: "14, 14, 14", // #0e0e0e
+      secondary: "22, 22, 22", // #161616
+      tertiary: "26, 26, 26", // #1a1a1a
     },
     text: {
       primary: "248, 250, 252", // slate-50
@@ -848,9 +847,16 @@ function DashboardContent({
     if (typeof window === "undefined") return;
     try {
       document.documentElement.setAttribute("data-theme", currentMode);
+      document.documentElement.setAttribute("data-brand-theme", currentMode);
+      document.documentElement.setAttribute("data-surface", "brand");
+      if (userRole) {
+        document.documentElement.setAttribute("data-role", userRole);
+      } else {
+        document.documentElement.removeAttribute("data-role");
+      }
       if (currentMode === "dark") {
         document.documentElement.classList.add("dark");
-        document.documentElement.style.backgroundColor = "#07031E";
+        document.documentElement.style.backgroundColor = "#0e0e0e";
         document.documentElement.style.color = "rgb(248, 250, 252)";
       } else {
         document.documentElement.classList.remove("dark");
@@ -860,7 +866,16 @@ function DashboardContent({
     } catch {
       // ignore
     }
-  }, [currentMode]);
+    return () => {
+      try {
+        document.documentElement.removeAttribute("data-surface");
+        document.documentElement.removeAttribute("data-role");
+        document.documentElement.removeAttribute("data-brand-theme");
+      } catch {
+        // ignore
+      }
+    };
+  }, [currentMode, userRole]);
 
   useEffect(() => {
     const onThemeChange = (event: Event) => {
@@ -966,9 +981,10 @@ function DashboardContent({
       document.cookie = `dashboard-mode=${modeKey}; path=/; max-age=31536000`;
       document.cookie = "dashboard-preset=; path=/; max-age=0";
       document.documentElement.setAttribute("data-theme", modeKey);
+      document.documentElement.setAttribute("data-brand-theme", modeKey);
       if (modeKey === "dark") {
         document.documentElement.classList.add("dark");
-        document.documentElement.style.backgroundColor = "#07031E";
+        document.documentElement.style.backgroundColor = "#0e0e0e";
         document.documentElement.style.color = "rgb(248, 250, 252)";
       } else {
         document.documentElement.classList.remove("dark");
@@ -1091,6 +1107,9 @@ function DashboardContent({
     <div
       className="bg-background text-foreground transition-colors duration-300"
       data-theme={currentMode}
+      data-brand-theme={currentMode}
+      data-surface="brand"
+      data-role={userRole ?? undefined}
       data-color-theme={currentTheme}
     >
       <SimpleLoadingBar />
@@ -1099,17 +1118,17 @@ function DashboardContent({
         :root {
           --background: ${currentMode === "light"
             ? "240 6% 96.7%"
-            : "222.2 84% 4.9%"};
+            : "0 0% 5.5%"};
           --foreground: ${currentMode === "light"
             ? "220 13% 9%"
             : "210 40% 98%"};
-          --card: ${currentMode === "light" ? "0 0% 96%" : "217.2 32.6% 17.5%"};
+          --card: ${currentMode === "light" ? "0 0% 96%" : "0 0% 8.6%"};
           --card-foreground: ${currentMode === "light"
             ? "220 13% 9%"
             : "210 40% 98%"};
           --popover: ${currentMode === "light"
             ? "0 0% 96%"
-            : "217.2 32.6% 17.5%"};
+            : "0 0% 8.6%"};
           --popover-foreground: ${currentMode === "light"
             ? "220 13% 9%"
             : "210 40% 98%"};
@@ -1119,28 +1138,28 @@ function DashboardContent({
             : "222.2 84% 4.9%"};
           --secondary: ${currentMode === "light"
             ? "220 14% 96%"
-            : "217.2 32.6% 17.5%"};
+            : "0 0% 10.2%"};
           --secondary-foreground: ${currentMode === "light"
             ? "220 9% 46%"
             : "210 40% 98%"};
           --muted: ${currentMode === "light"
             ? "220 13% 91%"
-            : "217.2 32.6% 17.5%"};
+            : "0 0% 10.2%"};
           --muted-foreground: ${currentMode === "light"
             ? "220 9% 46%"
             : "215 20.2% 75.1%"};
           --accent: ${currentMode === "light"
             ? "220 13% 91%"
-            : "217.2 32.6% 17.5%"};
+            : "0 0% 10.2%"};
           --accent-foreground: ${currentMode === "light"
             ? "220 13% 9%"
             : "210 40% 98%"};
           --border: ${currentMode === "light"
             ? "220 13% 82%"
-            : "217.2 32.6% 17.5%"};
+            : "0 0% 16%"};
           --input: ${currentMode === "light"
             ? "220 13% 82%"
-            : "217.2 32.6% 17.5%"};
+            : "0 0% 16%"};
           --ring: ${getThemeHSL(currentTheme)};
 
           /* Performance optimized theme variables */
@@ -1318,7 +1337,7 @@ function DashboardContent({
         .dashboard-main-content {
           background-color: ${currentMode === "light"
             ? "#f6f6f7"
-            : "hsl(var(--background))"};
+            : "#0e0e0e"};
         }
       `}</style>
 
@@ -1328,7 +1347,7 @@ function DashboardContent({
             "fixed top-0 left-0 z-[41] hidden h-dvh min-h-0 flex-col overflow-hidden border-r transition-[width] duration-300 ease-in-out lg:flex",
             sidebarCollapsed ? "w-28" : "w-72",
             currentMode === "dark"
-              ? "bg-[#06021D] text-white border-white/10"
+              ? "bg-[#0e0e0e] text-white border-white/10"
               : "bg-[#f6f6f7] text-[#1a1a1a] border-[#e8e8ea]",
           )}
           // style={{
@@ -1392,18 +1411,20 @@ function DashboardContent({
                 <Image
                   src={
                     currentMode === "dark"
-                      ? sidebarCollapsed
-                        ? goldSquareLogo
-                        : goldLogoHorizontal
-                      : gocLogoInk
+                      ? landingLogoWhite
+                      : sidebarCollapsed
+                        ? gocLogoMark
+                        : gocLogoInk
                   }
                   alt="Game Of Creators Logo"
                   width={196}
                   height={70}
                   className={cn(
-                    "w-auto",
+                    "w-auto object-contain",
                     sidebarCollapsed
-                      ? "h-14 w-14 object-contain"
+                      ? currentMode === "dark"
+                        ? "h-9 max-w-[5.5rem]"
+                        : "h-14 w-14"
                       : "h-16",
                   )}
                 />
@@ -1479,7 +1500,7 @@ function DashboardContent({
             className={cn(
               "sticky top-0 z-40 w-full",
               currentMode === "dark"
-                ? "bg-[#07031E] text-white border-b border-gray-800"
+                ? "bg-[#0e0e0e] text-white border-b border-white/10"
                 : "bg-[#f6f6f7] text-slate-900",
             )}
             style={{
@@ -1575,7 +1596,7 @@ function DashboardContent({
                       className={cn(
                         "md:w-64 p-0 flex flex-col h-full",
                         currentMode === "dark"
-                          ? "bg-[#06021D] text-white border-gray-800"
+                          ? "bg-[#0e0e0e] text-white border-white/10"
                           : "bg-[#f6f6f7] text-slate-900",
                       )}
                     >
@@ -1595,7 +1616,7 @@ function DashboardContent({
                           <Image
                             src={
                               currentMode === "dark"
-                                ? goldLogoHorizontal
+                                ? landingLogoWhite
                                 : gocLogoInk
                             }
                             alt="Game Of Creators Logo"
@@ -1847,7 +1868,7 @@ function DashboardContent({
                       side="right"
                       className={cn(
                         "w-96 p-0 border-l ",
-                        currentMode === "light" ? "bg-white" : "bg-[#06021D]",
+                        currentMode === "light" ? "bg-white" : "bg-[#0e0e0e]",
                       )}
                       // style={{
                       //   background: `linear-gradient(135deg, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1))`,
@@ -2403,7 +2424,7 @@ function DashboardContent({
                       side="right"
                       className={cn(
                         "w-96 bg-white p-0 border-l",
-                        currentMode === "light" ? " bg-white" : "bg-[#06021D]",
+                        currentMode === "light" ? " bg-white" : "bg-[#0e0e0e]",
                       )}
                       // style={{
                       //   background:

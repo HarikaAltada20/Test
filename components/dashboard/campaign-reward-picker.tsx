@@ -90,8 +90,8 @@ export function CampaignRewardPicker({
     (model) => model.paidOnly && paidTypesLocked,
   );
   const inkRgb = isDark ? "255 255 255" : "26 26 26";
-  const cardSurface = isDark ? "#180438" : "#ffffff";
-  const textOnFill = isDark ? "#180438" : "#ffffff";
+  const cardSurface = isDark ? "#161616" : "#ffffff";
+  const textOnFill = isDark ? "#161616" : "#ffffff";
   const controlFill = isDark ? "#2a1050" : "#f4f4f5";
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -188,7 +188,7 @@ export function CampaignRewardPicker({
               }
               className={cn(
                 "group relative flex min-h-[280px] flex-col overflow-hidden rounded-[20px] border p-4 text-left transition-[border-color,box-shadow]",
-                isDark ? "bg-[#180438]" : "bg-white",
+                isDark ? "bg-[#161616]" : "bg-white",
                 isDark
                   ? "shadow-[0_10px_28px_rgb(0_0_0_/_0.28)]"
                   : "shadow-[0_10px_28px_rgb(26_26_26_/_0.06)]",

@@ -761,7 +761,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 align="end"
                 className={cn(
                   "min-w-[220px]",
-                  isDark ? "bg-[#06021D] border-gray-800" : "bg-white",
+                  isDark ? "bg-[#161616] border-gray-800" : "bg-white",
                 )}
               >
                 <DropdownMenuItem
@@ -1022,7 +1022,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 className={cn(
                   "w-56 border shadow-lg",
                   isDark
-                    ? "bg-[#06021D] border-gray-800 text-white"
+                    ? "bg-[#161616] border-gray-800 text-white"
                     : "bg-white border-black/5 text-black",
                 )}
               >
@@ -1082,7 +1082,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 className={cn(
                   "w-96 border shadow-lg",
                   isDark
-                    ? "bg-[#06021D] border-gray-800 text-white"
+                    ? "bg-[#161616] border-gray-800 text-white"
                     : "bg-white border-black/5 text-black",
                 )}
               >
@@ -1282,13 +1282,13 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
         <div
           className={cn(
             "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
-            isDark ? "bg-[#100A33]" : "bg-black",
+            isDark ? "bg-black/70" : "bg-black",
           )}
         >
           <div
             className={cn(
               "rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto",
-              isDark ? "bg-[#06021D] border border-gray-800" : "bg-white",
+              isDark ? "bg-[#161616] border border-gray-800" : "bg-white",
             )}
           >
             <div className="flex items-center justify-between mb-6">

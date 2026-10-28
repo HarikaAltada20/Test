@@ -89,7 +89,9 @@ export function AdminDateRangePicker({
           type="button"
           className={cn(
             "min-w-[180px] max-w-[220px] justify-start text-left font-normal shrink-0",
-            isDark ? "border-white/20 bg-white/5 hover:bg-white/10" : "",
+            isDark
+              ? "border-white/10 bg-[#161616] text-white hover:bg-white/10 hover:text-white"
+              : "",
             triggerClassName,
           )}
         >
@@ -100,12 +102,17 @@ export function AdminDateRangePicker({
       <PopoverContent
         className={cn(
           "w-auto p-0",
-          isDark ? "border-white/20 bg-[#170337]" : "",
+          isDark ? "border-white/10 bg-[#161616] text-white" : "",
         )}
         align={align}
       >
         <div className="flex flex-col sm:flex-row max-h-[420px] overflow-y-auto">
-          <div className="flex flex-col gap-1 p-3 border-b sm:border-b-0 sm:border-r sm:h-full sm:min-h-[580px]">
+          <div
+            className={cn(
+              "flex flex-col gap-1 p-3 border-b sm:border-b-0 sm:border-r sm:h-full sm:min-h-[580px]",
+              isDark ? "border-white/10" : "",
+            )}
+          >
             <p
               className={cn(
                 "text-sm font-medium",
@@ -159,10 +166,10 @@ export function AdminDateRangePicker({
                   "justify-start font-normal",
                   presetLabel === presetLabelItem
                     ? isDark
-                      ? "bg-white/10 text-white"
+                      ? "border border-white/20 bg-white/10 text-white"
                       : "bg-accent"
                     : isDark
-                      ? "text-gray-300 hover:bg-white/10"
+                      ? "border border-transparent text-white/70 hover:bg-white/10 hover:text-white"
                       : "",
                 )}
                 onClick={() => {
@@ -210,7 +217,22 @@ export function AdminDateRangePicker({
               disabled={(date) =>
                 date > now || date < subDays(now, historyDays)
               }
-              className={isDark ? "rounded-md border-0 bg-transparent" : ""}
+              className={isDark ? "rounded-md border-0 bg-transparent text-white" : ""}
+              classNames={
+                isDark
+                  ? {
+                      day_selected:
+                        "bg-white text-[#171717] hover:bg-white hover:text-[#171717] focus:bg-white focus:text-[#171717]",
+                      day_range_end:
+                        "bg-white text-[#171717] hover:bg-white hover:text-[#171717]",
+                      day_range_middle:
+                        "aria-selected:bg-white/10 aria-selected:text-white",
+                      day_today: "bg-white/10 text-white",
+                      nav_button:
+                        "h-7 w-7 bg-transparent p-0 opacity-70 hover:opacity-100 border-white/15 text-white",
+                    }
+                  : undefined
+              }
             />
             <div
               className={cn(
@@ -256,7 +278,7 @@ export function AdminDateRangePicker({
                     className={cn(
                       "h-9 text-sm",
                       isDark
-                        ? "border-white/20 bg-white/5 text-white"
+                        ? "border-white/10 bg-[#0e0e0e] text-white"
                         : "",
                     )}
                   />
@@ -289,7 +311,7 @@ export function AdminDateRangePicker({
                     className={cn(
                       "h-9 text-sm w-[100px]",
                       isDark
-                        ? "border-white/20 bg-white/5 text-white"
+                        ? "border-white/10 bg-[#0e0e0e] text-white"
                         : "",
                     )}
                   />
@@ -333,7 +355,7 @@ export function AdminDateRangePicker({
                     className={cn(
                       "h-9 text-sm",
                       isDark
-                        ? "border-white/20 bg-white/5 text-white"
+                        ? "border-white/10 bg-[#0e0e0e] text-white"
                         : "",
                     )}
                   />
@@ -366,7 +388,7 @@ export function AdminDateRangePicker({
                     className={cn(
                       "h-9 text-sm w-[100px]",
                       isDark
-                        ? "border-white/20 bg-white/5 text-white"
+                        ? "border-white/10 bg-[#0e0e0e] text-white"
                         : "",
                     )}
                   />
@@ -398,13 +420,15 @@ export function AdminDateRangePicker({
                 <SelectTrigger
                   className={cn(
                     "h-9 text-sm",
-                    isDark ? "border-white/20 bg-white/5 text-white" : "",
+                    isDark
+                      ? "border-white/10 bg-[#0e0e0e] text-white"
+                      : "",
                   )}
                 >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent
-                  className={isDark ? "border-white/20 bg-[#170337]" : ""}
+                  className={isDark ? "border-white/10 bg-[#161616] text-white" : ""}
                 >
                   <SelectItem value="utc">UTC</SelectItem>
                   <SelectItem value="local">Local (Asia/Calcutta)</SelectItem>
@@ -415,7 +439,7 @@ export function AdminDateRangePicker({
               <Button
                 size="sm"
                 type="button"
-                className="w-full"
+                className="w-full goc-btn-primary"
                 onClick={() => {
                   const fromDateStr = getDateStrInTz(
                     internalRange.from,

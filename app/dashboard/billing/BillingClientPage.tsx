@@ -132,7 +132,7 @@ function BillingStatCard({
       className={cn(
         "flex flex-col rounded-2xl border p-5",
         isDark
-          ? "border-slate-700 bg-slate-900"
+          ? "border-white/10 bg-[#161616]"
           : "border-neutral-200 bg-white",
       )}
     >
@@ -1070,7 +1070,12 @@ export default function BillingClientPage({
               type="button"
               onClick={() => openPayoutDialog("list")}
               disabled={isLoading}
-              className="h-10 rounded-full bg-[#171717] px-4 text-sm font-medium text-white shadow-none hover:bg-[#2a2a2a]"
+              className={cn(
+                "h-10 rounded-full px-4 text-sm font-medium shadow-none",
+                isDark
+                  ? "bg-white text-[#171717] hover:bg-neutral-200"
+                  : "bg-[#171717] text-white hover:bg-[#2a2a2a]",
+              )}
             >
               <Settings2 className="mr-1.5 h-4 w-4" />
               Manage Payout Methods
@@ -1082,7 +1087,7 @@ export default function BillingClientPage({
       <div
         className={cn(
           "mt-8 flex gap-6 border-b",
-          isDark ? "border-slate-700" : "border-neutral-200",
+          isDark ? "border-white/10" : "border-neutral-200",
         )}
       >
         {tabs.map((tab) => {
@@ -1162,7 +1167,7 @@ export default function BillingClientPage({
             className={cn(
               "overflow-hidden rounded-2xl border",
               isDark
-                ? "border-slate-700 bg-slate-900"
+                ? "border-white/10 bg-[#161616]"
                 : "border-neutral-200 bg-white",
             )}
           >
@@ -1178,7 +1183,7 @@ export default function BillingClientPage({
                   className={cn(
                     "text-left border-b",
                     isDark
-                      ? "border-b border-slate-700 text-slate-400"
+                      ? "border-b border-white/10 text-white/50"
                       : "border-b border-neutral-200 text-[#737373]",
                   )}
                 >
@@ -1306,7 +1311,7 @@ export default function BillingClientPage({
             className={cn(
               "overflow-hidden rounded-2xl border",
               isDark
-                ? "border-slate-700 bg-slate-900"
+                ? "border-white/10 bg-[#161616]"
                 : "border-neutral-200 bg-white",
             )}
           >
@@ -1316,7 +1321,7 @@ export default function BillingClientPage({
                   className={cn(
                     "text-left border-b",
                     isDark
-                      ? "border-b border-slate-700 text-slate-400"
+                      ? "border-b border-white/10 text-white/50"
                       : "border-b border-neutral-200 text-[#737373]",
                   )}
                 >
@@ -1437,7 +1442,7 @@ export default function BillingClientPage({
             className={cn(
               "overflow-hidden rounded-2xl border",
               isDark
-                ? "border-slate-700 bg-slate-900"
+                ? "border-white/10 bg-[#161616]"
                 : "border-neutral-200 bg-white",
             )}
           >
@@ -1453,7 +1458,7 @@ export default function BillingClientPage({
                   className={cn(
                     "text-left border-b",
                     isDark
-                      ? "border-b border-slate-700 text-slate-400"
+                      ? "border-b border-white/10 text-white/50"
                       : "border-b border-neutral-200 text-[#737373]",
                   )}
                 >
@@ -1579,7 +1584,7 @@ export default function BillingClientPage({
             className={cn(
               "overflow-hidden rounded-2xl border",
               isDark
-                ? "border-slate-700 bg-slate-900"
+                ? "border-white/10 bg-[#161616]"
                 : "border-neutral-200 bg-white",
             )}
           >
@@ -1589,7 +1594,7 @@ export default function BillingClientPage({
                   className={cn(
                     "text-left border-b",
                     isDark
-                      ? "border-b border-slate-700 text-slate-400"
+                      ? "border-b border-white/10 text-white/50"
                       : "border-b border-neutral-200 text-[#737373]",
                   )}
                 >
@@ -1697,6 +1702,7 @@ export default function BillingClientPage({
         onSave={savePayoutMethod}
         onDelete={deletePayoutMethod}
         onSetDefault={setDefaultPayoutMethod}
+        brandAccent
       />
 
       {/* Withdraw Balance Modal */}
@@ -1716,6 +1722,7 @@ export default function BillingClientPage({
           openPayoutDialog("list");
         }}
         onSubmit={submitWithdrawal}
+        brandAccent
       />
 
       {/* Top Up Wallet Modal */}
@@ -1743,7 +1750,7 @@ export default function BillingClientPage({
             "h-[100dvh] max-h-[100dvh] w-full max-w-none rounded-none",
             "sm:h-auto sm:max-h-[min(90vh,720px)] sm:w-[calc(100vw-2rem)] sm:max-w-[480px] sm:rounded-2xl",
             isDark
-              ? "border-slate-700 bg-slate-900"
+              ? "border-white/10 bg-[#161616]"
               : "border-neutral-200 bg-white",
           )}
         >

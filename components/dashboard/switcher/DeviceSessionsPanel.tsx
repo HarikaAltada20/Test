@@ -121,7 +121,7 @@ export function DeviceSessionsPanel({
     <Card
       className={cn(
         "rounded-2xl border shadow-none",
-        isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white",
+        isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white",
       )}
     >
       <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 px-5 py-4">
@@ -136,14 +136,14 @@ export function DeviceSessionsPanel({
             <span
               className={cn(
                 "ml-2 text-base font-normal",
-                isDark ? "text-slate-400" : "text-[#737373]",
+                isDark ? "text-white/50" : "text-[#737373]",
               )}
             >
               Up to three at a time.
             </span>
           </CardTitle>
           <CardDescription
-            className={cn("mt-1 text-base", isDark ? "text-slate-400" : "text-[#44403c]")}
+            className={cn("mt-1 text-base", isDark ? "text-white/55" : "text-[#44403c]")}
           >
             Up to three recent browsers are remembered. Use sign-out options if
             you no longer trust a device.
@@ -155,7 +155,7 @@ export function DeviceSessionsPanel({
           className={cn(
             "h-9 shrink-0 rounded-full px-4 text-sm font-medium shadow-none",
             isDark
-              ? "border-slate-600 bg-transparent text-white hover:bg-white/10"
+              ? "border-white/20 bg-transparent text-white hover:bg-white/10"
               : "border border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
           )}
           onClick={() => void refresh(true)}
@@ -167,13 +167,13 @@ export function DeviceSessionsPanel({
       <CardContent className="space-y-4 px-5 pb-5">
         {loading ? (
           <div className="flex justify-center py-6">
-            <Loader2 className="h-6 w-6 animate-spin text-[#171717]" />
+            <Loader2 className={cn("h-6 w-6 animate-spin", isDark ? "text-white" : "text-[#171717]")} />
           </div>
         ) : rows.length === 0 ? (
           <p
             className={cn(
               "text-base text-center py-4",
-              isDark ? "text-slate-500" : "text-slate-500",
+              isDark ? "text-white/45" : "text-slate-500",
             )}
           >
             No session history yet. It appears after you use this account in a
@@ -186,13 +186,13 @@ export function DeviceSessionsPanel({
                 key={row.id}
                 className={cn(
                   "border-t py-3 text-base first:border-t-0 first:pt-0",
-                  isDark ? "border-slate-700" : "border-neutral-200",
+                  isDark ? "border-white/10" : "border-neutral-200",
                 )}
               >
                 <p
                   className={cn(
                     "font-medium line-clamp-2",
-                    isDark ? "text-slate-200" : "text-slate-800",
+                    isDark ? "text-white" : "text-slate-800",
                   )}
                 >
                   {row.user_agent?.trim() || "Unknown browser"}
@@ -200,7 +200,7 @@ export function DeviceSessionsPanel({
                 <p
                   className={cn(
                     "text-base mt-1",
-                    isDark ? "text-slate-500" : "text-slate-500",
+                    isDark ? "text-white/45" : "text-slate-500",
                   )}
                 >
                   {row.ip_address ? `${row.ip_address} · ` : ""}
@@ -211,14 +211,14 @@ export function DeviceSessionsPanel({
           </ul>
         )}
 
-        <div className={cn("flex flex-col gap-2 border-t pt-4 sm:flex-row sm:flex-wrap", isDark ? "border-slate-700" : "border-neutral-200")}>
+        <div className={cn("flex flex-col gap-2 border-t pt-4 sm:flex-row sm:flex-wrap", isDark ? "border-white/10" : "border-neutral-200")}>
           <Button
             type="button"
             variant="outline"
             className={cn(
               "h-9 rounded-full px-4 text-sm font-medium shadow-none",
               isDark
-                ? "border-slate-600 bg-transparent text-white hover:bg-white/10"
+                ? "border-white/20 bg-transparent text-white hover:bg-white/10"
                 : "border border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
             )}
             disabled={!!busy || loading}
@@ -235,7 +235,7 @@ export function DeviceSessionsPanel({
             className={cn(
               "h-9 rounded-full px-4 text-sm font-medium shadow-none",
               isDark
-                ? "border-slate-600 bg-transparent text-white hover:bg-white/10"
+                ? "border-white/20 bg-transparent text-white hover:bg-white/10"
                 : "border border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
             )}
             disabled={!!busy || loading}
@@ -253,7 +253,7 @@ export function DeviceSessionsPanel({
               className={cn(
                 "h-9 rounded-full px-4 text-sm font-medium shadow-none",
                 isDark
-                  ? "border-slate-600 bg-transparent text-white hover:bg-white/10"
+                  ? "border-white/20 bg-transparent text-white hover:bg-white/10"
                   : "border border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
               )}
               onClick={onLogOut}

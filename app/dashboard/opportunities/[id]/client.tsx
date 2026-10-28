@@ -3492,7 +3492,7 @@ export function ContestClientPage({
 
   if (restrictedPreview) {
     return (
-      <div className="px-4 py-6">
+      <div className="mx-auto w-full max-w-7xl px-4 py-6 md:px-8">
         <RestrictedCampaignPreview
           preview={restrictedPreview}
           onChanged={async () => {
@@ -3616,7 +3616,7 @@ export function ContestClientPage({
       : "border-neutral-300 bg-white text-[#171717] hover:bg-neutral-50",
   );
   const primaryButtonClass =
-    "h-11 w-full rounded-full border border-transparent bg-[#ff7a1a] px-5 text-sm font-semibold text-white shadow-none hover:bg-[#e86e14]";
+    "h-11 w-full rounded-full border border-transparent goc-btn-primary px-5 text-sm font-semibold";
   const disabledButtonClass = cn(
     "h-11 w-full cursor-not-allowed rounded-full border px-5 text-sm font-semibold shadow-none",
     isDark
@@ -8838,7 +8838,7 @@ export function ContestClientPage({
                                                     <Button
                                                       size="sm"
                                                       asChild
-                                                      className="rounded-full bg-[#ff7a1a] px-4 py-2 text-sm text-white hover:bg-[#e86e14]"
+                                                      className="rounded-full goc-btn-primary px-4 py-2 text-sm"
                                                     >
                                                       <a
                                                         href={resource.url}
@@ -9290,7 +9290,7 @@ export function ContestClientPage({
                                 <span
                                   className={cn(
                                     "inline-flex h-2 w-2 shrink-0 rounded-full animate-pulse",
-                                    "bg-[#ff7a1a]",
+                                    "bg-[var(--accent-btn-base)]",
                                   )}
                                   aria-hidden
                                 />
@@ -9326,7 +9326,7 @@ export function ContestClientPage({
                                 <div
                                   className={cn(
                                     "absolute inset-0 rounded-full blur-xl opacity-40",
-                                    "bg-[#ff7a1a]",
+                                    "bg-[var(--accent-btn-base)]",
                                   )}
                                 />
                                 <Loader2
@@ -9461,8 +9461,8 @@ export function ContestClientPage({
                                   className={`text-xs px-4 py-1.5 rounded-lg shadow-none transition-all duration-200 flex-1 ${
                                     leaderboardViewMode === "simple"
                                       ? isDark
-                                        ? "!bg-[#ff7a1a] !text-white hover:!bg-[#e86e14]"
-                                        : "!bg-[#ff7a1a] !text-white hover:!bg-[#e86e14]"
+                                        ? "goc-btn-primary"
+                                        : "goc-btn-primary"
                                       : isDark
                                         ? "text-slate-300 hover:text-white hover:!bg-white/10"
                                         : "!text-neutral-500 hover:!text-neutral-900 hover:!bg-neutral-100"
@@ -9485,8 +9485,8 @@ export function ContestClientPage({
                                   className={`text-xs px-4 py-1.5 rounded-lg shadow-none transition-all duration-200 flex-1 ${
                                     leaderboardViewMode === "detailed"
                                       ? isDark
-                                        ? "!bg-[#ff7a1a] !text-white hover:!bg-[#e86e14]"
-                                        : "!bg-[#ff7a1a] !text-white hover:!bg-[#e86e14]"
+                                        ? "goc-btn-primary"
+                                        : "goc-btn-primary"
                                       : isDark
                                         ? "text-slate-300 hover:text-white hover:!bg-white/10"
                                         : "!text-neutral-500 hover:!text-neutral-900 hover:!bg-neutral-100"
@@ -9560,8 +9560,8 @@ export function ContestClientPage({
                                   className={`text-xs px-4 py-1.5 rounded-lg shadow-none transition-all duration-200 flex-1 ${
                                     leaderboardDisplayMode === "submission"
                                       ? isDark
-                                        ? "!bg-[#ff7a1a] !text-white hover:!bg-[#e86e14]"
-                                        : "!bg-[#ff7a1a] !text-white hover:!bg-[#e86e14]"
+                                        ? "goc-btn-primary"
+                                        : "goc-btn-primary"
                                       : isDark
                                         ? "text-slate-300 hover:text-white hover:!bg-white/10"
                                         : "!text-neutral-500 hover:!text-neutral-900 hover:!bg-neutral-100"
@@ -9584,8 +9584,8 @@ export function ContestClientPage({
                                   className={`text-xs px-4 py-1.5 rounded-lg shadow-none transition-all duration-200 flex-1 ${
                                     leaderboardDisplayMode === "creator"
                                       ? isDark
-                                        ? "!bg-[#ff7a1a] !text-white hover:!bg-[#e86e14]"
-                                        : "!bg-[#ff7a1a] !text-white hover:!bg-[#e86e14]"
+                                        ? "goc-btn-primary"
+                                        : "goc-btn-primary"
                                       : isDark
                                         ? "text-slate-300 hover:text-white hover:!bg-white/10"
                                         : "!text-neutral-500 hover:!text-neutral-900 hover:!bg-neutral-100"
@@ -10448,8 +10448,8 @@ export function ContestClientPage({
                                                     className={`text-xs px-3 py-1.5 transition-all duration-200 ${
                                                       modalViewMode === "simple"
                                                         ? isDark
-                                                          ? "!bg-[#ff7a1a] !text-white hover:!bg-[#e86e14]"
-                                                          : "!bg-[#ff7a1a] !text-white hover:!bg-[#e86e14]"
+                                                          ? "goc-btn-primary"
+                                                          : "goc-btn-primary"
                                                         : isDark
                                                           ? "text-slate-300 hover:text-white hover:!bg-white/10"
                                                           : "!text-neutral-500 hover:!text-neutral-900 hover:!bg-neutral-100"
@@ -10474,8 +10474,8 @@ export function ContestClientPage({
                                                       modalViewMode ===
                                                       "detailed"
                                                         ? isDark
-                                                          ? "!bg-[#ff7a1a] !text-white hover:!bg-[#e86e14]"
-                                                          : "!bg-[#ff7a1a] !text-white hover:!bg-[#e86e14]"
+                                                          ? "goc-btn-primary"
+                                                          : "goc-btn-primary"
                                                         : isDark
                                                           ? "text-slate-300 hover:text-white hover:!bg-white/10"
                                                           : "!text-neutral-500 hover:!text-neutral-900 hover:!bg-neutral-100"
@@ -11143,7 +11143,7 @@ export function ContestClientPage({
                                     <div
                                       className={cn(
                                         "h-full rounded-full transition-[width] duration-300 ease-out shadow-sm",
-                                        "bg-[#ff7a1a]",
+                                        "bg-[var(--accent-btn-base)]",
                                       )}
                                       style={{ width: `${busyPct}%` }}
                                     />

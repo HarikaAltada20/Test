@@ -182,7 +182,7 @@ export function LeaderboardPanel({
     <section
       className={cn(
         "rounded-[22px] border px-4 py-5 shadow-[0_1px_2px_rgba(120,72,20,0.04)] sm:px-5 sm:py-6",
-        isDark ? "border-white/10 bg-[#161018]" : "border-neutral-200 bg-white",
+        isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white",
       )}
       aria-labelledby="live-leaderboard-heading"
     >
@@ -296,7 +296,9 @@ export function LeaderboardPanel({
                   ? isDark
                     ? "border-white text-white"
                     : "border-neutral-950 text-neutral-950"
-                  : "border-transparent text-[#292524] hover:text-[#171717]",
+                  : isDark
+                    ? "border-transparent text-neutral-400 hover:text-white"
+                    : "border-transparent text-[#292524] hover:text-[#171717]",
               )}
             >
               {label} leaderboard{" "}
@@ -396,7 +398,7 @@ export function LeaderboardPanel({
                 </p>
                 <Link
                   href="/dashboard/opportunities"
-                  className="mt-5 inline-flex items-center justify-center rounded-full bg-[#ff7a1a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#f56c0c]"
+                  className="mt-5 inline-flex items-center justify-center rounded-full goc-btn-primary px-4 py-2 text-sm font-semibold"
                 >
                   <Upload className="mr-1 h-4 w-4" />
                   Upload your first reel
@@ -429,10 +431,10 @@ export function LeaderboardPanel({
                         first ? "py-6 sm:py-7" : "py-4",
                         first
                           ? isDark
-                            ? "border-orange-300/30 bg-orange-400/10"
+                            ? "border-[#c4a15a]/45 bg-[linear-gradient(180deg,rgba(196,161,90,0.28)_0%,rgba(14,14,14,0.4)_46%,#0e0e0e_78%)]"
                             : "border-[#f0d3b0] bg-gradient-to-b from-white to-[#fff6ee]"
                           : isDark
-                            ? "border-white/10 bg-white/[0.03]"
+                            ? "border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,#0e0e0e_52%)]"
                             : "border-[#f3e6d8] bg-[#fafafa]",
                       )}
                     >
@@ -491,7 +493,9 @@ export function LeaderboardPanel({
                           className={cn(
                             "mt-2 text-sm font-semibold",
                             first && row.trophy
-                              ? "text-[#c2410c]"
+                              ? isDark
+                                ? "text-[#ff7a1a]"
+                                : "text-[#c2410c]"
                               : isDark
                                 ? "text-neutral-100"
                                 : "text-[#292524]",

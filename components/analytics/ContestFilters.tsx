@@ -84,7 +84,7 @@ export default function ContestFilters({
               isActive
                 ? "bg-purple-600 hover:bg-purple-700 text-white border-purple-600"
                 : isDark
-                ? "bg-[#170337] hover:bg-[#2A0B5A] text-white border-gray-600"
+                ? "bg-[#161616] hover:bg-white/10 text-white border-white/15"
                 : "bg-white hover:bg-gray-50 text-gray-700 border-gray-200"
             )}
           >

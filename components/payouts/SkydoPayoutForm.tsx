@@ -127,7 +127,10 @@ export function SkydoPayoutForm({
           aria-valuenow={Math.min(balanceCents, SKYDO_MIN_BALANCE_CENTS)}
           className={cn("h-1.5 w-full overflow-hidden rounded-full", isDark ? "bg-white/10" : "bg-gray-200")}
         >
-          <div className="h-full rounded-full bg-[#171717]" style={{ width: `${progress}%` }} />
+          <div
+            className="h-full rounded-full bg-[var(--accent-btn-base)]"
+            style={{ width: `${progress}%` }}
+          />
         </div>
         <p className={cn("text-xs", t.muted)}>
           {formatCurrencyFromCents(balanceCents)} of {formatCurrencyFromCents(SKYDO_MIN_BALANCE_CENTS)}
@@ -179,7 +182,8 @@ export function SkydoPayoutForm({
         <CollapsibleTrigger
           className={cn(
             "flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#171717]",
+            "focus-visible:outline-none focus-visible:ring-2",
+            isDark ? "focus-visible:ring-[#ff7a1a]" : "focus-visible:ring-[#171717]",
             t.text
           )}
         >

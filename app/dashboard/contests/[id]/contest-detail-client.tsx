@@ -16121,7 +16121,7 @@ export default function ContestDetailClient({
             className={cn(
               "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
               isDark
-                ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
+                ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
                 : "bg-gradient-to-br from-white to-gray-50 border border-gray-100",
             )}
           >
@@ -16216,7 +16216,7 @@ export default function ContestDetailClient({
             className={cn(
               "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
               isDark
-                ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
+                ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
                 : "bg-gradient-to-br from-white to-blue-50 border border-blue-100",
             )}
           >
@@ -16317,7 +16317,7 @@ export default function ContestDetailClient({
                 className={cn(
                   "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                   isDark
-                    ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-yellow-500/20"
+                    ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-yellow-500/20"
                     : "bg-gradient-to-br from-white to-yellow-50 border border-yellow-100",
                 )}
               >
@@ -16564,8 +16564,8 @@ export default function ContestDetailClient({
                       "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                       isDark
                         ? campaignType === "raid"
-                          ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-red-500/20"
-                          : "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-cyan-500/20"
+                          ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-red-500/20"
+                          : "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-cyan-500/20"
                         : campaignType === "raid"
                           ? "bg-gradient-to-br from-white to-red-50 border border-red-100"
                           : "bg-gradient-to-br from-white to-cyan-50 border border-cyan-100",
@@ -16683,7 +16683,7 @@ export default function ContestDetailClient({
                   className={cn(
                     "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                     isDark
-                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
+                      ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
                       : "bg-gradient-to-br from-white to-purple-50 border border-purple-100",
                   )}
                 >
@@ -16766,7 +16766,7 @@ export default function ContestDetailClient({
                 className={cn(
                   "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                   isDark
-                    ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-emerald-500/20"
+                    ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-emerald-500/20"
                     : "bg-white border border-gray-100",
                 )}
               >
@@ -16895,7 +16895,7 @@ export default function ContestDetailClient({
                 className={cn(
                   "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                   isDark
-                    ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
+                    ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
                     : "bg-white border border-gray-100",
                 )}
               >
@@ -16974,7 +16974,7 @@ export default function ContestDetailClient({
             className={cn(
               "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
               isDark
-                ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
+                ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
                 : "bg-gradient-to-br from-white to-purple-50 border border-purple-100",
             )}
           >
@@ -17049,7 +17049,7 @@ export default function ContestDetailClient({
               className={cn(
                 "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                 isDark
-                  ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-indigo-500/20"
+                  ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-indigo-500/20"
                   : "bg-gradient-to-br from-white to-indigo-50 border border-indigo-100",
               )}
             >
@@ -17151,7 +17151,7 @@ export default function ContestDetailClient({
               className={cn(
                 "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                 isDark
-                  ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-emerald-500/20"
+                  ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-emerald-500/20"
                   : "bg-gradient-to-br from-white to-emerald-50 border border-emerald-100",
               )}
             >
@@ -17235,7 +17235,7 @@ export default function ContestDetailClient({
               className={cn(
                 "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
                 isDark
-                  ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
+                  ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
                   : "bg-gradient-to-br from-white to-blue-50 border border-blue-100",
               )}
             >
@@ -31104,7 +31104,7 @@ export default function ContestDetailClient({
             <div
               className={cn(
                 "rounded-xl shadow-md p-2",
-                isDark ? "bg-[#180438]" : "bg-white",
+                isDark ? "bg-[#161616]" : "bg-white",
               )}
             >
               <CardHeader>
@@ -32590,7 +32590,7 @@ export default function ContestDetailClient({
                                   className={cn(
                                     "group rounded-xl shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden relative min-w-0",
                                     isDark
-                                      ? "bg-[#180438] border border-white/20 backdrop-blur-2xl"
+                                      ? "bg-[#161616] border border-white/20 backdrop-blur-2xl"
                                       : "bg-gradient-to-br from-white to-blue-50 border border-blue-100",
                                   )}
                                   title={hint}
@@ -34242,7 +34242,7 @@ export default function ContestDetailClient({
                           className={cn(
                             "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4 sm:p-6",
                             isDark
-                              ? "bg-[#180438] border border-white/20 backdrop-blur-2xl"
+                              ? "bg-[#161616] border border-white/20 backdrop-blur-2xl"
                               : "bg-white",
                           )}
                         >

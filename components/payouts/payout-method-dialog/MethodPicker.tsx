@@ -53,7 +53,8 @@ export function MethodPicker({
             value={opt.type}
             className={cn(
               "flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#171717]",
+              "focus-visible:outline-none focus-visible:ring-2",
+              isDark ? "focus-visible:ring-[#ff7a1a]" : "focus-visible:ring-[#171717]",
               "disabled:cursor-not-allowed disabled:opacity-60",
               selected
                 ? isDark
@@ -69,10 +70,10 @@ export function MethodPicker({
                 "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
                 selected
                   ? isDark
-                    ? "bg-white text-slate-900"
+                    ? "bg-white text-[#171717]"
                     : "bg-[#171717] text-white"
                   : isDark
-                    ? "bg-white/10 text-slate-200"
+                    ? "bg-white/10 text-white"
                     : "bg-white text-[#171717] shadow-[0_0_0_1px_rgba(0,0,0,0.06)]"
               )}
             >
@@ -88,7 +89,7 @@ export function MethodPicker({
                 <span
                   className={cn(
                     "mt-1 inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                    isDark ? "bg-amber-950/60 text-amber-200" : "bg-amber-100 text-amber-900"
+                    isDark ? "bg-amber-500/15 text-amber-200" : "bg-amber-100 text-amber-900"
                   )}
                 >
                   Paused
@@ -100,9 +101,11 @@ export function MethodPicker({
               className={cn(
                 "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
                 selected
-                  ? "border-[#171717] bg-[#171717] text-white"
+                  ? isDark
+                    ? "border-[var(--accent-btn-base)] bg-[var(--accent-btn-base)] text-white"
+                    : "border-[#171717] bg-[#171717] text-white"
                   : isDark
-                    ? "border-slate-500"
+                    ? "border-white/25"
                     : "border-neutral-300 bg-white"
               )}
             >

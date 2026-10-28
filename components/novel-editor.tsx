@@ -413,7 +413,7 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
         <div
           className={`border rounded-t-lg px-3 py-2 flex flex-wrap gap-1 ${
             isDark
-              ? "border-gray-600 bg-[#170337]"
+              ? "border-white/10 bg-[#161616]"
               : "border-gray-200 bg-gray-50"
           }`}
         >
@@ -422,9 +422,9 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
             onClick={() => editorInstance?.chain().focus().toggleBold().run()}
             className={`px-2 py-1 text-sm border rounded ${
               isDark
-                ? `text-gray-300 border-gray-600 hover:bg-gray-700 ${
+                ? `text-white/80 border-white/15 hover:bg-white/10 ${
                     editorInstance?.isActive("bold")
-                      ? "bg-gray-600 font-bold"
+                      ? "bg-white/15 font-bold"
                       : ""
                   }`
                 : `hover:bg-gray-100 ${
@@ -442,9 +442,9 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
             onClick={() => editorInstance?.chain().focus().toggleItalic().run()}
             className={`px-2 py-1 text-sm border rounded ${
               isDark
-                ? `text-gray-300 border-gray-600 hover:bg-gray-700 ${
+                ? `text-white/80 border-white/15 hover:bg-white/10 ${
                     editorInstance?.isActive("italic")
-                      ? "bg-gray-600 italic"
+                      ? "bg-white/15 italic"
                       : ""
                   }`
                 : `hover:bg-gray-100 ${
@@ -462,9 +462,9 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
             onClick={() => editorInstance?.chain().focus().toggleStrike().run()}
             className={`px-2 py-1 text-sm border rounded ${
               isDark
-                ? `text-gray-300 border-gray-600 hover:bg-gray-700 ${
+                ? `text-white/80 border-white/15 hover:bg-white/10 ${
                     editorInstance?.isActive("strike")
-                      ? "bg-gray-600 line-through"
+                      ? "bg-white/15 line-through"
                       : ""
                   }`
                 : `hover:bg-gray-100 ${
@@ -478,7 +478,7 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
             <s>S</s>
           </button>
           <div
-            className={`w-px mx-1 ${isDark ? "bg-gray-600" : "bg-gray-300"}`}
+            className={`w-px mx-1 ${isDark ? "bg-white/15" : "bg-gray-300"}`}
           ></div>
           <button
             type="button"
@@ -487,9 +487,9 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
             }
             className={`px-2 py-1 text-sm border rounded ${
               isDark
-                ? `text-gray-300 border-gray-600 hover:bg-gray-700 ${
+                ? `text-white/80 border-white/15 hover:bg-white/10 ${
                     editorInstance?.isActive("heading", { level: 1 })
-                      ? "bg-gray-600 font-bold"
+                      ? "bg-white/15 font-bold"
                       : ""
                   }`
                 : `hover:bg-gray-100 ${
@@ -509,9 +509,9 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
             }
             className={`px-2 py-1 text-sm border rounded ${
               isDark
-                ? `text-gray-300 border-gray-600 hover:bg-gray-700 ${
+                ? `text-white/80 border-white/15 hover:bg-white/10 ${
                     editorInstance?.isActive("heading", { level: 2 })
-                      ? "bg-gray-600 font-bold"
+                      ? "bg-white/15 font-bold"
                       : ""
                   }`
                 : `hover:bg-gray-100 ${
@@ -531,9 +531,9 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
             }
             className={`px-2 py-1 text-sm border rounded ${
               isDark
-                ? `text-gray-300 border-gray-600 hover:bg-gray-700 ${
+                ? `text-white/80 border-white/15 hover:bg-white/10 ${
                     editorInstance?.isActive("heading", { level: 3 })
-                      ? "bg-gray-600 font-bold"
+                      ? "bg-white/15 font-bold"
                       : ""
                   }`
                 : `hover:bg-gray-100 ${
@@ -547,7 +547,7 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
             H3
           </button>
           <div
-            className={`w-px mx-1 ${isDark ? "bg-gray-600" : "bg-gray-300"}`}
+            className={`w-px mx-1 ${isDark ? "bg-white/15" : "bg-gray-300"}`}
           ></div>
           <button
             type="button"
@@ -556,8 +556,8 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
             }
             className={`px-2 py-1 text-sm border rounded ${
               isDark
-                ? `text-gray-300 border-gray-600 hover:bg-gray-700 ${
-                    editorInstance?.isActive("bulletList") ? "bg-gray-600" : ""
+                ? `text-white/80 border-white/15 hover:bg-white/10 ${
+                    editorInstance?.isActive("bulletList") ? "bg-white/15" : ""
                   }`
                 : `hover:bg-gray-100 ${
                     editorInstance?.isActive("bulletList") ? "bg-gray-200" : ""
@@ -574,8 +574,8 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
             }
             className={`px-2 py-1 text-sm border rounded ${
               isDark
-                ? `text-gray-300 border-gray-600 hover:bg-gray-700 ${
-                    editorInstance?.isActive("orderedList") ? "bg-gray-600" : ""
+                ? `text-white/80 border-white/15 hover:bg-white/10 ${
+                    editorInstance?.isActive("orderedList") ? "bg-white/15" : ""
                   }`
                 : `hover:bg-gray-100 ${
                     editorInstance?.isActive("orderedList") ? "bg-gray-200" : ""
@@ -592,8 +592,8 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
             }
             className={`px-2 py-1 text-sm border rounded ${
               isDark
-                ? `text-gray-300 border-gray-600 hover:bg-gray-700 ${
-                    editorInstance?.isActive("blockquote") ? "bg-gray-600" : ""
+                ? `text-white/80 border-white/15 hover:bg-white/10 ${
+                    editorInstance?.isActive("blockquote") ? "bg-white/15" : ""
                   }`
                 : `hover:bg-gray-100 ${
                     editorInstance?.isActive("blockquote") ? "bg-gray-200" : ""
@@ -604,7 +604,7 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
             "
           </button>
           <div
-            className={`w-px mx-1 ${isDark ? "bg-gray-600" : "bg-gray-300"}`}
+            className={`w-px mx-1 ${isDark ? "bg-white/15" : "bg-gray-300"}`}
           ></div>
           {enableImages && (
             <>
@@ -613,7 +613,7 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
                 onClick={() => fileInputRef.current?.click()}
                 className={`px-2 py-1 text-sm border rounded flex items-center ${
                   isDark
-                    ? "text-gray-300 border-gray-600 hover:bg-gray-700"
+                    ? "text-white/80 border-white/15 hover:bg-white/10"
                     : "hover:bg-gray-100"
                 }`}
                 title="Insert Image"
@@ -656,10 +656,10 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
                 }}
                 className={`px-2 py-1 text-sm border rounded flex items-center ${
                   isDark
-                    ? `text-gray-300 border-gray-600 ${
+                    ? `text-white/80 border-white/15 ${
                         editorInstance?.isActive("image")
                           ? "hover:bg-red-600/20 hover:border-red-500 hover:text-red-400 bg-red-600/10"
-                          : "hover:bg-gray-700"
+                          : "hover:bg-white/10"
                       }`
                     : `${
                         editorInstance?.isActive("image")
@@ -689,7 +689,7 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
         {/* Editor Content */}
         <div
           className={`border border-t-0 rounded-b-lg overflow-hidden ${
-            isDark ? "border-gray-600 bg-[#180438]" : "border-gray-300 bg-white"
+            isDark ? "border-white/10 bg-[#0e0e0e]" : "border-gray-300 bg-white"
           }`}
           style={{ minHeight: height }}
         >

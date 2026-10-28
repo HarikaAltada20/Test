@@ -249,7 +249,7 @@ function SourcePicker({
               isAdmin ? "Search by title, brand or campaign ID" : "Search your campaigns by title"
             }
             aria-label="Search campaigns"
-            className="pl-9 dark:border-gray-600 dark:bg-[#180438]"
+            className="pl-9 dark:border-gray-600 dark:bg-[#161616]"
           />
         </div>
         {isAdmin && brandFilterId && (
@@ -461,7 +461,7 @@ function SectionChooser({
           maxLength={DUPLICATE_TITLE_MAX_LENGTH}
           disabled={!titleOn || disabled}
           placeholder={titleOn ? "Campaign name" : "Untitled campaign (title isn't copied)"}
-          className="dark:border-gray-600 dark:bg-[#180438]"
+          className="dark:border-gray-600 dark:bg-[#161616]"
         />
         {titleOn && (
           <p className="text-right text-xs text-muted-foreground">
@@ -899,8 +899,8 @@ export function DuplicateCampaignDialog({
                 disabled={!preview || submitting || loadingPreview}
                 onClick={() => void handleCreate()}
                 className={cn(
-                  "inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all",
-                  "bg-[#4A00BE] hover:opacity-95 active:scale-[0.99] dark:bg-[#5F2BB1]",
+                  "inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-all goc-btn-primary",
+                  "active:scale-[0.99]",
                   "disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100",
                 )}
               >

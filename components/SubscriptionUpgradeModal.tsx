@@ -174,9 +174,9 @@ export function SubscriptionUpgradeModal({
     return differences;
   };
 
-  const mutedText = isPricingDark ? "text-slate-400" : "text-[#66666F]";
+  const mutedText = isPricingDark ? "text-white/50" : "text-[#66666F]";
   const strongText = isPricingDark ? "text-white" : "text-[#171717]";
-  const softBorder = isPricingDark ? "border-slate-700" : "border-neutral-200";
+  const softBorder = isPricingDark ? "border-white/10" : "border-neutral-200";
   const featureDiffs = getFeatureDifferences();
   const changeVerb = isUpgrade ? "upgrade" : "downgrade";
 
@@ -188,7 +188,7 @@ export function SubscriptionUpgradeModal({
           ? "border-white/40 bg-white/10"
           : "border-[#171717] bg-[#F6F6F7]"
         : isPricingDark
-          ? "border-slate-700 bg-transparent hover:bg-white/5"
+          ? "border-white/10 bg-transparent hover:bg-white/5"
           : "border-neutral-200 bg-white hover:bg-[#FAFAFA]",
     );
 
@@ -199,7 +199,7 @@ export function SubscriptionUpgradeModal({
         className={cn(
           "max-h-[90vh] w-[95vw] max-w-xl overflow-y-auto rounded-2xl p-0 sm:p-0",
           isPricingDark
-            ? "border-slate-700 bg-slate-900 text-white pricing-scroll"
+            ? "border-white/10 bg-[#161616] text-white pricing-scroll"
             : "border-neutral-200 bg-white text-[#171717]",
         )}
       >
@@ -300,7 +300,7 @@ export function SubscriptionUpgradeModal({
                 className={cn(
                   "divide-y overflow-hidden rounded-xl border",
                   softBorder,
-                  isPricingDark ? "divide-slate-700" : "divide-neutral-200",
+                  isPricingDark ? "divide-white/10" : "divide-neutral-200",
                 )}
               >
                 {featureDiffs.map((diff) => (
@@ -348,7 +348,7 @@ export function SubscriptionUpgradeModal({
                     className={cn(
                       "mt-0.5 shrink-0",
                       isPricingDark
-                        ? "border-slate-500 text-white data-[state=checked]:border-white"
+                        ? "border-white/30 text-white data-[state=checked]:border-white"
                         : "border-neutral-300 text-[#171717] data-[state=checked]:border-[#171717]",
                     )}
                   />
@@ -397,7 +397,7 @@ export function SubscriptionUpgradeModal({
                     className={cn(
                       "mt-0.5 shrink-0",
                       isPricingDark
-                        ? "border-slate-500 text-white data-[state=checked]:border-white"
+                        ? "border-white/30 text-white data-[state=checked]:border-white"
                         : "border-neutral-300 text-[#171717] data-[state=checked]:border-[#171717]",
                     )}
                   />
@@ -436,12 +436,7 @@ export function SubscriptionUpgradeModal({
               onClick={handleUpgrade}
               loading={isProcessing}
               loadingText="Processing..."
-              className={cn(
-                "h-11 w-full rounded-full text-sm font-medium shadow-none",
-                isPricingDark
-                  ? "border border-white/20 bg-white text-[#171717] hover:bg-neutral-100"
-                  : "bg-[#171717] text-white hover:bg-[#2a2a2a]",
-              )}
+              className="h-11 w-full rounded-full border-0 text-sm font-medium goc-btn-primary"
             >
               {upgradeType === "scheduled" ? (
                 <>Schedule {isUpgrade ? "Upgrade" : "Downgrade"}</>
@@ -460,7 +455,7 @@ export function SubscriptionUpgradeModal({
               className={cn(
                 "h-10 w-full rounded-full border border-neutral-400 rounded-full text-sm font-medium shadow-none",
                 isPricingDark
-                  ? "text-slate-100 hover:bg-white/10"
+                  ? "border-white/20 text-white hover:bg-white/10"
                   : "text-[#171717] hover:bg-[#F4F4F5]",
               )}
             >

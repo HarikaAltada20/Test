@@ -527,7 +527,7 @@ export function UserNotificationsBell({
           side="right"
           className={cn(
             "w-full sm:max-w-lg flex flex-col p-0 gap-0",
-            isDark && "bg-[#06021D] text-white border-slate-700",
+            isDark && "bg-[#0e0e0e] text-white border-white/10",
           )}
         >
           <SheetHeader

@@ -82,7 +82,10 @@ export function SavedMethodsView({
                     <span className={cn("truncate text-sm font-semibold", t.text)}>{title}</span>
                     <span className={cn("text-xs", t.muted)}>{meta.label}</span>
                     {method.is_default && (
-                      <span className="rounded-full bg-[#171717] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                      <span className={cn(
+                        "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white",
+                        "bg-[var(--accent-btn-base)]",
+                      )}>
                         Default
                       </span>
                     )}
@@ -200,7 +203,7 @@ export function DeletePayoutMethodDialog({
 
   return (
     <AlertDialog open={method !== null} onOpenChange={(open) => !open && onCancel()}>
-      <AlertDialogContent className={cn(isDark && "border-gray-700 bg-[#0B0629] text-white")}>
+      <AlertDialogContent className={cn(isDark && "border-white/10 bg-[#161616] text-white")}>
         <AlertDialogHeader>
           <AlertDialogTitle>{isSkydo ? "Remove this Skydo email?" : "Delete this payout method?"}</AlertDialogTitle>
           <AlertDialogDescription className={cn(isDark && "text-gray-400")}>
@@ -212,7 +215,7 @@ export function DeletePayoutMethodDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className={cn(isDark && "border-gray-700 bg-transparent text-white hover:bg-white/10")}>
+          <AlertDialogCancel className={cn(isDark && "border-white/20 bg-transparent text-white hover:bg-white/10")}>
             Keep it
           </AlertDialogCancel>
           <AlertDialogAction

@@ -504,7 +504,7 @@ export function EmailChangeForm({
               className={cn(
                 "h-11 rounded-xl border pr-10 text-base shadow-none focus-visible:ring-1 focus-visible:ring-offset-0",
                 isDark
-                  ? "border-white/15 bg-transparent text-white focus-visible:ring-white"
+                  ? "border-white/10 bg-[#0e0e0e] text-white focus-visible:ring-[#ff7a1a]"
                   : "border-neutral-200 bg-white text-[#171717] focus-visible:ring-[#171717]"
               )}
               required
@@ -553,7 +553,7 @@ export function EmailChangeForm({
                     className={cn(
                       "h-11 flex-1 rounded-xl border text-center text-lg tracking-[0.3em] shadow-none focus-visible:ring-1 focus-visible:ring-offset-0",
                       isDark
-                        ? "border-white/15 bg-transparent text-white focus-visible:ring-white"
+                        ? "border-white/10 bg-[#0e0e0e] text-white focus-visible:ring-[#ff7a1a]"
                         : "border-neutral-200 bg-white text-[#171717] focus-visible:ring-[#171717]"
                     )}
                     required
@@ -564,7 +564,12 @@ export function EmailChangeForm({
                     disabled={isSendingOtp}
                     variant="outline"
                     size="sm"
-                    className="h-10 rounded-full border-neutral-300 bg-white px-4 text-sm text-[#171717] shadow-none hover:bg-[#F6F6F7]"
+                    className={cn(
+                      "h-10 rounded-full px-4 text-sm shadow-none",
+                      isDark
+                        ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                        : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
+                    )}
                   >
                     {isSendingOtp ? (
                       <>
@@ -585,7 +590,8 @@ export function EmailChangeForm({
                       currentEmailOtp.length !== 6
                     }
                     size="sm"
-                    className="h-10 rounded-full bg-[#171717] px-4 text-sm text-white shadow-none hover:bg-[#171717]/90"
+                    className="h-10 rounded-full px-4 text-sm goc-btn-primary"
+                    )}
                   >
                     {isSubmitting ? (
                       <>
@@ -648,7 +654,7 @@ export function EmailChangeForm({
           className={cn(
             "h-11 rounded-xl border text-base shadow-none focus-visible:ring-1 focus-visible:ring-offset-0",
             isDark
-              ? "border-white/15 bg-transparent text-white focus-visible:ring-white"
+              ? "border-white/10 bg-[#0e0e0e] text-white focus-visible:ring-[#ff7a1a]"
               : "border-neutral-200 bg-white text-[#171717] focus-visible:ring-[#171717]"
           )}
           required
@@ -674,7 +680,7 @@ export function EmailChangeForm({
           className={cn(
             "h-11 rounded-xl border text-base shadow-none focus-visible:ring-1 focus-visible:ring-offset-0",
             isDark
-              ? "border-white/15 bg-transparent text-white focus-visible:ring-white"
+              ? "border-white/10 bg-[#0e0e0e] text-white focus-visible:ring-[#ff7a1a]"
               : "border-neutral-200 bg-white text-[#171717] focus-visible:ring-[#171717]"
           )}
           required
@@ -696,7 +702,12 @@ export function EmailChangeForm({
             isSendingNewEmailOtp ||
             isSubmitting
           }
-          className="h-10 rounded-full border-neutral-300 bg-white px-4 text-[#171717] shadow-none hover:bg-[#F6F6F7]"
+          className={cn(
+            "h-10 rounded-full px-4 shadow-none",
+            isDark
+              ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+              : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
+          )}
         >
           Cancel
         </Button>
@@ -708,7 +719,8 @@ export function EmailChangeForm({
             (verificationMethod === "password" && !emailPassword) ||
             (verificationMethod === "otp" && !currentEmailOtpVerified)
           }
-          className="h-10 rounded-full bg-[#171717] px-5 text-white shadow-none hover:bg-[#171717]/90"
+          className="h-10 rounded-full px-5 goc-btn-primary"
+          )}
         >
           {isSendingNewEmailOtp ? (
             <>

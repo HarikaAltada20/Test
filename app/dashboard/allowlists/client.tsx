@@ -337,7 +337,7 @@ export default function AllowlistsClient() {
   const soft = isDark ? "text-white/70" : "text-[#55555E]";
   const cardClass = cn(
     "overflow-hidden rounded-2xl border",
-    isDark ? "border-white/10 bg-[#180438]" : "border-[#ececef] bg-white",
+    isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white",
   );
   const fieldLabel = cn("text-[15px] font-semibold", ink);
 
@@ -363,7 +363,7 @@ export default function AllowlistsClient() {
         align="end"
         className={cn(
           "rounded-xl",
-          isDark && "border-white/10 bg-[#180438] text-white",
+          isDark && "border-white/10 bg-[#161616] text-white",
         )}
       >
         <DropdownMenuItem onSelect={() => openRename(list)}>
@@ -484,7 +484,7 @@ export default function AllowlistsClient() {
                   >
                     <button
                       type="button"
-                      className="flex h-full w-full flex-col items-start rounded-2xl p-5 pr-12 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7c3aed] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#180438]"
+                      className="flex h-full w-full flex-col items-start rounded-2xl p-5 pr-12 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7c3aed] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#161616]"
                       onClick={() => setSelectedId(list.id)}
                     >
                       <span
@@ -695,7 +695,7 @@ export default function AllowlistsClient() {
           className={cn(
             "flex w-full flex-col gap-0 border-l p-0 sm:max-w-lg",
             isDark
-              ? "dark border-white/10 bg-[#180438] text-white"
+              ? "dark border-white/10 bg-[#161616] text-white"
               : "border-[#ececef] bg-white text-[#1a1a1a]",
           )}
         >
@@ -937,7 +937,7 @@ export default function AllowlistsClient() {
           className={cn(
             "rounded-2xl",
             isDark
-              ? "dark border-white/10 bg-[#180438] text-white"
+              ? "dark border-white/10 bg-[#161616] text-white"
               : "text-[#1a1a1a]",
           )}
         >

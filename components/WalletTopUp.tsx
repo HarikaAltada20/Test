@@ -116,7 +116,7 @@ export function WalletTopUp({
 
   const detectedDark = useDashboardMode() === "dark";
   const isDark = isDarkProp ?? detectedDark;
-  const t = payoutDialogTheme(isDark);
+  const t = payoutDialogTheme(isDark, { brand: true });
   const predefinedAmounts = [25, 50, 100, 200, 500];
 
   const isBelowMinimum =
@@ -194,9 +194,11 @@ export function WalletTopUp({
                 className={cn(
                   "h-10 rounded-full border font-semibold shadow-none",
                   selected
-                    ? "border-[#171717] bg-[#171717] text-white hover:bg-[#2a2a2a] hover:text-white"
+                    ? isDark
+                      ? "goc-btn-primary hover:text-white"
+                      : "border-[#171717] bg-[#171717] text-white hover:bg-[#2a2a2a] hover:text-white"
                     : isDark
-                      ? "border-slate-600 bg-transparent text-slate-100 hover:bg-white/10"
+                      ? "border-white/20 bg-transparent text-white hover:bg-white/10"
                       : "border-neutral-200 bg-white text-[#171717] hover:bg-[#F6F6F7]",
                 )}
               >

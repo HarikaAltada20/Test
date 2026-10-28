@@ -139,7 +139,7 @@ function EarningsStatCard({
       className={cn(
         "flex flex-col rounded-2xl border p-5",
         isDark
-          ? "border-slate-700 bg-slate-900"
+          ? "border-white/10 bg-[#161616]"
           : "border-neutral-200 bg-white",
       )}
     >
@@ -813,7 +813,7 @@ export default function EarningsClientPage({
                 className={cn(
                   "h-10 rounded-full px-4 text-md font-medium shadow-none",
                   isDark
-                    ? "border-slate-600 bg-transparent text-slate-100 hover:bg-white/10"
+                    ? "border-white/20 bg-transparent text-white hover:bg-white/10"
                     : "border-neutral-300 bg-white text-[#171717] hover:bg-neutral-50",
                 )}
               >
@@ -823,13 +823,12 @@ export default function EarningsClientPage({
             ) : canOpenWithdraw ? (
               <Button
                 type="button"
-                variant="outline"
                 onClick={() => openPayoutDialog("add")}
                 className={cn(
                   "h-10 rounded-full px-4 text-md font-medium shadow-none",
                   isDark
-                    ? "border-slate-600 bg-transparent text-slate-100 hover:bg-white/10"
-                    : "border-neutral-300 bg-white text-[#171717] hover:bg-neutral-50",
+                    ? "bg-white text-[#171717] hover:bg-neutral-200"
+                    : "border border-neutral-300 bg-white text-[#171717] hover:bg-neutral-50",
                 )}
               >
                 <PlusCircle className="mr-1.5 h-4 w-4" />
@@ -843,7 +842,7 @@ export default function EarningsClientPage({
                 className={cn(
                   "h-10 rounded-full px-4 text-md font-medium shadow-none disabled:opacity-60",
                   isDark
-                    ? "border-slate-600 bg-transparent text-slate-100"
+                    ? "border-white/20 bg-transparent text-white"
                     : "border-neutral-300 bg-white text-[#171717]",
                 )}
               >
@@ -855,7 +854,12 @@ export default function EarningsClientPage({
               type="button"
               onClick={() => openPayoutDialog("list")}
               disabled={isLoading}
-              className="h-10 rounded-full bg-[#171717] px-4 text-sm font-medium text-white shadow-none hover:bg-[#2a2a2a]"
+              className={cn(
+                "h-10 rounded-full px-4 text-sm font-medium shadow-none",
+                isDark
+                  ? "border border-white/20 bg-transparent text-white hover:bg-white/10"
+                  : "bg-[#171717] text-white hover:bg-[#2a2a2a]",
+              )}
             >
               <Settings2 className="mr-1.5 h-4 w-4" />
               Manage Payout Methods
@@ -867,7 +871,7 @@ export default function EarningsClientPage({
       <div
         className={cn(
           "mt-8 flex gap-6 border-b",
-          isDark ? "border-slate-700" : "border-neutral-200",
+          isDark ? "border-white/10" : "border-neutral-200",
         )}
       >
         {tabs.map((tab) => {
@@ -931,12 +935,12 @@ export default function EarningsClientPage({
             className={cn(
               "mt-4 flex flex-col gap-3 rounded-2xl border px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between",
               isDark
-                ? "border-slate-700 bg-slate-900"
+                ? "border-white/10 bg-[#161616]"
                 : "border-neutral-200 bg-white",
             )}
           >
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#fff1e6] text-[#ff7a1a]">
+              <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", isDark ? "bg-[#2a1a10] text-[#ff7a1a]" : "bg-[#fff1e6] text-[#ff7a1a]")}>
                 <Ticket className="h-5 w-5" />
               </div>
               <div className="min-w-0">
@@ -965,7 +969,7 @@ export default function EarningsClientPage({
                 className={cn(
                   "h-10 w-full rounded-full border-0 px-4 text-sm shadow-none sm:w-[380px]",
                   isDark
-                    ? "bg-slate-800 text-white placeholder:text-slate-400"
+                    ? "bg-[#1a1a1a] text-white placeholder:text-slate-400"
                     : "bg-[#f3f3f4] text-[#171717] placeholder:text-[#a3a3a3]",
                 )}
                 placeholder="Enter coupon or promo code"
@@ -1065,7 +1069,7 @@ export default function EarningsClientPage({
             className={cn(
               "overflow-hidden rounded-2xl border",
               isDark
-                ? "border-slate-700 bg-slate-900"
+                ? "border-white/10 bg-[#161616]"
                 : "border-neutral-200 bg-white",
             )}
           >
@@ -1081,7 +1085,7 @@ export default function EarningsClientPage({
                   className={cn(
                     "text-left border-b",
                     isDark
-                      ? "border-b border-slate-700 text-slate-400"
+                      ? "border-b border-white/10 text-slate-400"
                       : "border-b border-neutral-200 text-[#737373]",
                   )}
                 >
@@ -1207,7 +1211,7 @@ export default function EarningsClientPage({
             className={cn(
               "overflow-hidden rounded-2xl border",
               isDark
-                ? "border-slate-700 bg-slate-900"
+                ? "border-white/10 bg-[#161616]"
                 : "border-neutral-200 bg-white",
             )}
           >
@@ -1217,7 +1221,7 @@ export default function EarningsClientPage({
                   className={cn(
                     "text-left border-b",
                     isDark
-                      ? "border-b border-slate-700 text-slate-400"
+                      ? "border-b border-white/10 text-slate-400"
                       : "border-b border-neutral-200 text-[#737373]",
                   )}
                 >
@@ -1339,7 +1343,7 @@ export default function EarningsClientPage({
             className={cn(
               "overflow-hidden rounded-2xl border",
               isDark
-                ? "border-slate-700 bg-slate-900"
+                ? "border-white/10 bg-[#161616]"
                 : "border-neutral-200 bg-white",
             )}
           >
@@ -1349,7 +1353,7 @@ export default function EarningsClientPage({
                   className={cn(
                     "text-left border-b",
                     isDark
-                      ? "border-b border-slate-700 text-slate-400"
+                      ? "border-b border-white/10 text-slate-400"
                       : "border-b border-neutral-200 text-[#737373]",
                   )}
                 >
@@ -1464,7 +1468,7 @@ export default function EarningsClientPage({
             className={cn(
               "overflow-hidden rounded-2xl border",
               isDark
-                ? "border-slate-700 bg-slate-900"
+                ? "border-white/10 bg-[#161616]"
                 : "border-neutral-200 bg-white",
             )}
           >
@@ -1474,7 +1478,7 @@ export default function EarningsClientPage({
                   className={cn(
                     "text-left border-b",
                     isDark
-                      ? "border-b border-slate-700 text-slate-400"
+                      ? "border-b border-white/10 text-slate-400"
                       : "border-b border-neutral-200 text-[#737373]",
                   )}
                 >

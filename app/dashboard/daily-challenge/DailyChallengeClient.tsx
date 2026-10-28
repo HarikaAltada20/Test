@@ -1237,7 +1237,7 @@ export default function DailyChallengeClient({
         <div
           className={cn(
             "space-y-3 rounded-xl border p-4",
-            isDark ? "border-white/10 bg-white/[0.02]" : "border-gray-200 bg-muted/40",
+            isDark ? "border-white/10 bg-[#161616]" : "border-gray-200 bg-muted/40",
           )}
         >
           <div>

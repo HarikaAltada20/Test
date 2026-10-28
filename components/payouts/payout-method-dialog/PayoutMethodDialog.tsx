@@ -52,6 +52,8 @@ export interface PayoutMethodDialogProps {
   onSave: (draft: PayoutMethodDraft) => Promise<PayoutSaveResult>;
   onDelete: (method: PayoutMethod) => Promise<boolean>;
   onSetDefault: (method: PayoutMethod) => Promise<boolean>;
+  /** Brand (advertiser) dialogs use purple CTAs with glow instead of orange. */
+  brandAccent?: boolean;
 }
 
 const METHOD_NAMES_IN_SENTENCE: Record<string, string> = {
@@ -92,8 +94,9 @@ export function PayoutMethodDialog({
   onSave,
   onDelete,
   onSetDefault,
+  brandAccent = false,
 }: PayoutMethodDialogProps) {
-  const t = payoutDialogTheme(isDark);
+  const t = payoutDialogTheme(isDark, { brand: brandAccent });
   const existingSkydo =
     payoutMethods.find((m) => m.method_type === "skydo") ?? null;
   const skydoEligible = withdrawableBalanceCents >= SKYDO_MIN_BALANCE_CENTS;
@@ -269,7 +272,7 @@ export function PayoutMethodDialog({
           "h-[100dvh] max-h-[100dvh] w-full max-w-none rounded-none",
           "sm:h-auto sm:max-h-[min(92vh,820px)] sm:w-[calc(100vw-2rem)] sm:max-w-[760px] sm:rounded-3xl",
           isDark
-            ? "border-slate-700 bg-slate-900"
+            ? "border-white/10 bg-[#161616]"
             : "border-neutral-200 bg-white",
         )}
       >
@@ -407,10 +410,10 @@ export function PayoutMethodDialog({
                                 "h-9 rounded-full text-sm font-medium transition-colors",
                                 selected
                                   ? isDark
-                                    ? "bg-white text-slate-900 shadow-sm"
+                                    ? "bg-white text-[#171717] shadow-sm"
                                     : "bg-white text-[#171717] shadow-sm"
                                   : isDark
-                                    ? "text-slate-300 hover:text-white"
+                                    ? "text-white/70 hover:text-white"
                                     : "text-[#3f3f46] hover:text-[#171717]",
                               )}
                             >

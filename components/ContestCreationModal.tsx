@@ -136,16 +136,16 @@ export function ContestCreationModal({
       disabled={isNavigating}
       className={cn(
         "group flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] disabled:opacity-60",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-btn-base)] disabled:opacity-60",
         isDark
-          ? "border-violet-500/30 bg-[#0c0618] hover:border-[#7F39EC] hover:bg-violet-500/10"
-          : "border-purple-200 bg-white hover:border-[#7F39EC] hover:bg-purple-50/60",
+          ? "border-white/10 bg-[#0e0e0e] hover:border-white/20 hover:bg-white/5"
+          : "border-[#ececef] bg-white hover:border-[#d5d5db] hover:bg-[#f6f6f7]",
       )}
     >
       <span
         className={cn(
           "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-          isDark ? "bg-violet-500/15 text-violet-200" : "bg-[#7F39EC]/10 text-[#7F39EC]",
+          isDark ? "bg-white/10 text-white" : "bg-[#f1f1f3] text-[#1a1a1a]",
         )}
       >
         {navigatingTo === key ? <Loader2 className="h-5 w-5 animate-spin" /> : icon}
@@ -166,7 +166,9 @@ export function ContestCreationModal({
         <DialogContent
           className={cn(
             "w-[calc(100vw-16px)] max-w-md md:max-w-lg",
-            isDark ? "bg-[#06021D] text-white" : "bg-white text-black",
+            isDark
+              ? "border-white/10 bg-[#161616] text-white"
+              : "border-[#ececef] bg-white text-[#1a1a1a]",
           )}
         >
           <DialogHeader className="text-left">
@@ -180,17 +182,27 @@ export function ContestCreationModal({
 
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-[#7F39EC]" />
+              <Loader2 className="h-6 w-6 animate-spin text-[var(--accent-btn-base)]" />
             </div>
           ) : (
             <div className="space-y-4">
               {recentDraft && (
-                <div className="space-y-3 rounded-xl border border-[#7F39EC] bg-[#D9C0FF26] p-4">
+                <div
+                  className={cn(
+                    "space-y-3 rounded-xl border p-4",
+                    isDark
+                      ? "border-white/10 bg-[#0e0e0e]"
+                      : "border-[#ececef] bg-[#f6f6f7]",
+                  )}
+                >
                   <p className={cn("text-sm font-medium", isDark ? "text-white" : "text-gray-900")}>
                     Continue your draft
                   </p>
                   <div className="flex items-center gap-3 text-sm">
-                    <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-purple-100/60 dark:bg-violet-500/15">
+                    <div className={cn(
+                      "h-12 w-12 flex-shrink-0 overflow-hidden rounded-full",
+                      isDark ? "bg-white/10" : "bg-[#e8e8ea]",
+                    )}>
                       {recentDraft.thumbnail_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -215,10 +227,7 @@ export function ContestCreationModal({
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Button
                       onClick={() => handleContinueDraft(recentDraft.id)}
-                      className={cn(
-                        "flex-1 rounded-full",
-                        isDark ? "bg-[#7F39EC]" : "bg-[#D9C0FF61] text-[#7F39EC]",
-                      )}
+                      className="flex-1 rounded-full goc-btn-primary"
                       disabled={isNavigating}
                     >
                       {navigatingTo === "draft" ? (
@@ -232,7 +241,12 @@ export function ContestCreationModal({
                       <Button
                         variant="outline"
                         onClick={handleViewAllDrafts}
-                        className="flex-1 rounded-full border-[#7F39EC] text-[#7F39EC]"
+                        className={cn(
+                          "flex-1 rounded-full shadow-none",
+                          isDark
+                            ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                            : "border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
+                        )}
                         disabled={isNavigating}
                       >
                         <Clock className="h-4 w-4" />

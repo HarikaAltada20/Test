@@ -566,7 +566,7 @@ export default function LeaderboardClient({
           <div
             className={cn(
               "shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl",
-              isDark ? "bg-[#170337]" : "bg-white",
+              isDark ? "bg-[#161616]" : "bg-white",
             )}
           >
             <CardHeader
@@ -692,7 +692,7 @@ export default function LeaderboardClient({
           <div
             className={cn(
               "shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl",
-              isDark ? "bg-[#170337]" : "bg-white",
+              isDark ? "bg-[#161616]" : "bg-white",
             )}
           >
             <CardHeader
@@ -753,7 +753,7 @@ export default function LeaderboardClient({
           <div
             className={cn(
               "shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl",
-              isDark ? "bg-[#170337]" : "bg-white",
+              isDark ? "bg-[#161616]" : "bg-white",
             )}
           >
             <CardHeader
@@ -814,7 +814,7 @@ export default function LeaderboardClient({
           <div
             className={cn(
               "shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl",
-              isDark ? "bg-[#170337]" : "bg-white",
+              isDark ? "bg-[#161616]" : "bg-white",
             )}
           >
             <CardHeader
@@ -1096,10 +1096,10 @@ export default function LeaderboardClient({
                             rank === 3 && "order-3 md:order-none md:col-start-3",
                             isFirst
                               ? isDark
-                                ? "border-[#c4a15a]/50 bg-[linear-gradient(180deg,rgba(196,161,90,0.22)_0%,rgba(18,10,40,0.15)_46%,#120a28_78%)] py-8"
+                                ? "border-[#c4a15a]/45 bg-[linear-gradient(180deg,rgba(196,161,90,0.28)_0%,rgba(14,14,14,0.4)_46%,#0e0e0e_78%)] py-8"
                                 : "border-[#f0d7a8] bg-[linear-gradient(180deg,#fff6ea_0%,#fffdf8_40%,#ffffff_70%)] py-8 "
                               : isDark
-                                ? "border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.07)_0%,#120a28_46%)] py-7 "
+                                ? "border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.07)_0%,#161616_46%)] py-7 "
                                 : "border-[#e6e6ea] bg-[linear-gradient(180deg,#f3f3f5_0%,#fafafa_34%,#ffffff_68%)] py-7 ",
                           )}
                         >
@@ -1166,7 +1166,7 @@ export default function LeaderboardClient({
                   className={cn(
                     "overflow-x-auto rounded-2xl border",
                     isDark
-                      ? "border-white/10 bg-[#120a28]"
+                      ? "border-white/10 bg-[#161616]"
                       : "border-[#e8e8ec] bg-white",
                   )}
                 >

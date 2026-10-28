@@ -275,7 +275,7 @@ const SubmissionActionButtons = ({
   const actionLabel = isGroup ? "View submissions" : "View content";
   const pillClass = cn(
     "inline-flex h-9 items-center justify-center gap-1 rounded-full border border-neutral-200 bg-[#E4E4E4] px-3 text-sm font-medium leading-none text-[#171717] shadow-none hover:bg-[#dadada]",
-    "dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700",
+    "dark:border-white/15 dark:bg-[#1a1a1a] dark:text-slate-100 dark:hover:bg-white/10",
     isFullWidth && "flex-1",
   );
   const iconClass = "h-3.5 w-3.5 shrink-0 text-neutral-500 dark:text-slate-400";
@@ -913,7 +913,7 @@ export default function SubmissionsClient({
   const filterPillClass = cn(
     "!h-11 !min-w-[168px] !w-auto !justify-between !rounded-full !border !px-4 !py-0 text-sm font-medium shadow-none",
     isDark
-      ? "!border-[#8d8d8d] !bg-[#1c1c22] !text-white hover:!bg-[#2a2a32]"
+      ? "!border-white/15 !bg-[#1a1a1a] !text-white hover:!bg-white/10"
       : "!border-neutral-200 !bg-[#E4E4E4] !text-[#171717] hover:!bg-[#dadada]",
   );
   const platformSelectValue =
@@ -1537,11 +1537,11 @@ export default function SubmissionsClient({
         key={submission.id}
         className={cn(
           "rounded-2xl border p-4",
-          isDark ? "border-slate-800 bg-[#0f172a]" : "border-neutral-200 bg-white"
+          isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white"
         )}
       >
         <div className="flex flex-col items-stretch gap-4 md:flex-row">
-        <div className="relative w-full shrink-0 overflow-hidden rounded-[12px] border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-900 md:w-[280px] md:aspect-[4/3] aspect-[16/9]">
+        <div className="relative w-full shrink-0 overflow-hidden rounded-[12px] border border-slate-200 bg-slate-100 dark:border-white/10 dark:bg-[#161616] md:w-[280px] md:aspect-[4/3] aspect-[16/9]">
 
           {(() => {
             const platformLower = (submission.platform || "").toLowerCase();
@@ -1850,7 +1850,7 @@ export default function SubmissionsClient({
         key={group.id}
         className={cn(
           "overflow-hidden rounded-[16px] shadow-none transition-all duration-300 border flex flex-col md:flex-row group w-full relative",
-          isDark ? "bg-[#0f172a] border-slate-800" : "bg-white border-neutral-200"
+          isDark ? "bg-[#161616] border-white/10" : "bg-white border-neutral-200"
         )}
       >
         {/* Status Badge - Fixed overlap issues on mobile */}
@@ -1873,7 +1873,7 @@ export default function SubmissionsClient({
         </div>
 
         {/* Thumbnail Section - Corrected logic for Thumbnail vs Logo */}
-        <div className="w-full md:w-[280px] aspect-[16/9] md:aspect-square flex-shrink-0 overflow-hidden bg-slate-100 dark:bg-slate-900 border-b md:border-b-0 md:border-r border-slate-100 dark:border-slate-800 relative">
+        <div className="w-full md:w-[280px] aspect-[16/9] md:aspect-square flex-shrink-0 overflow-hidden bg-slate-100 dark:bg-[#161616] border-b md:border-b-0 md:border-r border-slate-100 dark:border-white/10 relative">
           {contest?.thumbnail_url ? (
             <img
               src={contest.thumbnail_url}
@@ -1903,10 +1903,10 @@ export default function SubmissionsClient({
                   {contest.advertiser_profiles.company_name}
                 </Badge>
               )}
-              <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border-slate-200 dark:border-slate-800">
+              <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border-slate-200 dark:border-white/10">
                 {contest?.platform || "Platform"}
               </Badge>
-              <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border-slate-200 dark:border-slate-800">
+              <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border-slate-200 dark:border-white/10">
                 {contest?.contest_type || "Type"}
               </Badge>
             </div>
@@ -2002,7 +2002,7 @@ export default function SubmissionsClient({
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-100 dark:border-white/10">
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-1.5 text-slate-400">
                 <Video className="w-3.5 h-3.5" />
@@ -2131,7 +2131,7 @@ export default function SubmissionsClient({
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
           <div className={cn(
             "flex h-11 w-full items-center rounded-full border px-4 sm:w-[320px]",
-            isDark ? "border-[#8d8d8d] bg-[#1c1c22]" : "border-neutral-200 bg-[#E4E4E4]",
+            isDark ? "border-white/15 bg-[#1a1a1a]" : "border-neutral-200 bg-[#E4E4E4]",
           )}>
             <Search className={cn("h-4 w-4 shrink-0", isDark ? "text-slate-400" : "text-neutral-500")} />
             <Input
@@ -2171,7 +2171,7 @@ export default function SubmissionsClient({
             className={cn(
               "h-11 shrink-0 rounded-full px-4 text-sm font-medium shadow-none",
               isDark
-                ? "border-slate-600 bg-white/10 text-slate-100 hover:bg-white/15"
+                ? "border-white/20 bg-transparent text-white hover:bg-white/10"
                 : "border-neutral-200 bg-[#E4E4E4] text-neutral-800 hover:bg-[#dadada]",
             )}
           >
@@ -2182,7 +2182,7 @@ export default function SubmissionsClient({
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.55fr)]">
-        <section className={cn("flex min-h-[176px] flex-col rounded-2xl border p-5", isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white")}>
+        <section className={cn("flex min-h-[176px] flex-col rounded-2xl border p-5", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
           <div className={cn("flex items-center gap-2 text-sm font-medium", isDark ? "text-slate-200" : "text-neutral-700")}>
             <ShieldCheck className="h-4 w-4" />
             Your account
@@ -2191,13 +2191,13 @@ export default function SubmissionsClient({
           <p className={cn("mt-1.5 text-[28px] font-semibold leading-none tracking-tight", isDark ? "text-white" : "text-neutral-950")}>
             {creatorStats?.trustScorePct != null ? formatTrustScoreDisplay(creatorStats.trustScorePct) : "—"}
           </p>
-          <div className={cn("mt-auto flex items-end justify-between gap-4 border-t pt-4", isDark ? "border-slate-700" : "border-neutral-200")}>
+          <div className={cn("mt-auto flex items-end justify-between gap-4 border-t pt-4", isDark ? "border-white/10" : "border-neutral-200")}>
             <span className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-[#44403c]")}>Trust score</span>
             <span className={cn("mt-1 text-base font-semibold", isDark ? "text-slate-100" : "text-neutral-900")}>{formatTrustNumberDisplay(creatorStats?.trustNumber)}</span>
           </div>
         </section>
 
-        <section className={cn("flex min-h-[176px] flex-col rounded-2xl border p-5", isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white")}>
+        <section className={cn("flex min-h-[176px] flex-col rounded-2xl border p-5", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
           <div className={cn("flex items-center gap-2 text-sm font-medium", isDark ? "text-slate-200" : "text-neutral-700")}>
             <Star className="h-4 w-4" />
             Quality
@@ -2206,7 +2206,7 @@ export default function SubmissionsClient({
           <p className={cn("mt-1.5 text-[28px] font-semibold leading-none tracking-tight", isDark ? "text-white" : "text-neutral-950")}>
             {formatQualityScoreDisplay(creatorStats?.avgQualityScore)}
           </p>
-          <div className={cn("mt-auto grid grid-cols-2 gap-x-6 gap-y-1 border-t pt-4", isDark ? "border-slate-700" : "border-neutral-200")}>
+          <div className={cn("mt-auto grid grid-cols-2 gap-x-6 gap-y-1 border-t pt-4", isDark ? "border-white/10" : "border-neutral-200")}>
             <div>
               <p className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-[#44403c]")}>Best</p>
               <p className={cn("mt-1 text-base font-semibold", isDark ? "text-slate-100" : "text-neutral-900")}>{formatQualityScoreDisplay(creatorStats?.bestQualityScore)}</p>
@@ -2218,7 +2218,7 @@ export default function SubmissionsClient({
           </div>
         </section>
 
-        <section className={cn("flex min-h-[176px] flex-col rounded-2xl border p-5", isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white")}>
+        <section className={cn("flex min-h-[176px] flex-col rounded-2xl border p-5", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
           <div className={cn("flex items-center gap-2 text-sm font-medium", isDark ? "text-slate-200" : "text-neutral-700")}>
             <Eye className="h-4 w-4" />
             Reach
@@ -2227,13 +2227,13 @@ export default function SubmissionsClient({
           <p className={cn("mt-1.5 text-[28px] font-semibold leading-none tracking-tight", isDark ? "text-white" : "text-neutral-950")}>
             {stats.views.toLocaleString()}
           </p>
-          <div className={cn("mt-auto flex items-end justify-between gap-4 border-t pt-4", isDark ? "border-slate-700" : "border-neutral-200")}>
+          <div className={cn("mt-auto flex items-end justify-between gap-4 border-t pt-4", isDark ? "border-white/10" : "border-neutral-200")}>
             <span className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-[#44403c]")}>Campaigns</span>
             <span className={cn("mt-1 text-base font-semibold", isDark ? "text-slate-100" : "text-neutral-900")}>{stats.contests}</span>
           </div>
         </section>
 
-        <section className={cn("flex min-h-[176px] flex-col rounded-2xl border p-5 md:col-span-2 xl:col-span-1", isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white")}>
+        <section className={cn("flex min-h-[176px] flex-col rounded-2xl border p-5 md:col-span-2 xl:col-span-1", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
           <div className={cn("flex items-center gap-2 text-sm font-medium", isDark ? "text-slate-200" : "text-neutral-700")}>
             <DollarSign className="h-4 w-4" />
             Earnings
@@ -2248,7 +2248,7 @@ export default function SubmissionsClient({
               <p className={cn("mt-1.5 text-2xl font-semibold tracking-tight", isDark ? "text-white" : "text-neutral-950")}>${centsToDollars(stats.estimatedEarnings).toFixed(2)}</p>
             </div>
           </div>
-          <div className={cn("mt-5 grid grid-cols-2 gap-x-8 gap-y-1 border-t pt-4", isDark ? "border-slate-700" : "border-neutral-200")}>
+          <div className={cn("mt-5 grid grid-cols-2 gap-x-8 gap-y-1 border-t pt-4", isDark ? "border-white/10" : "border-neutral-200")}>
             <div>
               <p className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-[#44403c]")}>Bonus earned</p>
               <p className={cn("mt-1 text-base font-semibold", isDark ? "text-slate-100" : "text-neutral-900")}>${centsToDollars(stats.bonus).toFixed(2)}</p>
@@ -2399,13 +2399,13 @@ export default function SubmissionsClient({
               <ChevronDown className="h-4 w-4 shrink-0 opacity-80" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className={cn("w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800", isDark ? "bg-[#0f172a]" : "bg-white")} align="start">
+          <PopoverContent className={cn("w-[240px] p-2 rounded-xl border-slate-200 dark:border-white/10", isDark ? "bg-[#161616]" : "bg-white")} align="start">
             <div className="flex flex-col gap-1">
               {/* LIVE option */}
               <div
                 className={cn(
                   "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                  isDark ? "hover:bg-slate-800" : "hover:bg-slate-50"
+                  isDark ? "hover:bg-white/10" : "hover:bg-slate-50"
                 )}
                 onClick={() => {
                   setContestStatusFilter(prev =>
@@ -2417,7 +2417,7 @@ export default function SubmissionsClient({
                   "w-4 h-4 rounded border flex items-center justify-center transition-all",
                   contestStatusFilter.includes("live")
                     ? "bg-[#4211a1] border-[#4211a1]"
-                    : isDark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"
+                    : isDark ? "border-white/10 bg-[#161616]" : "border-slate-300 bg-white"
                 )}>
                   {contestStatusFilter.includes("live") && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
                 </div>
@@ -2430,7 +2430,7 @@ export default function SubmissionsClient({
               <div
                 className={cn(
                   "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                  isDark ? "hover:bg-slate-800" : "hover:bg-slate-50"
+                  isDark ? "hover:bg-white/10" : "hover:bg-slate-50"
                 )}
                 onClick={() => {
                   const endedStatuses = ["pending_review", "in_review", "verification_complete", "payouts_processed"];
@@ -2448,7 +2448,7 @@ export default function SubmissionsClient({
                     ? "bg-[#4211a1] border-[#4211a1]"
                     : ["pending_review", "in_review", "verification_complete", "payouts_processed"].some(s => contestStatusFilter.includes(s))
                       ? "bg-[#4211a1]/50 border-[#4211a1]"
-                      : isDark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"
+                      : isDark ? "border-white/10 bg-[#161616]" : "border-slate-300 bg-white"
                 )}>
                   {["pending_review", "in_review", "verification_complete", "payouts_processed"].every(s => contestStatusFilter.includes(s)) && (
                     <Check className="w-3 h-3 text-white" strokeWidth={4} />
@@ -2468,7 +2468,7 @@ export default function SubmissionsClient({
                   key={child.id}
                   className={cn(
                     "flex items-center gap-2 pl-7 pr-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                    isDark ? "hover:bg-slate-800" : "hover:bg-slate-50"
+                    isDark ? "hover:bg-white/10" : "hover:bg-slate-50"
                   )}
                   onClick={() => {
                     setContestStatusFilter(prev =>
@@ -2480,7 +2480,7 @@ export default function SubmissionsClient({
                     "w-4 h-4 rounded border flex items-center justify-center transition-all",
                     contestStatusFilter.includes(child.id)
                       ? "bg-[#4211a1] border-[#4211a1]"
-                      : isDark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"
+                      : isDark ? "border-white/10 bg-[#161616]" : "border-slate-300 bg-white"
                   )}>
                     {contestStatusFilter.includes(child.id) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
                   </div>
@@ -2505,7 +2505,7 @@ export default function SubmissionsClient({
               <ChevronDown className="h-4 w-4 shrink-0 opacity-80" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className={cn("w-[200px] p-2 rounded-xl border-slate-200 dark:border-slate-800", isDark ? "bg-[#0f172a]" : "bg-white")} align="start">
+          <PopoverContent className={cn("w-[200px] p-2 rounded-xl border-slate-200 dark:border-white/10", isDark ? "bg-[#161616]" : "bg-white")} align="start">
             <div className="flex flex-col gap-1">
               {[
                 { id: "leaderboard", label: "Leaderboard" },
@@ -2517,7 +2517,7 @@ export default function SubmissionsClient({
                   key={type.id}
                   className={cn(
                     "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                    isDark ? "hover:bg-slate-800" : "hover:bg-slate-50"
+                    isDark ? "hover:bg-white/10" : "hover:bg-slate-50"
                   )}
                   onClick={() => {
                     setContestTypeFilter(prev =>
@@ -2529,7 +2529,7 @@ export default function SubmissionsClient({
                     "w-4 h-4 rounded border flex items-center justify-center transition-all",
                     contestTypeFilter.includes(type.id)
                       ? "bg-[#4211a1] border-[#4211a1]"
-                      : isDark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"
+                      : isDark ? "border-white/10 bg-[#161616]" : "border-slate-300 bg-white"
                   )}>
                     {contestTypeFilter.includes(type.id) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
                   </div>
@@ -2585,7 +2585,7 @@ export default function SubmissionsClient({
                 </Button>
               </PopoverTrigger>
               <PopoverContent
-                className="z-[100] w-min max-w-[calc(100vw-32px)] overflow-hidden rounded-xl border-slate-200 p-0 shadow-2xl dark:border-slate-800"
+                className="z-[100] w-min max-w-[calc(100vw-32px)] overflow-hidden rounded-xl border-slate-200 p-0 shadow-2xl dark:border-white/10"
                 align={calendarMonths === 1 ? "center" : "start"}
                 sideOffset={4}
               >
@@ -2596,7 +2596,7 @@ export default function SubmissionsClient({
                   selected={dateRange}
                   onSelect={setDateRange}
                   numberOfMonths={calendarMonths}
-                  className={isDark ? "bg-[#0f172a] text-white" : "bg-white"}
+                  className={isDark ? "bg-[#161616] text-white" : "bg-white"}
                 />
               </PopoverContent>
             </Popover>
@@ -2640,8 +2640,8 @@ export default function SubmissionsClient({
           </PopoverTrigger>
           <PopoverContent
             className={cn(
-              "w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800",
-              isDark ? "bg-[#0f172a]" : "bg-white",
+              "w-[240px] p-2 rounded-xl border-slate-200 dark:border-white/10",
+              isDark ? "bg-[#161616]" : "bg-white",
             )}
             align="start"
           >
@@ -2649,7 +2649,7 @@ export default function SubmissionsClient({
               <div
                 className={cn(
                   "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                  isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
+                  isDark ? "hover:bg-white/10" : "hover:bg-slate-50",
                 )}
                 onClick={() => setQualityScoreFilters([])}
               >
@@ -2659,7 +2659,7 @@ export default function SubmissionsClient({
                     qualityScoreFilters.length === 0
                       ? "bg-[#4211a1] border-[#4211a1]"
                       : isDark
-                        ? "border-slate-700 bg-slate-900"
+                        ? "border-white/15 bg-[#161616]"
                         : "border-slate-300 bg-white",
                   )}
                 >
@@ -2693,7 +2693,7 @@ export default function SubmissionsClient({
                     key={String(opt.value)}
                     className={cn(
                       "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                      isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
+                      isDark ? "hover:bg-white/10" : "hover:bg-slate-50",
                     )}
                     onClick={() => {
                       setQualityScoreFilters((prev) =>
@@ -2709,7 +2709,7 @@ export default function SubmissionsClient({
                         checked
                           ? "bg-[#4211a1] border-[#4211a1]"
                           : isDark
-                            ? "border-slate-700 bg-slate-900"
+                            ? "border-white/15 bg-[#161616]"
                             : "border-slate-300 bg-white",
                       )}
                     >
@@ -2758,14 +2758,14 @@ export default function SubmissionsClient({
                             window.location.href = "/dashboard/opportunities";
                           }, 100);
                         }}
-                        className="h-11 rounded-full bg-[#ff7a1a] px-6 text-sm font-semibold text-white shadow-none hover:bg-[#f0680a]"
+                        className="h-11 rounded-full goc-btn-primary px-6 text-sm font-semibold"
                       >
                         {opportunitiesLoading ? <ButtonLoadingSpinner /> : null}
                         Find campaigns
                       </Button>
                     </div>
                   ) : (
-                    <div className={cn("rounded-xl border-2 border-dashed py-12 text-center", isDark ? "border-slate-800 bg-slate-800/20" : "border-slate-200 bg-slate-50")}>
+                    <div className={cn("rounded-xl border-2 border-dashed py-12 text-center", isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50")}>
                       <p className={isDark ? "text-slate-400" : "text-slate-500"}>No submissions found matching the criteria.</p>
                     </div>
                   )
@@ -2791,14 +2791,14 @@ export default function SubmissionsClient({
                             window.location.href = "/dashboard/opportunities";
                           }, 100);
                         }}
-                        className="h-11 mt-4 rounded-full bg-[#ff7a1a] px-6 text-sm font-semibold text-white shadow-none hover:bg-[#f0680a]"
+                        className="h-11 mt-4 rounded-full goc-btn-primary px-6 text-sm font-semibold"
                       >
                         {opportunitiesLoading ? <ButtonLoadingSpinner /> : null}
                         Find campaigns
                       </Button>
                     </div>
                   ) : (
-                    <div className={cn("rounded-xl border-2 border-dashed py-12 text-center", isDark ? "border-slate-800 bg-slate-800/20" : "border-slate-200 bg-slate-50")}>
+                    <div className={cn("rounded-xl border-2 border-dashed py-12 text-center", isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50")}>
                       <p className={isDark ? "text-slate-400" : "text-slate-500"}>No submissions found matching the criteria.</p>
                     </div>
                   )
@@ -2833,13 +2833,13 @@ export default function SubmissionsClient({
                   }}>
                     <SelectTrigger className={cn(
                       "h-10 w-[80px] rounded-lg border shadow-none text-sm font-bold",
-                      isDark ? "bg-[#1e293b] border-slate-700" : "bg-white border-slate-200"
+                      isDark ? "bg-[#1a1a1a] border-white/15" : "bg-white border-slate-200"
                     )}>
                       <SelectValue placeholder="25" />
                     </SelectTrigger>
                     <SelectContent className={cn(
                       "min-w-0 w-[80px]",
-                      isDark ? "bg-[#0f172a] border-slate-800" : "bg-white border-slate-200"
+                      isDark ? "bg-[#161616] border-white/10" : "bg-white border-slate-200"
                     )}>
                       <SelectItem value="25" isDark={isDark}>25</SelectItem>
                       <SelectItem value="50" isDark={isDark}>50</SelectItem>
@@ -2861,7 +2861,7 @@ export default function SubmissionsClient({
                   disabled={currentPage === 1}
                   className={cn(
                     "h-9 w-9 rounded-md border shadow-none transition-colors",
-                    isDark ? "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-400" : "bg-white border-slate-200 hover:bg-slate-100 text-slate-600"
+                    isDark ? "bg-[#1a1a1a] border-white/15 hover:bg-white/10 text-slate-400" : "bg-white border-slate-200 hover:bg-slate-100 text-slate-600"
                   )}
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -2888,7 +2888,7 @@ export default function SubmissionsClient({
                             isActive
                               ? "bg-[#171717] text-white border-[#171717] hover:bg-[#2a2a2a]"
                               : isDark
-                                ? "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300"
+                                ? "bg-[#1a1a1a] border-white/15 hover:bg-white/10 text-slate-300"
                                 : "bg-white border-slate-200 hover:bg-slate-100 text-slate-600"
                           )}
                         >
@@ -2909,7 +2909,7 @@ export default function SubmissionsClient({
                   disabled={currentPage === Math.ceil((viewMode === "contest" ? groupedContests.length : filteredSubmissions.length) / itemsPerPage)}
                   className={cn(
                     "h-9 w-9 rounded-md border shadow-none transition-colors",
-                    isDark ? "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-400" : "bg-white border-slate-200 hover:bg-slate-100 text-slate-600"
+                    isDark ? "bg-[#1a1a1a] border-white/15 hover:bg-white/10 text-slate-400" : "bg-white border-slate-200 hover:bg-slate-100 text-slate-600"
                   )}
                 >
                   <ChevronRight className="h-4 w-4" />
@@ -2922,7 +2922,7 @@ export default function SubmissionsClient({
 
       {/* Contest Submissions Modal */}
       <Dialog open={!!selectedContestGroup} onOpenChange={(open) => !open && setSelectedContestGroup(null)} isdark={isDark}>
-        <DialogContent className={cn("w-[95vw] sm:max-w-2xl max-h-[85vh] overflow-y-auto scrollbar-thin rounded-[20px]", isDark ? "bg-[#0f172a] border-slate-800" : "bg-white border-slate-200")}>
+        <DialogContent className={cn("w-[95vw] sm:max-w-2xl max-h-[85vh] overflow-y-auto scrollbar-thin rounded-[20px]", isDark ? "bg-[#161616] border-white/10" : "bg-white border-slate-200")}>
           <DialogHeader>
             <DialogTitle
               className={cn("text-xl font-black break-words leading-tight", isDark ? "text-white" : "text-slate-900")}
@@ -3093,11 +3093,11 @@ export default function SubmissionsClient({
                   key={submission.id}
                   className={cn(
                     "rounded-[14px] border overflow-hidden transition-all duration-300 group/item hover:shadow-lg min-w-0 w-full",
-                    isDark ? "bg-[#1e293b] border-slate-700" : "bg-white border-neutral-200"
+                    isDark ? "bg-[#0e0e0e] border-white/10" : "bg-white border-neutral-200"
                   )}
                 >
                   {/* ── SECTION 1: Thumbnail banner ── */}
-                  <div className="relative w-full h-[160px] bg-slate-100 dark:bg-slate-900">
+                  <div className="relative w-full h-[160px] bg-slate-100 dark:bg-[#161616]">
                     {isInstagram && (!hasThumb || isBroken) ? (
                       <img src="/instagram-poster.svg" alt="Instagram content" className="absolute inset-0 w-full h-full object-cover" />
                     ) : isTiktok && (!hasThumb || isBroken) ? (
@@ -3114,7 +3114,7 @@ export default function SubmissionsClient({
                         onError={() => setBrokenThumbs((prev) => ({ ...prev, [submission.id]: true }))}
                       />
                     ) : (
-                      <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800/30">
+                      <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-white/5">
                         <Video className="h-12 w-12 text-slate-300 dark:text-slate-600" />
                       </div>
                     )}
@@ -3147,7 +3147,7 @@ export default function SubmissionsClient({
                   </div>
 
                   {/* ── SECTION 2: Title row ── */}
-                  <div className={cn("px-4 pt-3 pb-3 border-b max-w-full overflow-hidden min-w-0 flex-shrink-0", isDark ? "border-slate-700" : "border-slate-100")}>
+                  <div className={cn("px-4 pt-3 pb-3 border-b max-w-full overflow-hidden min-w-0 flex-shrink-0", isDark ? "border-white/10" : "border-slate-100")}>
                     <h4
                       className={cn(
                         "text-[15px] font-bold leading-snug transition-all duration-300 w-full truncate hover:whitespace-normal group-hover:whitespace-normal",
@@ -3171,14 +3171,14 @@ export default function SubmissionsClient({
                   </div>
 
                   {/* ── SECTION 3: Meta chips row ── */}
-                  <div className={cn("px-4 py-3 flex items-center gap-2 border-b whitespace-nowrap overflow-hidden flex-wrap", isDark ? "border-slate-700" : "border-slate-100")}>
-                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0", isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
+                  <div className={cn("px-4 py-3 flex items-center gap-2 border-b whitespace-nowrap overflow-hidden flex-wrap", isDark ? "border-white/10" : "border-slate-100")}>
+                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0", isDark ? "bg-white/10 text-white/80" : "bg-slate-100 text-slate-600")}>
                       <CalendarDays className="w-3 h-3 shrink-0" /> {submission.formatted_created_at?.split(',')[0]}
                     </span>
-                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0", isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
+                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0", isDark ? "bg-white/10 text-white/80" : "bg-slate-100 text-slate-600")}>
                       <Eye className="w-3 h-3 shrink-0" /> {views.toLocaleString()}
                     </span>
-                    <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider flex-shrink-0 border", isDark ? "bg-slate-800 text-slate-300 border-slate-600" : "bg-slate-100 text-slate-600 border-slate-200")}>
+                    <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider flex-shrink-0 border", isDark ? "bg-white/10 text-white/80 border-white/10" : "bg-slate-100 text-slate-600 border-slate-200")}>
                       {campaignTypeBadgeLabel(campaignTypeModal)}
                     </span>
                     {campaignTypeModal === "leaderboard" && null}
@@ -3196,9 +3196,9 @@ export default function SubmissionsClient({
                         : !showBonusRowModal
                           ? "grid-cols-1"
                           : "grid-cols-2",
-                    isDark ? "border-slate-700" : "border-slate-100"
+                    isDark ? "border-white/10" : "border-slate-100"
                   )}>
-                    <div className={cn("rounded-[10px] p-3", isDark ? "bg-slate-800/60" : "bg-slate-50")}>
+                    <div className={cn("rounded-[10px] p-3", isDark ? "bg-white/5" : "bg-slate-50")}>
                       <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isDark ? "text-slate-500" : "text-slate-400")}>
                         {earningsDisplay?.label || "Estimated Earnings"}
                       </p>
@@ -3239,7 +3239,7 @@ export default function SubmissionsClient({
                     </div>
                     {/* Detailed helper text replaced by tooltip on the label */}
                     {!isRejectedModal && showBonusRowModal && (
-                      <div className={cn("rounded-[10px] p-3", isDark ? "bg-slate-800/60" : "bg-slate-50")}>
+                      <div className={cn("rounded-[10px] p-3", isDark ? "bg-white/5" : "bg-slate-50")}>
                         <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isDark ? "text-slate-500" : "text-slate-400")}>
                           {bonusLabelModal}
                         </p>
@@ -3265,7 +3265,7 @@ export default function SubmissionsClient({
                   {/* ── SECTION 5: Rejection block (only if rejected) ── */}
                   {
                     submission.status === "rejected" && rejectionDetails && (
-                      <div className={cn("px-4 py-3 border-b", isDark ? "border-slate-700" : "border-slate-100")}>
+                      <div className={cn("px-4 py-3 border-b", isDark ? "border-white/10" : "border-slate-100")}>
                         <div className="rounded-[10px] border-l-4 border-red-500 bg-red-500/5 px-3 py-2.5 flex flex-col gap-3">
                           <div className="min-w-0">
                             <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Rejection Reason</p>
@@ -3336,7 +3336,12 @@ export default function SubmissionsClient({
           <div className="flex justify-end mt-4">
             <Button
               variant="ghost"
-              className={cn("rounded-full font-bold", isDark ? "text-white hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100")}
+              className={cn(
+                "rounded-full font-bold",
+                isDark
+                  ? "border border-white/20 bg-transparent text-white hover:bg-white/10"
+                  : "text-slate-600 hover:bg-slate-100",
+              )}
               onClick={() => setSelectedContestGroup(null)}
             >
               Close

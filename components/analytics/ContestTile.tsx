@@ -171,7 +171,7 @@ export default function ContestTile({
           className={cn(
             "h-40 w-full rounded-2xl border sm:h-48 lg:h-56",
             isInitiallyDark
-              ? "border-white/10 bg-[#121212]"
+              ? "border-white/10 bg-[#161616]"
               : "border-neutral-200 bg-[#F6F6F7]",
           )}
         ></div>
@@ -363,7 +363,7 @@ export default function ContestTile({
       className={cn(
         "group w-full cursor-pointer rounded-2xl border transition-shadow duration-300",
         isDark
-          ? "border-white/10 bg-[#121212] text-white hover:shadow-lg"
+          ? "border-white/10 bg-[#161616] text-white hover:shadow-lg"
           : "border-neutral-200 bg-white text-[#171717] shadow-[0px_5px_20px_0px_#0000000D] hover:shadow-[0px_8px_24px_0px_#00000014]",
       )}
       onClick={() => onViewDetails(contest.id)}

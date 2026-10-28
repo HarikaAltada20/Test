@@ -1860,7 +1860,7 @@ export default function ProfilePage({
         <div
           className={cn(
             "rounded-t-2xl border-b px-6 py-4 shadow-lg",
-            isDark ? "bg-[#180438]" : "bg-white "
+            isDark ? "bg-[#161616]" : "bg-white "
           )}
         >
           <CardTitle
@@ -1872,16 +1872,23 @@ export default function ProfilePage({
         )}
         <div
           className={cn(
-            userData.user_type === "creator" ? "rounded-2xl border border-[#f3e6d4] px-5 py-4 shadow-none" : "rounded-b-2xl shadow-lg px-2 pb-4",
-            isDark ? "bg-[#180438]" : "bg-white "
+            userData.user_type === "creator"
+              ? cn(
+                  "rounded-2xl border px-5 py-4 shadow-none",
+                  isDark
+                    ? "border-[#c4a574]/35 bg-[linear-gradient(180deg,rgba(196,161,90,0.16)_0%,rgba(14,14,14,0.55)_48%,#161616_100%)]"
+                    : "border-[#f3e6d4] bg-white",
+                )
+              : "rounded-b-2xl shadow-lg px-2 pb-4",
+            userData.user_type !== "creator" && (isDark ? "bg-[#161616]" : "bg-white "),
           )}
         >
           {userData.user_type === "creator" && (
             <div className="flex items-center gap-4">
               <div className="relative shrink-0">
-                <Avatar className="h-[4.5rem] w-[4.5rem] rounded-2xl border border-neutral-200">
+                <Avatar className={cn("h-[4.5rem] w-[4.5rem] rounded-2xl border", isDark ? "border-white/15" : "border-neutral-200")}>
                   <AvatarImage src={avatarPreview || undefined} alt={userData.full_name || "User"} />
-                  <AvatarFallback className="rounded-2xl bg-[#E8E8EA] text-lg font-semibold text-[#171717]">
+                  <AvatarFallback className={cn("rounded-2xl text-lg font-semibold", isDark ? "bg-white/10 text-white" : "bg-[#E8E8EA] text-[#171717]")}>
                     {(userData.full_name || userData.email || "U")
                       .split(" ")
                       .filter(Boolean)
@@ -1893,7 +1900,7 @@ export default function ProfilePage({
                 <button
                   type="button"
                   onClick={triggerAvatarUpload}
-                  className="absolute -bottom-1 -left-1 flex h-7 w-7 items-center justify-center rounded-full bg-[#ff7a1a] text-white shadow-sm"
+                  className="absolute -bottom-1 -left-1 flex h-7 w-7 items-center justify-center rounded-full goc-btn-primary"
                   aria-label="Change profile photo"
                 >
                   <Camera className="h-3.5 w-3.5" />
@@ -1919,7 +1926,7 @@ export default function ProfilePage({
                       type="button"
                       onClick={handleSaveFullName}
                       disabled={isSubmitting}
-                      className="h-11 rounded-full bg-[#ff7a1a] px-5 text-white shadow-none hover:bg-[#e86e14]"
+                      className="h-11 rounded-full goc-btn-primary px-5"
                     >
                       {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
                     </Button>
@@ -1948,7 +1955,7 @@ export default function ProfilePage({
                   <span>·</span>
                   <span className="capitalize">{userData.user_type}</span>
                   <span>·</span>
-                  <span className="rounded-full bg-[#e8f6ee] px-2 py-0.5 text-xs font-medium text-[#1f8a4c]">Active</span>
+                  <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", isDark ? "bg-emerald-500/15 text-emerald-400" : "bg-[#e8f6ee] text-[#1f8a4c]")}>Active</span>
                 </p>
                 {isEditingFullName && (fullNameError || editedFullName.length > 0) && (
                   <div className="mt-1 flex items-center justify-between gap-3">
@@ -2088,7 +2095,7 @@ export default function ProfilePage({
                    focus:outline-none focus:ring-1 transition-colors duration-300
                    ${
                      isDark
-                       ? "bg-[#180438] text-white border border-gray-300"
+                       ? "bg-[#161616] text-white border border-gray-300"
                        : "bg-white text-gray-900 border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                    }
                 ${
@@ -2110,7 +2117,7 @@ export default function ProfilePage({
                           className={cn(
                             "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 bg-white px-1 peer-placeholder-shown:top-1/2 peer-placeholder-shown:text-sm peer-placeholder-shown:text-gray-400",
                             isDark
-                              ? "bg-[#180438] text-white"
+                              ? "bg-[#161616] text-white"
                               : "bg-white text-[#1A1A1A]"
                           )}
                         >
@@ -2167,7 +2174,7 @@ export default function ProfilePage({
                         className={cn(
                           "peer block w-full rounded-lg border focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-purple-500 px-3 pr-10 pt-5 pb-2 text-md cursor-default",
                           isDark
-                            ? "bg-[#180438] border border-gray-400"
+                            ? "bg-[#161616] border border-gray-400"
                             : "text-[#1A1A1A] bg-gray-50 "
                         )}
                         placeholder=" "
@@ -2177,7 +2184,7 @@ export default function ProfilePage({
                         className={cn(
                           "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                           isDark
-                            ? "bg-[#180438] text-white"
+                            ? "bg-[#161616] text-white"
                             : "bg-white text-[#1A1A1A]"
                         )}
                       >
@@ -2222,7 +2229,7 @@ export default function ProfilePage({
                     className={cn(
                       "peer block w-full rounded-lg border focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-purple-500 px-3 pr-10 pt-5 pb-2 text-md cursor-default",
                       isDark
-                        ? "bg-[#180438] border border-gray-400"
+                        ? "bg-[#161616] border border-gray-400"
                         : "text-[#1A1A1A] bg-gray-50 "
                     )}
                     placeholder=" "
@@ -2232,7 +2239,7 @@ export default function ProfilePage({
                     className={cn(
                       "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                       isDark
-                        ? "bg-[#180438] text-white"
+                        ? "bg-[#161616] text-white"
                         : "bg-white text-[#1A1A1A]"
                     )}
                   >
@@ -2256,7 +2263,7 @@ export default function ProfilePage({
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
+                      ? "bg-[#161616] text-[#8A8A8A]"
                       : "bg-white text-gray-500"
                   )}
                 >
@@ -2314,7 +2321,7 @@ export default function ProfilePage({
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
+                      ? "bg-[#161616] text-[#8A8A8A]"
                       : "bg-white text-gray-500"
                   )}
                 >
@@ -2387,7 +2394,7 @@ export default function ProfilePage({
           <div
             className={cn(
               "rounded-2xl border px-2 pb-4 shadow-sm",
-              isDark ? "border-slate-700 bg-[#180438]" : "border-neutral-200 bg-white"
+              isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white"
             )}
           >
             <div className="px-6 pt-4 pb-4">
@@ -2396,12 +2403,12 @@ export default function ProfilePage({
                   Complete your profile
                 </CardTitle>
                 {!hasReceivedProfileBonus && (
-                  <span className="rounded-full bg-[#fff1e6] px-3 py-1 text-sm font-medium text-[#ff7a1a]">
+                  <span className={cn("rounded-full px-3 py-1 text-sm font-medium", isDark ? "border border-[#c4a574]/50 bg-transparent text-[#c4a574]" : "bg-[#fff1e6] text-[#ff7a1a]")}>
                     Earn $0.50
                   </span>
                 )}
               </div>
-              <div className="mt-4 grid grid-cols-5 border-b border-neutral-200">
+              <div className={cn("mt-4 grid grid-cols-5 border-b", isDark ? "border-white/10" : "border-neutral-200")}>
                 {(
                   [
                     ["about", "About you"],
@@ -2418,8 +2425,12 @@ export default function ProfilePage({
                     className={cn(
                       "-mb-px border-b-2 pb-3 text-left text-md font-medium",
                       profileStep === id
-                        ? "border-[#c4a574] text-[#171717]"
-                        : "border-transparent text-[#737373] hover:text-[#171717]",
+                        ? isDark
+                          ? "border-[#ff7a1a] text-white"
+                          : "border-[#c4a574] text-[#171717]"
+                        : isDark
+                          ? "border-transparent text-slate-400 hover:text-white"
+                          : "border-transparent text-[#737373] hover:text-[#171717]",
                     )}
                   >
                     {label}
@@ -2485,26 +2496,26 @@ export default function ProfilePage({
                   ).map((group) => {
                     const missing = group.rows.filter(([, value]) => !value);
                     return (
-                      <div key={group.title} className={cn("rounded-2xl border px-4 py-3", isDark ? "border-slate-700 bg-white/5" : "border-neutral-200 bg-[#F6F6F7]")}>
+                      <div key={group.title} className={cn("rounded-2xl border px-4 py-3", isDark ? "border-white/10 bg-[#0e0e0e]" : "border-neutral-200 bg-[#F6F6F7]")}>
                         <div className="flex items-center justify-between gap-3">
                           <p className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>
                             {group.title}
                             {missing.length > 0 && (
-                              <span className="ml-2 rounded-full bg-[#fff1e6] px-2 py-0.5 text-xs font-medium text-[#ff7a1a]">
+                              <span className={cn("ml-2 rounded-full px-2 py-0.5 text-xs font-medium", isDark ? "bg-[#ff7a1a]/15 text-[#ffd29a]" : "bg-[#fff1e6] text-[#ff7a1a]")}>
                                 {missing.length} missing
                               </span>
                             )}
                           </p>
-                          <button type="button" onClick={() => setProfileStep(group.step)} className="inline-flex items-center gap-1 rounded-full border border-neutral-300 bg-white px-3 py-1 text-sm text-[#171717]">
+                          <button type="button" onClick={() => setProfileStep(group.step)} className={cn("inline-flex items-center gap-1 rounded-full border px-3 py-1 text-sm", isDark ? "border-white/20 bg-transparent text-white" : "border-neutral-300 bg-white text-[#171717]")}>
                             <Pencil className="h-3.5 w-3.5" />
                             Edit
                           </button>
                         </div>
-                        <div className="mt-3 divide-y divide-neutral-200">
+                        <div className={cn("mt-3 divide-y", isDark ? "divide-white/10" : "divide-neutral-200")}>
                           {group.rows.map(([label, value]) => (
                             <div key={label} className="flex items-center justify-between gap-3 py-2 text-base">
-                              <span className="text-[#44403c]">{label}</span>
-                              <span className={cn("text-right", value ? "text-[#171717]" : "text-[#ff7a1a]")}>
+                              <span className={isDark ? "text-slate-400" : "text-[#44403c]"}>{label}</span>
+                              <span className={cn("text-right", value ? (isDark ? "text-white" : "text-[#171717]") : "text-[#ff7a1a]")}>
                                 {value || "Not added"}
                               </span>
                             </div>
@@ -2525,10 +2536,10 @@ export default function ProfilePage({
                         "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 z-10 px-1 pointer-events-none",
                         hasReceivedProfileBonus || isSubmitting
                           ? isDark
-                            ? "bg-[#180438] text-gray-400"
+                            ? "bg-[#161616] text-gray-400"
                             : "bg-white text-gray-400"
                           : isDark
-                          ? "bg-[#180438] text-white"
+                          ? "bg-[#161616] text-white"
                           : "bg-white text-[#1A1A1A]"
                       )}
                     >
@@ -2548,17 +2559,17 @@ export default function ProfilePage({
                         "custom-phone-input",
                         hasReceivedProfileBonus || isSubmitting
                           ? isDark
-                            ? "bg-[#180438] text-gray-400 border-gray-400"
+                            ? "bg-[#161616] text-gray-400 border-gray-400"
                             : "bg-white text-gray-400 border-gray-400"
                           : isDark
-                          ? "bg-[#180438] text-white border-gray-300"
+                          ? "bg-[#161616] text-white border-gray-300"
                           : "bg-white text-gray-900 border-gray-300"
                       )}
                       style={
                         {
                           "--PhoneInputCountryFlag-height": "1.2em",
                           "--PhoneInputCountryFlag-borderWidth": "0",
-                          backgroundColor: isDark ? "#180438" : "white",
+                          backgroundColor: isDark ? "#161616" : "white",
                           color:
                             hasReceivedProfileBonus || isSubmitting
                               ? "#9ca3af"
@@ -2589,20 +2600,20 @@ export default function ProfilePage({
                 </div> */}
 
                 {profileStep === "about" && (
-                  <div className="relative col-span-1 flex items-center justify-between gap-3 rounded-2xl border border-neutral-200 bg-[#F6F6F7] px-4 py-3 sm:col-span-2">
+                  <div className={cn("relative col-span-1 flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 sm:col-span-2", isDark ? "border-white/10 bg-[#0e0e0e]" : "border-neutral-200 bg-[#F6F6F7]")}>
                     <div className="flex items-center gap-3">
                       <Avatar className="h-12 w-12 rounded-2xl">
                         <AvatarImage src={avatarPreview || undefined} alt="" />
-                        <AvatarFallback className="rounded-2xl bg-[#E4E4E7] text-sm font-semibold text-[#171717]">
+                        <AvatarFallback className={cn("rounded-2xl text-sm font-semibold", isDark ? "bg-white/10 text-white" : "bg-[#E4E4E7] text-[#171717]")}>
                           {(userData.full_name || "U").slice(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
                       <div>
-                        <p className="text-base font-medium text-[#171717]">Profile picture</p>
-                        <p className="text-sm text-[#737373]">PNG, JPG or WEBP, up to 5 MB.</p>
+                        <p className={cn("text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>Profile picture</p>
+                        <p className={cn("text-sm", isDark ? "text-slate-400" : "text-[#737373]")}>PNG, JPG or WEBP, up to 5 MB.</p>
                       </div>
                     </div>
-                    <Button type="button" variant="outline" className="h-9 rounded-full border-neutral-300 bg-white px-4 text-[#171717]" onClick={triggerAvatarUpload}>
+                    <Button type="button" variant="outline" className={cn("h-9 rounded-full px-4", isDark ? "border-white/20 bg-transparent text-white hover:bg-white/10" : "border-neutral-300 bg-white text-[#171717]")} onClick={triggerAvatarUpload}>
                       <Upload className="h-4 w-4" />
                       Upload photo
                     </Button>
@@ -2631,7 +2642,10 @@ export default function ProfilePage({
                       })()}
                       disabled={hasReceivedProfileBonus || isSubmitting}
                       className={cn(
-                        "h-11 w-full rounded-xl border border-neutral-200 bg-white pl-10 pr-3 text-base text-[#171717] focus:outline-none focus:ring-1 focus:ring-[#171717]",
+                        "h-11 w-full rounded-xl border pl-10 pr-3 text-base focus:outline-none focus:ring-1",
+                        isDark
+                          ? "border-white/15 bg-[#0e0e0e] text-white focus:ring-white/30"
+                          : "border-neutral-200 bg-white text-[#171717] focus:ring-[#171717]",
                         !editedDateOfBirth && "text-transparent [&::-webkit-datetime-edit]:text-transparent",
                         (hasReceivedProfileBonus || isSubmitting) && "cursor-not-allowed opacity-60",
                       )}
@@ -2644,7 +2658,7 @@ export default function ProfilePage({
                 <div className={cn("relative w-full", profileStep !== "about" && "hidden")}>
                   <div className="relative flex-1">
                     <p className={cn("mb-2 text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>Gender</p>
-                    <div className="inline-flex h-11 items-center gap-1 rounded-xl bg-[#F3F3F5] px-1">
+                    <div className={cn("inline-flex h-11 items-center gap-1 rounded-xl px-1", isDark ? "bg-white/10" : "bg-[#F3F3F5]")}>
                       {["Female", "Male", ...(editedGender && editedGender !== "Female" && editedGender !== "Male" ? [editedGender] : [])].map((option) => (
                         <button
                           key={option}
@@ -2652,8 +2666,9 @@ export default function ProfilePage({
                           disabled={hasReceivedProfileBonus || isSubmitting}
                           onClick={() => setEditedGender(option)}
                           className={cn(
-                            "h-9 rounded-lg px-4 text-base text-[#171717]",
-                            editedGender === option && "bg-white shadow-sm",
+                            "h-9 rounded-lg px-4 text-base",
+                            isDark ? "text-white" : "text-[#171717]",
+                            editedGender === option && (isDark ? "bg-white/15 shadow-sm" : "bg-white shadow-sm"),
                             (hasReceivedProfileBonus || isSubmitting) && "cursor-not-allowed opacity-60",
                           )}
                         >
@@ -2726,7 +2741,7 @@ export default function ProfilePage({
                               ? "border-white/15 bg-white/5 text-slate-400"
                               : "border-neutral-200 bg-[#F6F6F7] text-[#737373]"
                             : isDark
-                              ? "border-white/15 bg-transparent text-white"
+                              ? "border-white/15 bg-[#0e0e0e] text-white"
                               : "border-neutral-200 bg-white text-[#171717]"
                         )}
                       >
@@ -2746,7 +2761,7 @@ export default function ProfilePage({
                               className={cn(
                                 "pl-8 h-9 text-sm",
                                 isDark
-                                  ? "bg-[#180438] text-white border-gray-600"
+                                  ? "bg-[#161616] text-white border-gray-600"
                                   : "bg-white text-gray-900 border-gray-300"
                               )}
                             />
@@ -2836,7 +2851,7 @@ export default function ProfilePage({
                               ? "border-white/15 bg-white/5 text-slate-400"
                               : "border-neutral-200 bg-[#F6F6F7] text-[#737373]"
                             : isDark
-                              ? "border-white/15 bg-transparent text-white"
+                              ? "border-white/15 bg-[#0e0e0e] text-white"
                               : "border-neutral-200 bg-white text-[#171717]"
                         )}
                       >
@@ -2866,7 +2881,7 @@ export default function ProfilePage({
                                 className={cn(
                                   "pl-8 h-9 text-sm",
                                   isDark
-                                    ? "bg-[#180438] text-white border-gray-600"
+                                    ? "bg-[#161616] text-white border-gray-600"
                                     : "bg-white text-gray-900 border-gray-300"
                                 )}
                               />
@@ -2958,7 +2973,7 @@ export default function ProfilePage({
                               ? "border-white/15 bg-white/5 text-slate-400"
                               : "border-neutral-200 bg-[#F6F6F7] text-[#737373]"
                             : isDark
-                              ? "border-white/15 bg-transparent text-white"
+                              ? "border-white/15 bg-[#0e0e0e] text-white"
                               : "border-neutral-200 bg-white text-[#171717]"
                         )}
                       >
@@ -2995,7 +3010,7 @@ export default function ProfilePage({
                                   className={cn(
                                     "pl-8 h-9 text-sm",
                                     isDark
-                                      ? "bg-[#180438] text-white border-gray-600"
+                                      ? "bg-[#161616] text-white border-gray-600"
                                       : "bg-white text-gray-900 border-gray-300"
                                   )}
                                 />
@@ -3081,7 +3096,7 @@ export default function ProfilePage({
                             ? "border-white/15 bg-white/5 text-slate-400"
                             : "border-neutral-200 bg-[#F6F6F7] text-[#737373]"
                           : isDark
-                            ? "border-white/15 bg-transparent text-white placeholder:text-slate-500"
+                            ? "border-white/15 bg-[#0e0e0e] text-white placeholder:text-slate-500"
                             : "border-neutral-200 bg-white text-[#171717] placeholder:text-[#737373]"
                       )}
                     />
@@ -3233,7 +3248,7 @@ export default function ProfilePage({
                                       ? "border-white bg-white/15 text-white"
                                       : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]"
                                     : isDark
-                                      ? "border-transparent bg-white/5 text-gray-300"
+                                      ? "border-white/20 bg-transparent text-gray-300"
                                       : "border-transparent bg-[#ececef] text-[#3a3a42]",
                                   (isDisabled || isSubmitting) && "cursor-not-allowed opacity-50",
                                 )}
@@ -3307,7 +3322,7 @@ export default function ProfilePage({
                                           ? "border-white bg-white/15 text-white"
                                           : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]"
                                         : isDark
-                                          ? "border-transparent bg-white/5 text-gray-300"
+                                          ? "border-white/20 bg-transparent text-gray-300"
                                           : "border-transparent bg-[#ececef] text-[#3a3a42]",
                                     )}
                                   >
@@ -3373,7 +3388,7 @@ export default function ProfilePage({
                                           ? "border-white bg-white/15 text-white"
                                           : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]"
                                         : isDark
-                                          ? "border-transparent bg-white/5 text-gray-300"
+                                          ? "border-white/20 bg-transparent text-gray-300"
                                           : "border-transparent bg-[#ececef] text-[#3a3a42]",
                                     )}
                                   >
@@ -3408,12 +3423,12 @@ export default function ProfilePage({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-3 border-t border-neutral-200 pt-4">
+              <div className={cn("flex items-center justify-between gap-3 border-t pt-4", isDark ? "border-white/10" : "border-neutral-200")}>
                 {profileStep !== "about" ? (
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-10 rounded-full border-neutral-300 bg-white px-4 text-[#171717] shadow-none hover:bg-[#F6F6F7]"
+                  className={cn("h-10 rounded-full px-4 shadow-none", isDark ? "border-white/20 bg-transparent text-white hover:bg-white/10" : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]")}
                   onClick={() =>
                     setProfileStep((step) =>
                       step === "location"
@@ -3437,7 +3452,7 @@ export default function ProfilePage({
                 {profileStep !== "review" && (
                   <Button
                     type="button"
-                    className="h-10 rounded-full bg-[#ff7a1a] px-5 text-white shadow-none hover:bg-[#e86e14]"
+                    className="h-10 rounded-full goc-btn-primary px-5"
                     onClick={() =>
                       setProfileStep((step) =>
                         step === "about"
@@ -3463,7 +3478,7 @@ export default function ProfilePage({
                     <Button
                       onClick={() => (hasReceivedProfileBonus ? handleSaveProfileChanges(false) : handleSaveClick())}
                       disabled={!hasProfileChanges() || isSubmitting}
-                      className="h-10 rounded-full bg-[#ff7a1a] px-5 text-white shadow-none hover:bg-[#e86e14]"
+                      className="h-10 rounded-full goc-btn-primary px-5"
                     >
                       {isSubmitting ? (
                         <>
@@ -3497,36 +3512,36 @@ export default function ProfilePage({
         />
       )}
       {userData.user_type === "creator" && (
-        <div className={cn("rounded-2xl border px-5 py-4 shadow-none", isDark ? "border-slate-700 bg-[#180438]" : "border-neutral-200 bg-white")}>
+        <div className={cn("rounded-2xl border px-5 py-4 shadow-none", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
           <h3 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Your details</h3>
           <div className={cn("mt-2 divide-y", isDark ? "divide-white/10" : "divide-neutral-200")}>
             <div className="grid grid-cols-[13rem_1fr_auto] items-center gap-3 py-3">
-              <p className="text-base text-[#737373]">Email</p>
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Email</p>
               <p className={cn("truncate text-base", isDark ? "text-white" : "text-[#171717]")}>{userData.email}</p>
-              <Button type="button" variant="outline" className="h-9 rounded-full border-neutral-300 bg-white px-4 text-[#171717]" onClick={handleEditEmail}>
+              <Button type="button" variant="outline" className={cn("h-9 rounded-full px-4", isDark ? "border-white/20 bg-transparent text-white hover:bg-white/10" : "border-neutral-300 bg-white text-[#171717]")} onClick={handleEditEmail}>
                 Change
               </Button>
             </div>
             <div className="grid grid-cols-[13rem_1fr_auto] items-center gap-3 py-3">
-              <p className="text-base text-[#737373]">Username</p>
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Username</p>
               <p className={cn("truncate text-base", isDark ? "text-white" : "text-[#171717]")}>@{userData.username}</p>
-              <Button type="button" variant="outline" className="h-9 rounded-full border-neutral-300 bg-white px-4 text-[#171717]" onClick={handleCopyUsername}>
+              <Button type="button" variant="outline" className={cn("h-9 rounded-full px-4", isDark ? "border-white/20 bg-transparent text-white hover:bg-white/10" : "border-neutral-300 bg-white text-[#171717]")} onClick={handleCopyUsername}>
                 <Copy className="h-4 w-4" />
                 Copy
               </Button>
             </div>
             <div className="grid grid-cols-[13rem_1fr_auto] items-center gap-3 py-3">
-              <p className="text-base text-[#737373]">Account type</p>
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Account type</p>
               <p className={cn("text-base capitalize", isDark ? "text-white" : "text-[#171717]")}>{userData.user_type}</p>
               <span />
             </div>
             <div className="grid grid-cols-[13rem_1fr_auto] items-center gap-3 py-3">
-              <p className="text-base text-[#737373]">Campaigns participated</p>
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Campaigns participated</p>
               <p className={cn("text-base", isDark ? "text-white" : "text-[#171717]")}>{creatorProfile?.total_contests_participated ?? 0}</p>
               <span />
             </div>
             <div className="grid grid-cols-[13rem_1fr_auto] items-center gap-3 py-3">
-              <p className="text-base text-[#737373]">Campaigns won</p>
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Campaigns won</p>
               <p className={cn("text-base", isDark ? "text-white" : "text-[#171717]")}>{creatorProfile?.total_contests_won ?? 0}</p>
               <span />
             </div>
@@ -3534,23 +3549,23 @@ export default function ProfilePage({
         </div>
       )}
       {userData.user_type === "creator" && (
-        <div className={cn("rounded-2xl border px-5 py-4 shadow-none", isDark ? "border-slate-700 bg-[#180438]" : "border-neutral-200 bg-white")}>
+        <div className={cn("rounded-2xl border px-5 py-4 shadow-none", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
           <h3 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Referrals</h3>
           <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
-              <p className="text-base text-[#737373]">Referred by</p>
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Referred by</p>
               <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{referrer || "No one"}</p>
             </div>
             <div>
-              <p className="text-base text-[#737373]">Available coins</p>
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Available coins</p>
               <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{userData.coins.toLocaleString()}</p>
             </div>
             <div>
-              <p className="text-base text-[#737373]">Creators referred</p>
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Creators referred</p>
               <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{userData.creators_referred}</p>
             </div>
             <div>
-              <p className="text-base text-[#737373]">Brands referred</p>
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Brands referred</p>
               <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{userData.advertisers_referred}</p>
             </div>
           </div>
@@ -3562,7 +3577,7 @@ export default function ProfilePage({
           <div
             className={cn(
               "rounded-t-2xl border-b px-6 py-4 shadow-lg",
-              isDark ? "bg-[#180438]" : "bg-white "
+              isDark ? "bg-[#161616]" : "bg-white "
             )}
           >
             <CardTitle
@@ -3577,7 +3592,7 @@ export default function ProfilePage({
           <div
             className={cn(
               "rounded-b-2xl shadow-lg px-2 pb-3",
-              isDark ? "bg-[#180438]" : "bg-white "
+              isDark ? "bg-[#161616]" : "bg-white "
             )}
           >
             <div className="px-6 py-4">
@@ -3597,7 +3612,7 @@ export default function ProfilePage({
                     name="company_name"
                     className={cn(
                       isDark
-                        ? "bg-[#180438] border border-gray-600 text-white"
+                        ? "bg-[#161616] border border-gray-600 text-white"
                         : "bg-white border border-gray-300"
                     )}
                     defaultValue={advertiserProfile?.company_name || ""}
@@ -3612,7 +3627,7 @@ export default function ProfilePage({
                     type="url"
                     className={cn(
                       isDark
-                        ? "bg-[#180438] border border-gray-600 text-white"
+                        ? "bg-[#161616] border border-gray-600 text-white"
                         : "bg-white border border-gray-300"
                     )}
                     defaultValue={advertiserProfile?.website_url || ""}
@@ -3635,7 +3650,7 @@ export default function ProfilePage({
       <div
         className={cn(
           "rounded-2xl shadow-lg px-2 pb-5",
-          isDark ? "bg-[#180438]" : "bg-white ",
+          isDark ? "bg-[#161616]" : "bg-white ",
           userData.user_type === "creator" && "hidden",
         )}
       >
@@ -3672,7 +3687,7 @@ export default function ProfilePage({
                 className={cn(
                   "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                   isDark
-                    ? "bg-[#180438] text-[#8A8A8A]"
+                    ? "bg-[#161616] text-[#8A8A8A]"
                     : "bg-white text-gray-500"
                 )}
               >
@@ -3704,7 +3719,7 @@ export default function ProfilePage({
                 className={cn(
                   "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                   isDark
-                    ? "bg-[#180438] text-[#8A8A8A]"
+                    ? "bg-[#161616] text-[#8A8A8A]"
                     : "bg-white text-gray-500"
                 )}
               >
@@ -3745,7 +3760,7 @@ export default function ProfilePage({
                 className={cn(
                   "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                   isDark
-                    ? "bg-[#180438] text-[#8A8A8A]"
+                    ? "bg-[#161616] text-[#8A8A8A]"
                     : "bg-white text-gray-500"
                 )}
               >
@@ -3786,7 +3801,7 @@ export default function ProfilePage({
                 className={cn(
                   "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                   isDark
-                    ? "bg-[#180438] text-[#8A8A8A]"
+                    ? "bg-[#161616] text-[#8A8A8A]"
                     : "bg-white text-gray-500"
                 )}
               >
@@ -3828,7 +3843,7 @@ export default function ProfilePage({
         <div
           className={cn(
             "rounded-2xl shadow-lg px-2 pb-5",
-            isDark ? "bg-[#180438]" : "bg-white "
+            isDark ? "bg-[#161616]" : "bg-white "
           )}
         >
           <CardHeader className="pb-8">
@@ -3919,7 +3934,7 @@ export default function ProfilePage({
                         className={cn(
                           "peer block w-full rounded-lg border px-3 pt-5 pb-2 text-md  borderfocus:outline-none focus:ring-1 focus:border-purple-500",
                           isDark
-                            ? "bg-[#180438] text-white border-gray-300"
+                            ? "bg-[#161616] text-white border-gray-300"
                             : "bg-white text-gray-500"
                         )}
                       />
@@ -3928,7 +3943,7 @@ export default function ProfilePage({
                         className={cn(
                           "absolute left-3 font-medium top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                           isDark
-                            ? "bg-[#180438] text-white"
+                            ? "bg-[#161616] text-white"
                             : "bg-white text-[#1A1A1A]"
                         )}
                       >
@@ -3968,7 +3983,7 @@ export default function ProfilePage({
                       className={cn(
                         "peer block w-full rounded-lg border px-3 pt-5 pb-2 text-[14px] focus:outline-none focus:ring-1 focus:border-purple-500 cursor-default",
                         isDark
-                          ? "bg-[#180438] text-white border-gray-400"
+                          ? "bg-[#161616] text-white border-gray-400"
                           : "text-gray-500 bg-gray-50"
                       )}
                     />
@@ -3977,7 +3992,7 @@ export default function ProfilePage({
                       className={cn(
                         "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                         isDark
-                          ? "bg-[#180438] text-white"
+                          ? "bg-[#161616] text-white"
                           : "bg-white text-[#1A1A1A]"
                       )}
                     >
@@ -4015,7 +4030,7 @@ export default function ProfilePage({
                         className={cn(
                           "peer block w-full rounded-lg border px-3 pt-5 pb-2 text-md focus:outline-none focus:ring-1 focus:border-purple-500",
                           isDark
-                            ? "bg-[#180438] text-white border-gray-300"
+                            ? "bg-[#161616] text-white border-gray-300"
                             : "bg-white text-[#1A1A1A] border-gray-300"
                         )}
                       />
@@ -4025,7 +4040,7 @@ export default function ProfilePage({
                         className={cn(
                           "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                           isDark
-                            ? "bg-[#180438] text-white"
+                            ? "bg-[#161616] text-white"
                             : "bg-white text-[#1A1A1A]"
                         )}
                       >
@@ -4063,7 +4078,7 @@ export default function ProfilePage({
                       className={cn(
                         "peer block w-full rounded-lg border px-3 pt-5 pb-2 text-[14px] focus:outline-none focus:ring-1 focus:border-purple-500 cursor-default",
                         isDark
-                          ? "bg-[#180438] text-white border-gray-300"
+                          ? "bg-[#161616] text-white border-gray-300"
                           : "bg-gray-50 text-[#1A1A1A]"
                       )}
                     />
@@ -4072,7 +4087,7 @@ export default function ProfilePage({
                       className={cn(
                         "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                         isDark
-                          ? "bg-[#180438] text-white"
+                          ? "bg-[#161616] text-white"
                           : "bg-white text-[#1A1A1A]"
                       )}
                     >
@@ -4121,7 +4136,7 @@ export default function ProfilePage({
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
+                      ? "bg-[#161616] text-[#8A8A8A]"
                       : "bg-white text-gray-500"
                   )}
                 >
@@ -4178,7 +4193,7 @@ export default function ProfilePage({
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
+                      ? "bg-[#161616] text-[#8A8A8A]"
                       : "bg-white text-gray-500"
                   )}
                 >
@@ -4219,7 +4234,7 @@ export default function ProfilePage({
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
+                      ? "bg-[#161616] text-[#8A8A8A]"
                       : "bg-white text-gray-500"
                   )}
                 >
@@ -4259,7 +4274,7 @@ export default function ProfilePage({
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
+                      ? "bg-[#161616] text-[#8A8A8A]"
                       : "bg-white text-gray-500"
                   )}
                 >
@@ -4299,7 +4314,7 @@ export default function ProfilePage({
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
+                      ? "bg-[#161616] text-[#8A8A8A]"
                       : "bg-white text-gray-500"
                   )}
                 >
@@ -4344,7 +4359,7 @@ export default function ProfilePage({
         onOpenChange={setIsCompleteProfileModalOpen}
         isdark={isDark}
       >
-        <DialogContent className="max-w-xl">
+        <DialogContent className={cn("max-w-xl", isDark && "border-white/10 bg-[#161616]")}>
           <DialogHeader>
             <DialogTitle
               className={cn(isDark ? "text-white" : "text-gray-900")}
@@ -4391,7 +4406,7 @@ export default function ProfilePage({
               className={cn(
                 "w-full sm:w-auto",
                 isDark
-                  ? "border-gray-600 text-gray-300 hover:bg-gray-800"
+                  ? "rounded-full border-white/20 bg-transparent text-white hover:bg-white/10"
                   : "border-gray-300 text-gray-900"
               )}
             >
@@ -4413,8 +4428,7 @@ export default function ProfilePage({
               <Button
                 onClick={handleConfirmCompleteProfile}
                 disabled={isSubmitting}
-                className={cn(
-                  "h-10 rounded-full bg-[#171717] px-5 text-white hover:bg-[#171717]/90"
+                className="h-10 rounded-full px-5 goc-btn-primary"
                 )}
               >
                 {isSubmitting ? (

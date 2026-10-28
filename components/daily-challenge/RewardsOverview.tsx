@@ -250,10 +250,10 @@ export function RewardsOverview({
                   "relative flex items-center gap-3 rounded-2xl border p-3 sm:flex-col sm:justify-center sm:px-2 sm:py-5 sm:text-center",
                   creator.rank === 1
                     ? isDark
-                      ? "border-orange-300/30 bg-orange-400/10"
+                      ? "border-[#c4a15a]/45 bg-[linear-gradient(180deg,rgba(196,161,90,0.28)_0%,rgba(14,14,14,0.4)_46%,#0e0e0e_78%)]"
                       : "border-[#f0d3b0] bg-gradient-to-b from-white to-[#fff6ee]"
                     : isDark
-                      ? "border-white/10 bg-white/[0.03]"
+                      ? "border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,#0e0e0e_52%)]"
                       : "border-[#f3e6d8] bg-[#fafafa]",
                 )}
               >
@@ -388,7 +388,7 @@ export function RewardsOverview({
     <section
       className={cn(
         "rounded-[22px] border px-5 py-6 shadow-[0_1px_2px_rgba(120,72,20,0.04)] sm:px-6",
-        isDark ? "border-white/10 bg-[#161018]" : "border-[#f0e2d2] bg-white",
+        isDark ? "border-white/10 bg-[#161616]" : "border-[#f0e2d2] bg-white",
       )}
       aria-labelledby="rewards-overview-heading"
     >

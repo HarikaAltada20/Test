@@ -1364,7 +1364,7 @@ export default function SettingsPage({
   const outlinePill = cn(
     "h-9 rounded-full border px-4 text-sm font-medium shadow-none",
     isDark
-      ? "border-slate-600 bg-transparent text-white hover:bg-white/10"
+      ? "border-white/20 bg-transparent text-white hover:bg-white/10"
       : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
   );
   const connectPill = cn(
@@ -1375,6 +1375,7 @@ export default function SettingsPage({
   );
   const disconnectPill =
     "h-9 rounded-full bg-[#C90808] px-4 text-sm font-medium text-white shadow-none hover:bg-[#a50707]";
+  const darkDialogCta = "rounded-full goc-btn-primary";
   const connectedPlatforms = (
     [
       youtubeConnected ? "youtube" : null,
@@ -1838,7 +1839,7 @@ export default function SettingsPage({
         </p>
       </div>
 
-      <div className={cn("flex gap-6 overflow-x-auto border-b", isDark ? "border-slate-700" : "border-neutral-200")}>
+      <div className={cn("flex gap-6 overflow-x-auto border-b", isDark ? "border-white/10" : "border-neutral-200")}>
         {(
           [
             ["social", "Social accounts"],
@@ -2003,7 +2004,7 @@ export default function SettingsPage({
         <div
           className={cn(
             "rounded-2xl border",
-            isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white",
+            isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white",
           )}
         >
           <div className="px-5 py-5 sm:px-6">
@@ -2021,7 +2022,7 @@ export default function SettingsPage({
               {stageLine.rest} Connect your social media accounts to participate in campaigns.
             </p>
           </div>
-          <div className={cn("border-t px-5 py-2 sm:px-6", isDark ? "border-slate-700" : "border-neutral-200")}>
+          <div className={cn("border-t px-5 py-2 sm:px-6", isDark ? "border-white/10" : "border-neutral-200")}>
             <CardContent className="space-y-4 px-0">
               {/* YouTube Connection */}
               <div className="flex flex-col gap-3 border-b py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
@@ -2114,7 +2115,7 @@ export default function SettingsPage({
               {!youtubeConnected && (
                 <Alert
                   variant="default"
-                  className={cn("mt-2 border", isDark ? "border-slate-600 bg-white/5" : "border-neutral-200 bg-[#F6F6F7]")}
+                  className={cn("mt-2 border", isDark ? "border-white/15 bg-white/5" : "border-neutral-200 bg-[#F6F6F7]")}
                 >
                   <Bell className="h-4 w-4" />
                   <AlertDescription className="text-sm leading-relaxed">
@@ -2227,7 +2228,7 @@ export default function SettingsPage({
               {!instagramConnected && (
                 <Alert
                   variant="default"
-                  className={cn("mt-2 border", isDark ? "border-slate-600 bg-white/5" : "border-neutral-200 bg-[#F6F6F7]")}
+                  className={cn("mt-2 border", isDark ? "border-white/15 bg-white/5" : "border-neutral-200 bg-[#F6F6F7]")}
                 >
                   <Bell className="h-4 w-4" />
                   <AlertDescription className="text-sm leading-relaxed">
@@ -2397,7 +2398,7 @@ export default function SettingsPage({
               {!tiktokConnected && (
                 <Alert
                   variant="default"
-                  className={cn("mt-2 border", isDark ? "border-slate-600 bg-white/5" : "border-neutral-200 bg-[#F6F6F7]")}
+                  className={cn("mt-2 border", isDark ? "border-white/15 bg-white/5" : "border-neutral-200 bg-[#F6F6F7]")}
                 >
                   <Bell className="h-4 w-4" />
                   <AlertDescription className="text-sm leading-relaxed">
@@ -2509,7 +2510,7 @@ export default function SettingsPage({
               {!twitterConnected && (
                 <Alert
                   variant="default"
-                  className={cn("mt-2 border", isDark ? "border-slate-600 bg-white/5" : "border-neutral-200 bg-[#F6F6F7]")}
+                  className={cn("mt-2 border", isDark ? "border-white/15 bg-white/5" : "border-neutral-200 bg-[#F6F6F7]")}
                 >
                   <Bell className="h-4 w-4" />
                   <AlertDescription className="text-sm leading-relaxed">
@@ -2584,29 +2585,34 @@ export default function SettingsPage({
       {userType === "creator" && creatorTab === "account" && (
         <div className="space-y-4">
           {showProfileNotification && isProfileIncomplete() && (
-            <div className="rounded-2xl border border-[#ffd7b8] bg-[#fff7f0] px-5 py-4">
+            <div className={cn(
+              "rounded-2xl border px-5 py-4",
+              isDark
+                ? "border-[#c4a574]/40 bg-[linear-gradient(90deg,rgba(196,161,90,0.18)_0%,rgba(14,14,14,0.4)_55%,#161616_100%)]"
+                : "border-[#ffd7b8] bg-[#fff7f0]",
+            )}>
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <p className="text-base font-semibold text-[#171717]">
+                  <p className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>
                     Complete your profile to earn $0.50
                   </p>
-                  <p className="mt-1 text-base text-[#44403c]">
+                  <p className={cn("mt-1 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>
                     {11 - getMissingProfileLabels().length} of 11 done
                     {getMissingProfileLabels().length > 0
                       ? ` · missing ${getMissingProfileLabels().join(", ")}`
                       : ""}
                     . Complete your profile now and claim your $0.50 reward!
                   </p>
-                  <div className="mt-3 h-1.5 w-full max-w-md overflow-hidden rounded-full bg-[#f3e6da]">
+                  <div className={cn("mt-3 h-1.5 w-full max-w-md overflow-hidden rounded-full", isDark ? "bg-white/10" : "bg-[#f3e6da]")}>
                     <div
-                      className="h-full rounded-full bg-[#ff7a1a]"
+                      className="h-full rounded-full bg-[var(--accent-btn-base)]"
                       style={{ width: `${getProfileCompletionPercentage()}%` }}
                     />
                   </div>
                 </div>
                 <Link href="/dashboard/profile">
                   <Button
-                    className="h-10 rounded-full bg-[#ff7a1a] px-5 text-sm font-semibold text-white shadow-none hover:bg-[#e86e14]"
+                    className="h-10 rounded-full goc-btn-primary px-5 text-sm font-semibold"
                     onClick={() => {
                       setProfileCompletionLoading(true);
                       setTimeout(() => {
@@ -2639,11 +2645,11 @@ export default function SettingsPage({
                 </div>
               </div>
             )}
-          <div className={cn("rounded-2xl border", isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white")}>
+          <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
             <div className="px-5 py-4">
               <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Profile</h2>
             </div>
-            <div className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-slate-700" : "border-neutral-200")}>
+            <div className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-white/10" : "border-neutral-200")}>
               <p className={cn("w-40 shrink-0 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>Profile information</p>
               <p className={cn("min-w-0 flex-1 text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>
                 {(user?.user_metadata?.full_name as string | undefined) ||
@@ -2671,7 +2677,7 @@ export default function SettingsPage({
         <div
           className={cn(
             "rounded-2xl border px-5 py-4",
-            isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white",
+            isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white",
           )}
         >
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between">
@@ -2714,7 +2720,7 @@ export default function SettingsPage({
       )}
 
       {userType === "creator" && creatorTab === "account" && (
-        <div className={cn("rounded-2xl border", isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white")}>
+        <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
           <div className="px-5 py-4">
             <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>
               Switch account
@@ -2723,7 +2729,7 @@ export default function SettingsPage({
               </span>
             </h2>
           </div>
-          <div className={cn("flex flex-col gap-4 border-t px-5 py-4", isDark ? "border-slate-700" : "border-neutral-200")}>
+          <div className={cn("flex flex-col gap-4 border-t px-5 py-4", isDark ? "border-white/10" : "border-neutral-200")}>
             <div className="flex flex-wrap items-center gap-3">
               <div>
                 <p className={cn("text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>
@@ -2736,7 +2742,7 @@ export default function SettingsPage({
                   {user?.email || "Signed in"}
                 </p>
               </div>
-              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-base font-medium text-emerald-700">
+              <span className={cn("rounded-full px-2.5 py-1 text-base font-medium", isDark ? "bg-emerald-500/15 text-emerald-400" : "bg-emerald-50 text-emerald-700")}>
                 Active now
               </span>
             </div>
@@ -2755,11 +2761,11 @@ export default function SettingsPage({
       )}
 
       {creatorTab === "security" && (
-        <div className={cn("rounded-2xl border", isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white")}>
+        <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
           <div className="px-5 py-4">
             <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Sign in</h2>
           </div>
-          <div className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-slate-700" : "border-neutral-200")}>
+          <div className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-white/10" : "border-neutral-200")}>
             <p className={cn("w-40 shrink-0 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>Password</p>
             <p className={cn("min-w-0 flex-1 text-base tracking-widest", isDark ? "text-white" : "text-[#171717]")}>
               {hasPassword ? "••••••••" : "No password set"}
@@ -2778,7 +2784,7 @@ export default function SettingsPage({
 
       {creatorTab === "referrals" && (
         <div className="space-y-4">
-          <div className={cn("rounded-2xl border px-5 py-4", isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white")}>
+          <div className={cn("rounded-2xl border px-5 py-4", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
             <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>
               Refer and earn up to $100
             </h2>
@@ -2786,7 +2792,7 @@ export default function SettingsPage({
               You get 100 coins for every sign-up, and 10% of a referred creator&apos;s campaign winnings, up to $100, as affiliate earnings. Invite others with your referral link. Choose the right landing page.
             </p>
           </div>
-          <div className={cn("rounded-2xl border", isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white")}>
+          <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
             <h2 className={cn("px-5 pb-2 pt-5 text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>
             Referral Information  
             </h2>
@@ -2806,7 +2812,7 @@ export default function SettingsPage({
                     index > 0 && "lg:border-l",
                     index >= 2 && "border-t lg:border-t-0",
                     index % 2 === 1 && "border-l lg:border-l",
-                    isDark ? "border-slate-700" : "border-neutral-200",
+                    isDark ? "border-white/10" : "border-neutral-200",
                   )}
                 >
                   <p className={cn("text-sm", isDark ? "text-slate-400" : "text-[#737373]")}>{label}</p>
@@ -2815,7 +2821,7 @@ export default function SettingsPage({
               ))}
             </div>
           </div>
-          <div className={cn("rounded-2xl border", isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white")}>
+          <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
             <div className="px-5 py-4">
               <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Your links</h2>
             </div>
@@ -2831,7 +2837,7 @@ export default function SettingsPage({
                 ).map(([label, value]) => (
                   <div
                     key={label}
-                    className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-slate-700" : "border-neutral-200")}
+                    className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-white/10" : "border-neutral-200")}
                   >
                     <p className={cn("w-36 shrink-0 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>{label}</p>
                     <div className={cn("min-w-0 flex-1 truncate rounded-full px-4 py-2 text-base", isDark ? "bg-white/5 text-slate-200" : "bg-[#F4F4F5] text-[#171717]")}>
@@ -2864,7 +2870,7 @@ export default function SettingsPage({
 
       {creatorTab === "community" && (
         <div className="space-y-4">
-          <div className={cn("rounded-2xl border", isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white")}>
+          <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
             <div className="px-5 py-4">
               <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Communities</h2>
             </div>
@@ -2872,7 +2878,7 @@ export default function SettingsPage({
               { name: "Discord", detail: "Updates, support and bonus codes", href: SOCIAL_LINKS.discord },
               { name: "WhatsApp", detail: "Connect with creators and get support", href: SOCIAL_LINKS.whatsapp },
             ].map((item) => (
-              <div key={item.name} className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-slate-700" : "border-neutral-200")}>
+              <div key={item.name} className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-white/10" : "border-neutral-200")}>
                 <p className={cn("w-36 shrink-0 text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>{item.name}</p>
                 <p className={cn("min-w-0 flex-1 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>{item.detail}</p>
                 <a href={item.href} target="_blank" rel="noopener noreferrer" className={outlinePill + " inline-flex items-center gap-1"}>
@@ -2881,7 +2887,7 @@ export default function SettingsPage({
               </div>
             ))}
           </div>
-          <div className={cn("rounded-2xl border", isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white")}>
+          <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
             <div className="px-5 py-4">
               <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Follow us</h2>
             </div>
@@ -2891,7 +2897,7 @@ export default function SettingsPage({
               { name: "YouTube", href: SOCIAL_LINKS.youtube },
               { name: "LinkedIn", href: SOCIAL_LINKS.linkedin },
             ].map((item) => (
-              <div key={item.name} className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-slate-700" : "border-neutral-200")}>
+              <div key={item.name} className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-white/10" : "border-neutral-200")}>
                 <p className={cn("w-36 shrink-0 text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>{item.name}</p>
                 <p className={cn("min-w-0 flex-1 truncate text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>
                   {item.href.replace(/^https?:\/\//, "")}
@@ -2906,11 +2912,11 @@ export default function SettingsPage({
       )}
 
       {creatorTab === "legal" && (
-        <div className={cn("rounded-2xl border", isDark ? "border-slate-700 bg-slate-900" : "border-neutral-200 bg-white")}>
+        <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
           <div className="px-5 py-4">
             <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Terms and policies</h2>
           </div>
-          <div className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-slate-700" : "border-neutral-200")}>
+          <div className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-white/10" : "border-neutral-200")}>
             <p className={cn("w-40 shrink-0 text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>Terms of Use</p>
             <p className={cn("min-w-0 flex-1 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>The rules for using Game of Creators.</p>
             <Button
@@ -2923,7 +2929,7 @@ export default function SettingsPage({
               {navigatingTerms ? <ButtonLoadingSpinner /> : "Read"}
             </Button>
           </div>
-          <div className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-slate-700" : "border-neutral-200")}>
+          <div className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-white/10" : "border-neutral-200")}>
             <p className={cn("w-40 shrink-0 text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>Privacy Policy</p>
             <p className={cn("min-w-0 flex-1 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>What we collect, why, and how it is protected.</p>
             <Button
@@ -2952,7 +2958,10 @@ export default function SettingsPage({
         }}
         isdark={isDark}
       >
-        <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto">
+        <DialogContent className={cn(
+          "sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto",
+          isDark && "border-white/10 bg-[#161616]",
+        )}>
           <DialogHeader>
             <DialogTitle
               className={cn(isDark ? "text-white" : "text-gray-900")}
@@ -2972,7 +2981,7 @@ export default function SettingsPage({
               className={cn(
                 "list-none space-y-3 text-sm rounded-lg border p-4",
                 isDark
-                  ? "border-[#7F39EC]/50 bg-[#D9C0FF]/10"
+                  ? "border-white/10 bg-[#0e0e0e]"
                   : "border-[#7F39EC]/30 bg-[#D9C0FF26]"
               )}
             >
@@ -2980,7 +2989,7 @@ export default function SettingsPage({
                 <span
                   className={cn(
                     "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                    isDark ? "bg-[#7F39EC] text-white" : "bg-[#6C43D0] text-white"
+                    "bg-[var(--accent-btn-base)] text-white"
                   )}
                 >
                   1
@@ -3008,7 +3017,7 @@ export default function SettingsPage({
                       className={cn(
                         "flex min-w-0 flex-1 items-center rounded-md border px-3 py-2 font-mono text-sm",
                         isDark
-                          ? "border-gray-600 bg-[#06021d] text-white"
+                          ? "border-white/10 bg-[#0e0e0e] text-white"
                           : "border-gray-200 bg-white text-gray-900"
                       )}
                     >
@@ -3033,7 +3042,7 @@ export default function SettingsPage({
                 <span
                   className={cn(
                     "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                    isDark ? "bg-[#7F39EC] text-white" : "bg-[#6C43D0] text-white"
+                    "bg-[var(--accent-btn-base)] text-white"
                   )}
                 >
                   2
@@ -3076,7 +3085,7 @@ export default function SettingsPage({
                     onChange={(e) => setTwitterUsername(e.target.value)}
                     className={cn(
                       isDark
-                        ? "bg-[#06021d] border border-gray-600 text-white"
+                        ? "border-white/10 bg-[#0e0e0e] text-white placeholder:text-white/40"
                         : "bg-white text-gray-900",
                     )}
                   />
@@ -3085,7 +3094,7 @@ export default function SettingsPage({
                 <div className="flex flex-col items-stretch gap-2 pt-1">
                   <Button
                     type="button"
-                    className="w-full bg-[#6C43D0] text-white"
+                    className="w-full rounded-full goc-btn-primary"
                     disabled={
                       !twitterUsername.trim() || twitterFetchState === "loading"
                     }
@@ -3163,7 +3172,7 @@ export default function SettingsPage({
                     className={cn(
                       "flex items-start gap-3 rounded-lg border p-3",
                       isDark
-                        ? "border-gray-700 bg-[#06021d]"
+                        ? "border-white/10 bg-[#0e0e0e]"
                         : "border-gray-200 bg-white",
                     )}
                   >
@@ -3211,7 +3220,10 @@ export default function SettingsPage({
                       {!isUsernameInBio(twitterProfile.desc) && (
                         <Button
                           type="button"
-                          className="bg-[#4A00BE] text-white"
+                          className={cn(
+                            "text-white",
+                            isDark ? darkDialogCta : "bg-[#4A00BE]",
+                          )}
                           onClick={async () => {
                             if (!twitterUsername.trim()) return;
                             try {
@@ -3272,7 +3284,7 @@ export default function SettingsPage({
                       )}
                       <Button
                         type="button"
-                        className="bg-[#4A00BE] text-white"
+                        className="rounded-full goc-btn-primary"
                         disabled={
                           !isUsernameInBio(twitterProfile.desc) ||
                           isSavingTwitter
@@ -3443,7 +3455,10 @@ export default function SettingsPage({
         onOpenChange={setIsPasswordModalOpen}
         isdark={isDark}
       >
-        <DialogContent className="sm:max-w-[480px] w-[95vw] max-h-[90vh] overflow-y-auto rounded-2xl border-neutral-200 p-5 sm:p-5">
+        <DialogContent className={cn(
+          "sm:max-w-[480px] w-[95vw] max-h-[90vh] overflow-y-auto rounded-2xl p-5 sm:p-5",
+          isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200",
+        )}>
           <DialogHeader>
             <DialogTitle
               className={cn(isDark ? "text-white" : "text-gray-900")}
@@ -3465,7 +3480,7 @@ export default function SettingsPage({
                     ? "border-white/15 bg-white/10 text-white"
                     : "border-[#e6e6e8] bg-[#f3f3f5] text-[#1a1a1a]"
                   : isDark
-                    ? "border-slate-600 bg-white/5 text-white"
+                    ? "border-white/15 bg-white/5 text-white"
                     : "border-neutral-200 bg-[#F6F6F7] text-[#171717]",
               )}
             >
@@ -3517,7 +3532,7 @@ export default function SettingsPage({
                     className={cn(
                       "pr-10",
                       isDark
-                        ? "bg-[#06021d] border border-gray-600 text-white"
+                        ? "border-white/10 bg-[#0e0e0e] text-white placeholder:text-white/40"
                         : "bg-white text-gray-900",
                       userType === "advertiser"
                         ? "focus-visible:ring-black focus-visible:ring-offset-0"
@@ -3558,7 +3573,7 @@ export default function SettingsPage({
                   className={cn(
                     "pr-10",
                     isDark
-                      ? "bg-[#06021d] border border-gray-600 text-white"
+                      ? "border-white/10 bg-[#0e0e0e] text-white placeholder:text-white/40"
                       : "bg-white text-gray-900",
                     userType === "advertiser"
                       ? "focus-visible:ring-black focus-visible:ring-offset-0"
@@ -3605,7 +3620,7 @@ export default function SettingsPage({
                   className={cn(
                     "pr-10",
                     isDark
-                      ? "bg-[#06021d] border border-gray-600 text-white"
+                      ? "border-white/10 bg-[#0e0e0e] text-white placeholder:text-white/40"
                       : "bg-white text-gray-900",
                     userType === "advertiser"
                       ? "focus-visible:ring-black focus-visible:ring-offset-0"
@@ -3641,7 +3656,7 @@ export default function SettingsPage({
                     : cn(
                         "h-10 rounded-full border shadow-none",
                         isDark
-                          ? "border-slate-600 bg-transparent text-white hover:bg-white/10"
+                          ? "border-white/20 bg-transparent text-white hover:bg-white/10"
                           : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
                       ),
                 )}
@@ -3650,12 +3665,7 @@ export default function SettingsPage({
               </Button>
               <Button
                 type="submit"
-                className={cn(
-                  "flex-1 text-white",
-                  userType === "advertiser"
-                    ? "bg-[#1a1a1a] hover:bg-black"
-                    : "h-10 rounded-full bg-[#171717] shadow-none hover:bg-[#2a2a2a]",
-                )}
+                className="flex-1 h-10 rounded-full goc-btn-primary"
                 disabled={
                   passwordChangeLoading || !newPassword || !confirmPassword
                 }
@@ -3674,7 +3684,10 @@ export default function SettingsPage({
         isdark={isDark}
       >
         <DialogContent
-          className="sm:max-w-[550px] w-[95vw] max-h-[90vh] overflow-y-auto"
+          className={cn(
+            "sm:max-w-[550px] w-[95vw] max-h-[90vh] overflow-y-auto",
+            isDark && "border-white/10 bg-[#161616]",
+          )}
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <DialogHeader>
@@ -3709,7 +3722,7 @@ export default function SettingsPage({
                           value={links.general}
                           className={cn(
                             isDark
-                              ? "bg-[#06021d] border border-gray-600 text-white"
+                              ? "border-white/10 bg-[#0e0e0e] text-white placeholder:text-white/40"
                               : "bg-white text-gray-900",
                           )}
                           onFocus={(e) =>
@@ -3721,7 +3734,10 @@ export default function SettingsPage({
                         />
                         <Button
                           type="button"
-                          className="bg-[#4A00BE] text-white"
+                          className={cn(
+                            "text-white",
+                            isDark ? darkDialogCta : "bg-[#4A00BE]",
+                          )}
                           variant="outline"
                           onClick={() => copyToClipboard(links.general)}
                         >
@@ -3742,14 +3758,17 @@ export default function SettingsPage({
                           value={links.creators}
                           className={cn(
                             isDark
-                              ? "bg-[#06021d] border border-gray-600 text-white"
+                              ? "border-white/10 bg-[#0e0e0e] text-white placeholder:text-white/40"
                               : "bg-white text-gray-900",
                           )}
                         />
                         <Button
                           type="button"
                           variant="outline"
-                          className="bg-[#4A00BE] text-white"
+                          className={cn(
+                            "text-white",
+                            isDark ? darkDialogCta : "bg-[#4A00BE]",
+                          )}
                           onClick={() => copyToClipboard(links.creators)}
                         >
                           <Copy className="h-4 w-4 mr-1" />
@@ -3769,14 +3788,17 @@ export default function SettingsPage({
                           value={links.brands}
                           className={cn(
                             isDark
-                              ? "bg-[#06021d] border border-gray-600 text-white"
+                              ? "border-white/10 bg-[#0e0e0e] text-white placeholder:text-white/40"
                               : "bg-white text-gray-900",
                           )}
                         />
                         <Button
                           type="button"
                           variant="outline"
-                          className="bg-[#4A00BE] text-white"
+                          className={cn(
+                            "text-white",
+                            isDark ? darkDialogCta : "bg-[#4A00BE]",
+                          )}
                           onClick={() => copyToClipboard(links.brands)}
                         >
                           <Copy className="h-4 w-4 mr-1" />
@@ -3789,8 +3811,12 @@ export default function SettingsPage({
               })()}
             </div>
           ) : (
-            <Alert className="bg-yellow-50 border-yellow-200">
-              <AlertDescription className="text-yellow-800">
+            <Alert className={cn(
+              isDark
+                ? "border-amber-500/30 bg-amber-500/10"
+                : "border-yellow-200 bg-yellow-50",
+            )}>
+              <AlertDescription className={cn(isDark ? "text-amber-100" : "text-yellow-800")}>
                 <strong>Note:</strong> You need to set up a username to generate
                 referral links. Please set up your username first.
               </AlertDescription>
@@ -3814,7 +3840,10 @@ export default function SettingsPage({
         onOpenChange={handleBillingModalOpen}
         isdark={isDark}
       >
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className={cn(
+          "max-w-3xl max-h-[90vh] overflow-y-auto",
+          isDark && "border-white/10 bg-[#161616]",
+        )}>
           <DialogHeader>
             <DialogTitle
               className={cn(isDark ? "text-white" : "text-gray-900")}
@@ -3851,7 +3880,7 @@ export default function SettingsPage({
                       className={cn(
                         "border rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4",
                         isDark
-                          ? "border-gray-700 bg-[#06021d]"
+                          ? "border-white/10 bg-[#0e0e0e]"
                           : "border-gray-400 bg-white",
                       )}
                     >
@@ -3903,7 +3932,7 @@ export default function SettingsPage({
                               className={cn(
                                 "px-4 py-2",
                                 isDark
-                                  ? "border-purple-500 text-purple-400 hover:bg-purple-900/30"
+                                  ? "border-white/20 text-white hover:bg-white/10"
                                   : "border-purple-500 text-purple-600 hover:bg-purple-50",
                               )}
                             >
@@ -3920,7 +3949,12 @@ export default function SettingsPage({
                               );
                               setIsBillingModalOpen(false);
                             }}
-                            className="bg-[#6C43D0] text-white hover:bg-[#5A36B8] px-6 py-2"
+                            className={cn(
+                              "px-6 py-2 text-white",
+                              isDark
+                                ? darkDialogCta
+                                : "bg-[#6C43D0] hover:bg-[#5A36B8]",
+                            )}
                           >
                             Subscribe
                           </Button>
@@ -3952,7 +3986,7 @@ export default function SettingsPage({
                           className={cn(
                             "rounded-2xl p-4 shadow-sm border",
                             isDark
-                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                              ? "border-white/10 bg-[#0e0e0e] text-white"
                               : "bg-[#D9C0FF26] border-[#7F39EC] text-black",
                           )}
                         >
@@ -3968,7 +4002,7 @@ export default function SettingsPage({
                           className={cn(
                             "rounded-2xl p-4 shadow-sm border",
                             isDark
-                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                              ? "border-white/10 bg-[#0e0e0e] text-white"
                               : "bg-[#D9C0FF26] border-[#7F39EC] text-black",
                           )}
                         >
@@ -3983,7 +4017,7 @@ export default function SettingsPage({
                           className={cn(
                             "rounded-2xl p-4 shadow-sm border",
                             isDark
-                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                              ? "border-white/10 bg-[#0e0e0e] text-white"
                               : "bg-[#D9C0FF26] border-[#7F39EC] text-black",
                           )}
                         >
@@ -4043,7 +4077,7 @@ export default function SettingsPage({
                           className={cn(
                             "rounded-xl p-4 border",
                             isDark
-                              ? "bg-[#180438] border-gray-700"
+                              ? "border-white/10 bg-[#0e0e0e]"
                               : "border-gray-300",
                           )}
                         >
@@ -4128,7 +4162,12 @@ export default function SettingsPage({
                           router.push("/dashboard/billing");
                           setIsBillingModalOpen(false);
                         }}
-                        className="bg-[#6C43D0] text-white hover:bg-[#5A36B8] px-6 py-2"
+                        className={cn(
+                          "px-6 py-2 text-white",
+                          isDark
+                            ? darkDialogCta
+                            : "bg-[#6C43D0] hover:bg-[#5A36B8]",
+                        )}
                       >
                         Subscribe
                       </Button>
