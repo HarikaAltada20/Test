@@ -121,6 +121,7 @@ import {
   ContestListStatsFooter,
   ContestListSubmissionBadges,
 } from "@/components/ContestListCardMetrics";
+import { HighestPlatformBadge } from "@/components/contest/HighestPlatformPayoutNote";
 
 // Define the type for a campaign
 type Contest = {
@@ -1266,6 +1267,11 @@ export function ContestListClient({
                   isDark={isDark}
                   size="compact"
                 />
+                <HighestPlatformBadge
+                  contest={contest}
+                  isDark={isDark}
+                  size="compact"
+                />
                 {/* Don't show content_type badge for Twitter text_image contests (we show campaign_type badge instead) */}
                 {(() => {
                   const isTwitterTextImage =
@@ -2048,6 +2054,11 @@ export function ContestListClient({
                     return null;
                   })()}
                   <ContestListFlatFeeBonusBadge
+                    contest={contest}
+                    isDark={isDark}
+                    size="default"
+                  />
+                  <HighestPlatformBadge
                     contest={contest}
                     isDark={isDark}
                     size="default"

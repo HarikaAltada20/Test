@@ -446,48 +446,54 @@ export async function POST(request: Request) {
   }
 
   // Stamp contest-level timestamps only after at least one successful update.
+  // Each contest is re-read right before its own write so only the timestamp
+  // key changes (never another contest's or a stale copy of its settings).
   if (successCount > 0 && targetContestIds.length > 0) {
-    const { data: contestRow } = await supabaseAdmin
-      .from("contests")
-      .select("contest_based_details")
-      .eq("id", targetContestIds[0])
-      .maybeSingle();
-
-    const existing =
-      (contestRow?.contest_based_details as Record<string, unknown>) || {};
     const stampNow = new Date().toISOString();
 
-    if (isPostCampaign) {
-      const merged = mergePostCampaignYouTubeTimestamps(existing, type, stampNow);
-      await supabaseAdmin
+    for (const targetContestId of targetContestIds) {
+      const { data: contestRow } = await supabaseAdmin
         .from("contests")
-        .update({
-          post_campaign_last_metrics_updated:
-            merged.post_campaign_last_metrics_updated,
-          ...(merged.contest_based_details
-            ? { contest_based_details: merged.contest_based_details }
-            : {}),
-        })
-        .in("id", targetContestIds);
-    } else {
-      const existingYt =
-        (existing.youtube_metrics_last_updated as Record<string, string>) || {};
-      const nextYt = { ...existingYt };
-      if (type === "core" || isYouTubeAllLikeScope(type)) nextYt.core = stampNow;
-      if (type === "traffic" || isYouTubeAllLikeScope(type)) nextYt.traffic = stampNow;
-      if (type === "demographics" || isYouTubeAllLikeScope(type)) {
-        nextYt.demographics = stampNow;
+        .select("contest_based_details")
+        .eq("id", targetContestId)
+        .maybeSingle();
+      if (!contestRow) continue;
+
+      const existing =
+        (contestRow.contest_based_details as Record<string, unknown>) || {};
+
+      if (isPostCampaign) {
+        const merged = mergePostCampaignYouTubeTimestamps(existing, type, stampNow);
+        await supabaseAdmin
+          .from("contests")
+          .update({
+            post_campaign_last_metrics_updated:
+              merged.post_campaign_last_metrics_updated,
+            ...(merged.contest_based_details
+              ? { contest_based_details: merged.contest_based_details }
+              : {}),
+          })
+          .eq("id", targetContestId);
+      } else {
+        const existingYt =
+          (existing.youtube_metrics_last_updated as Record<string, string>) || {};
+        const nextYt = { ...existingYt };
+        if (type === "core" || isYouTubeAllLikeScope(type)) nextYt.core = stampNow;
+        if (type === "traffic" || isYouTubeAllLikeScope(type)) nextYt.traffic = stampNow;
+        if (type === "demographics" || isYouTubeAllLikeScope(type)) {
+          nextYt.demographics = stampNow;
+        }
+        await supabaseAdmin
+          .from("contests")
+          .update({
+            last_metrics_updated: stampNow,
+            contest_based_details: {
+              ...existing,
+              youtube_metrics_last_updated: nextYt,
+            },
+          })
+          .eq("id", targetContestId);
       }
-      await supabaseAdmin
-        .from("contests")
-        .update({
-          last_metrics_updated: stampNow,
-          contest_based_details: {
-            ...existing,
-            youtube_metrics_last_updated: nextYt,
-          },
-        })
-        .in("id", targetContestIds);
     }
   }
 

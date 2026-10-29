@@ -91,12 +91,16 @@ async function finalizeContestAfterYoutubeRun(
     if (scope === "demographics" || isYouTubeAllLikeScope(scope))
       nextYt.demographics = now;
 
-    await supabaseAdmin
-      .from("contests")
-      .update({
-        contest_based_details: { ...existing, youtube_metrics_last_updated: nextYt },
-      })
-      .eq("id", contestId);
+    // Written right after the read; skipped when the row could not be read so
+    // the other settings (payout switch, platform blocks) are never wiped.
+    if (contestRow) {
+      await supabaseAdmin
+        .from("contests")
+        .update({
+          contest_based_details: { ...existing, youtube_metrics_last_updated: nextYt },
+        })
+        .eq("id", contestId);
+    }
   }
 
   if (scope === "basic" || isYouTubeAllLikeScope(scope)) {

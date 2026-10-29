@@ -1,4 +1,5 @@
 import { creditCreatorWithdrawableBalance } from "@/lib/payment-utils";
+import type { HighestPlatformLedgerNote } from "@/lib/highest-platform-payout";
 
 export type DualRewardsBulkBreakdownItem = {
   submission_id: string;
@@ -18,6 +19,8 @@ export async function creditDualRewardsBulkPayment(params: {
   paymentType: string;
   idempotencyKey: string;
   breakdown: DualRewardsBulkBreakdownItem[];
+  /** Highest-platform-only campaigns: records which platform was paid. */
+  highestPlatformNote?: HighestPlatformLedgerNote | null;
 }): Promise<{
   success: boolean;
   error?: string;
@@ -34,7 +37,7 @@ export async function creditDualRewardsBulkPayment(params: {
     totalCents,
     `Bulk payment for ${params.paidCount} submissions in contest: ${
       params.contestTitle || "Contest"
-    }`,
+    }${params.highestPlatformNote?.descriptionSuffix ?? ""}`,
     {
       idempotencyKey: params.idempotencyKey,
       remarks: `Bulk payment: ${params.paymentType}`,
@@ -47,6 +50,7 @@ export async function creditDualRewardsBulkPayment(params: {
         dual_rewards_reward: true,
         bulk_dual_rewards_payment: true,
         breakdown: params.breakdown,
+        ...params.highestPlatformNote?.metadata,
       },
     },
   );
@@ -71,6 +75,8 @@ export async function creditDualRewardsSubmissionReward(params: {
   idempotencyKey: string;
   remarks?: string | null;
   payoutType?: "standard" | "custom";
+  /** Highest-platform-only campaigns: records which platform was paid. */
+  highestPlatformNote?: HighestPlatformLedgerNote | null;
 }): Promise<{ success: boolean; error?: string; alreadyApplied?: boolean }> {
   const cpmCents = Math.max(0, Math.round(params.cpmCents));
   const milestoneCents = Math.max(0, Math.round(params.milestoneCents));
@@ -82,9 +88,10 @@ export async function creditDualRewardsSubmissionReward(params: {
   const creditRes = await creditCreatorWithdrawableBalance(
     params.creatorId,
     totalCents,
-    params.payoutType === "custom"
+    (params.payoutType === "custom"
       ? `Custom contest payment credited - ${params.contestTitle}`
-      : `Contest payout credited - ${params.contestTitle}`,
+      : `Contest payout credited - ${params.contestTitle}`) +
+      (params.highestPlatformNote?.descriptionSuffix ?? ""),
     {
       idempotencyKey: params.idempotencyKey,
       remarks:
@@ -97,6 +104,7 @@ export async function creditDualRewardsSubmissionReward(params: {
         dual_rewards_reward: true,
         payout_cycle: params.payoutCycle,
         payout_type: params.payoutType ?? "standard",
+        ...params.highestPlatformNote?.metadata,
       },
     },
   );

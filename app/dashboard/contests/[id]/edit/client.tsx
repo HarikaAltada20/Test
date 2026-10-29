@@ -201,6 +201,15 @@ import {
 } from "@/lib/video-platform-campaigns";
 import { VideoPlatformMultiSelect } from "@/components/contest/VideoPlatformMultiSelect";
 import { PlatformCampaignTabs } from "@/components/contest/PlatformCampaignTabs";
+import { HighestPlatformPayoutSwitch } from "@/components/contest/HighestPlatformPayoutSwitch";
+import {
+  canUseHighestPlatformPayout,
+  readHighestPlatformPayoutFlag,
+} from "@/lib/highest-platform-payout";
+import {
+  highestPlatformPayoutLockReason,
+  withHighestPlatformPayoutFlag,
+} from "@/lib/highest-platform-payout-config";
 import { isVideoContestFormat } from "@/lib/trust-score";
 import { sanitizeContestCreatorRequirementPayload } from "@/lib/contest-creator-requirements-validation";
 
@@ -835,6 +844,9 @@ export default function EditContestPage({
     useState(false);
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
     useState<number>(1);
+  // contest_based_details.highest_platform_payout_only (multi-platform video).
+  const [highestPlatformPayoutOnly, setHighestPlatformPayoutOnly] =
+    useState(false);
   const [contentType, setContentType] = useState<
     "ugc" | "clipping" | "other" | "" | "raid" | "awareness"
   >("other");
@@ -1408,7 +1420,13 @@ export default function EditContestPage({
         : null;
     if (!isVideoEditContest || selectedPlatforms.length < 2) {
       return {
-        details,
+        details: withHighestPlatformPayoutFlag(
+          details,
+          highestPlatformPayoutOnly,
+          contestType,
+          isVideoEditContest ? selectedPlatforms.length : 0,
+          contest?.contest_format,
+        ),
         platform:
           isVideoEditContest && selectedPlatforms.length > 0
             ? serializeVideoContestPlatforms(selectedPlatforms)
@@ -1486,12 +1504,18 @@ export default function EditContestPage({
       flushed,
     );
     return {
-      details: attachPlatformCampaignsToDetails(
-        {
-          ...(twitterCampaign ? { twitter_campaign: twitterCampaign } : {}),
-        },
-        selectedPlatforms,
-        flushed,
+      details: withHighestPlatformPayoutFlag(
+        attachPlatformCampaignsToDetails(
+          {
+            ...(twitterCampaign ? { twitter_campaign: twitterCampaign } : {}),
+          },
+          selectedPlatforms,
+          flushed,
+        ),
+        highestPlatformPayoutOnly,
+        primarySnap.contestType,
+        selectedPlatforms.length,
+        contest?.contest_format,
       ),
       platform: serializeVideoContestPlatforms(selectedPlatforms),
       contestType: primarySnap.contestType,
@@ -2402,6 +2426,9 @@ export default function EditContestPage({
               data.multiple_submissions_enabled || false,
             );
             setMaxSubmissionsPerCreator(data.max_submissions_per_creator || 1);
+            setHighestPlatformPayoutOnly(
+              readHighestPlatformPayoutFlag(data.contest_based_details),
+            );
             const trustScore = parseStoredOptionalNumber(data.trust_score);
             if (trustScore !== null) {
               setTrustScoreEnabled(true);
@@ -5645,6 +5672,13 @@ export default function EditContestPage({
       } else {
         contestBasedDetails = {};
       }
+      contestBasedDetails = withHighestPlatformPayoutFlag(
+        contestBasedDetails,
+        highestPlatformPayoutOnly,
+        contestType,
+        isVideoEditContest ? selectedPlatforms.length : 0,
+        contest?.contest_format,
+      );
 
       const { error: updateError } = await supabase
         .from("contests")
@@ -6696,7 +6730,13 @@ export default function EditContestPage({
           resources,
           contest_type: contestType,
           contest_based_details: preserveExistingBudgetSpentFields(
-            contestBasedDetails,
+            withHighestPlatformPayoutFlag(
+              contestBasedDetails,
+              highestPlatformPayoutOnly,
+              contestType,
+              isVideoEditContest ? selectedPlatforms.length : 0,
+              contest?.contest_format,
+            ),
             contest?.contest_based_details,
           ),
           // Categories, subcategories, and interests
@@ -7355,7 +7395,13 @@ export default function EditContestPage({
           resources,
           contest_type: contestType,
           contest_based_details: preserveExistingBudgetSpentFields(
-            contestBasedDetails2,
+            withHighestPlatformPayoutFlag(
+              contestBasedDetails2,
+              highestPlatformPayoutOnly,
+              contestType,
+              isVideoEditContest ? selectedPlatforms.length : 0,
+              contest?.contest_format,
+            ),
             contest?.contest_based_details,
           ),
           // Categories, subcategories, and interests
@@ -12746,6 +12792,25 @@ export default function EditContestPage({
           </div>
 
           <Separator />
+
+          {!datesOnly &&
+            isVideoEditContest &&
+            canUseHighestPlatformPayout(
+              contestType,
+              selectedPlatforms.length,
+            ) && (
+              <HighestPlatformPayoutSwitch
+                checked={highestPlatformPayoutOnly}
+                onCheckedChange={setHighestPlatformPayoutOnly}
+                platforms={selectedPlatforms}
+                multipleSubmissionsEnabled={multipleSubmissionsEnabled}
+                lockedReason={highestPlatformPayoutLockReason(
+                  contest,
+                  isAdmin,
+                )}
+                isDark={isDark}
+              />
+            )}
 
           {!datesOnly && isVideoEditContest && (
             <PlatformCampaignTabs

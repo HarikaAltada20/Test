@@ -20,6 +20,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { PREDEFINED_REASONS } from "@/components/RejectionReasonModal";
+import { NotCountedChip } from "@/components/contest/HighestPlatformPayoutNote";
 import { cn } from "@/lib/utils";
 import {
   botScoreTone,
@@ -529,6 +530,14 @@ export function ReviewSidePanel({
               </p>
             </div>
           </div>
+          {reward?.notCounted && (
+            <NotCountedChip
+              label={reward.notCounted.label}
+              detail={reward.notCounted.detail}
+              isDark
+              className="mt-2"
+            />
+          )}
           <div className={cn(tile(), "mt-2")}>
             <div className="flex items-center justify-between">
               <p className="text-[11px] text-slate-400">You watched</p>

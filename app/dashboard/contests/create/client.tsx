@@ -98,6 +98,13 @@ import {
 } from "@/lib/video-platform-campaigns";
 import { VideoPlatformMultiSelect } from "@/components/contest/VideoPlatformMultiSelect";
 import { PlatformCampaignTabs } from "@/components/contest/PlatformCampaignTabs";
+import { HighestPlatformPayoutSwitch } from "@/components/contest/HighestPlatformPayoutSwitch";
+import {
+  HIGHEST_PLATFORM_PAYOUT_KEY,
+  canUseHighestPlatformPayout,
+  readHighestPlatformPayoutFlag,
+} from "@/lib/highest-platform-payout";
+import { withHighestPlatformPayoutFlag } from "@/lib/highest-platform-payout-config";
 import { toast } from "@/hooks/use-toast"; // Added import
 import { AccessModeSelector } from "@/components/campaign-access/AccessModeSelector";
 import {
@@ -539,6 +546,9 @@ export default function CreateContestPage({
     useState(false);
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
     useState<number>(1);
+  // contest_based_details.highest_platform_payout_only (multi-platform video).
+  const [highestPlatformPayoutOnly, setHighestPlatformPayoutOnly] =
+    useState(false);
   const [accessMode, setAccessMode] = useState<AccessMode>("public");
   const [accessListSkipsRequirements, setAccessListSkipsRequirements] =
     useState(false);
@@ -4144,14 +4154,20 @@ export default function CreateContestPage({
             flushedCampaigns[primary] ??
             createDefaultPlatformCampaignSnapshot();
           const twitterCampaign = contestBasedDetails.twitter_campaign;
-          contestBasedDetails = attachPlatformCampaignsToDetails(
-            {
-              ...(twitterCampaign
-                ? { twitter_campaign: twitterCampaign }
-                : {}),
-            },
-            platformsForSave,
-            flushedCampaigns,
+          contestBasedDetails = withHighestPlatformPayoutFlag(
+            attachPlatformCampaignsToDetails(
+              {
+                ...(twitterCampaign
+                  ? { twitter_campaign: twitterCampaign }
+                  : {}),
+              },
+              platformsForSave,
+              flushedCampaigns,
+            ),
+            highestPlatformPayoutOnly,
+            primarySnap.contestType,
+            platformsForSave.length,
+            contestFormat,
           );
           const contentColumns = buildPlatformContentColumns(
             platformsForSave,
@@ -5365,6 +5381,13 @@ export default function CreateContestPage({
           basicsData.resources = contentColumns.resources;
           basicsData.inspiration_links = contentColumns.inspiration_links;
         }
+        basicsData.contest_based_details = withHighestPlatformPayoutFlag(
+          basicsData.contest_based_details,
+          highestPlatformPayoutOnly,
+          basicsData.contest_type,
+          selectedPlatforms.length,
+          contestFormat,
+        );
       } else if (contestFormat === "video") {
         basicsData.contest_based_details = clearPlatformCampaignKeys({
           ...(basicsData.contest_based_details || {}),
@@ -5459,6 +5482,10 @@ export default function CreateContestPage({
             if (!Object.prototype.hasOwnProperty.call(incoming, p)) {
               delete mergedDetails[p];
             }
+          }
+          // The payout switch is written on every save; never keep a stale one.
+          if (incoming[HIGHEST_PLATFORM_PAYOUT_KEY] !== true) {
+            delete mergedDetails[HIGHEST_PLATFORM_PAYOUT_KEY];
           }
           basicsData.contest_based_details = mergedDetails;
         }
@@ -6291,6 +6318,9 @@ export default function CreateContestPage({
       setSelectedPlatforms(["youtube"]);
       setActivePlatform("youtube");
     }
+    setHighestPlatformPayoutOnly(
+      readHighestPlatformPayoutFlag(draft.contest_based_details),
+    );
 
     setCategory(draft.category || "technology");
 
@@ -8408,6 +8438,19 @@ export default function CreateContestPage({
 
             {contestFormat === "video" && (
               <div className="border-t-2 border-dashed pt-6">
+                {canUseHighestPlatformPayout(
+                  contestType,
+                  selectedPlatforms.length,
+                ) && (
+                  <HighestPlatformPayoutSwitch
+                    checked={highestPlatformPayoutOnly}
+                    onCheckedChange={setHighestPlatformPayoutOnly}
+                    platforms={selectedPlatforms}
+                    multipleSubmissionsEnabled={multipleSubmissionsEnabled}
+                    isDark={isDark}
+                    className="mb-4"
+                  />
+                )}
                 <PlatformCampaignTabs {...videoSectionTabProps("prize")} />
               </div>
             )}

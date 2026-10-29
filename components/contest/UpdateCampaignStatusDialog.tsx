@@ -273,6 +273,8 @@ export function UpdateCampaignStatusDialog({
   const [reason, setReason] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  /** Status change refused until the campaign is ready (e.g. platforms not refreshed after end). */
+  const [blockedMessage, setBlockedMessage] = useState("");
 
   const availableOptions = getAvailablePostContestTransitions({
     current: currentStatus,
@@ -288,6 +290,7 @@ export function UpdateCampaignStatusDialog({
     setSelectedStatus(recommended ?? "");
     setReason("");
     setElapsedSeconds(0);
+    setBlockedMessage("");
   }, [open, currentStatus, isAdmin]);
 
   useEffect(() => {
@@ -322,6 +325,7 @@ export function UpdateCampaignStatusDialog({
     }
 
     setIsUpdating(true);
+    setBlockedMessage("");
     try {
       const response = await fetch(`/api/contests/${contestId}/update-status`, {
         method: "POST",
@@ -333,6 +337,11 @@ export function UpdateCampaignStatusDialog({
       });
 
       const result = await response.json().catch(() => ({}));
+
+      if (response.status === 409 && typeof result.error === "string") {
+        setBlockedMessage(result.error);
+        return;
+      }
 
       if (!response.ok) {
         const details =
@@ -501,7 +510,10 @@ export function UpdateCampaignStatusDialog({
                           selected={selectedStatus === option.value}
                           disabled={isUpdating}
                           isDark={isDark}
-                          onSelect={() => setSelectedStatus(option.value)}
+                          onSelect={() => {
+                            setSelectedStatus(option.value);
+                            setBlockedMessage("");
+                          }}
                         />
                       ))}
                     </div>
@@ -547,6 +559,27 @@ export function UpdateCampaignStatusDialog({
                           If any step fails, the status will not change.
                         </p>
                       ) : null}
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+
+                {blockedMessage ? (
+                  <Alert
+                    className={cn(
+                      "items-start",
+                      isDark
+                        ? "border-amber-500/30 bg-amber-500/10 [&>svg]:text-amber-400"
+                        : "border-amber-200 bg-amber-50 [&>svg]:text-amber-600",
+                    )}
+                  >
+                    <AlertTriangle className="h-4 w-4 mt-0.5" />
+                    <AlertDescription
+                      className={cn(
+                        "text-sm leading-relaxed",
+                        isDark ? "text-amber-100" : "text-amber-900",
+                      )}
+                    >
+                      {blockedMessage}
                     </AlertDescription>
                   </Alert>
                 ) : null}

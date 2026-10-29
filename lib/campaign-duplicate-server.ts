@@ -23,6 +23,10 @@ import {
 import { parseVideoContestPlatforms } from "@/lib/video-platform-campaigns";
 import { normalizeDraftReviewSettings } from "@/lib/content-drafts";
 import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
+import {
+  HIGHEST_PLATFORM_PAYOUT_KEY,
+  readHighestPlatformPayoutFlag,
+} from "@/lib/highest-platform-payout";
 
 export const CONTEST_ASSETS_BUCKET = "contest-assets";
 
@@ -151,6 +155,15 @@ export function sanitizeSetupDetails(
       Object.assign(next, stripRuntimeKeys(pick(block, PAYOUT_BLOCK_KEYS)));
     }
     if (Object.keys(next).length > 0) out[p] = next;
+  }
+
+  // Campaign-wide payout rule; only meaningful with 2+ video platforms.
+  if (
+    opts.rewards &&
+    opts.platforms.length >= 2 &&
+    readHighestPlatformPayoutFlag(details)
+  ) {
+    out[HIGHEST_PLATFORM_PAYOUT_KEY] = true;
   }
 
   if (isPlainObject(details.twitter_campaign)) {

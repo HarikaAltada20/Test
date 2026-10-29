@@ -68,6 +68,15 @@ import {
   formatQualitySumDisplay,
   formatTrustScoreDisplay,
 } from "@/lib/creator-profile-stats";
+import { isHighestPlatformPayoutOnly } from "@/lib/highest-platform-payout";
+import {
+  creatorSubmissionPayoutTag,
+  fetchCreatorHighestPlatformSummaries,
+  isCreatorSubmissionExcluded,
+  type CreatorHighestPlatformSummary,
+} from "@/lib/highest-platform-payout-creator";
+import { HighestPlatformPayoutNote } from "@/components/contest/HighestPlatformPayoutNote";
+import { HighestPlatformSubmissionTag } from "@/components/contest/HighestPlatformSubmissionTag";
 
 // Map human-readable rejection reason labels to their descriptions (new canonical set only)
 const REJECTION_REASON_DESCRIPTIONS: Record<string, string> = {
@@ -498,6 +507,38 @@ export default function SubmissionsClient({
   const isSubmissionPaid = (s: SubmissionWithContest) =>
     (s.status as string || "").toLowerCase() === "paid" || (s as any).paid === true;
 
+  // "Best platform paid" campaigns: which platform counts comes from the
+  // server (decided on every creator's submissions), never from loaded/filtered rows.
+  const [highestPlatformByContest, setHighestPlatformByContest] = useState<
+    Record<string, CreatorHighestPlatformSummary>
+  >({});
+  const highestPlatformContestKey = useMemo(() => {
+    const ids = new Set<string>();
+    for (const sub of allSubmissions) {
+      if (sub.contest_id && isHighestPlatformPayoutOnly(sub.contests)) {
+        ids.add(sub.contest_id);
+      }
+    }
+    return Array.from(ids).sort().join(",");
+  }, [allSubmissions]);
+  useEffect(() => {
+    if (!highestPlatformContestKey) return;
+    let cancelled = false;
+    fetchCreatorHighestPlatformSummaries(highestPlatformContestKey.split(","))
+      .then((byContest) => {
+        if (!cancelled) setHighestPlatformByContest(byContest);
+      })
+      .catch((err) => console.error("Error loading best-platform payouts:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [highestPlatformContestKey]);
+  const getHighestPlatformSummary = (s: SubmissionWithContest) =>
+    s.contest_id ? highestPlatformByContest[s.contest_id] : undefined;
+  /** Losing-platform submission on a "best platform paid" campaign: counts $0. */
+  const isNotCountedForPayout = (s: SubmissionWithContest) =>
+    isCreatorSubmissionExcluded(getHighestPlatformSummary(s), s.id);
+
   const formatContestTypeFilterLabel = (id: string) => {
     if (id === "dual_rewards") return "Dual Rewards";
     if (id === "cpm") return "CPM";
@@ -582,6 +623,7 @@ export default function SubmissionsClient({
       return submission.earnings ?? 0;
     }
     if (isPayoutsProcessed(contest)) return 0;
+    if (isNotCountedForPayout(submission)) return 0;
 
     if (campaignType === "cpm") {
       if (subStatus === "rejected") return 0;
@@ -634,6 +676,7 @@ export default function SubmissionsClient({
     // If contest payouts are fully processed, and this submission isn't paid,
     // there's nothing more to earn.
     if (isPayoutsProcessed(contest)) return 0;
+    if (isNotCountedForPayout(submission)) return 0;
 
     if (campaignType === "cpm") {
       if (subStatus === "rejected") return 0;
@@ -709,6 +752,7 @@ export default function SubmissionsClient({
     const isRejected = subStatus === "rejected";
 
     if (isRejected) return 0;
+    if (isNotCountedForPayout(submission)) return 0;
 
     // Gate: Participant bonus (flat fee) is ONLY shown/calculated once verified.
     // However, if an admin has ALREADY manually assigned a bonus_amount, we respect that immediately.
@@ -1252,7 +1296,7 @@ export default function SubmissionsClient({
 
     setAnalyticsFilteredSubmissions(submissionsForAnalytics);
     setFilteredSubmissions(submissions);
-  }, [allSubmissions, contestTypeFilter, statusFilter, platformFilter, activeSearch, sortOrder, dateFilter, dateRange, contestStatusFilter, qualityScoreFilters]);
+  }, [allSubmissions, contestTypeFilter, statusFilter, platformFilter, activeSearch, sortOrder, dateFilter, dateRange, contestStatusFilter, qualityScoreFilters, highestPlatformByContest]);
 
   const groupedContests = useMemo(() => {
     const groups: Record<string, {
@@ -1346,7 +1390,7 @@ export default function SubmissionsClient({
         }
       }
     });
-  }, [filteredSubmissions, sortOrder]);
+  }, [filteredSubmissions, sortOrder, highestPlatformByContest]);
 
   const stats = useMemo(() => {
     const contests = new Set(
@@ -1416,7 +1460,7 @@ export default function SubmissionsClient({
       estimatedEarnings,
       estimatedBonus,
     };
-  }, [analyticsFilteredSubmissions]);
+  }, [analyticsFilteredSubmissions, highestPlatformByContest]);
 
 
 
@@ -1507,6 +1551,15 @@ export default function SubmissionsClient({
         // Pending estimated earnings in yellow
         earningsDisplay.color = isDark ? "text-yellow-300" : "text-yellow-500";
       }
+    }
+
+    const highestPlatformTag = creatorSubmissionPayoutTag(
+      getHighestPlatformSummary(submission),
+      submission,
+    );
+    // Not counted ("best platform paid"): neutral $0, never the rejected style.
+    if (earningsDisplay && highestPlatformTag && !highestPlatformTag.counted) {
+      earningsDisplay.color = isDark ? "text-slate-400" : "text-slate-500";
     }
 
     const contestDetailsForBonus = contest?.contest_based_details as any;
@@ -1751,6 +1804,7 @@ export default function SubmissionsClient({
                     `$${earningsDisplay.amount} USD`
                   )}
                 </p>
+                <HighestPlatformSubmissionTag tag={highestPlatformTag} isDark={isDark} />
                 {campaignType === "milestone" &&
                   totalEarningsCents > 0 &&
                   milestoneMatch && (
@@ -2064,6 +2118,13 @@ export default function SubmissionsClient({
                 </Badge>
               )}
             </div>
+            <HighestPlatformPayoutNote
+              contest={contest}
+              audience="creator"
+              isDark={isDark}
+              compact
+              className="mt-3"
+            />
           </div>
 
           {/* Stats Grid */}
@@ -3123,6 +3184,14 @@ export default function SubmissionsClient({
                 }
               }
 
+              const highestPlatformTagModal = creatorSubmissionPayoutTag(
+                getHighestPlatformSummary(submission),
+                submission,
+              );
+              if (earningsDisplay && highestPlatformTagModal && !highestPlatformTagModal.counted) {
+                earningsDisplay.color = isDark ? "text-slate-400" : "text-slate-500";
+              }
+
               const platformLowerModal = (submission.platform || "").toLowerCase();
               const isInstagram = platformLowerModal === "instagram";
               const isTiktok = platformLowerModal.includes("tiktok");
@@ -3253,6 +3322,11 @@ export default function SubmissionsClient({
                           "Not Eligible"
                         ) : `$${earningsDisplay?.amount || "0.00"} USD`}
                       </p>
+                      <HighestPlatformSubmissionTag
+                        tag={highestPlatformTagModal}
+                        isDark={isDark}
+                        className="mt-1"
+                      />
                       {campaignTypeModal === "milestone" &&
                         totalEarningsCents > 0 &&
                         milestoneMatchModal && (

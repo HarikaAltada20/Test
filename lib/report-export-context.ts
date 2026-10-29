@@ -29,6 +29,8 @@ export type ReportExportContestContext = {
   contestStart?: string | null;
   contestEnd?: string | null;
   platform?: string | null;
+  /** e.g. the highest-earning-platform payout rule; shown in report metadata. */
+  payoutRuleNote?: string | null;
 };
 
 export function buildReportMetricsInput(opts: {
@@ -144,6 +146,7 @@ export function buildReportExportBundle(opts: {
     contestId: opts.contest.contestId,
     contestLifecycleStatus: opts.contest.contestLifecycleStatus,
     postContestStatus: opts.contest.postContestStatus,
+    payoutRuleNote: opts.contest.payoutRuleNote,
   });
 
   return {
