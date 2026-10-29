@@ -5,9 +5,11 @@ import {
   computeBudgetPaidCents,
   computeDualRewardsCpmMilestoneFilledByPlatform,
   computeDualRewardsCpmMilestoneFilledCents,
+  computeHighestPlatformDecisionsForBudget,
   getBudgetTileMode,
   getPoolBudgetSpentCentsForDisplay,
   resolveBudgetTileMetrics,
+  sumHighestPlatformExcludedCents,
 } from "./contest-budget-tile-metrics";
 
 describe("contest-budget-tile-metrics", () => {
@@ -812,5 +814,194 @@ describe("contest-budget-tile-metrics", () => {
     ];
     // Same prize ladders → All-tab rank: 1st 10000, 2nd 0. Bonuses 200 + 500.
     assert.equal(computeBudgetFilledCents(contest, submissions), 10700);
+  });
+});
+
+describe("contest-budget-tile-metrics: highest platform only", () => {
+  function hpContest(
+    contestType: string,
+    details: Record<string, unknown>,
+    on = true,
+  ) {
+    return {
+      contest_type: contestType,
+      post_contest_status: "pending_review",
+      platform: "youtube,instagram",
+      contest_based_details: { highest_platform_payout_only: on, ...details },
+    };
+  }
+
+  let seq = 0;
+  function sub(
+    id: string,
+    creatorId: string,
+    platform: string,
+    views: number,
+    extra: Record<string, unknown> = {},
+  ) {
+    seq += 1;
+    return {
+      id,
+      creator_id: creatorId,
+      created_at: `2026-06-01T00:00:${String(seq % 60).padStart(2, "0")}.000Z`,
+      status: "verified",
+      paid: false,
+      earnings: null,
+      bonus_paid: false,
+      views,
+      platform,
+      ...extra,
+    };
+  }
+
+  const cpmDetails = {
+    youtube: { contest_type: "cpm", cpm_contest: { cpm_rate_usd: 1 } },
+    instagram: { contest_type: "cpm", cpm_contest: { cpm_rate_usd: 2 } },
+  };
+
+  it("CPM filled counts only each creator's best platform", () => {
+    const submissions = [
+      sub("c1-yt", "c1", "youtube", 10_000), // $10
+      sub("c1-ig", "c1", "instagram", 10_000), // $20 → wins
+      sub("c2-yt", "c2", "youtube", 5_000), // $5, single platform
+    ];
+    assert.equal(
+      computeBudgetFilledCents(hpContest("cpm", cpmDetails), submissions),
+      2_500,
+    );
+    assert.equal(
+      computeBudgetFilledCents(hpContest("cpm", cpmDetails, false), submissions),
+      3_500,
+    );
+  });
+
+  it("CPM flat-fee bonus slot on a losing platform is not reassigned", () => {
+    const details = {
+      youtube: {
+        contest_type: "cpm",
+        cpm_contest: {
+          cpm_rate_usd: 1,
+          flat_fee_bonus: 300,
+          flat_fee_bonus_cap: 300,
+        },
+      },
+      instagram: { contest_type: "cpm", cpm_contest: { cpm_rate_usd: 2 } },
+    };
+    const submissions = [
+      sub("c1-yt", "c1", "youtube", 10_000), // $10 + $3 bonus (only slot)
+      sub("c1-ig", "c1", "instagram", 10_000), // $20 → wins
+      sub("c2-yt", "c2", "youtube", 5_000), // $5, no slot left
+    ];
+    assert.equal(
+      computeBudgetFilledCents(hpContest("cpm", details), submissions),
+      2_500,
+    );
+  });
+
+  it("dual per-platform filled sums to the campaign total", () => {
+    const dual = (payout: number) => ({
+      contest_type: "dual_rewards",
+      cpm_contest: { cpm_rate_usd: 1 },
+      milestone_contest: {
+        milestones: [{ order: 1, target_views: 1_000, payout_cents: payout }],
+      },
+    });
+    const contest = hpContest("dual_rewards", {
+      total_budget_cents: 100_000,
+      youtube: dual(500),
+      instagram: dual(5_000),
+    });
+    const submissions = [
+      sub("yt", "c1", "youtube", 4_000), // 400 + 500 = 900
+      sub("ig", "c1", "instagram", 2_000), // 200 + 5000 = 5200 → wins
+    ];
+    const byPlatform = computeDualRewardsCpmMilestoneFilledByPlatform(
+      contest,
+      submissions,
+    );
+    assert.equal(byPlatform.get("youtube") ?? 0, 0);
+    assert.equal(byPlatform.get("instagram"), 5_200);
+    assert.equal(computeBudgetFilledCents(contest, submissions), 5_200);
+  });
+
+  it("milestone filled drops a most-verified bonus won on the losing platform", () => {
+    const milestone = (payout: number, mvCents: number) => ({
+      contest_type: "milestone",
+      milestone_contest: {
+        milestones: [{ order: 1, target_views: 1_000, payout_cents: payout }],
+        bonus: {
+          enabled: mvCents > 0,
+          most_verified_views: { payout_cents: mvCents, min_total_views: 1 },
+        },
+      },
+    });
+    const details = {
+      youtube: milestone(1_000, 500), // 1000 + 500 MV = 1500
+      instagram: milestone(5_000, 0), // 5000 → wins
+    };
+    const submissions = [
+      sub("yt", "c1", "youtube", 2_000),
+      sub("ig", "c1", "instagram", 2_000),
+    ];
+    assert.equal(
+      computeBudgetFilledCents(hpContest("milestone", details), submissions),
+      5_000,
+    );
+    assert.equal(
+      computeBudgetFilledCents(
+        hpContest("milestone", details, false),
+        submissions,
+      ),
+      6_500,
+    );
+  });
+
+  it("sums excluded earnings for decided creators only", () => {
+    const decisions = computeHighestPlatformDecisionsForBudget(
+      hpContest("cpm", cpmDetails),
+      [
+        sub("c1-yt", "c1", "youtube", 10_000),
+        sub("c1-ig", "c1", "instagram", 10_000),
+        sub("c2-yt", "c2", "youtube", 5_000),
+        // Pending-only creator: provisional, not in the filled numbers.
+        sub("c3-yt", "c3", "youtube", 1_000, { status: "pending" }),
+        sub("c3-ig", "c3", "instagram", 9_000, { status: "pending" }),
+      ],
+    );
+    assert.equal(sumHighestPlatformExcludedCents(decisions), 1_000);
+    assert.equal(
+      sumHighestPlatformExcludedCents(
+        computeHighestPlatformDecisionsForBudget(
+          hpContest("cpm", cpmDetails, false),
+          [sub("a", "c1", "youtube", 1_000), sub("b", "c1", "instagram", 1_000)],
+        ),
+      ),
+      0,
+    );
+  });
+
+  it("CPM filled counts a paid flat-fee bonus once", () => {
+    const details = {
+      youtube: {
+        contest_type: "cpm",
+        cpm_contest: { cpm_rate_usd: 1, flat_fee_bonus: 500 },
+      },
+      instagram: { contest_type: "cpm", cpm_contest: { cpm_rate_usd: 1 } },
+    };
+    const submissions = [
+      // $10 CPM + $5 bonus already paid.
+      sub("c1-yt", "c1", "youtube", 10_000, {
+        bonus_paid: true,
+        bonus_amount: 500,
+      }),
+    ];
+    assert.equal(
+      computeBudgetFilledCents(hpContest("cpm", details), submissions),
+      1_500,
+    );
+    assert.equal(
+      computeBudgetFilledCents(hpContest("cpm", details, false), submissions),
+      1_500,
+    );
   });
 });

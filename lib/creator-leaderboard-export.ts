@@ -8,6 +8,10 @@ import {
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import { adjustBonusCents } from "@/lib/payout-rules";
 import type { MilestoneMostVerifiedBonusCreatorRow } from "@/lib/milestone-contest-expected-spend";
+import {
+  isSubmissionCountedForPayout,
+  type HighestPlatformDecisions,
+} from "@/lib/highest-platform-payout";
 import { centsToDollars } from "@/lib/currency-utils";
 import { formatLocalDateTime } from "@/lib/utils";
 import {
@@ -117,6 +121,8 @@ export type CreatorExportContext = {
     string,
     InstagramProfileSnapshot | null
   > | null;
+  /** Highest-platform-only campaigns: a creator's other platforms count $0. */
+  highestPlatform?: HighestPlatformDecisions | null;
 };
 
 function mvCreatorKey(group: Record<string, unknown>): string {
@@ -143,6 +149,7 @@ function sumDualExpectedForCreator(
   let cpm = 0;
   let milestone = 0;
   for (const sub of subs) {
+    if (!isSubmissionCountedForPayout(ctx.highestPlatform, sub.id)) continue;
     cpm += ctx.cappedCpmMap.get(sub.id) ?? 0;
     milestone += ctx.dualMilestoneMap.get(sub.id) ?? 0;
   }

@@ -107,6 +107,9 @@ function appendReportMetadataRows(
     ["Exported on", branding.exportedAt],
     ["Filter", branding.filtersApplied ?? branding.dataScopeLabel],
   ];
+  if (branding.payoutRuleNote) {
+    infoRows.push(["Payout rule", branding.payoutRuleNote]);
+  }
 
   for (const [label, value] of infoRows) {
     const r = ws.getRow(rowIdx++);

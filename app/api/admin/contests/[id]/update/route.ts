@@ -17,6 +17,8 @@ import {
   clearTopLevelPayoutKeys,
   readPersistedPlatformCampaigns,
 } from "@/lib/video-platform-campaigns";
+import { readHighestPlatformPayoutFlag } from "@/lib/highest-platform-payout";
+import { hasCampaignEnded } from "@/lib/highest-platform-payout-config";
 
 export async function POST(
   request: Request,
@@ -245,9 +247,25 @@ export async function POST(
     if (updateData.contest_based_details !== undefined) {
       const { data: existingForSpend } = await admin
         .from("contests")
-        .select("contest_based_details")
+        .select(
+          "contest_based_details, moderation_status, end_date, post_contest_status"
+        )
         .eq("id", contestId)
         .maybeSingle();
+      // The best-platform payout switch is locked once the campaign has ended.
+      if (
+        readHighestPlatformPayoutFlag(updateData.contest_based_details) !==
+          readHighestPlatformPayoutFlag(existingForSpend?.contest_based_details) &&
+        hasCampaignEnded(existingForSpend)
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "The highest-earning platform payout setting can't be changed after the campaign has ended.",
+          },
+          { status: 400 }
+        );
+      }
       let nextDetails = preserveExistingBudgetSpentFields(
         updateData.contest_based_details,
         existingForSpend?.contest_based_details,

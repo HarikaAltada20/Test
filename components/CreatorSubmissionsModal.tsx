@@ -140,6 +140,15 @@ import {
 } from "@/lib/video-platform-campaigns";
 import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
 import { getPlatformIcon } from "@/lib/platform-icons";
+import {
+  isSubmissionCountedForPayout,
+  type HighestPlatformDecisions,
+} from "@/lib/highest-platform-payout";
+import {
+  highestPlatformCreatorInfo,
+  highestPlatformNotCountedInfo,
+} from "@/lib/highest-platform-payout-display";
+import { NotCountedChip } from "@/components/contest/HighestPlatformPayoutNote";
 
 interface Creator {
   id: string;
@@ -278,6 +287,11 @@ interface CreatorSubmissionsModalProps {
   onOpenReviewMode?: (submissionIds: string[], initialId?: string) => void;
   /** Campaign platform supports inline players (YouTube / Instagram / TikTok). */
   supportsInlineContentEmbed?: boolean;
+  /**
+   * Highest-platform-only campaigns: paid platform per creator, decided by the
+   * parent from the FULL campaign list (never from this modal's rows).
+   */
+  highestPlatformDecisions?: HighestPlatformDecisions | null;
 }
 
 const CREATOR_MODAL_DETAILED_VIEW_STORAGE_KEY =
@@ -311,7 +325,12 @@ export function CreatorSubmissionsModal({
   onQualityScoreUpdated,
   onOpenReviewMode,
   supportsInlineContentEmbed = false,
+  highestPlatformDecisions = null,
 }: CreatorSubmissionsModalProps) {
+  const highestPlatformOnly = Boolean(highestPlatformDecisions?.enabled);
+  /** True for a submission on this creator's non-paid platform (counts $0). */
+  const isNotCounted = (submissionId: string) =>
+    !isSubmissionCountedForPayout(highestPlatformDecisions, submissionId);
   const [detailedViewEnabled, setDetailedViewEnabled] = useState(false);
   useEffect(() => {
     try {
@@ -766,11 +785,18 @@ export function CreatorSubmissionsModal({
       });
     }
 
+    // Highest-platform payout: never pay a submission on a platform that does not count.
+    const notCountedSelected = paySubs.some((s) => isNotCounted(s.id));
+    if (notCountedSelected) {
+      paySubs = paySubs.filter((s) => !isNotCounted(s.id));
+    }
+
     if (paySubs.length === 0) {
       toast({
         title: "Cannot pay",
-        description:
-          type === "bonus" &&
+        description: notCountedSelected
+          ? "The selected submissions are not counted. Only the creator's highest-earning platform is paid."
+          : type === "bonus" &&
           hasTwitterTweetsSelected &&
           isTwitterCpmContestFlag
             ? "No selected paid tweets with unpaid bonus found."
@@ -1178,7 +1204,8 @@ export function CreatorSubmissionsModal({
             rows,
             (platform) =>
               resolveMaxEarningsCentsForSubmission(contest as any, platform),
-            { keyedCaps: maxKeyed },
+            // Highest-platform-only: cap each platform on its own.
+            { keyedCaps: maxKeyed || highestPlatformOnly },
           );
         for (const row of rows) {
           cpmMap.set(row.id, cpmCappedBySubmissionId.get(row.id) ?? 0);
@@ -1214,9 +1241,10 @@ export function CreatorSubmissionsModal({
                 0,
             )
           : maxEarningsPerCreator;
-        const runKey = maxKeyed
-          ? String(sub.platform || "").toLowerCase() || "_"
-          : "_";
+        const runKey =
+          maxKeyed || highestPlatformOnly
+            ? String(sub.platform || "").toLowerCase() || "_"
+            : "_";
         const runningTotal = runningByPlatform.get(runKey) || 0;
         let cappedCpm = rawCpm;
         if (subMax > 0 && runningTotal + rawCpm > subMax) {
@@ -1233,13 +1261,21 @@ export function CreatorSubmissionsModal({
     });
     fillUncappedMilestoneForAllSubs();
     return { cpmMap, dualMilestoneCappedMap };
-  }, [submissions, contest, milestoneExpectedPayoutBySubmissionId]);
+  }, [
+    submissions,
+    contest,
+    milestoneExpectedPayoutBySubmissionId,
+    highestPlatformOnly,
+  ]);
 
   const calculateSubmissionCpmExpectedReward = (submission: Submission) => {
     return dualAndCpmCapMaps.cpmMap.get(submission.id) ?? 0;
   };
 
   const computeDualExpectedPayableForSubmission = (submission: Submission) => {
+    if (isNotCounted(submission.id)) {
+      return { cpmExpected: 0, milestoneExpected: 0 };
+    }
     const cpmExpectedRaw = calculateRawSubmissionCpmExpectedReward(submission);
     const milestoneExpectedRaw = Math.max(
       Number(milestoneExpectedPayoutBySubmissionId?.get(submission.id) || 0),
@@ -1270,6 +1306,17 @@ export function CreatorSubmissionsModal({
     options?: { skipReload?: boolean },
   ): Promise<{ paid: boolean; cpmCents: number; milestoneCents: number }> => {
     const emptyResult = { paid: false, cpmCents: 0, milestoneCents: 0 };
+    if (isNotCounted(submission.id)) {
+      if (!options?.skipReload) {
+        toast({
+          title: "Not counted",
+          description:
+            "This creator is paid only for their highest-earning platform, so this submission is not paid.",
+          variant: "default",
+        });
+      }
+      return emptyResult;
+    }
     const { cpmExpected, milestoneExpected } =
       computeDualExpectedPayableForSubmission(submission);
     const { cpmRemaining, milestoneRemaining, totalRemaining } =
@@ -1885,9 +1932,10 @@ export function CreatorSubmissionsModal({
               0,
           )
         : maxEarningsPerCreator;
-      const runKey = maxEarningsKeyed
-        ? String(sub.platform || "").toLowerCase() || "_"
-        : "_";
+      const runKey =
+        maxEarningsKeyed || highestPlatformOnly
+          ? String(sub.platform || "").toLowerCase() || "_"
+          : "_";
       const runningTotal = runningByPlatform.get(runKey) || 0;
       const remainingCap = subMax > 0 ? subMax - runningTotal : baseExpectedReward;
       let cappedExpectedReward = baseExpectedReward;
@@ -1929,6 +1977,10 @@ export function CreatorSubmissionsModal({
     paid: moderationStatusCounts.paid,
   };
   const isDark = mode === "dark";
+  const creatorHighestPlatformInfo = highestPlatformCreatorInfo(
+    highestPlatformDecisions,
+    creator.id,
+  );
   const creatorDisplayName =
     creator.username?.trim() ||
     creator.full_name?.trim() ||
@@ -2014,6 +2066,18 @@ export function CreatorSubmissionsModal({
                       ? "submission"
                       : "submissions"}
                   </p>
+                  {creatorHighestPlatformInfo && (
+                    <p
+                      className={cn(
+                        "mt-0.5 text-xs font-medium cursor-help",
+                        isDark ? "text-amber-200" : "text-amber-700",
+                      )}
+                      title={creatorHighestPlatformInfo.detail}
+                    >
+                      {creatorHighestPlatformInfo.label} (only this platform is
+                      paid)
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -3528,9 +3592,16 @@ export function CreatorSubmissionsModal({
                         !!(submission as any).deleted_at &&
                         (submission as any).deleted_at !== "";
 
+                      // Highest-platform payout: losing-platform rows count $0.
+                      const rowNotCounted = isNotCounted(submission.id);
+                      const notCountedInfo = highestPlatformNotCountedInfo(
+                        highestPlatformDecisions,
+                        submission,
+                      );
                       // Get pre-calculated expected reward (with cap applied in submission time order)
-                      const expectedReward =
-                        expectedRewardsMap.get(submission.id) || 0;
+                      const expectedReward = rowNotCounted
+                        ? 0
+                        : expectedRewardsMap.get(submission.id) || 0;
                       const adjustedExpectedReward =
                         shouldAdjustReward && !isNonTwitterLeaderboardContest
                           ? applyPayoutAdjustment(
@@ -3552,7 +3623,7 @@ export function CreatorSubmissionsModal({
                             )
                           : 0;
                       const milestoneExpectedForDual =
-                        contest?.contest_type === "dual_rewards"
+                        contest?.contest_type === "dual_rewards" && !rowNotCounted
                           ? Math.max(
                               Number(
                                 dualAndCpmCapMaps.dualMilestoneCappedMap.get(
@@ -3563,7 +3634,7 @@ export function CreatorSubmissionsModal({
                             )
                           : 0;
                       const cpmExpectedForDual =
-                        contest?.contest_type === "dual_rewards"
+                        contest?.contest_type === "dual_rewards" && !rowNotCounted
                           ? Math.max(
                               calculateSubmissionCpmExpectedReward(submission),
                               0,
@@ -3608,6 +3679,7 @@ export function CreatorSubmissionsModal({
                       );
                       const dualCreatorCapWarning =
                         contest?.contest_type === "dual_rewards" &&
+                        !rowNotCounted &&
                         activeCreatorCapCents > 0 &&
                         cpmExpectedForDual + milestoneExpectedForDual <
                           rawCpmUncappedForDual + milestoneUncappedForDual;
@@ -3632,6 +3704,7 @@ export function CreatorSubmissionsModal({
                           : 0;
                       const dualMilestoneCapWarning =
                         contest?.contest_type === "dual_rewards" &&
+                        !rowNotCounted &&
                         activeCreatorCapCents > 0 &&
                         milestoneUncappedForDual > 0 &&
                         milestoneExpectedForDual < milestoneUncappedForDual;
@@ -3734,10 +3807,12 @@ export function CreatorSubmissionsModal({
                           )
                         : uncappedExpectedReward;
                       const isCappedToZeroWithPotential =
+                        !rowNotCounted &&
                         expectedReward === 0 &&
                         uncappedExpectedRewardAdjusted > 0;
-                      const expectedBonus =
-                        expectedBonusMap.get(submission.id) || 0;
+                      const expectedBonus = rowNotCounted
+                        ? 0
+                        : expectedBonusMap.get(submission.id) || 0;
                       const adjustedExpectedBonus = shouldAdjustBonus
                         ? applyPayoutAdjustment(
                             expectedBonus,
@@ -4939,6 +5014,15 @@ export function CreatorSubmissionsModal({
                                       ) : (
                                         formatCurrency(expectedReward)
                                       )}
+                                      {notCountedInfo && (
+                                        <div className="mt-1">
+                                          <NotCountedChip
+                                            label={notCountedInfo.label}
+                                            detail={notCountedInfo.detail}
+                                            isDark={isDark}
+                                          />
+                                        </div>
+                                      )}
                                     </TableCell>
                                   )}
                                   {hasPayoutAdjustment &&
@@ -5327,6 +5411,7 @@ export function CreatorSubmissionsModal({
                                 {/* Payment options: verified submissions (hide for Twitter leaderboard contests) */}
                                 {showPaymentActions &&
                                   moderationBucket === "verified" &&
+                                  !rowNotCounted &&
                                   !isTwitterLeaderboardContest && (
                                     <>
                                       <DropdownMenuSeparator />
@@ -5450,6 +5535,7 @@ export function CreatorSubmissionsModal({
                                   )}
 
                                 {showPaymentActions &&
+                                  !rowNotCounted &&
                                   contest?.post_contest_status !==
                                     "payouts_processed" && (
                                     <>

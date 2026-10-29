@@ -60,6 +60,7 @@ import {
 } from "@/components/CreatorContestRequirementsGate";
 import { useCreatorContestEligibility } from "@/hooks/useCreatorContestEligibility";
 import { getPlatformIcon } from "@/lib/platform-icons";
+import { HighestPlatformPayoutNote } from "@/components/contest/HighestPlatformPayoutNote";
 import {
   parseVideoContestPlatforms,
   resolveMaxEarningsCentsForSubmission,
@@ -3522,6 +3523,12 @@ export default function SubmitContentPage({
                   .join(", ")}
                 . Select one platform to continue.
               </p>
+              <HighestPlatformPayoutNote
+                contest={contest}
+                audience="creator"
+                isDark={isDark}
+                compact
+              />
             </div>
           )}
 
@@ -6489,7 +6496,9 @@ export default function SubmitContentPage({
                           >
                             <strong>Earnings Cap:</strong> You can earn up to $
                             {(earningsCapCents / 100).toFixed(2)}{" "}
-                            total from this contest.
+                            {availablePlatforms.length > 1
+                              ? `from your ${platformDisplayLabel(contestPlatform)} submissions in this contest.`
+                              : "total from this contest."}
                           </AlertDescription>
                         </Alert>
                       )}

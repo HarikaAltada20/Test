@@ -398,6 +398,58 @@ describe("sanitizeSetupDetails", () => {
     });
   });
 
+  it("copies the highest-earning platform switch only with rewards and 2+ platforms", () => {
+    const details = {
+      highest_platform_payout_only: true,
+      youtube: { contest_type: "cpm", cpm_contest: { cpm_rate_usd: 1 } },
+      tiktok: { contest_type: "cpm", cpm_contest: { cpm_rate_usd: 2 } },
+    };
+    const opts = {
+      setup: true,
+      rewards: true,
+      contentType: false,
+      postRequirements: false,
+      platforms: ["youtube", "tiktok"],
+    };
+    assert.equal(sanitizeSetupDetails(details, opts)?.highest_platform_payout_only, true);
+    assert.equal(
+      sanitizeSetupDetails(details, { ...opts, rewards: false })?.highest_platform_payout_only,
+      undefined,
+    );
+    assert.equal(
+      sanitizeSetupDetails(details, { ...opts, platforms: ["youtube"] })?.highest_platform_payout_only,
+      undefined,
+    );
+    assert.equal(
+      sanitizeSetupDetails({ ...details, highest_platform_payout_only: "true" }, opts)
+        ?.highest_platform_payout_only,
+      undefined,
+    );
+  });
+
+  it("keeps the switch through buildDuplicateRow for a multi-platform copy", () => {
+    const { row } = buildDuplicateRow({
+      source: paidLiveSource({
+        platform: "youtube,instagram",
+        contest_format: "video",
+        contest_type: "cpm",
+        contest_based_details: {
+          highest_platform_payout_only: true,
+          youtube: { contest_type: "cpm", cpm_contest: { cpm_rate_usd: 1 } },
+          instagram: { contest_type: "cpm", cpm_contest: { cpm_rate_usd: 1 } },
+        },
+      }),
+      sections: ["setup", "rewards"],
+      targetAdvertiserId: "44444444-4444-4444-8444-444444444444",
+      title: null,
+      now: new Date("2026-10-16T15:00:00.000Z"),
+    });
+    assert.equal(
+      (row.contest_based_details as Record<string, unknown>).highest_platform_payout_only,
+      true,
+    );
+  });
+
   it("keeps the platform's type without rewards", () => {
     const out = sanitizeSetupDetails(
       { youtube: { contest_type: "cpm", cpm_contest: { cpm_rate_usd: 1 } } },

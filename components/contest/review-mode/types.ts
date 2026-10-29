@@ -81,6 +81,8 @@ export type ReviewRewardLine = {
 export type ReviewRewardSummary = {
   expected: ReviewRewardLine | null;
   granted: ReviewRewardLine | null;
+  /** Highest-platform-only campaigns: set when this clip counts $0. */
+  notCounted?: { label: string; detail: string } | null;
 };
 
 export type ReviewModerationAction = "verify" | "reject" | "pending";

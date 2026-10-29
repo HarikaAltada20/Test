@@ -768,6 +768,8 @@ export function buildMilestoneMostVerifiedBonusByCreatorMapFromDetails(
   contestPlatformCsv?: string | null,
   paidByCreatorTrack?: MilestoneMostVerifiedBonusPaidByCreator,
   mvBonusAdjustment?: MilestoneMostVerifiedBonusMapAdjustment | null,
+  /** Highest-platform-only campaigns: false drops a bonus won on a platform that does not count for that creator. */
+  isCountedForCreatorPlatform?: (creatorId: string, platform: string) => boolean,
 ): Map<string, MilestoneMostVerifiedBonusCreatorRow> {
   const platforms = milestoneBonusPlatforms(details, contestPlatformCsv);
   const multi = platforms.length >= 2;
@@ -824,11 +826,14 @@ export function buildMilestoneMostVerifiedBonusByCreatorMapFromDetails(
     );
     map.forEach((row, creatorId) => {
       const current = merged.get(creatorId) ?? emptyMilestoneBonusRow();
+      const counted = isCountedForCreatorPlatform
+        ? isCountedForCreatorPlatform(creatorId, platform)
+        : true;
       merged.set(creatorId, {
-        expectedCents: current.expectedCents + row.expectedCents,
+        expectedCents: current.expectedCents + (counted ? row.expectedCents : 0),
         paidCents: 0,
         viewsExpectedCents:
-          current.viewsExpectedCents + row.viewsExpectedCents,
+          current.viewsExpectedCents + (counted ? row.viewsExpectedCents : 0),
         viewsPaidCents: 0,
         verifiedReels: current.verifiedReels + row.verifiedReels,
         minRequired: Math.max(current.minRequired, row.minRequired),
