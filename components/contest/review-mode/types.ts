@@ -1,3 +1,5 @@
+import type { SubmissionDraftLink } from "@/lib/content-drafts";
+
 export type ReviewSubmission = {
   id: string;
   status: string;
@@ -24,6 +26,8 @@ export type ReviewSubmission = {
   creatorCampaign: ReviewCreatorCampaignCounts | null;
   /** Admin-only creator track record; null when hidden. */
   creatorStats: ReviewCreatorStats | null;
+  /** The approved draft this clip was posted from (Review before posting). */
+  draft?: SubmissionDraftLink | null;
 };
 
 export type ReviewCreatorCampaignCounts = {

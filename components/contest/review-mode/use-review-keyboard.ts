@@ -16,6 +16,8 @@ export type ReviewKeyboardHandlers = {
   /** Number keys 1-9; return false to let the key through. */
   digit: (n: number) => boolean;
   openOriginal: () => void;
+  /** Show the approved draft next to the clip. */
+  toggleCompare?: () => void;
   exit: () => void;
 };
 
@@ -95,6 +97,10 @@ export function useReviewKeyboard(
             break;
           case "o":
             h.openOriginal();
+            break;
+          case "d":
+            if (h.toggleCompare) h.toggleCompare();
+            else handled = false;
             break;
           case "escape":
             h.exit();

@@ -141,6 +141,10 @@ import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { DraftReviewPanel } from "@/components/content-drafts/DraftReviewPanel";
 import { listCampaignDrafts } from "@/components/content-drafts/api";
+import {
+  DraftCompareDialog,
+  useSubmissionDrafts,
+} from "@/components/content-drafts/SubmissionDraftCompare";
 import { useTabState } from "@/components/ui/tab-utils";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -478,6 +482,7 @@ import {
   Globe,
   Columns2,
   PlaySquare,
+  Clapperboard,
 } from "lucide-react";
 import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
 import {
@@ -1855,6 +1860,7 @@ export default function ContestDetailClient({
     toReview: number;
     any: boolean;
     reviewOn: boolean;
+    posted: number;
   } | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -1875,6 +1881,7 @@ export default function ContestDetailClient({
           toReview: page.counts.pending_review ?? 0,
           any: total > 0,
           reviewOn: page.review_before_posting === true,
+          posted: page.counts.posted ?? 0,
         });
       })
       .catch(() => {});
@@ -1887,6 +1894,16 @@ export default function ContestDetailClient({
     !!contest?.review_before_posting || !!draftCounts?.reviewOn;
   const showDraftsTab = draftReviewOn || !!draftCounts?.any;
   const requestedDraftId = useSearchParams().get("draft");
+  // Submissions posted from an approved draft, so reviewers can compare the two.
+  const submissionDrafts = useSubmissionDrafts(
+    contestId,
+    (draftCounts?.posted ?? 0) > 0,
+  );
+  const [compareDraftSubmissionId, setCompareDraftSubmissionId] = useState<
+    string | null
+  >(null);
+  // A draft to open when the Drafts tab mounts (from a submission's draft link).
+  const [draftToOpen, setDraftToOpen] = useState<string | null>(null);
 
   const tabs = [
     { id: "overview", label: "Overview" },
@@ -1910,6 +1927,10 @@ export default function ContestDetailClient({
   const { activeTab, setActiveTab } = useTabState(tabs, {
     defaultTab: "overview",
   });
+  // Open a draft once; going back to the Drafts tab later shows the list.
+  useEffect(() => {
+    if (activeTab !== "drafts") setDraftToOpen(null);
+  }, [activeTab]);
   // Notifications can link straight to a tab, e.g. ?tab=applications. Applied
   // whenever the requested tab changes, including when a notification for
   // this same campaign is clicked while the page is already open.
@@ -14185,6 +14206,11 @@ export default function ContestDetailClient({
   const creatorHasReviewableSubmission = (creatorId: string) =>
     canOpenCreatorReviewMode && reviewableCreatorIds.has(creatorId);
 
+  const openDraftHistory = (draftId: string) => {
+    setDraftToOpen(draftId);
+    setActiveTab("drafts");
+  };
+
   const closeReviewMode = () => {
     preserveSelectionAfterModerationRef.current = false;
     setReviewModeSession(null);
@@ -14231,6 +14257,7 @@ export default function ContestDetailClient({
           ? (reviewSubmissionLookup.campaignByCreator.get(s.creator_id) ?? null)
           : null,
       creatorStats: isAdminView ? getReviewCreatorStats(s) : null,
+      draft: submissionDrafts.get(s.id) ?? null,
     };
   };
 
@@ -24863,6 +24890,28 @@ export default function ContestDetailClient({
                                                     )}
                                                   </button>
                                                 )}
+                                                {submissionDrafts.has(
+                                                  submission.id,
+                                                ) && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      setCompareDraftSubmissionId(
+                                                        submission.id,
+                                                      )
+                                                    }
+                                                    className={cn(
+                                                      "text-xs hover:underline flex items-center gap-1 transition-colors whitespace-nowrap font-medium",
+                                                      isDark
+                                                        ? "text-violet-300 hover:text-violet-200"
+                                                        : "text-violet-700 hover:text-violet-900",
+                                                    )}
+                                                    title="Compare the posted clip with the draft the brand approved"
+                                                  >
+                                                    <Clapperboard className="h-3 w-3" />
+                                                    Approved draft
+                                                  </button>
+                                                )}
                                               </div>
                                             )}
                                           </div>
@@ -27428,6 +27477,20 @@ export default function ContestDetailClient({
                                                 View Content
                                               </a>
                                             </DropdownMenuItem>
+                                            {submissionDrafts.has(
+                                              submission.id,
+                                            ) && (
+                                              <DropdownMenuItem
+                                                onClick={() =>
+                                                  setCompareDraftSubmissionId(
+                                                    submission.id,
+                                                  )
+                                                }
+                                              >
+                                                <Clapperboard className="h-3 w-3 mr-2" />
+                                                Compare with approved draft
+                                              </DropdownMenuItem>
+                                            )}
                                             {/* YouTube per-submission analytics refresh (admin only; single + multi-platform) */}
                                             {isAdminView &&
                                               !isTwitterTweet &&
@@ -34447,12 +34510,13 @@ export default function ContestDetailClient({
             <TabPanel value="drafts" activeTab={activeTab}>
               <DraftReviewPanel
                 contestId={contestId}
-                initialDraftId={requestedDraftId}
+                initialDraftId={draftToOpen ?? requestedDraftId}
                 onPendingCountChange={(n) =>
                   setDraftCounts((c) => ({
                     toReview: n,
                     any: (c?.any ?? false) || n > 0,
                     reviewOn: c?.reviewOn ?? false,
+                    posted: c?.posted ?? 0,
                   }))
                 }
               />
@@ -35453,8 +35517,43 @@ export default function ContestDetailClient({
           onDownloadSelected={() => void handleNormalViewBulkDownload()}
           isDark={isDark}
           onExit={closeReviewMode}
+          onOpenDraft={(draftId) => {
+            closeReviewMode();
+            openDraftHistory(draftId);
+          }}
         />
       )}
+      {(() => {
+        const s = compareDraftSubmissionId
+          ? reviewSubmissionLookup.byId.get(compareDraftSubmissionId)
+          : undefined;
+        const link = compareDraftSubmissionId
+          ? (submissionDrafts.get(compareDraftSubmissionId) ?? null)
+          : null;
+        return (
+          <DraftCompareDialog
+            link={s ? link : null}
+            post={
+              s
+                ? {
+                    id: s.id,
+                    contentLink: s.content_link ?? null,
+                    platform: s.platform ?? currentContest?.platform ?? null,
+                    videoId: s.video_id ?? null,
+                    videoThumbnailUrl: s.video_thumbnail_url ?? null,
+                    videoTitle: s.video_title ?? null,
+                    creatorName:
+                      s.creator_display_name ||
+                      s.creator_username ||
+                      null,
+                  }
+                : null
+            }
+            onClose={() => setCompareDraftSubmissionId(null)}
+            onOpenDraft={openDraftHistory}
+          />
+        );
+      })()}
     </div>
   );
 }

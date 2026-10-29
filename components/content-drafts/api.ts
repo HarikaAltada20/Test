@@ -6,6 +6,7 @@ import type {
   CampaignDraftStatus,
   DraftDetail,
   DraftListPage,
+  DraftListRow,
   DraftMedia,
   DraftReviewDecision,
   DraftSort,
@@ -95,6 +96,17 @@ export async function listCampaignDrafts(opts: {
   if (error) fail(error);
   if (data === null) throw new DraftApiError("You can't review drafts for this campaign.");
   return normalizePage(data);
+}
+
+/** Every posted draft of a campaign (paged 100 at a time), for the submissions table. */
+export async function listPostedCampaignDrafts(contestId: string, maxRows = 2000): Promise<DraftListRow[]> {
+  const rows: DraftListRow[] = [];
+  for (let offset = 0; offset < maxRows; offset += 100) {
+    const page = await listCampaignDrafts({ contestId, status: "posted", sort: "newest", offset, limit: 100 });
+    rows.push(...page.rows);
+    if (page.rows.length < 100 || rows.length >= page.total) break;
+  }
+  return rows;
 }
 
 function normalizePage(data: unknown): DraftListPage {

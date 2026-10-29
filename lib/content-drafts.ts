@@ -692,3 +692,65 @@ export const DRAFT_REVIEW_SETTING_KEYS = [
   "draft_max_revisions",
   "draft_max_rejections",
 ] as const;
+
+/** The approved draft a published submission was made from (brand and admin views). */
+export type SubmissionDraftLink = {
+  draftId: string;
+  /** The version that was approved and posted. */
+  versionId: string;
+  versionNo: number | null;
+  title: string | null;
+  caption: string | null;
+  hashtags: string[];
+  durationSec: number | null;
+  approvedAt: string | null;
+  /** When the creator submitted the posted link. */
+  submittedAt: string | null;
+  /** Draft revision rounds before approval. */
+  revisionCount: number;
+  filesPurged: boolean;
+};
+
+/** Maps each linked submission id to its approved draft, from the brand's draft list rows. */
+export function buildSubmissionDraftMap(rows: DraftListRow[]): Map<string, SubmissionDraftLink> {
+  const map = new Map<string, SubmissionDraftLink>();
+  for (const row of rows) {
+    const version = row.current_version;
+    const versionId = row.approved_version_id ?? version?.id ?? null;
+    if (!versionId) continue;
+    const duration = Number(version?.duration_sec);
+    for (const post of row.posts ?? []) {
+      if (!post?.id) continue;
+      map.set(post.id, {
+        draftId: row.id,
+        versionId,
+        versionNo: version?.version_no ?? null,
+        title: version?.title ?? null,
+        caption: version?.caption ?? null,
+        hashtags: version?.hashtags ?? [],
+        durationSec: Number.isFinite(duration) && duration > 0 ? duration : null,
+        approvedAt: row.approved_at,
+        submittedAt: post.created_at ?? null,
+        revisionCount: row.revision_count ?? 0,
+        filesPurged: !!row.files_purged,
+      });
+    }
+  }
+  return map;
+}
+
+/** "3 h after approval", or null when either time is missing. */
+export function postedAfterApprovalLabel(
+  approvedAt: string | null | undefined,
+  postedAt: string | null | undefined,
+): string | null {
+  if (!approvedAt || !postedAt) return null;
+  const ms = new Date(postedAt).getTime() - new Date(approvedAt).getTime();
+  if (!Number.isFinite(ms)) return null;
+  if (ms < 60_000) return "right after approval";
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 60) return `${minutes} min after approval`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} h after approval`;
+  return `${Math.round(hours / 24)} days after approval`;
+}

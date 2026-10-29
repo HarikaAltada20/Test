@@ -2,6 +2,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   MAX_DRAFT_FILE_BYTES,
+  buildSubmissionDraftMap,
+  postedAfterApprovalLabel,
+  type DraftListRow,
   draftBlockMessage,
   draftNotificationHref,
   draftPosterPath,
@@ -217,5 +220,46 @@ describe("draft notifications", () => {
       draftNotificationHref("c1", "creator", "/dashboard/opportunities/c1"),
       "/dashboard/submissions?view=drafts&campaign=c1",
     );
+  });
+});
+
+describe("submission draft links", () => {
+  const row = {
+    id: "d1",
+    approved_version_id: "v2",
+    approved_at: "2026-10-29T10:00:00Z",
+    revision_count: 1,
+    files_purged: false,
+    current_version: { id: "v2", version_no: 2, title: "Pool demo", caption: "Hi", hashtags: ["#a"], duration_sec: "20.5" },
+    posts: [
+      { id: "s1", platform: "youtube", created_at: "2026-10-29T12:00:00Z" },
+      { id: "s2", platform: "instagram", created_at: "2026-10-29T12:30:00Z" },
+    ],
+  } as unknown as DraftListRow;
+
+  it("links every post of a draft to the approved version", () => {
+    const map = buildSubmissionDraftMap([row, { ...row, id: "d2", posts: [] } as DraftListRow]);
+    assert.equal(map.size, 2);
+    const s1 = map.get("s1");
+    assert.equal(s1?.draftId, "d1");
+    assert.equal(s1?.versionId, "v2");
+    assert.equal(s1?.versionNo, 2);
+    assert.equal(s1?.durationSec, 20.5);
+    assert.equal(s1?.submittedAt, "2026-10-29T12:00:00Z");
+    assert.equal(map.get("s2")?.submittedAt, "2026-10-29T12:30:00Z");
+  });
+
+  it("skips drafts without a version", () => {
+    const map = buildSubmissionDraftMap([{ ...row, approved_version_id: null, current_version: null } as DraftListRow]);
+    assert.equal(map.size, 0);
+  });
+
+  it("describes the gap between approval and posting", () => {
+    const a = "2026-10-29T10:00:00Z";
+    assert.equal(postedAfterApprovalLabel(a, "2026-10-29T10:00:30Z"), "right after approval");
+    assert.equal(postedAfterApprovalLabel(a, "2026-10-29T10:45:00Z"), "45 min after approval");
+    assert.equal(postedAfterApprovalLabel(a, "2026-10-29T13:00:00Z"), "3 h after approval");
+    assert.equal(postedAfterApprovalLabel(a, "2026-11-02T10:00:00Z"), "4 days after approval");
+    assert.equal(postedAfterApprovalLabel(null, a), null);
   });
 });

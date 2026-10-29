@@ -11,6 +11,8 @@ import {
   resolveReviewPlatform,
 } from "./review-metrics";
 import type { ReviewMetricsSource, ReviewSubmission } from "./types";
+import type { SubmissionDraftLink } from "@/lib/content-drafts";
+import { ApprovedDraftStage, StageLabel } from "@/components/content-drafts/SubmissionDraftCompare";
 
 const RAIL_ICONS = {
   likes: Heart,
@@ -33,6 +35,8 @@ type ReviewSlideProps = {
   /** Only passed for the active slide. */
   onWatchedChange?: (percent: number) => void;
   onDurationChange?: (seconds: number) => void;
+  /** Show this approved draft next to the clip (active slide only). */
+  compareDraft?: SubmissionDraftLink | null;
 };
 
 export const ReviewSlide = forwardRef<ReviewPlayerHandle, ReviewSlideProps>(
@@ -49,6 +53,7 @@ export const ReviewSlide = forwardRef<ReviewPlayerHandle, ReviewSlideProps>(
       onWheelForward,
       onWatchedChange,
       onDurationChange,
+      compareDraft,
     },
     playerRef,
   ) {
@@ -69,6 +74,7 @@ export const ReviewSlide = forwardRef<ReviewPlayerHandle, ReviewSlideProps>(
     const rail = buildRailMetrics(platform, metrics ?? {}, canSeeCore);
     const handle = submission.creatorUsername || submission.creatorDisplayName;
     const showOverlays = overlaysVisible || distance !== 0;
+    const comparing = distance === 0 && !!compareDraft;
 
     return (
       <div className="relative flex h-full w-full snap-start snap-always items-center justify-center px-2 py-2 sm:px-4 sm:py-5 lg:px-10">
@@ -76,16 +82,37 @@ export const ReviewSlide = forwardRef<ReviewPlayerHandle, ReviewSlideProps>(
           className={cn(
             "flex max-h-full items-end gap-4",
             vertical ? "h-full" : "w-full max-w-[1000px]",
+            // Phones: two stages side by side, sized by width. Larger screens: by height.
+            comparing && "w-full items-center justify-center gap-2 sm:items-end sm:gap-4",
+            comparing && vertical && "h-auto sm:h-full sm:w-auto",
           )}
         >
+          {comparing && compareDraft && (
+            <ApprovedDraftStage
+              link={compareDraft}
+              className={cn(
+                "aspect-[9/16] shrink-0",
+                vertical
+                  ? "w-[48%] sm:h-full sm:w-auto sm:max-w-[48%]"
+                  : "w-[30%] sm:h-full sm:max-h-full sm:w-auto",
+              )}
+            />
+          )}
           <div
             className={cn(
               "relative overflow-hidden rounded-2xl bg-black shadow-2xl ring-1 ring-white/10",
               vertical
-                ? "aspect-[9/16] h-full max-w-full sm:max-w-[calc(100vw-7rem)]"
+                ? comparing
+                  ? "aspect-[9/16] w-[48%] sm:h-full sm:w-auto sm:max-w-[48%]"
+                  : "aspect-[9/16] h-full max-w-full sm:max-w-[calc(100vw-7rem)]"
                 : "aspect-video w-full max-h-full",
             )}
           >
+            {comparing && (
+              <StageLabel tone="post" className="left-1/2 -translate-x-1/2">
+                Posted
+              </StageLabel>
+            )}
             <ReviewPlayer
               ref={distance === 0 ? playerRef : undefined}
               submissionId={submission.id}
