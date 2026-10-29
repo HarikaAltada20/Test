@@ -165,6 +165,11 @@ import {
 } from "@/components/contest/ContestDetailPlatformScopeCard";
 import { ContestDetailVideoPayoutSections } from "@/components/contest/ContestDetailVideoPayoutSections";
 import { getPlatformIcon } from "@/lib/platform-icons";
+import {
+  CampaignDraftPanel,
+  hasLinkableDraft,
+} from "@/components/content-drafts/CampaignDraftPanel";
+import type { CampaignDraftStatus } from "@/lib/content-drafts";
 import { CopyContentButton, copyPayloadFromElement } from "@/components/contest/CopyContentButton";
 import {
   formatLinkListForCopy,
@@ -848,6 +853,19 @@ export function ContestClientPage({
     () => parseVideoContestPlatforms(contest?.platform),
     [contest?.platform],
   );
+  // Review before posting: creators upload a draft first, then submit the
+  // link of the approved video.
+  const [draftStatus, setDraftStatus] = useState<CampaignDraftStatus | null>(
+    null,
+  );
+  const [draftUploadRequest, setDraftUploadRequest] = useState(0);
+  const draftReviewOn = !!draftStatus?.review_before_posting;
+  const needsDraftFirst =
+    draftReviewOn &&
+    !hasLinkableDraft(draftStatus, detailVideoPlatforms.length > 1);
+  const submitEntryLabel = needsDraftFirst
+    ? "Upload Your Draft"
+    : "Submit Your Entry";
   const [detailPlatformTab, setDetailPlatformTab] =
     useState<PlatformTabValue>(ALL_PLATFORM_TAB);
   const [leaderboardPlatformTab, setLeaderboardPlatformTab] =
@@ -3344,6 +3362,11 @@ export function ContestClientPage({
   const handleSubmitContent = async (button: SubmitEntryButton) => {
     if (isRequirementsBlocked) return;
     await trackSubmitEntryClick(contestId, button);
+    // Review before posting: with no approved draft yet, start with the upload.
+    if (needsDraftFirst) {
+      setDraftUploadRequest((n) => n + 1);
+      return;
+    }
     router.push(`/dashboard/opportunities/${contestId}/submit`);
   };
 
@@ -3788,9 +3811,11 @@ export function ContestClientPage({
                               submissionCount > 0 &&
                               contest?.multiple_submissions_enabled &&
                               submissionCount < maxSubmissions
-                            ? `Submit More (${
-                                maxSubmissions - submissionCount
-                              } left)`
+                            ? needsDraftFirst
+                              ? "Upload Your Next Draft"
+                              : `Submit More (${
+                                  maxSubmissions - submissionCount
+                                } left)`
                             : hasSubmitted
                               ? "Submitted"
                               : isTwitterTextImageContest
@@ -3801,7 +3826,7 @@ export function ContestClientPage({
                                     : user && twitterConnectStatus === "loading"
                                       ? "Checking…"
                                       : "Join Twitter Campaign"
-                                : "Submit Your Entry"}
+                                : submitEntryLabel}
                     </span>
                   </Button>
                 </div>
@@ -3821,6 +3846,18 @@ export function ContestClientPage({
               className="bg-slate-100 dark:bg-slate-800"
             />
           </div>
+        )}
+
+        {user && !isTwitterTextImageContest && (
+          <CampaignDraftPanel
+            className="mb-8"
+            contestId={contestId}
+            campaignTitle={contest.title}
+            isDark={isDark}
+            multiPlatform={detailVideoPlatforms.length > 1}
+            onStatusChange={setDraftStatus}
+            uploadRequest={draftUploadRequest}
+          />
         )}
 
         {/* Enhanced Action Card: Submit or Status */}
@@ -3942,9 +3979,11 @@ export function ContestClientPage({
                   >
                     <span className="relative z-10">
                       {contest.status?.toLowerCase() === "active"
-                        ? `Submit More Videos (${
-                            maxSubmissions - submissionCount
-                          } remaining)`
+                        ? needsDraftFirst
+                          ? "Upload Your Next Draft"
+                          : `Submit More Videos (${
+                              maxSubmissions - submissionCount
+                            } remaining)`
                         : "Contest Not Active"}
                     </span>
                     {contest.status?.toLowerCase() === "active" &&
@@ -4085,7 +4124,7 @@ export function ContestClientPage({
                                     : user && twitterConnectStatus === "loading"
                                       ? "Checking…"
                                       : "Join Twitter Campaign"
-                                : "Submit Your Entry!"}
+                                : `${submitEntryLabel}!`}
                             </span>
                           </div>
                           {contest.status?.toLowerCase() === "active" &&

@@ -12,11 +12,14 @@ import {
   ChevronRight,
   CircleCheck,
   CircleX,
+  Clapperboard,
   Inbox,
   KeyRound,
   Loader2,
   MessageCircle,
+  MessageSquareText,
   Megaphone,
+  PencilLine,
 } from "lucide-react";
 import {
   Dialog,
@@ -38,6 +41,10 @@ import {
 } from "@/lib/user-notifications/support-sender-display";
 import { cn } from "@/lib/utils";
 import { isCampaignAccessNotificationType } from "@/lib/campaign-access";
+import {
+  draftNotificationHref,
+  isContentDraftNotificationType,
+} from "@/lib/content-drafts";
 import {
   NOTIFICATIONS_CHANGED_EVENT,
   dispatchNotificationsChanged,
@@ -104,13 +111,17 @@ function opensContest(n: NotificationRow): boolean {
   return (
     !!n.contest_id &&
     (isPublicAnnouncement(n.notification_type) ||
-      isCampaignAccessNotificationType(n.notification_type))
+      isCampaignAccessNotificationType(n.notification_type) ||
+      isContentDraftNotificationType(n.notification_type))
   );
 }
 
 /** Campaign page for a notification, opening the right tab or welcome banner. */
 function notificationHref(n: NotificationRow, userType: string): string {
   const base = getContestDashboardPath(n.contest_id!, userType);
+  if (isContentDraftNotificationType(n.notification_type)) {
+    return draftNotificationHref(n.contest_id!, userType, base);
+  }
   if (n.notification_type === "campaign_application_received") return `${base}?tab=applications`;
   if (
     n.notification_type === "campaign_application_approved" ||
@@ -123,13 +134,18 @@ function notificationHref(n: NotificationRow, userType: string): string {
 
 type NotificationGroup = { lead: NotificationRow; more: NotificationRow[] };
 
-/** Groups campaign-access updates about the same campaign under the newest one. */
+/** Groups campaign-access (and draft review) updates about the same campaign under the newest one. */
 function groupNotifications(rows: NotificationRow[]): NotificationGroup[] {
   const groups: NotificationGroup[] = [];
   const byContest = new Map<string, NotificationGroup>();
   for (const n of rows) {
-    const key =
-      n.contest_id && isCampaignAccessNotificationType(n.notification_type) ? n.contest_id : null;
+    const key = !n.contest_id
+      ? null
+      : isCampaignAccessNotificationType(n.notification_type)
+        ? n.contest_id
+        : isContentDraftNotificationType(n.notification_type)
+          ? `drafts:${n.contest_id}`
+          : null;
     const existing = key ? byContest.get(key) : undefined;
     if (existing) {
       existing.more.push(n);
@@ -228,6 +244,31 @@ function NotificationIcon({
     },
     campaign_applications_reopened: {
       icon: BellRing,
+      light: "bg-sky-100 text-sky-700",
+      dark: "bg-sky-500/20 text-sky-300",
+    },
+    content_draft_submitted: {
+      icon: Clapperboard,
+      light: "bg-purple-100 text-purple-600",
+      dark: "bg-purple-500/20 text-purple-300",
+    },
+    content_draft_approved: {
+      icon: CircleCheck,
+      light: "bg-emerald-100 text-emerald-600",
+      dark: "bg-emerald-500/20 text-emerald-300",
+    },
+    content_draft_revision_requested: {
+      icon: PencilLine,
+      light: "bg-amber-100 text-amber-700",
+      dark: "bg-amber-500/20 text-amber-300",
+    },
+    content_draft_rejected: {
+      icon: CircleX,
+      light: "bg-red-100 text-red-600",
+      dark: "bg-red-500/20 text-red-300",
+    },
+    content_draft_comment: {
+      icon: MessageSquareText,
       light: "bg-sky-100 text-sky-700",
       dark: "bg-sky-500/20 text-sky-300",
     },
@@ -356,7 +397,11 @@ function NotificationCard({
             >
               {n.notification_type === "campaign_application_received"
                 ? "Review applications"
-                : "View campaign"}
+                : n.notification_type === "content_draft_submitted"
+                  ? "Review drafts"
+                  : isContentDraftNotificationType(n.notification_type)
+                    ? "View drafts"
+                    : "View campaign"}
               <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
             </p>
           )}

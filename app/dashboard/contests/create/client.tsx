@@ -110,6 +110,12 @@ import {
 } from "@/components/campaign-access/AllowlistPicker";
 import { PreviewEditor } from "@/components/campaign-access/PreviewEditor";
 import { AccessStep } from "@/components/campaign-access/AccessStep";
+import { ReviewBeforePostingSettings } from "@/components/content-drafts/ReviewBeforePostingSettings";
+import {
+  DEFAULT_DRAFT_REVIEW_SETTINGS,
+  normalizeDraftReviewSettings,
+  type DraftReviewSettings,
+} from "@/lib/content-drafts";
 import {
   ApplicantVisibilityEditor,
   DEFAULT_APPLICANT_VISIBILITY,
@@ -536,6 +542,11 @@ export default function CreateContestPage({
   const [accessMode, setAccessMode] = useState<AccessMode>("public");
   const [accessListSkipsRequirements, setAccessListSkipsRequirements] =
     useState(false);
+  const [draftReview, setDraftReview] = useState<DraftReviewSettings>(
+    DEFAULT_DRAFT_REVIEW_SETTINGS,
+  );
+  // True once the saved row may have review on, so turning it off is saved too.
+  const draftReviewSavedOn = useRef(false);
   const [allowlistSelection, setAllowlistSelection] =
     useState<AllowlistSelection>(EMPTY_ALLOWLIST_SELECTION);
   const [previewDescription, setPreviewDescription] = useState("");
@@ -4271,6 +4282,15 @@ export default function CreateContestPage({
         ...(accessMode === "public" && listOnlyToEligible
           ? { list_only_to_eligible: true }
           : {}),
+        // Review before posting (video campaigns). Same rule: only sent when used.
+        ...(draftReview.review_before_posting || draftReviewSavedOn.current
+          ? {
+              ...draftReview,
+              review_before_posting:
+                isVideoContestFormat(contestFormat) &&
+                draftReview.review_before_posting,
+            }
+          : {}),
         trust_score:
           isVideoContestFormat(contestFormat) &&
           trustScoreEnabled &&
@@ -4424,6 +4444,8 @@ export default function CreateContestPage({
       }
 
       if (responseError) throw responseError;
+      draftReviewSavedOn.current =
+        isVideoContestFormat(contestFormat) && draftReview.review_before_posting;
 
       // Brand writes bypass mutation APIs — bump list gens so dashboards see the change.
       if (!isAdmin) {
@@ -6295,6 +6317,8 @@ export default function CreateContestPage({
       setAccessMode(draft.access_mode);
     }
     setAccessListSkipsRequirements(!!draft.access_list_skips_requirements);
+    setDraftReview(normalizeDraftReviewSettings(draft));
+    draftReviewSavedOn.current = draft.review_before_posting === true;
     setPreviewDescription(draft.preview_description ?? "");
     setApplicationsOpen(draft.applications_open !== false);
     setListOnlyToEligible(!!draft.list_only_to_eligible);
@@ -11945,6 +11969,14 @@ export default function CreateContestPage({
                   </div>
                 )}
               </div>
+
+              {isVideoContestFormat(contestFormat) && (
+                <ReviewBeforePostingSettings
+                  value={draftReview}
+                  onChange={setDraftReview}
+                  isDark={isDark}
+                />
+              )}
 
               {isVideoContestFormat(contestFormat) && (
                 <div

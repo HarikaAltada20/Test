@@ -139,6 +139,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
+import { DraftReviewPanel } from "@/components/content-drafts/DraftReviewPanel";
+import { listCampaignDrafts } from "@/components/content-drafts/api";
+import {
+  DraftCompareDialog,
+  useSubmissionDrafts,
+} from "@/components/content-drafts/SubmissionDraftCompare";
 import { useTabState } from "@/components/ui/tab-utils";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -476,6 +482,7 @@ import {
   Globe,
   Columns2,
   PlaySquare,
+  Clapperboard,
 } from "lucide-react";
 import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
 import {
@@ -859,6 +866,7 @@ interface Contest {
   min_platform_views?: number | null;
   access_mode?: AccessMode | null;
   advertiser_id?: string | null;
+  review_before_posting?: boolean | null;
 }
 
 interface Submission {
@@ -1846,12 +1854,64 @@ export default function ContestDetailClient({
     return emailLocal || "Creator";
   };
 
+  // Review before posting: drafts waiting for review (tab label), and whether
+  // the campaign has any drafts, so the tab stays after the setting is turned off.
+  const [draftCounts, setDraftCounts] = useState<{
+    toReview: number;
+    any: boolean;
+    reviewOn: boolean;
+    posted: number;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    listCampaignDrafts({
+      contestId,
+      status: "pending_review",
+      sort: "oldest",
+      offset: 0,
+      limit: 1,
+    })
+      .then((page) => {
+        if (cancelled) return;
+        const total = Object.values(page.counts).reduce(
+          (sum: number, n) => sum + (n ?? 0),
+          0,
+        );
+        setDraftCounts({
+          toReview: page.counts.pending_review ?? 0,
+          any: total > 0,
+          reviewOn: page.review_before_posting === true,
+          posted: page.counts.posted ?? 0,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [contestId]);
+  // The page's contest view doesn't carry the new column; the drafts list does.
+  const draftReviewOn =
+    !!contest?.review_before_posting || !!draftCounts?.reviewOn;
+  const showDraftsTab = draftReviewOn || !!draftCounts?.any;
+  const requestedDraftId = useSearchParams().get("draft");
+  // Submissions posted from an approved draft, so reviewers can compare the two.
+  const submissionDrafts = useSubmissionDrafts(
+    contestId,
+    (draftCounts?.posted ?? 0) > 0,
+  );
+  const [compareDraftSubmissionId, setCompareDraftSubmissionId] = useState<
+    string | null
+  >(null);
+  // A draft to open when the Drafts tab mounts (from a submission's draft link).
+  const [draftToOpen, setDraftToOpen] = useState<string | null>(null);
+
   const tabs = [
     { id: "overview", label: "Overview" },
     {
       id: "submissions",
       label: `Submissions (${submissionTotalCount})`,
     },
+    ...(showDraftsTab ? [{ id: "drafts", label: "Drafts" }] : []),
     ...(contest?.platform?.toLowerCase() === "twitter"
       ? [{ id: "twitter-feed", label: "Twitter Feed" }]
       : []),
@@ -1867,6 +1927,10 @@ export default function ContestDetailClient({
   const { activeTab, setActiveTab } = useTabState(tabs, {
     defaultTab: "overview",
   });
+  // Open a draft once; going back to the Drafts tab later shows the list.
+  useEffect(() => {
+    if (activeTab !== "drafts") setDraftToOpen(null);
+  }, [activeTab]);
   // Notifications can link straight to a tab, e.g. ?tab=applications. Applied
   // whenever the requested tab changes, including when a notification for
   // this same campaign is clicked while the page is already open.
@@ -4232,6 +4296,16 @@ export default function ContestDetailClient({
         id: "submissions",
         label: `Submissions (${submissionTotalCount})`,
       },
+      ...(showDraftsTab
+        ? [
+            {
+              id: "drafts",
+              label: draftCounts?.toReview
+                ? `Drafts (${draftCounts.toReview} to review)`
+                : "Drafts",
+            },
+          ]
+        : []),
       ...(contest?.platform?.toLowerCase() === "twitter"
         ? [{ id: "twitter-feed", label: "Twitter Feed" }]
         : []),
@@ -4250,7 +4324,14 @@ export default function ContestDetailClient({
         ? [{ id: "access", label: "Access" }]
         : []),
     ],
-    [submissionTotalCount, contest?.platform, contest?.access_mode, pendingApplications],
+    [
+      submissionTotalCount,
+      contest?.platform,
+      contest?.access_mode,
+      pendingApplications,
+      showDraftsTab,
+      draftCounts?.toReview,
+    ],
   );
 
   // Filter + sort (memoized so virtualizer isn't fed a new array every render).
@@ -14125,6 +14206,11 @@ export default function ContestDetailClient({
   const creatorHasReviewableSubmission = (creatorId: string) =>
     canOpenCreatorReviewMode && reviewableCreatorIds.has(creatorId);
 
+  const openDraftHistory = (draftId: string) => {
+    setDraftToOpen(draftId);
+    setActiveTab("drafts");
+  };
+
   const closeReviewMode = () => {
     preserveSelectionAfterModerationRef.current = false;
     setReviewModeSession(null);
@@ -14171,6 +14257,7 @@ export default function ContestDetailClient({
           ? (reviewSubmissionLookup.campaignByCreator.get(s.creator_id) ?? null)
           : null,
       creatorStats: isAdminView ? getReviewCreatorStats(s) : null,
+      draft: submissionDrafts.get(s.id) ?? null,
     };
   };
 
@@ -15900,6 +15987,33 @@ export default function ContestDetailClient({
                       {pendingApplications === 1 ? "" : "s"}
                     </button>
                   )}
+                {draftReviewOn && (
+                  <span
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-semibold sm:text-sm",
+                      isDark
+                        ? "bg-[#7F39EC]/20 text-purple-200"
+                        : "bg-purple-50 text-[#4A00BE]",
+                    )}
+                  >
+                    Review before posting
+                  </span>
+                )}
+                {showDraftsTab && (draftCounts?.toReview ?? 0) > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("drafts")}
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-semibold underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] sm:text-sm",
+                      isDark
+                        ? "bg-amber-500/15 text-amber-200"
+                        : "bg-amber-50 text-amber-800",
+                    )}
+                  >
+                    {draftCounts?.toReview} draft
+                    {draftCounts?.toReview === 1 ? "" : "s"} to review
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -24776,6 +24890,28 @@ export default function ContestDetailClient({
                                                     )}
                                                   </button>
                                                 )}
+                                                {submissionDrafts.has(
+                                                  submission.id,
+                                                ) && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      setCompareDraftSubmissionId(
+                                                        submission.id,
+                                                      )
+                                                    }
+                                                    className={cn(
+                                                      "text-xs hover:underline flex items-center gap-1 transition-colors whitespace-nowrap font-medium",
+                                                      isDark
+                                                        ? "text-violet-300 hover:text-violet-200"
+                                                        : "text-violet-700 hover:text-violet-900",
+                                                    )}
+                                                    title="Compare the posted clip with the draft the brand approved"
+                                                  >
+                                                    <Clapperboard className="h-3 w-3" />
+                                                    Approved draft
+                                                  </button>
+                                                )}
                                               </div>
                                             )}
                                           </div>
@@ -27341,6 +27477,20 @@ export default function ContestDetailClient({
                                                 View Content
                                               </a>
                                             </DropdownMenuItem>
+                                            {submissionDrafts.has(
+                                              submission.id,
+                                            ) && (
+                                              <DropdownMenuItem
+                                                onClick={() =>
+                                                  setCompareDraftSubmissionId(
+                                                    submission.id,
+                                                  )
+                                                }
+                                              >
+                                                <Clapperboard className="h-3 w-3 mr-2" />
+                                                Compare with approved draft
+                                              </DropdownMenuItem>
+                                            )}
                                             {/* YouTube per-submission analytics refresh (admin only; single + multi-platform) */}
                                             {isAdminView &&
                                               !isTwitterTweet &&
@@ -34356,6 +34506,22 @@ export default function ContestDetailClient({
               </CardContent>
             </div>
           </TabPanel>
+          {showDraftsTab && (
+            <TabPanel value="drafts" activeTab={activeTab}>
+              <DraftReviewPanel
+                contestId={contestId}
+                initialDraftId={draftToOpen ?? requestedDraftId}
+                onPendingCountChange={(n) =>
+                  setDraftCounts((c) => ({
+                    toReview: n,
+                    any: (c?.any ?? false) || n > 0,
+                    reviewOn: c?.reviewOn ?? false,
+                    posted: c?.posted ?? 0,
+                  }))
+                }
+              />
+            </TabPanel>
+          )}
           {contest?.access_mode === "restricted" && (
             <TabPanel value="applications" activeTab={activeTab}>
               <ApplicationsPanel
@@ -35351,8 +35517,43 @@ export default function ContestDetailClient({
           onDownloadSelected={() => void handleNormalViewBulkDownload()}
           isDark={isDark}
           onExit={closeReviewMode}
+          onOpenDraft={(draftId) => {
+            closeReviewMode();
+            openDraftHistory(draftId);
+          }}
         />
       )}
+      {(() => {
+        const s = compareDraftSubmissionId
+          ? reviewSubmissionLookup.byId.get(compareDraftSubmissionId)
+          : undefined;
+        const link = compareDraftSubmissionId
+          ? (submissionDrafts.get(compareDraftSubmissionId) ?? null)
+          : null;
+        return (
+          <DraftCompareDialog
+            link={s ? link : null}
+            post={
+              s
+                ? {
+                    id: s.id,
+                    contentLink: s.content_link ?? null,
+                    platform: s.platform ?? currentContest?.platform ?? null,
+                    videoId: s.video_id ?? null,
+                    videoThumbnailUrl: s.video_thumbnail_url ?? null,
+                    videoTitle: s.video_title ?? null,
+                    creatorName:
+                      s.creator_display_name ||
+                      s.creator_username ||
+                      null,
+                  }
+                : null
+            }
+            onClose={() => setCompareDraftSubmissionId(null)}
+            onOpenDraft={openDraftHistory}
+          />
+        );
+      })()}
     </div>
   );
 }
