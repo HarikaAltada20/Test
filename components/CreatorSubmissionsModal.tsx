@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
@@ -350,6 +351,7 @@ export function CreatorSubmissionsModal({
     "views-desc" | "views-asc" | "date-desc" | "date-asc"
   >("date-desc");
   const [mode, setMode] = useState<"light" | "dark">("light");
+  const isDark = mode === "dark";
   const [bulkVerifyLoading, setBulkVerifyLoading] = useState(false);
   const bulkModerationJobActive =
     !!bulkModerationJob &&
@@ -1071,13 +1073,65 @@ export function CreatorSubmissionsModal({
   ) => {
     switch (bucket) {
       case "paid":
-        return <Badge className="bg-green-600 text-white">Paid</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-xs inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-medium",
+              isDark
+                ? "bg-blue-950/40 text-blue-300 border border-blue-800/60"
+                : "bg-blue-100 text-blue-700 border border-blue-200",
+            )}
+          >
+            <DollarSign className="h-3 w-3" />
+            Paid
+          </Badge>
+        );
       case "verified":
-        return <Badge className="bg-green-500 text-white">Verified</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-xs inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-medium border-transparent",
+              isDark
+                ? "bg-emerald-500/15 text-emerald-300"
+                : "bg-[#ecfdf5] text-[#059669]",
+            )}
+          >
+            <CheckCircle className="h-3 w-3" />
+            Verified
+          </Badge>
+        );
       case "pending":
-        return <Badge className="bg-yellow-500 text-white">Pending</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-xs inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-medium border-transparent",
+              isDark
+                ? "bg-amber-500/15 text-amber-300"
+                : "bg-[#fffbeb] text-[#d97706]",
+            )}
+          >
+            <Clock className="h-3 w-3" />
+            Pending
+          </Badge>
+        );
       case "rejected":
-        return <Badge className="bg-red-500 text-white">Rejected</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-xs inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-medium border-transparent",
+              isDark
+                ? "bg-red-500/15 text-red-300"
+                : "bg-[#fef2f2] text-[#dc2626]",
+            )}
+          >
+            <XCircle className="h-3 w-3" />
+            Rejected
+          </Badge>
+        );
       default:
         return <Badge variant="outline">Unknown</Badge>;
     }
@@ -1661,8 +1715,7 @@ export function CreatorSubmissionsModal({
   const getInsightsMeta = (
     status: Submission["insights_status"],
     errorMsg?: string,
-  ): { help: string; dotClass: string; pillClass: string } => {
-    const isDark = mode === "dark";
+  ) => {
     const errorSuffix = errorMsg ? `\n\nDetails: ${errorMsg}` : "";
 
     if (status === "ok") {
@@ -1928,7 +1981,6 @@ export function CreatorSubmissionsModal({
     rejected: moderationStatusCounts.rejected,
     paid: moderationStatusCounts.paid,
   };
-  const isDark = mode === "dark";
   const creatorDisplayName =
     creator.username?.trim() ||
     creator.full_name?.trim() ||
@@ -1958,21 +2010,26 @@ export function CreatorSubmissionsModal({
     <>
       <Dialog open={isOpen} onOpenChange={onClose} isdark={isDark}>
         <DialogContent
-          className="max-w-[98vw] max-h-[98vh] p-0 gap-0"
+          className={cn(
+            "max-w-[98vw] max-h-[98vh] p-0 gap-0 overflow-hidden rounded-2xl border shadow-xl",
+            isDark
+              ? "bg-[#111113] border-white/10 text-white"
+              : "bg-white border-[#e5e5e5] text-slate-900",
+          )}
           hideCloseButton
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <DialogTitle className="sr-only">
             {creatorDisplayName}&apos;s Submissions
           </DialogTitle>
-          <div className="flex flex-col h-[98vh] min-h-0 overflow-hidden relative">
+          <div className={cn("flex flex-col h-[98vh] min-h-0 overflow-hidden relative", isDark ? "bg-[#111113]" : "bg-white")}>
             {showProcessingOverlay && (
               <div
                 className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 rounded-lg bg-black/45 px-4"
                 aria-live="polite"
                 aria-busy="true"
               >
-                <Loader2 className="h-10 w-10 animate-spin text-purple-300" />
+                <PageLoadingSpinner mode="dark" />
                 <p className="text-center text-sm font-medium text-white">
                   Processing submission updates…
                 </p>
@@ -1981,32 +2038,32 @@ export function CreatorSubmissionsModal({
             {/* Header */}
             <div
               className={cn(
-                "flex items-center justify-between gap-3 p-4 sm:p-6 border-b flex-shrink-0",
+                "flex items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-3.5 border-b flex-shrink-0",
                 isDark
-                  ? "bg-[#170337] "
-                  : "bg-gradient-to-r from-purple-50 to-blue-50",
+                  ? "bg-[#111113] border-white/10"
+                  : "bg-white border-[#e5e5e5]",
               )}
             >
               <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-                <Avatar className="h-10 w-10 shrink-0 sm:h-12 sm:w-12">
+                <Avatar className="h-9 w-9 shrink-0 sm:h-10 sm:w-10">
                   <AvatarImage src={creator.profile_picture_url || undefined} />
-                  <AvatarFallback>
+                  <AvatarFallback className={isDark ? "bg-white/10 text-white" : "bg-neutral-100 text-neutral-800"}>
                     {creatorDisplayName[0]?.toUpperCase() || "U"}
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0">
                   <h2
                     className={cn(
-                      "truncate text-lg font-bold text-gray-900 dark:text-white sm:text-2xl",
-                      isDark ? "text-white" : "text-gray-900",
+                      "truncate text-lg font-bold sm:text-2xl",
+                      isDark ? "text-white" : "text-[#0a0a0a]",
                     )}
                   >
                     {creatorDisplayName}&apos;s Submissions
                   </h2>
                   <p
                     className={cn(
-                      "text-sm",
-                      isDark ? "text-gray-400" : "text-gray-600",
+                      "text-sm font-medium",
+                      isDark ? "text-slate-400" : "text-[#737373]",
                     )}
                   >
                     {platformScopedSubmissions.length} total{" "}
@@ -2022,7 +2079,12 @@ export function CreatorSubmissionsModal({
                     size="sm"
                     disabled={!canOpenReview}
                     onClick={() => onOpenReviewMode(reviewQueueIds)}
-                    className="h-9 gap-2 bg-[#7F39EC] text-white hover:bg-[#6d2fd4] disabled:opacity-60"
+                    className={cn(
+                      "h-9 gap-2 text-[13px] font-medium disabled:opacity-60",
+                      isDark
+                        ? "bg-white text-[#0a0a0a] hover:bg-slate-200"
+                        : "bg-[#0a0a0a] text-white hover:bg-[#262626]",
+                    )}
                     title="Watch this creator's clips one at a time (respects the status filter and sort)"
                     aria-label="Review Mode"
                   >
@@ -2036,10 +2098,13 @@ export function CreatorSubmissionsModal({
                   onClick={onClose}
                   disabled={showProcessingOverlay}
                   className={cn(
-                    isDark ? "text-white" : "text-gray-600 hover:bg-white/50",
+                    "h-9 w-9 rounded-lg transition-colors",
+                    isDark
+                      ? "text-slate-300 hover:text-white hover:bg-white/10"
+                      : "text-gray-500 hover:text-gray-900 hover:bg-gray-100",
                   )}
                 >
-                  <X className="h-6 w-6" />
+                  <X className="h-5 w-5" />
                 </Button>
               </div>
             </div>
@@ -2047,133 +2112,67 @@ export function CreatorSubmissionsModal({
             {/* Status Filter Tabs */}
             <div
               className={cn(
-                "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-3 border-b flex-shrink-0",
-                isDark ? "bg-[#06021D] " : "bg-white",
+                "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-2.5 border-b flex-shrink-0",
+                isDark ? "bg-[#111113] border-white/10" : "bg-white border-[#e5e5e5]",
               )}
             >
-              <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-                <Button
-                  size="sm"
-                  variant={statusFilter === "all" ? "default" : "outline"}
-                  onClick={() => setStatusFilter("all")}
-                  className={cn(
-                    statusFilter === "all"
-                      ? "bg-purple-600 hover:bg-purple-700 text-white"
-                      : "",
-                    isDark
-                      ? "text-white border-gray-600"
-                      : statusFilter === "all"
-                        ? "text-white"
-                        : "text-gray-600",
-                  )}
-                >
-                  All{" "}
-                  <Badge variant="secondary" className="ml-2">
-                    {statusCounts.all}
-                  </Badge>
-                </Button>
-                <Button
-                  size="sm"
-                  variant={
-                    statusFilter === "verified_or_paid" ? "default" : "outline"
-                  }
-                  onClick={() => setStatusFilter("verified_or_paid")}
-                  className={cn(
-                    statusFilter === "verified_or_paid"
-                      ? "bg-purple-600 hover:bg-purple-700 text-white"
-                      : "",
-                    isDark
-                      ? "text-white border-gray-600"
-                      : statusFilter === "verified_or_paid"
-                        ? "text-white"
-                        : "text-gray-600",
-                  )}
-                >
-                  Verified + Paid{" "}
-                  <Badge variant="secondary" className="ml-2">
-                    {statusCounts.verifiedOrPaid}
-                  </Badge>
-                </Button>
-                <Button
-                  size="sm"
-                  variant={statusFilter === "pending" ? "default" : "outline"}
-                  onClick={() => setStatusFilter("pending")}
-                  className={cn(
-                    statusFilter === "pending"
-                      ? "bg-purple-600 hover:bg-purple-700 text-white"
-                      : "",
-                    isDark
-                      ? "text-white border-gray-600"
-                      : statusFilter === "pending"
-                        ? "text-white"
-                        : "text-gray-600",
-                  )}
-                >
-                  Pending{" "}
-                  <Badge variant="secondary" className="ml-2">
-                    {statusCounts.pending}
-                  </Badge>
-                </Button>
-                <Button
-                  size="sm"
-                  variant={statusFilter === "verified" ? "default" : "outline"}
-                  onClick={() => setStatusFilter("verified")}
-                  className={cn(
-                    statusFilter === "verified"
-                      ? "bg-purple-600 hover:bg-purple-700 text-white"
-                      : "",
-                    isDark
-                      ? "text-white border-gray-600"
-                      : statusFilter === "verified"
-                        ? "text-white"
-                        : "text-gray-600",
-                  )}
-                >
-                  Verified{" "}
-                  <Badge variant="secondary" className="ml-2">
-                    {statusCounts.verified}
-                  </Badge>
-                </Button>
-                <Button
-                  size="sm"
-                  variant={statusFilter === "rejected" ? "default" : "outline"}
-                  onClick={() => setStatusFilter("rejected")}
-                  className={cn(
-                    statusFilter === "rejected"
-                      ? "bg-purple-600 hover:bg-purple-700 text-white"
-                      : "",
-                    isDark
-                      ? "text-white border-gray-600"
-                      : statusFilter === "rejected"
-                        ? "text-white"
-                        : "text-gray-600",
-                  )}
-                >
-                  Rejected{" "}
-                  <Badge variant="secondary" className="ml-2">
-                    {statusCounts.rejected}
-                  </Badge>
-                </Button>
-                <Button
-                  size="sm"
-                  variant={statusFilter === "paid" ? "default" : "outline"}
-                  onClick={() => setStatusFilter("paid")}
-                  className={cn(
-                    statusFilter === "paid"
-                      ? "bg-purple-600 hover:bg-purple-700 text-white"
-                      : "",
-                    isDark
-                      ? "text-white border-gray-600"
-                      : statusFilter === "paid"
-                        ? "text-white"
-                        : "text-gray-600",
-                  )}
-                >
-                  Paid{" "}
-                  <Badge variant="secondary" className="ml-2">
-                    {statusCounts.paid}
-                  </Badge>
-                </Button>
+              <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto">
+                {[
+                  { id: "all", label: "All", count: statusCounts.all },
+                  {
+                    id: "verified_or_paid",
+                    label: "Verified + Paid",
+                    count: statusCounts.verifiedOrPaid,
+                  },
+                  { id: "pending", label: "Pending", count: statusCounts.pending },
+                  {
+                    id: "verified",
+                    label: "Verified",
+                    count: statusCounts.verified,
+                  },
+                  {
+                    id: "rejected",
+                    label: "Rejected",
+                    count: statusCounts.rejected,
+                  },
+                  { id: "paid", label: "Paid", count: statusCounts.paid },
+                ].map((tab) => {
+                  const isActive = statusFilter === tab.id;
+                  return (
+                    <Button
+                      key={tab.id}
+                      size="sm"
+                      variant={isActive ? "default" : "outline"}
+                      onClick={() => setStatusFilter(tab.id as any)}
+                      className={cn(
+                        "rounded-lg text-[13px] font-medium h-9 transition-colors",
+                        isActive
+                          ? isDark
+                            ? "bg-white text-[#0a0a0a] hover:bg-slate-200 border-0 shadow-none"
+                            : "bg-[#0a0a0a] text-white hover:bg-[#262626] border-0 shadow-none"
+                          : isDark
+                            ? "border-white/10 bg-transparent text-slate-300 hover:text-white hover:bg-white/5 shadow-none"
+                            : "border-[#e5e5e5] bg-white text-[#404040] hover:text-[#0a0a0a] hover:bg-[#fafafa] shadow-none",
+                      )}
+                    >
+                      {tab.label}
+                      <span
+                        className={cn(
+                          "ml-1.5 rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums",
+                          isActive
+                            ? isDark
+                              ? "bg-black/15 text-[#0a0a0a]"
+                              : "bg-white/20 text-white"
+                            : isDark
+                              ? "bg-white/10 text-slate-400"
+                              : "bg-neutral-100 text-[#737373]",
+                        )}
+                      >
+                        {tab.count}
+                      </span>
+                    </Button>
+                  );
+                })}
               </div>
               <div className="flex items-center gap-2 w-full flex-wrap justify-between sm:w-auto sm:flex-nowrap sm:justify-end">
                 {supportsInlineContentEmbed && (
@@ -2198,8 +2197,8 @@ export function CreatorSubmissionsModal({
                 )}
                 <span
                   className={cn(
-                    "text-sm",
-                    isDark ? "text-gray-400" : "text-gray-600",
+                    "text-sm font-medium",
+                    isDark ? "text-slate-400" : "text-[#737373]",
                   )}
                 >
                   Sort by
@@ -2211,8 +2210,10 @@ export function CreatorSubmissionsModal({
                   >
                     <SelectTrigger
                       className={cn(
-                        "w-full sm:w-[180px]",
-                        isDark ? "text-white border-gray-600" : "text-gray-600",
+                        "w-full sm:w-[180px] h-9 text-[13px] rounded-lg",
+                        isDark
+                          ? "border-white/10 bg-white/5 text-slate-100 hover:bg-white/10"
+                          : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
                       )}
                     >
                       <SelectValue />
@@ -2330,8 +2331,8 @@ export function CreatorSubmissionsModal({
                       className={cn(
                         "h-8 shrink-0 whitespace-nowrap rounded-md",
                         isDark
-                          ? "border bg-purple-900/30 text-purple-400 border-purple-500 hover:bg-purple-900/50"
-                          : "bg-purple-600 text-white hover:bg-purple-700 ",
+                          ? "border border-white/10 bg-white/5 text-slate-100 hover:bg-white/10"
+                          : "border border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
                       )}
                     >
                       <Download className="h-4 w-4 mr-1" />
@@ -2414,7 +2415,7 @@ export function CreatorSubmissionsModal({
                                     handleBulkPayment("both", false)
                                   }
                                   disabled={isAnyBulkPaymentBusy}
-                                  className="h-8 shrink-0 bg-purple-600 text-white hover:bg-purple-700"
+                                  className="h-8 shrink-0 bg-[#0a0a0a] text-white hover:bg-[#262626] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-slate-200"
                                 >
                                   {isBulkPayBtnLoading("both", false) ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2475,7 +2476,7 @@ export function CreatorSubmissionsModal({
                                     handleBulkPayment("both", true)
                                   }
                                   disabled={isAnyBulkPaymentBusy}
-                                  className="h-8 shrink-0 border border-purple-500/80 bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:text-purple-300"
+                                  className="h-8 shrink-0 border border-neutral-400/80 bg-neutral-500/10 text-neutral-800 hover:bg-neutral-500/20 dark:border-white/20 dark:bg-white/10 dark:text-slate-200"
                                 >
                                   {isBulkPayBtnLoading("both", true) ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2523,21 +2524,29 @@ export function CreatorSubmissionsModal({
 
             {/* Scrollable Table */}
             <div className="min-h-0 flex-1 overflow-auto px-6 py-4">
-              <Table>
-                <TableHeader
-                  className={cn(
-                    "sticky top-0 z-20 shadow-sm",
-                    isDark
-                      ? "bg-[#391A6A] text-white"
-                      : "bg-white text-gray-600",
-                  )}
-                >
-                  <TableRow className="border-b-2">
+              <div
+                className={cn(
+                  "overflow-hidden rounded-2xl border shadow-[0px_1px_3px_0px_rgba(10,10,10,0.04)]",
+                  isDark
+                    ? "bg-[#111113] border-white/10"
+                    : "bg-white border-[#e5e5e5]",
+                )}
+              >
+                <Table>
+                  <TableHeader
+                    className={cn(
+                      "sticky top-0 z-20 border-b text-sm font-semibold",
+                      isDark
+                        ? "bg-[#18181b] border-white/10 text-slate-200"
+                        : "bg-[#fafafa] border-[#e5e5e5] text-[#1a1a1a]",
+                    )}
+                  >
+                    <TableRow className={cn("border-b", isDark ? "border-white/10" : "border-[#e5e5e5]")}>
                     {showSelectionCheckboxes && (
                       <TableHead
                         className={cn(
                           "w-12",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                         )}
                       >
                         <Checkbox
@@ -2557,7 +2566,7 @@ export function CreatorSubmissionsModal({
                     <TableHead
                       className={cn(
                         "w-12",
-                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                        isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                       )}
                     >
                       #
@@ -2566,7 +2575,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                         )}
                         style={{
                           width: CONTEST_DETAILED_MEDIA_COLUMN_WIDTH,
@@ -2581,7 +2590,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "min-w-[200px]",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                         )}
                       >
                         Tweet
@@ -2590,7 +2599,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "min-w-[200px]",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                         )}
                       >
                         Content
@@ -2600,7 +2609,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center whitespace-nowrap",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                         )}
                       >
                         Platform
@@ -2612,7 +2621,7 @@ export function CreatorSubmissionsModal({
                         <TableHead
                           className={cn(
                             "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                           )}
                         >
                           Total Points
@@ -2620,7 +2629,7 @@ export function CreatorSubmissionsModal({
                         <TableHead
                           className={cn(
                             "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                           )}
                         >
                           Base Points
@@ -2628,7 +2637,7 @@ export function CreatorSubmissionsModal({
                         <TableHead
                           className={cn(
                             "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                           )}
                         >
                           Manual Points
@@ -2636,7 +2645,7 @@ export function CreatorSubmissionsModal({
                         <TableHead
                           className={cn(
                             "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                           )}
                         >
                           Likes
@@ -2644,7 +2653,7 @@ export function CreatorSubmissionsModal({
                         <TableHead
                           className={cn(
                             "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                           )}
                         >
                           Replies
@@ -2652,7 +2661,7 @@ export function CreatorSubmissionsModal({
                         <TableHead
                           className={cn(
                             "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                           )}
                         >
                           Retweets
@@ -2660,7 +2669,7 @@ export function CreatorSubmissionsModal({
                         <TableHead
                           className={cn(
                             "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                           )}
                         >
                           Quote Reposts
@@ -2668,7 +2677,7 @@ export function CreatorSubmissionsModal({
                         <TableHead
                           className={cn(
                             "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                           )}
                         >
                           Impressions
@@ -2676,7 +2685,7 @@ export function CreatorSubmissionsModal({
                         <TableHead
                           className={cn(
                             "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                           )}
                         >
                           {contest?.contest_type === "dual_rewards"
@@ -2693,7 +2702,7 @@ export function CreatorSubmissionsModal({
                             <TableHead
                               className={cn(
                                 "text-center",
-                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                               )}
                             >
                               Adjusted Reward
@@ -2704,7 +2713,7 @@ export function CreatorSubmissionsModal({
                             <TableHead
                               className={cn(
                                 "text-center",
-                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                               )}
                             >
                               Expected Reward (CPM)
@@ -2712,7 +2721,7 @@ export function CreatorSubmissionsModal({
                             <TableHead
                               className={cn(
                                 "text-center",
-                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                               )}
                             >
                               Expected Reward (Milestone)
@@ -2724,7 +2733,7 @@ export function CreatorSubmissionsModal({
                                   <TableHead
                                     className={cn(
                                       "text-center",
-                                      isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                      isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                     )}
                                   >
                                     Total Adjusted Reward
@@ -2733,7 +2742,7 @@ export function CreatorSubmissionsModal({
                                     <TableHead
                                       className={cn(
                                         "text-center",
-                                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                        isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                       )}
                                     >
                                       Adjusted Reward (CPM)
@@ -2743,7 +2752,7 @@ export function CreatorSubmissionsModal({
                                     <TableHead
                                       className={cn(
                                         "text-center",
-                                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                        isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                       )}
                                     >
                                       Adjusted Reward (Milestone)
@@ -2758,7 +2767,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center min-w-[170px]",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Milestone
@@ -2767,7 +2776,7 @@ export function CreatorSubmissionsModal({
                         <TableHead
                           className={cn(
                             "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                           )}
                         >
                           {contest?.contest_type === "dual_rewards"
@@ -2779,7 +2788,7 @@ export function CreatorSubmissionsModal({
                             <TableHead
                               className={cn(
                                 "text-center",
-                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                               )}
                             >
                               Reward Granted (CPM)
@@ -2787,7 +2796,7 @@ export function CreatorSubmissionsModal({
                             <TableHead
                               className={cn(
                                 "text-center",
-                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                               )}
                             >
                               Reward Granted (Milestone)
@@ -2797,7 +2806,7 @@ export function CreatorSubmissionsModal({
                         <TableHead
                           className={cn(
                             "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                           )}
                         >
                           Manual Points Reason
@@ -2809,7 +2818,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Views
@@ -2819,7 +2828,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Likes
@@ -2829,7 +2838,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Comments
@@ -2839,7 +2848,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Dislikes
@@ -2852,7 +2861,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Shares
@@ -2862,7 +2871,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Avg View %
@@ -2872,7 +2881,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Watch Time
@@ -2882,7 +2891,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Avg Duration
@@ -2892,7 +2901,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Total duration of clip
@@ -2902,7 +2911,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Engaged Views
@@ -2912,7 +2921,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Subs Gained
@@ -2922,7 +2931,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Bot Score
@@ -2932,7 +2941,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Analytics
@@ -2943,7 +2952,7 @@ export function CreatorSubmissionsModal({
                             <TableHead
                               className={cn(
                                 "text-center",
-                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                               )}
                             >
                               Top Traffic Source
@@ -2954,7 +2963,7 @@ export function CreatorSubmissionsModal({
                             <TableHead
                               className={cn(
                                 "text-center",
-                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                               )}
                             >
                               Shares
@@ -2964,7 +2973,7 @@ export function CreatorSubmissionsModal({
                             <TableHead
                                 className={cn(
                                   "text-center",
-                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                 )}
                               >
                                 <Tooltip>
@@ -2982,7 +2991,7 @@ export function CreatorSubmissionsModal({
                             <TableHead
                                 className={cn(
                                   "text-center",
-                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                 )}
                               >
                                 Saves
@@ -2990,7 +2999,7 @@ export function CreatorSubmissionsModal({
                                 <TableHead
                                   className={cn(
                                     "text-center",
-                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                    isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                   )}
                                 >
                                   Reach
@@ -2998,7 +3007,7 @@ export function CreatorSubmissionsModal({
                                 <TableHead
                                   className={cn(
                                     "text-center",
-                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                    isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                   )}
                                 >
                                   Interactions
@@ -3006,7 +3015,7 @@ export function CreatorSubmissionsModal({
                                 <TableHead
                                   className={cn(
                                     "text-center",
-                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                    isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                   )}
                                 >
                                   Avg Watch Time
@@ -3014,7 +3023,7 @@ export function CreatorSubmissionsModal({
                                 <TableHead
                                   className={cn(
                                     "text-center",
-                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                    isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                   )}
                                 >
                                   Total Watch Time
@@ -3022,7 +3031,7 @@ export function CreatorSubmissionsModal({
                                 <TableHead
                                   className={cn(
                                     "text-center",
-                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                    isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                   )}
                                 >
                                   <Tooltip>
@@ -3041,7 +3050,7 @@ export function CreatorSubmissionsModal({
                                 <TableHead
                                   className={cn(
                                     "text-center",
-                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                    isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                   )}
                                 >
                                   <Tooltip>
@@ -3060,7 +3069,7 @@ export function CreatorSubmissionsModal({
                                 <TableHead
                                   className={cn(
                                     "text-center",
-                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                    isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                   )}
                                 >
                                   <Tooltip>
@@ -3083,7 +3092,7 @@ export function CreatorSubmissionsModal({
                                 <TableHead
                                   className={cn(
                                     "text-center",
-                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                    isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                   )}
                                 >
                                   Total engagement
@@ -3091,7 +3100,7 @@ export function CreatorSubmissionsModal({
                                 <TableHead
                                   className={cn(
                                     "text-center",
-                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                    isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                   )}
                                 >
                                   Engagement rate
@@ -3109,7 +3118,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Quality Score
@@ -3120,7 +3129,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             {contest?.contest_type === "dual_rewards"
@@ -3138,7 +3147,7 @@ export function CreatorSubmissionsModal({
                             <TableHead
                               className={cn(
                                 "text-center",
-                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                               )}
                             >
                               Adjusted Reward
@@ -3149,7 +3158,7 @@ export function CreatorSubmissionsModal({
                             <TableHead
                               className={cn(
                                 "text-center",
-                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                               )}
                             >
                               Expected Reward (CPM)
@@ -3157,7 +3166,7 @@ export function CreatorSubmissionsModal({
                             <TableHead
                               className={cn(
                                 "text-center",
-                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                               )}
                             >
                               Expected Reward (Milestone)
@@ -3169,7 +3178,7 @@ export function CreatorSubmissionsModal({
                                   <TableHead
                                     className={cn(
                                       "text-center",
-                                      isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                      isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                     )}
                                   >
                                     Total Adjusted Reward
@@ -3178,7 +3187,7 @@ export function CreatorSubmissionsModal({
                                     <TableHead
                                       className={cn(
                                         "text-center",
-                                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                        isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                       )}
                                     >
                                       Adjusted Reward (CPM)
@@ -3188,7 +3197,7 @@ export function CreatorSubmissionsModal({
                                     <TableHead
                                       className={cn(
                                         "text-center",
-                                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                        isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                       )}
                                     >
                                       Adjusted Reward (Milestone)
@@ -3203,7 +3212,7 @@ export function CreatorSubmissionsModal({
                           <TableHead
                             className={cn(
                               "text-center min-w-[170px]",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                             )}
                           >
                             Milestone
@@ -3215,7 +3224,7 @@ export function CreatorSubmissionsModal({
                             <TableHead
                               className={cn(
                                 "text-center",
-                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                               )}
                             >
                               {contest?.contest_type === "dual_rewards"
@@ -3227,7 +3236,7 @@ export function CreatorSubmissionsModal({
                                 <TableHead
                                   className={cn(
                                     "text-center",
-                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                    isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                   )}
                                 >
                                   Reward Granted (CPM)
@@ -3235,7 +3244,7 @@ export function CreatorSubmissionsModal({
                                 <TableHead
                                   className={cn(
                                     "text-center",
-                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                    isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                                   )}
                                 >
                                   Reward Granted (Milestone)
@@ -3252,7 +3261,7 @@ export function CreatorSubmissionsModal({
                         <TableHead
                           className={cn(
                             "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                           )}
                         >
                           Bonus Expected
@@ -3260,7 +3269,7 @@ export function CreatorSubmissionsModal({
                         <TableHead
                           className={cn(
                             "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                           )}
                         >
                           Bonus Granted
@@ -3275,7 +3284,7 @@ export function CreatorSubmissionsModal({
                         <TableHead
                           className={cn(
                             "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                           )}
                         >
                           Insights status
@@ -3285,7 +3294,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                         )}
                       >
                         Status
@@ -3294,7 +3303,7 @@ export function CreatorSubmissionsModal({
                     {/* <TableHead
                     className={cn(
                       "min-w-[180px]",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                      isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold"
                     )}
                   >
                     Rejection reason
@@ -3302,7 +3311,7 @@ export function CreatorSubmissionsModal({
                     <TableHead
                       className={cn(
                         "min-w-[180px]",
-                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                        isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                       )}
                     >
                       Rejection reason
@@ -3311,7 +3320,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "min-w-[180px]",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                         )}
                       >
                         Submitted
@@ -3320,7 +3329,7 @@ export function CreatorSubmissionsModal({
                     <TableHead
                       className={cn(
                         "text-center",
-                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                        isDark ? "bg-[#18181b] text-slate-200 text-sm font-semibold" : "bg-[#fafafa] text-[#1a1a1a] text-sm font-semibold",
                       )}
                     >
                       Actions
@@ -3780,7 +3789,10 @@ export function CreatorSubmissionsModal({
                         <TableRow
                           key={submission.id}
                           className={cn(
-                            isDark ? "text-white" : "text-gray-700",
+                            "border-b transition-colors",
+                            isDark
+                              ? "border-white/10 hover:bg-white/5 text-slate-100"
+                              : "border-[#f5f5f5] hover:bg-[#fafafa] text-gray-700",
                             isDeletedTweet && "opacity-60",
                           )}
                         >
@@ -3835,7 +3847,7 @@ export function CreatorSubmissionsModal({
                                           submission.id,
                                         )
                                       }
-                                      className="absolute right-2 top-2 z-50 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[11px] font-semibold text-white backdrop-blur-sm transition-colors hover:bg-[#7F39EC]"
+                                      className="absolute right-2 top-2 z-50 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[11px] font-semibold text-white backdrop-blur-sm transition-colors hover:bg-black"
                                       title="Open in Review Mode"
                                     >
                                       <PlaySquare className="h-3.5 w-3.5" />
@@ -3864,7 +3876,7 @@ export function CreatorSubmissionsModal({
                                             "quote" ||
                                           submission.other_stats?.tweet_type ===
                                             "retweet"
-                                          ? "bg-purple-100 text-purple-700 border-purple-300"
+                                          ? "bg-[#f5f5f5] text-[#404040] border-transparent dark:bg-white/10 dark:text-slate-300"
                                           : "bg-blue-100 text-blue-700 border-blue-300",
                                       )}
                                     >
@@ -3923,8 +3935,8 @@ export function CreatorSubmissionsModal({
                                       className={cn(
                                         "text-xs flex items-center gap-1 hover:underline w-fit",
                                         isDark
-                                          ? "text-purple-400"
-                                          : "text-purple-600",
+                                          ? "text-slate-300 hover:text-white"
+                                          : "text-[#404040] hover:text-[#0a0a0a]",
                                       )}
                                     >
                                       Click to view tweet
@@ -4014,7 +4026,7 @@ export function CreatorSubmissionsModal({
                               <TableCell className="text-center">
                                 <div className="flex flex-col items-center">
                                   <div className="flex items-center gap-1">
-                                    <ThumbsUp className="h-3 w-3 text-purple-400" />
+                                    <ThumbsUp className="h-3 w-3 text-slate-400" />
                                     <span
                                       className={cn(
                                         "font-bold text-sm",
@@ -4040,7 +4052,7 @@ export function CreatorSubmissionsModal({
                               <TableCell className="text-center">
                                 <div className="flex flex-col items-center">
                                   <div className="flex items-center gap-1">
-                                    <MessageCircle className="h-3 w-3 text-purple-400" />
+                                    <MessageCircle className="h-3 w-3 text-slate-400" />
                                     <span
                                       className={cn(
                                         "font-bold text-sm",
@@ -4112,7 +4124,7 @@ export function CreatorSubmissionsModal({
                               <TableCell className="text-center">
                                 <div className="flex flex-col items-center">
                                   <div className="flex items-center gap-1">
-                                    <Eye className="h-3 w-3 text-purple-400" />
+                                    <Eye className="h-3 w-3 text-slate-400" />
                                     <span
                                       className={cn(
                                         "font-bold text-sm",
@@ -4687,7 +4699,7 @@ export function CreatorSubmissionsModal({
                                           "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
                                           isDark
                                             ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
-                                            : "bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700",
+                                            : "bg-slate-100 hover:bg-slate-200 text-slate-700",
                                         )}
                                       >
                                         <BarChart2 className="h-3 w-3" />
@@ -5548,6 +5560,7 @@ export function CreatorSubmissionsModal({
                   )}
                 </TableBody>
               </Table>
+              </div>
             </div>
           </div>
         </DialogContent>
@@ -5561,13 +5574,23 @@ export function CreatorSubmissionsModal({
       >
         <DialogContent
           className={cn(
-            "max-w-md",
-            isDark ? "bg-[#1a0a2e] border-gray-700 text-white" : "bg-white",
+            "sm:max-w-md rounded-3xl border border-[#e5e5e5] dark:border-white/10 bg-white dark:bg-[#111113] p-6 sm:p-7 shadow-2xl",
+            isDark ? "text-white" : "text-[#0a0a0a]",
           )}
         >
-          <DialogTitle className="flex items-center gap-2">
-            Rejection reason
-          </DialogTitle>
+          <div className="flex items-start gap-4 mb-2">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-500">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-xl font-bold tracking-tight text-[#0a0a0a] dark:text-white">
+                Rejection reason
+              </DialogTitle>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Details provided when this submission was rejected.
+              </p>
+            </div>
+          </div>
           {rejectionDetailsModalSubmission &&
             (() => {
               const parsed = parseSubmissionMetadata(
@@ -5585,7 +5608,7 @@ export function CreatorSubmissionsModal({
                 return (
                   <p
                     className={cn(
-                      "text-sm",
+                      "text-sm my-4",
                       isDark ? "text-gray-400" : "text-gray-600",
                     )}
                   >
@@ -5595,21 +5618,21 @@ export function CreatorSubmissionsModal({
               }
 
               return (
-                <div className="space-y-4 text-sm">
+                <div className="my-4 rounded-2xl border border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/5 p-4 space-y-3.5 text-sm">
                   {reason && (
                     <div>
                       <span
                         className={cn(
-                          "font-medium",
-                          isDark ? "text-gray-300" : "text-gray-700",
+                          "text-xs font-semibold uppercase tracking-wider",
+                          isDark ? "text-slate-400" : "text-slate-500",
                         )}
                       >
                         Reason
                       </span>
                       <p
                         className={cn(
-                          "mt-1",
-                          isDark ? "text-gray-200" : "text-gray-900",
+                          "mt-1 font-medium",
+                          isDark ? "text-gray-100" : "text-gray-900",
                         )}
                       >
                         {reason}
@@ -5620,16 +5643,16 @@ export function CreatorSubmissionsModal({
                     <div>
                       <span
                         className={cn(
-                          "font-medium",
-                          isDark ? "text-gray-300" : "text-gray-700",
+                          "text-xs font-semibold uppercase tracking-wider",
+                          isDark ? "text-slate-400" : "text-slate-500",
                         )}
                       >
                         Additional notes
                       </span>
                       <p
                         className={cn(
-                          "mt-1 whitespace-pre-wrap",
-                          isDark ? "text-gray-200" : "text-gray-900",
+                          "mt-1 whitespace-pre-wrap font-medium",
+                          isDark ? "text-gray-200" : "text-gray-800",
                         )}
                       >
                         {additionalNotes}
@@ -5639,8 +5662,8 @@ export function CreatorSubmissionsModal({
                   {timestamp && (
                     <div
                       className={cn(
-                        "text-xs",
-                        isDark ? "text-gray-500" : "text-gray-500",
+                        "pt-2 border-t border-slate-200/60 dark:border-white/10 text-xs",
+                        isDark ? "text-gray-400" : "text-gray-500",
                       )}
                     >
                       <span>
@@ -5649,10 +5672,12 @@ export function CreatorSubmissionsModal({
                       </span>
                     </div>
                   )}
-                  <div className="flex justify-end">
+                  <div className="flex justify-end pt-2">
                     <Button
+                      type="button"
                       variant="outline"
                       onClick={() => setRejectionDetailsModalSubmission(null)}
+                      className="h-11 w-full sm:w-auto rounded-xl border-slate-200 dark:border-white/10 font-semibold px-6 hover:bg-slate-50 dark:hover:bg-white/5"
                     >
                       Close
                     </Button>

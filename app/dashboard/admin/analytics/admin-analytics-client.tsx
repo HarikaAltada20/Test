@@ -21,7 +21,6 @@ import {
   ChevronDown,
   Clock,
   Eye,
-  Loader2,
   MessageSquare,
   Search,
   ShieldCheck,
@@ -34,6 +33,7 @@ import { FaYoutube, FaTiktok, FaInstagram } from "react-icons/fa";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
 import { AdminDateRangePicker } from "@/components/admin/AdminDateRangePicker";
 import {
@@ -1476,7 +1476,7 @@ export default function AdminAnalyticsClient() {
         <div className="relative h-[320px] w-full sm:h-[380px]">
           {metricsLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-inherit/40">
-              <Loader2 className="h-7 w-7 animate-spin text-[#7F39EC]" />
+              <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
             </div>
           )}
           {!metricsLoading && series.length === 0 ? (

@@ -10,8 +10,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   formatCompactCount,
   formatCurrencyFromCents,
@@ -189,7 +189,7 @@ export function PayoutHistoryChart({
       <div className="relative h-[240px] w-full sm:h-[280px]">
         {loading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-inherit/40">
-            <Loader2 className="h-7 w-7 animate-spin text-[#7F39EC]" />
+            <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
           </div>
         )}
         {!loading && !hasAnyPaid ? (

@@ -29,6 +29,7 @@ type ReviewSlideProps = {
   playbackRate: number;
   canSeeCore: boolean;
   overlaysVisible: boolean;
+  isDark?: boolean;
   onWheelForward: (deltaY: number) => void;
   /** Only passed for the active slide. */
   onWatchedChange?: (percent: number) => void;
@@ -46,6 +47,7 @@ export const ReviewSlide = forwardRef<ReviewPlayerHandle, ReviewSlideProps>(
       playbackRate,
       canSeeCore,
       overlaysVisible,
+      isDark = false,
       onWheelForward,
       onWatchedChange,
       onDurationChange,
@@ -141,7 +143,8 @@ export const ReviewSlide = forwardRef<ReviewPlayerHandle, ReviewSlideProps>(
 
           <div
             className={cn(
-              "hidden w-14 shrink-0 flex-col items-center gap-4 pb-4 text-white transition-opacity duration-300 sm:flex",
+              "hidden w-14 shrink-0 flex-col items-center gap-4 pb-4 transition-opacity duration-300 sm:flex",
+              isDark ? "text-white" : "text-slate-800",
               showOverlays ? "opacity-100" : "opacity-60",
             )}
           >
@@ -153,10 +156,22 @@ export const ReviewSlide = forwardRef<ReviewPlayerHandle, ReviewSlideProps>(
                   className="flex flex-col items-center gap-1"
                   title={item.label}
                 >
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 backdrop-blur-sm">
+                  <span
+                    className={cn(
+                      "flex h-11 w-11 items-center justify-center rounded-full backdrop-blur-sm transition-transform hover:scale-105",
+                      isDark
+                        ? "bg-white/10 text-white"
+                        : "bg-white text-slate-800 border border-slate-200/80 shadow-md",
+                    )}
+                  >
                     {Icon && <Icon className="h-5 w-5" />}
                   </span>
-                  <span className="text-xs font-semibold tabular-nums">
+                  <span
+                    className={cn(
+                      "text-xs font-bold tabular-nums drop-shadow-xs",
+                      isDark ? "text-white" : "text-slate-800",
+                    )}
+                  >
                     {item.value}
                   </span>
                 </div>

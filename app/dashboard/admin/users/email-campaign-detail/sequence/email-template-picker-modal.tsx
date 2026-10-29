@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Sparkles, Trash2 } from "lucide-react";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -271,8 +272,8 @@ export function EmailTemplatePickerModal({ open, onClose, onInsert }: Props) {
                     className="bg-white"
                   />
                   {loading ? (
-                    <div className="flex justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin" />
+                    <div className="flex justify-center py-4">
+                      <PageLoadingSpinner />
                     </div>
                   ) : filtered.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-4">
@@ -465,8 +466,8 @@ export function EmailTemplatePickerModal({ open, onClose, onInsert }: Props) {
                 </div>
                 <div className="flex-1 p-5 overflow-y-auto">
                   {genLoading ? (
-                    <div className="flex flex-col items-center justify-center h-full min-h-[280px] gap-4">
-                      <Loader2 className="h-10 w-10 animate-spin text-[#662EBD]" />
+                    <div className="flex flex-col items-center justify-center h-full min-h-[280px] gap-2">
+                      <PageLoadingSpinner />
                       <p className="text-sm text-muted-foreground">
                         Generating your email template...
                       </p>

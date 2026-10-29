@@ -96,8 +96,8 @@ export function getBrandSubmissionsStyles(isDark: boolean) {
     isDark ? "bg-[#111113] border-white/10" : "bg-white border-[#e5e5e5]",
   );
   const th = cn(
-    "text-xs font-medium",
-    isDark ? "text-slate-400" : "text-[#737373]",
+    "text-sm font-semibold",
+    isDark ? "text-slate-200" : "text-[#1a1a1a]",
   );
   /** Applied to the scroll wrapper of <Table> — gives the table its own rounded bordered card. */
   const tableScroll = cn(
@@ -108,9 +108,9 @@ export function getBrandSubmissionsStyles(isDark: boolean) {
   const headRow = cn(
     "border-b hover:bg-transparent",
     isDark
-      ? "bg-white/5 border-white/10 hover:bg-white/5 [&_th]:text-slate-400"
-      : "bg-[#fafafa] border-[#e5e5e5] hover:bg-[#fafafa] [&_th]:text-[#737373]",
-    "[&_th]:h-11 [&_th]:px-4 [&_th]:text-xs [&_th]:font-medium [&_th]:whitespace-nowrap",
+      ? "bg-white/5 border-white/10 hover:bg-white/5 [&_th]:text-slate-200"
+      : "bg-[#fafafa] border-[#e5e5e5] hover:bg-[#fafafa] [&_th]:text-[#1a1a1a]",
+    "[&_th]:h-12 [&_th]:px-4 [&_th]:text-sm [&_th]:font-semibold [&_th]:whitespace-nowrap",
   );
   /** Body <TableRow> look (no rank-tint / purple accents). */
   const bodyRow = cn(

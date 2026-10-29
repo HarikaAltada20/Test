@@ -39,7 +39,8 @@ import {
   formatSenderRoleLabel,
   isSupportAdminMessage,
 } from "@/lib/support/sender-role";
-import { MessageSquare, Trash2, Loader2, Lock, RotateCcw } from "lucide-react";
+import { MessageSquare, Trash2, Lock, RotateCcw } from "lucide-react";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 type Contact = {
   id: string;
   created_at: string;
@@ -559,7 +560,7 @@ export default function SupportClient({
               {loading ? (
                 <tr>
                   <td colSpan={9} className="py-8 text-center">
-                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-purple-500" />
+                    <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
                   </td>
                 </tr>
               ) : threads.length === 0 ? (

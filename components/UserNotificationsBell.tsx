@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   Sheet,
   SheetContent,
@@ -572,8 +573,8 @@ export function UserNotificationsBell({
 
           <div className="flex-1 overflow-y-auto min-h-0">
             {loading && notifications.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
-                <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+              <div className="flex flex-col items-center justify-center gap-2 py-8 text-muted-foreground">
+                <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
                 <p className="text-sm">Loading notifications…</p>
               </div>
             ) : notifications.length === 0 ? (

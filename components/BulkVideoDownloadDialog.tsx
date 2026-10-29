@@ -416,17 +416,23 @@ export function BulkVideoDownloadDialog({
       }}
       isdark={isDark}
     >
-      <DialogContent className="sm:max-w-[520px] z-[70] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className={cn(isDark ? "text-white" : "text-gray-900")}>
-            {title}
-          </DialogTitle>
-          <DialogDescription
-            className={cn(isDark ? "text-slate-400" : "text-slate-600")}
-          >
-            {description}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className={cn(
+        "sm:max-w-[540px] z-[70] max-h-[90vh] overflow-y-auto rounded-2xl border border-[#e5e5e5] dark:border-white/10 bg-white dark:bg-[#111113] p-4 shadow-2xl",
+        isDark ? "text-white" : "text-[#0a0a0a]",
+      )}>
+        <div className="flex items-start gap-4 mb-2">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-purple-500/10 text-[#7F39EC]">
+            <FolderDown className="h-6 w-6" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <DialogTitle className="text-xl font-bold tracking-tight text-[#0a0a0a] dark:text-white">
+              {title}
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {description}
+            </DialogDescription>
+          </div>
+        </div>
 
         <div
           className={cn(
@@ -715,9 +721,10 @@ export function BulkVideoDownloadDialog({
             disabled={busy}
             onClick={() => onOpenChange(false)}
             className={cn(
+              "h-11 rounded-xl font-semibold px-5 border-slate-200 dark:border-white/10",
               isDark
-                ? "border-gray-600 text-slate-200 hover:bg-white/5"
-                : undefined,
+                ? "text-slate-200 hover:bg-white/5"
+                : "text-slate-700 hover:bg-slate-50",
             )}
           >
             {manifestReady ? "Done" : "Cancel"}
@@ -730,9 +737,10 @@ export function BulkVideoDownloadDialog({
               disabled={busy}
               onClick={openDesktopAppNonNavigating}
               className={cn(
+                "h-11 rounded-xl font-semibold px-5 border-slate-200 dark:border-white/10",
                 isDark
-                  ? "border-gray-600 text-slate-200 hover:bg-white/5"
-                  : undefined,
+                  ? "text-slate-200 hover:bg-white/5"
+                  : "text-slate-700 hover:bg-slate-50",
               )}
             >
               Open app
@@ -747,12 +755,12 @@ export function BulkVideoDownloadDialog({
             onClick={() => {
               void handlePrimary();
             }}
-            className="bg-purple-600 text-white hover:bg-purple-700"
+            className="h-11 rounded-xl font-semibold px-5 bg-black dark:bg-white text-white dark:text-black hover:bg-slate-900 dark:hover:bg-slate-100 shadow-xs"
           >
             {desktopOnly || isMixed ? (
-              <FolderDown className="h-4 w-4 mr-1" />
+              <FolderDown className="h-4 w-4 mr-1.5" />
             ) : (
-              <Download className="h-4 w-4 mr-1" />
+              <Download className="h-4 w-4 mr-1.5" />
             )}
             {primaryLabel}
           </Button>

@@ -9458,21 +9458,10 @@ export function ContestClientPage({
                               surfaceClass,
                             )}
                           >
-                            <CardContent className="flex flex-col items-center justify-center gap-4 py-14 px-6">
-                              <div className="relative">
-                                <div
-                                  className={cn(
-                                    "absolute inset-0 rounded-full blur-xl opacity-40",
-                                    "bg-[var(--accent-btn-base)]",
-                                  )}
-                                />
-                                <Loader2
-                                  className={cn(
-                                    "relative h-10 w-10 animate-spin",
-                                    "text-[#ff7a1a]",
-                                  )}
-                                />
-                              </div>
+                            <CardContent className="flex flex-col items-center justify-center gap-2 py-8 px-6">
+                              <PageLoadingSpinner
+                                mode={isDark ? "dark" : "light"}
+                              />
                               <div className="text-center space-y-1">
                                 <p
                                   className={cn(

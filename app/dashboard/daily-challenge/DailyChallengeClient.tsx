@@ -14,6 +14,7 @@ import {
   EnhancedTabsContent as TabsContent,
 } from "@/components/ui/enhanced-tabs";
 import { cn } from "@/lib/utils";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_ADMIN,
   DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_CREATOR,
@@ -655,7 +656,7 @@ export default function DailyChallengeClient({
           isDark ? "text-white" : "text-gray-900",
         )}
       >
-        <Loader2 className="h-10 w-10 animate-spin text-violet-600 shrink-0" aria-hidden />
+        <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
         <p className="text-sm sm:text-base text-muted-foreground text-center max-w-sm">
           Loading {challengeTitle}…
         </p>

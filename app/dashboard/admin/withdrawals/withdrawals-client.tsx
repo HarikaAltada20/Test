@@ -87,6 +87,7 @@ import {
   Wand2,
   ClipboardPaste,
 } from "lucide-react";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -2855,19 +2856,7 @@ export default function WithdrawalsClient({
               )}
             >
               <div className="mx-auto flex max-w-md flex-col items-center text-center">
-                <div
-                  className={cn(
-                    "mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full",
-                    isDark ? "bg-violet-900/30" : "bg-violet-100",
-                  )}
-                >
-                  <Loader2
-                    className={cn(
-                      "h-6 w-6 animate-spin",
-                      isDark ? "text-violet-300" : "text-violet-600",
-                    )}
-                  />
-                </div>
+                <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
                 <p
                   className={cn(
                     "text-base font-semibold",

@@ -1,11 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import Image from "next/image";
-import { usePathname } from "next/navigation";
-import lightLogo from "@/public/images/Group (2).avif";
-import darkLogo from "@/public/images/Group (3).avif";
-import landingLogo from "@/public/images/page_spinner_logo.png";
+import React, { useEffect, useId, useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface LoadingSpinnerProps {
@@ -21,6 +16,7 @@ function GocAnimatedLogoSpinner({
 }) {
   const isLight = theme === "light";
   const barFill = isLight ? "#000000" : "#FFFFFF";
+  const gradientId = `gocOrangeGrad-${useId().replace(/:/g, "")}`;
 
   return (
     <div className="relative flex items-center justify-center p-2">
@@ -79,7 +75,7 @@ function GocAnimatedLogoSpinner({
       >
         <defs>
           <linearGradient
-            id="gocOrangeGrad"
+            id={gradientId}
             x1="0%"
             y1="0%"
             x2="100%"
@@ -129,7 +125,7 @@ function GocAnimatedLogoSpinner({
         {/* Center Orange Play Arrow */}
         <path
           d="M 10.5 9.5 L 19.5 14.25 L 10.5 19 Z"
-          fill="url(#gocOrangeGrad)"
+          fill={`url(#${gradientId})`}
           className="goc-play-arrow"
         />
       </svg>
@@ -139,42 +135,24 @@ function GocAnimatedLogoSpinner({
 
 const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   mode = "light",
-  variant,
   className,
 }) => {
-  const pathname = usePathname();
   const [theme, setTheme] = useState<"light" | "dark">(mode);
 
-  const isDashboard =
-    variant === "dashboard"
-      ? true
-      : variant === "landing"
-      ? false
-      : Boolean(pathname?.startsWith("/dashboard"));
-
-  const logo = isDashboard
-    ? theme === "dark"
-      ? darkLogo
-      : lightLogo
-    : landingLogo;
-
-  // Read mode from data attribute
+  // Landing and dashboard share the same mark. Bars follow light/dark.
   useEffect(() => {
     const checkMode = () => {
       const modeElement = document.querySelector("[data-mode]");
-      if (modeElement) {
-        const currentMode = modeElement.getAttribute("data-mode") as
-          | "light"
-          | "dark";
-        if (currentMode) {
-          setTheme(currentMode);
-        }
+      const currentMode = modeElement?.getAttribute("data-mode");
+      if (currentMode === "light" || currentMode === "dark") {
+        setTheme(currentMode);
+        return;
       }
+      setTheme(mode);
     };
 
     checkMode();
 
-    // Watch for changes in the data attribute
     const observer = new MutationObserver(checkMode);
     const targetNode = document.querySelector("[data-mode]");
     if (targetNode) {
@@ -185,45 +163,11 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
     }
 
     return () => observer.disconnect();
-  }, []);
-
-  if (!isDashboard) {
-    return (
-      <div className={cn("flex items-center justify-center min-h-[140px]", className)}>
-        <GocAnimatedLogoSpinner theme={theme} />
-      </div>
-    );
-  }
+  }, [mode]);
 
   return (
-    <div className={cn("flex items-center justify-center", className)}>
-      <div className="relative">
-        {/* Outermost Rotating Square Border - Clockwise */}
-        <div className="w-32 h-32 border-4 border-purple-200/40 rounded-2xl animate-spin"></div>
-
-        {/* Counter-clockwise Border */}
-        <div
-          className="absolute inset-6 w-20 h-20 border-2 border-purple-600 rounded-xl animate-spin"
-          style={{ animationDirection: "reverse" }}
-        ></div>
-
-        {/* Center Logo/Icon */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-20 h-20 flex items-center justify-center">
-            <Image
-              src={logo}
-              alt="Game Of Creators"
-              width={80}
-              height={80}
-              priority
-              className={cn(
-                "transition-all duration-300 object-contain",
-                "h-[50px] w-auto"
-              )}
-            />
-          </div>
-        </div>
-      </div>
+    <div className={cn("flex items-center justify-center min-h-[140px]", className)}>
+      <GocAnimatedLogoSpinner theme={theme} />
     </div>
   );
 };

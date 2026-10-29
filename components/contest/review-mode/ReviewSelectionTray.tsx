@@ -28,6 +28,7 @@ type ReviewSelectionTrayProps = {
   canDownload: boolean;
   downloading: boolean;
   isFocusedOnSelection: boolean;
+  isDark?: boolean;
   onModerate: (action: ReviewModerationAction, ids: string[]) => void;
   onDownload: () => void;
   onReviewOnlySelected: () => void;
@@ -42,6 +43,7 @@ export function ReviewSelectionTray({
   canDownload,
   downloading,
   isFocusedOnSelection,
+  isDark = false,
   onModerate,
   onDownload,
   onReviewOnlySelected,
@@ -62,27 +64,45 @@ export function ReviewSelectionTray({
       label: "Mark as Verified",
       ids: breakdown.verify,
       Icon: CheckCircle,
-      className: "border-green-500 bg-green-900/30 text-green-400 hover:bg-green-900/50",
+      className: isDark
+        ? "border-green-500 bg-green-900/30 text-green-400 hover:bg-green-900/50"
+        : "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold shadow-2xs",
     },
     {
       action: "reject",
       label: "Mark as Rejected",
       ids: breakdown.reject,
       Icon: XCircle,
-      className: "border-red-500 bg-red-900/30 text-red-400 hover:bg-red-900/50",
+      className: isDark
+        ? "border-red-500 bg-red-900/30 text-red-400 hover:bg-red-900/50"
+        : "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 font-semibold shadow-2xs",
     },
     {
       action: "pending",
       label: "Mark as Pending",
       ids: breakdown.pending,
       Icon: Clock,
-      className: "border-yellow-500 bg-yellow-900/30 text-yellow-400 hover:bg-yellow-900/50",
+      className: isDark
+        ? "border-yellow-500 bg-yellow-900/30 text-yellow-400 hover:bg-yellow-900/50"
+        : "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 font-semibold shadow-2xs",
     },
   ];
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-900/80 px-3 py-2 lg:px-5">
-      <span className="text-sm font-semibold tabular-nums text-violet-300">
+    <div
+      className={
+        isDark
+          ? "flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-900/80 px-3 py-2 lg:px-5"
+          : "flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white/95 text-slate-800 px-3 py-2 lg:px-5 shadow-2xs backdrop-blur-sm"
+      }
+    >
+      <span
+        className={
+          isDark
+            ? "text-sm font-semibold tabular-nums text-violet-300"
+            : "text-sm font-bold tabular-nums text-violet-700"
+        }
+      >
         {breakdown.total} selected
       </span>
       <Button
@@ -90,13 +110,21 @@ export function ReviewSelectionTray({
         variant="ghost"
         onClick={onClear}
         disabled={busy}
-        className="h-8 text-slate-300 hover:bg-white/10 hover:text-white"
+        className={
+          isDark
+            ? "h-8 text-slate-300 hover:bg-white/10 hover:text-white"
+            : "h-8 text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium"
+        }
       >
         Clear
       </Button>
       {breakdown.paid > 0 && (
         <span
-          className="flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-300"
+          className={
+            isDark
+              ? "flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-300"
+              : "flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-xs font-medium text-blue-700"
+          }
           title="Paid clips are skipped here. Reverse them from the submissions table."
         >
           <Lock className="h-3 w-3" />
@@ -132,7 +160,11 @@ export function ReviewSelectionTray({
             size="sm"
             variant="outline"
             onClick={onReviewOnlySelected}
-            className="h-8 shrink-0 gap-1 whitespace-nowrap rounded-md border-slate-600 bg-transparent text-slate-200 hover:bg-white/10 hover:text-white"
+            className={
+              isDark
+                ? "h-8 shrink-0 gap-1 whitespace-nowrap rounded-md border-slate-600 bg-transparent text-slate-200 hover:bg-white/10 hover:text-white"
+                : "h-8 shrink-0 gap-1 whitespace-nowrap rounded-md border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs font-medium"
+            }
           >
             <ListFilter className="h-4 w-4" />
             Review only these
@@ -143,7 +175,11 @@ export function ReviewSelectionTray({
             size="sm"
             onClick={onDownload}
             disabled={downloading || busy}
-            className="h-8 shrink-0 gap-1 whitespace-nowrap rounded-md border border-purple-500 bg-purple-900/30 text-purple-300 hover:bg-purple-900/50"
+            className={
+              isDark
+                ? "h-8 shrink-0 gap-1 whitespace-nowrap rounded-md border border-purple-500 bg-purple-900/30 text-purple-300 hover:bg-purple-900/50"
+                : "h-8 shrink-0 gap-1 whitespace-nowrap rounded-md border border-violet-300 bg-violet-600 text-white hover:bg-violet-700 font-medium shadow-2xs"
+            }
           >
             {downloading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
