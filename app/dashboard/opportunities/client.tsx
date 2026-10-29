@@ -1500,7 +1500,9 @@ export default function OpportunitiesPage({
       prefetch={false}
       className={cn(
         "pointer-events-auto relative z-[2] flex items-center justify-center gap-2 rounded-full",
-        isDark ? "bg-[#7F39EC] text-white" : "bg-[#D9C0FF61] text-[#7F39EC]",
+        isDark
+          ? "bg-white text-[#1a1a1a] hover:bg-white/90 shadow-sm font-semibold"
+          : "bg-[#1a1a1a] text-white hover:bg-black shadow-sm font-semibold",
         options?.fullWidth && "w-full",
         className,
       )}
@@ -1637,8 +1639,8 @@ export default function OpportunitiesPage({
       dark: "bg-white/5 text-slate-200 border-white/10",
     },
     purple: {
-      light: "bg-purple-50 text-[#4A00BE] border-purple-200",
-      dark: "bg-[#7F39EC]/15 text-purple-100 border-[#7F39EC]/40",
+      light: "bg-slate-100 text-slate-800 border-slate-200",
+      dark: "bg-white/10 text-white/90 border-white/20",
     },
   };
 
@@ -1695,7 +1697,9 @@ export default function OpportunitiesPage({
           "text-xs px-2.5 py-0.5 font-medium border shadow-sm",
           contest.status === "ended"
             ? `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`
-            : "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
+            : contest.status === "active"
+              ? "capitalize bg-emerald-600 text-white border-emerald-600"
+              : "capitalize bg-zinc-700 text-white border-zinc-700",
         )}
       >
         {contest.status === "active"
@@ -1749,14 +1753,14 @@ export default function OpportunitiesPage({
         className={cn(
           "relative flex w-full cursor-pointer overflow-hidden rounded-xl border shadow-lg transition-all duration-300 ease-in-out hover:shadow-2xl group",
           isList ? "flex-col sm:flex-row" : "flex-col",
-          isDark ? "bg-[#06021D] border-[#7F39EC]/40" : "bg-white border-purple-200",
+          isDark ? "bg-[#18181b] border-white/10" : "bg-white border-gray-200",
         )}
       >
         {renderOpportunityCardLink(contest)}
         <div className={cn("pointer-events-none flex flex-1", isList ? "flex-col sm:flex-row" : "flex-col")}>
           <div
             className={cn(
-              "relative flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#7F39EC]/30 to-[#4A00BE]/40",
+              "relative flex items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-700/40 to-zinc-900/60",
               isList ? "aspect-[16/10] sm:aspect-auto sm:w-72 sm:shrink-0" : "aspect-[16/10]",
             )}
           >
@@ -1853,12 +1857,14 @@ export default function OpportunitiesPage({
                 prefetch={false}
                 aria-label={`${copy.cta}: ${contest.title || "campaign"}`}
                 className={cn(
-                  "pointer-events-auto relative z-[2] flex w-full items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] focus-visible:ring-offset-2",
+                  "pointer-events-auto relative z-[2] flex w-full items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
                   copy.primary
-                    ? "bg-[#7F39EC] text-white hover:bg-[#6a2bd1]"
+                    ? isDark
+                      ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+                      : "bg-[#1a1a1a] text-white hover:bg-black"
                     : isDark
                       ? "border border-white/20 text-white hover:bg-white/10"
-                      : "border border-purple-200 bg-white text-[#4A00BE] hover:bg-purple-50",
+                      : "border border-gray-300 bg-white text-gray-800 hover:bg-gray-100",
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1904,9 +1910,9 @@ export default function OpportunitiesPage({
                 className={cn(
                   "text-sm px-3 py-1 font-medium border",
                   contest.status === "active" &&
-                    "capitalize bg-[#7F39EC] text-white",
+                    "capitalize bg-emerald-600 text-white border-emerald-600",
                   contest.status === "upcoming" &&
-                    "capitalize bg-[#7F39EC] text-white",
+                    "capitalize bg-zinc-700 text-white border-zinc-700",
                   contest.status === "ended" &&
                     `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
                 )}
@@ -1993,8 +1999,8 @@ export default function OpportunitiesPage({
                         className={cn(
                           "text-sm px-3 py-1 font-medium",
                           isDark
-                            ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                            : "bg-purple-50 text-purple-700 border-purple-200",
+                            ? "bg-white/10 text-white/90 border-white/20"
+                            : "bg-slate-100 text-slate-800 border-slate-200",
                         )}
                       >
                         <CheckCheck className="h-3 w-3 mr-1" />
@@ -2290,13 +2296,13 @@ export default function OpportunitiesPage({
                       <DollarSign
                         className={cn(
                           "h-4 w-4 mr-2 flex-shrink-0",
-                          isDark ? "text-purple-400" : "text-purple-600",
+                          isDark ? "text-emerald-400" : "text-emerald-600",
                         )}
                       />
                       <span
                         className={cn(
                           "font-medium",
-                          isDark ? "text-purple-300" : "text-purple-700",
+                          isDark ? "text-emerald-300" : "text-emerald-700",
                         )}
                         style={{ transition: "none" }}
                       >
@@ -2373,7 +2379,7 @@ export default function OpportunitiesPage({
                         )}
                       >
                         <div
-                          className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                          className="absolute h-full bg-[#1a1a1a] dark:bg-white rounded-full transition-all duration-500 ease-out"
                           style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
                         ></div>
                       </div>
@@ -2433,7 +2439,7 @@ export default function OpportunitiesPage({
                         )}
                       >
                         <div
-                          className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                          className="absolute h-full bg-[#1a1a1a] dark:bg-white rounded-full transition-all duration-500 ease-out"
                           style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
                         ></div>
                       </div>
@@ -2494,7 +2500,7 @@ export default function OpportunitiesPage({
                         )}
                       >
                         <div
-                          className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                          className="absolute h-full bg-[#1a1a1a] dark:bg-white rounded-full transition-all duration-500 ease-out"
                           style={{
                             width: `${Math.min(tracker.percentage, 100)}%`,
                           }}
@@ -2634,8 +2640,8 @@ export default function OpportunitiesPage({
                 className={cn(
                   "inline-flex items-center justify-center gap-2 border px-3 py-1.5 rounded-full transition-colors text-sm",
                   isDark
-                    ? "text-white border-gray-600"
-                    : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]",
+                    ? "text-white border-white/20 bg-white/10 hover:bg-white/20"
+                    : "text-zinc-800 border-zinc-300 bg-zinc-100 hover:bg-zinc-200",
                 )}
               >
                 <Play className="h-3.5 w-3.5" />
@@ -2646,8 +2652,8 @@ export default function OpportunitiesPage({
                 className={cn(
                   "inline-flex items-center justify-center gap-2 border px-3 py-1.5 rounded-full transition-colors text-sm",
                   isDark
-                    ? "text-white border-gray-600"
-                    : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]",
+                    ? "text-white border-white/20 bg-white/10 hover:bg-white/20"
+                    : "text-zinc-800 border-zinc-300 bg-zinc-100 hover:bg-zinc-200",
                 )}
               >
                 <GraduationCap className="h-3.5 w-3.5" />
@@ -2717,7 +2723,9 @@ export default function OpportunitiesPage({
                   className={cn(
                     "flex-1 sm:flex-initial flex items-center justify-center px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] min-w-[5rem] transition-colors",
                     eligibilityFilter === "all"
-                      ? "bg-[#7F39EC] text-white shadow-sm"
+                      ? isDark
+                        ? "bg-white text-[#1a1a1a] shadow-sm font-semibold"
+                        : "bg-[#1a1a1a] text-white shadow-sm font-semibold"
                       : isDark
                         ? "text-gray-300 hover:text-white hover:bg-white/10"
                         : "text-gray-700 hover:bg-white hover:text-gray-900",
@@ -2732,7 +2740,9 @@ export default function OpportunitiesPage({
                   className={cn(
                     "flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] min-w-[6.5rem] transition-colors",
                     eligibilityFilter === "eligible"
-                      ? "bg-[#7F39EC] text-white shadow-sm"
+                      ? isDark
+                        ? "bg-white text-[#1a1a1a] shadow-sm font-semibold"
+                        : "bg-[#1a1a1a] text-white shadow-sm font-semibold"
                       : isDark
                         ? "text-gray-300 hover:text-white hover:bg-white/10"
                         : "text-gray-700 hover:bg-white hover:text-gray-900",
@@ -2748,10 +2758,10 @@ export default function OpportunitiesPage({
                   type="button"
                   variant="outline"
                   className={cn(
-                    "h-11 w-full sm:w-auto shrink-0 rounded-xl font-semibold text-sm",
+                    "h-11 w-full sm:w-auto shrink-0 rounded-xl font-semibold text-sm transition-colors",
                     isDark
-                      ? "border-violet-400/60 text-violet-100 bg-transparent hover:bg-white/10 hover:text-white"
-                      : "border-[#7F39EC] text-[#7F39EC] bg-[#D9C0FF26] hover:bg-[#D9C0FF61]",
+                      ? "border-white/20 text-white bg-white/10 hover:bg-white/20"
+                      : "border-[#1a1a1a] text-white bg-[#1a1a1a] hover:bg-black",
                   )}
                   onClick={() =>
                     opportunitiesResultsRef.current?.scrollIntoView({
@@ -2780,12 +2790,14 @@ export default function OpportunitiesPage({
                     aria-pressed={active}
                     onClick={() => setAccessFilter(f)}
                     className={cn(
-                      "shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] focus-visible:ring-offset-1",
+                      "shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
                       active
-                        ? "border-[#7F39EC] bg-[#7F39EC] text-white"
+                        ? isDark
+                          ? "border-white bg-white text-[#1a1a1a]"
+                          : "border-[#1a1a1a] bg-[#1a1a1a] text-white"
                         : isDark
-                          ? "border-gray-600 text-gray-300 hover:border-violet-400/60 hover:text-white"
-                          : "border-gray-300 bg-white text-gray-700 hover:border-[#7F39EC]/60 hover:text-[#4A00BE]",
+                          ? "border-gray-600 text-gray-300 hover:border-white/60 hover:text-white"
+                          : "border-gray-300 bg-white text-gray-700 hover:border-[#1a1a1a]/60 hover:text-[#1a1a1a]",
                     )}
                   >
                     {OPPORTUNITY_ACCESS_FILTER_LABELS[f]}
@@ -2806,24 +2818,26 @@ export default function OpportunitiesPage({
                   role="group"
                   aria-label="Opportunity type"
                   className={cn(
-                    "flex w-full sm:w-auto rounded-xl border p-1 gap-1 min-h-[2.75rem] box-border",
-                    isDark
-                      ? "border-gray-600 bg-[#020817]/60"
-                      : "border-gray-300 bg-gray-50/90",
+                    "flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden w-full sm:w-auto",
+                    isDark ? "bg-white/10" : "bg-[#E4E4E4]",
                   )}
+                  style={{ borderRadius: 9999 }}
                 >
                   <button
                     type="button"
                     onClick={() => handleMediaTypeChange("all")}
                     title="All opportunities"
                     className={cn(
-                      "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
+                      "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium leading-none transition-colors",
                       mediaType === "all"
-                        ? "bg-[#7F39EC] text-white shadow-sm"
+                        ? isDark
+                          ? "bg-white/15 text-white shadow-sm font-semibold"
+                          : "bg-white text-[#1a1a1a] shadow-sm font-semibold"
                         : isDark
-                          ? "text-gray-300 hover:text-white hover:bg-white/10"
-                          : "text-gray-700 hover:bg-white hover:text-gray-900",
+                          ? "text-white/75 hover:bg-white/10 hover:text-white"
+                          : "text-[#3f3f46] hover:bg-white/80 hover:text-[#1a1a1a]",
                     )}
+                    style={{ borderRadius: 9999 }}
                   >
                     <LayoutGrid className="h-4 w-4 shrink-0 opacity-90" />
                     <span>All</span>
@@ -2833,13 +2847,16 @@ export default function OpportunitiesPage({
                     onClick={() => handleMediaTypeChange("text")}
                     title="Text and image opportunities"
                     className={cn(
-                      "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
+                      "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium leading-none transition-colors",
                       mediaType === "text"
-                        ? "bg-[#7F39EC] text-white shadow-sm"
+                        ? isDark
+                          ? "bg-white/15 text-white shadow-sm font-semibold"
+                          : "bg-white text-[#1a1a1a] shadow-sm font-semibold"
                         : isDark
-                          ? "text-gray-300 hover:text-white hover:bg-white/10"
-                          : "text-gray-700 hover:bg-white hover:text-gray-900",
+                          ? "text-white/75 hover:bg-white/10 hover:text-white"
+                          : "text-[#3f3f46] hover:bg-white/80 hover:text-[#1a1a1a]",
                     )}
+                    style={{ borderRadius: 9999 }}
                   >
                     <FileType className="h-4 w-4 shrink-0 opacity-90" />
                     <span>Text & image</span>
@@ -2849,13 +2866,16 @@ export default function OpportunitiesPage({
                     onClick={() => handleMediaTypeChange("media")}
                     title="Video opportunities"
                     className={cn(
-                      "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
+                      "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium leading-none transition-colors",
                       mediaType === "media"
-                        ? "bg-[#7F39EC] text-white shadow-sm"
+                        ? isDark
+                          ? "bg-white/15 text-white shadow-sm font-semibold"
+                          : "bg-white text-[#1a1a1a] shadow-sm font-semibold"
                         : isDark
-                          ? "text-gray-300 hover:text-white hover:bg-white/10"
-                          : "text-gray-700 hover:bg-white hover:text-gray-900",
+                          ? "text-white/75 hover:bg-white/10 hover:text-white"
+                          : "text-[#3f3f46] hover:bg-white/80 hover:text-[#1a1a1a]",
                     )}
+                    style={{ borderRadius: 9999 }}
                   >
                     <Film className="h-4 w-4 shrink-0 opacity-90" />
                     <span>Video</span>
@@ -2868,24 +2888,26 @@ export default function OpportunitiesPage({
                 role="group"
                 aria-label="Layout"
                 className={cn(
-                  "hidden lg:flex w-full sm:w-auto shrink-0 rounded-xl border p-1 gap-1 min-h-[2.75rem] items-stretch box-border",
-                  isDark
-                    ? "border-gray-600 bg-[#020817]/60"
-                    : "border-gray-300 bg-gray-50/90",
+                  "hidden lg:flex items-center gap-0.5 overflow-x-auto rounded-full p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink-0",
+                  isDark ? "bg-white/10" : "bg-[#E4E4E4]",
                 )}
+                style={{ borderRadius: 9999 }}
               >
                 <button
                   type="button"
                   onClick={() => setViewMode("grid")}
                   title="Grid view"
                   className={cn(
-                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors min-w-[5.5rem]",
+                    "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium leading-none transition-colors min-w-[5.5rem]",
                     viewMode === "grid"
-                      ? "bg-[#7F39EC] text-white shadow-sm"
+                      ? isDark
+                        ? "bg-white/15 text-white shadow-sm font-semibold"
+                        : "bg-white text-[#1a1a1a] shadow-sm font-semibold"
                       : isDark
-                        ? "text-gray-300 hover:text-white hover:bg-white/10"
-                        : "text-gray-700 hover:bg-white hover:text-gray-900",
+                        ? "text-white/75 hover:bg-white/10 hover:text-white"
+                        : "text-[#3f3f46] hover:bg-white/80 hover:text-[#1a1a1a]",
                   )}
+                  style={{ borderRadius: 9999 }}
                 >
                   <LayoutGrid className="h-4 w-4 shrink-0 opacity-90" />
                   <span>Grid</span>
@@ -2895,13 +2917,16 @@ export default function OpportunitiesPage({
                   onClick={() => setViewMode("list")}
                   title="List view"
                   className={cn(
-                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors min-w-[5.5rem]",
+                    "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium leading-none transition-colors min-w-[5.5rem]",
                     viewMode === "list"
-                      ? "bg-[#7F39EC] text-white shadow-sm"
+                      ? isDark
+                        ? "bg-white/15 text-white shadow-sm font-semibold"
+                        : "bg-white text-[#1a1a1a] shadow-sm font-semibold"
                       : isDark
-                        ? "text-gray-300 hover:text-white hover:bg-white/10"
-                        : "text-gray-700 hover:bg-white hover:text-gray-900",
+                        ? "text-white/75 hover:bg-white/10 hover:text-white"
+                        : "text-[#3f3f46] hover:bg-white/80 hover:text-[#1a1a1a]",
                   )}
+                  style={{ borderRadius: 9999 }}
                 >
                   <List className="h-4 w-4 shrink-0 opacity-90" />
                   <span>List</span>
@@ -2913,25 +2938,33 @@ export default function OpportunitiesPage({
 
         {/* Tabs */}
         <EnhancedTabs
-          tabs={tabs.map((tab) => ({
-            ...tab,
-            label: (
-              <div className="flex flex-wrap justify-center sm:justify-start items-center gap-1 sm:gap-2 text-center">
-                <span className="truncate">{tab.label}</span>
-                {tab.count !== undefined && (
-                  <Badge
-                    variant="secondary"
-                    className={cn(
-                      "ml-1 sm:ml-2 px-2 py-0.5 text-xs sm:text-sm text-gray-700 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground",
-                      isDark ? "text-gray-300" : "text-gray-600 bg-gray-200",
-                    )}
-                  >
-                    {tab.count}
-                  </Badge>
-                )}
-              </div>
-            ),
-          }))}
+          tabs={tabs.map((tab) => {
+            const isActive = statusFilter === tab.id;
+            return {
+              ...tab,
+              label: (
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="truncate">{tab.label}</span>
+                  {tab.count !== undefined && (
+                    <span
+                      className={cn(
+                        "px-2 py-0.5 text-[11px] font-bold tabular-nums rounded-full shrink-0",
+                        isActive
+                          ? isDark
+                            ? "bg-white text-[#1a1a1a]"
+                            : "bg-[#1a1a1a] text-white"
+                          : isDark
+                            ? "bg-white/10 text-slate-300"
+                            : "bg-black/5 text-[#3f3f46]",
+                      )}
+                    >
+                      {tab.count}
+                    </span>
+                  )}
+                </span>
+              ),
+            };
+          })}
           activeTab={statusFilter}
           isDark={isDark}
           light={!isDark}
@@ -3108,12 +3141,7 @@ export default function OpportunitiesPage({
                   </p>
                   <Button
                     onClick={() => setCreatorStatsRefreshNonce((n) => n + 1)}
-                    className="mt-4 text-md"
-                    style={{
-                      backgroundColor: "#7F39EC",
-                      color: "white",
-                      transition: "none",
-                    }}
+                    className="mt-4 text-md bg-[#1a1a1a] text-white hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-white/90 shadow-sm transition-colors"
                   >
                     <RotateCcw className="h-4 w-4" />
                     Retry
@@ -3153,14 +3181,14 @@ export default function OpportunitiesPage({
                               className={cn(
                                 "text-sm px-3 py-1 font-medium border",
                                 contest.status === "active" &&
-                                  "capitalize bg-[#7F39EC] text-white",
+                                  "capitalize bg-emerald-600 text-white border-emerald-600",
                                 contest.status === "upcoming" &&
-                                  "capitalize bg-[#7F39EC] text-white",
+                                  "capitalize bg-zinc-700 text-white border-zinc-700",
                                 contest.status === "ended" &&
                                   `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
                                 !["active", "upcoming", "ended"].includes(
                                   contest.status,
-                                ) && "capitalize bg-[#7F39EC] text-white",
+                                ) && "capitalize bg-zinc-700 text-white border-zinc-700",
                               )}
                             >
                               {contest.status === "active"
@@ -3242,8 +3270,8 @@ export default function OpportunitiesPage({
                                       className={cn(
                                         "text-[12px]",
                                         isDark
-                                          ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                                          : "bg-purple-50 text-purple-700 border-purple-200",
+                                          ? "bg-white/10 text-white/90 border-white/20"
+                                          : "bg-slate-100 text-slate-800 border-slate-200",
                                       )}
                                     >
                                       <CheckCheck className="h-3 w-3 mr-1" />
@@ -3296,8 +3324,8 @@ export default function OpportunitiesPage({
                                   className={cn(
                                     "text-[12px]",
                                     isDark
-                                      ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                                      : "bg-purple-50 text-purple-700 border-purple-200",
+                                      ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
+                                      : "bg-amber-50 text-amber-800 border-amber-200",
                                   )}
                                 >
                                   <Star className="h-3 w-3 mr-1" />
@@ -3568,16 +3596,16 @@ export default function OpportunitiesPage({
                                     className={cn(
                                       "h-4 w-4 mr-2 flex-shrink-0",
                                       isDark
-                                        ? "text-purple-400"
-                                        : "text-purple-600",
+                                        ? "text-emerald-400"
+                                        : "text-emerald-600",
                                     )}
                                   />
                                   <span
                                     className={cn(
                                       "font-medium",
                                       isDark
-                                        ? "text-purple-300"
-                                        : "text-purple-700",
+                                        ? "text-emerald-300"
+                                        : "text-emerald-700",
                                     )}
                                   >
                                     Total Prize Pool:{" "}
@@ -3673,7 +3701,7 @@ export default function OpportunitiesPage({
                                     )}`}
                                   >
                                     <div
-                                      className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                                      className="absolute h-full bg-[#1a1a1a] dark:bg-white rounded-full transition-all duration-500 ease-out"
                                       style={{
                                         width: `${Math.min(tracker.percentage, 100)}%`,
                                       }}
@@ -3750,7 +3778,7 @@ export default function OpportunitiesPage({
                                     )}`}
                                   >
                                     <div
-                                      className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                                      className="absolute h-full bg-[#1a1a1a] dark:bg-white rounded-full transition-all duration-500 ease-out"
                                       style={{
                                         width: `${Math.min(tracker.percentage, 100)}%`,
                                       }}
@@ -3896,7 +3924,7 @@ export default function OpportunitiesPage({
                                     )}`}
                                   >
                                     <div
-                                      className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                                      className="absolute h-full bg-[#1a1a1a] dark:bg-white rounded-full transition-all duration-500 ease-out"
                                       style={{
                                         width: `${Math.min(tracker.percentage, 100)}%`,
                                       }}
@@ -3956,12 +3984,7 @@ export default function OpportunitiesPage({
                   </p>
                   <Button
                     onClick={resetFilters}
-                    className="mt-4 text-md"
-                    style={{
-                      backgroundColor: isDark ? "#7F39EC" : "#7F39EC",
-                      color: "white",
-                      transition: "none",
-                    }}
+                    className="mt-4 text-md bg-[#1a1a1a] text-white hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-white/90 shadow-sm transition-colors"
                   >
                     <RotateCcw className="h-4 w-4" />
                     Reset
@@ -3994,12 +4017,7 @@ export default function OpportunitiesPage({
                   </p>
                   <Button
                     onClick={() => setCreatorStatsRefreshNonce((n) => n + 1)}
-                    className="mt-4 text-md"
-                    style={{
-                      backgroundColor: "#7F39EC",
-                      color: "white",
-                      transition: "none",
-                    }}
+                    className="mt-4 text-md bg-[#1a1a1a] text-white hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-white/90 shadow-sm transition-colors"
                   >
                     <RotateCcw className="h-4 w-4" />
                     Retry
@@ -4032,12 +4050,7 @@ export default function OpportunitiesPage({
                   </p>
                   <Button
                     onClick={resetFilters}
-                    className="mt-4 text-md"
-                    style={{
-                      backgroundColor: isDark ? "#7F39EC" : "#7F39EC",
-                      color: "white",
-                      transition: "none",
-                    }}
+                    className="mt-4 text-md bg-[#1a1a1a] text-white hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-white/90 shadow-sm transition-colors"
                   >
                     <RotateCcw className="h-4 w-4" />
                     Reset

@@ -1239,8 +1239,8 @@ export function BudgetProgress({
 
         <div
           className={cn(
-            "relative w-full h-4 rounded-full overflow-hidden",
-            isDark ? "bg-[#FFFFFF42]" : "bg-gray-200",
+            "relative w-full h-3 rounded-full overflow-hidden",
+            isDark ? "bg-[#FFFFFF42]" : "bg-[#e5e5e5]",
           )}
         >
           <div
@@ -1271,8 +1271,8 @@ export function BudgetProgress({
         ) : (
           <p
             className={cn(
-              "text-xs text-right",
-              isDark ? "text-gray-300" : "text-gray-600",
+              "text-[11px] text-right",
+              isDark ? "text-gray-300" : "text-[#737373]",
             )}
           >
             {formatCurrency(remaining)} remaining (
@@ -1311,8 +1311,8 @@ export function BudgetProgress({
       {/* Two-color progress bar */}
       <div
         className={cn(
-          "relative w-full h-4 rounded-full overflow-hidden",
-          isDark ? "bg-[#FFFFFF42]" : "bg-gray-200",
+          "relative w-full h-3 rounded-full overflow-hidden",
+          isDark ? "bg-[#FFFFFF42]" : "bg-[#e5e5e5]",
         )}
         title={
           hasFlatFeeBonus && bonusPaid > 0
@@ -1368,13 +1368,13 @@ export function BudgetProgress({
       >
         {/* CPM/Leaderboard earnings portion */}
         <div
-          className="absolute h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300"
+          className="absolute h-full bg-[#bae6fd] transition-all duration-300"
           style={{ width: `${Math.min(cpmPercentage, 100)}%` }}
         />
         {/* Flat fee bonus (CPM) or creator bonus (milestone / dual) */}
         {hasFlatFeeBonus && bonusPaid > 0 && (
           <div
-            className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-300"
+            className="absolute h-full bg-[#0284c7] transition-all duration-300"
             style={{
               left: `${Math.min(cpmPercentage, 100)}%`,
               width: `${Math.min(
@@ -1391,7 +1391,7 @@ export function BudgetProgress({
         <div className="space-y-3 text-sm">
           {renderLegendRow(
             <div className="flex items-start gap-1.5 min-w-0">
-              <div className="w-3 h-3 mt-0.5 shrink-0 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm" />
+              <div className="w-2.5 h-2.5 mt-1 shrink-0 bg-[#bae6fd] rounded-sm" />
               <div className="min-w-0">
                 <p
                   className={cn(
@@ -1426,7 +1426,7 @@ export function BudgetProgress({
           }`}
         >
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm" />
+            <div className="w-2.5 h-2.5 bg-[#bae6fd] rounded-sm" />
             <div className="flex-1">
               <p
                 className={cn(
@@ -1448,7 +1448,7 @@ export function BudgetProgress({
           </div>
           {hasFlatFeeBonus && (
             <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 bg-gradient-to-r from-green-500 to-green-600 rounded-sm" />
+              <div className="w-2.5 h-2.5 bg-[#0284c7] rounded-sm" />
               <div className="flex-1">
                 <p
                   className={cn(
@@ -1501,8 +1501,8 @@ export function BudgetProgress({
       ) : (
         <p
           className={cn(
-            "text-xs text-right",
-            isDark ? "text-gray-300" : "text-gray-600",
+            "text-[11px] text-right",
+            isDark ? "text-gray-300" : "text-[#737373]",
           )}
         >
           {formatCurrency(remaining)} remaining (

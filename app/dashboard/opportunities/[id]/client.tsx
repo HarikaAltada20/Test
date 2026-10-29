@@ -164,6 +164,28 @@ import {
 } from "@/components/contest/ContestDetailPlatformScopeCard";
 import { ContestDetailVideoPayoutSections } from "@/components/contest/ContestDetailVideoPayoutSections";
 import { getPlatformIcon } from "@/lib/platform-icons";
+import {
+  CopyContentButton,
+  copyPayloadFromElement,
+} from "@/components/contest/CopyContentButton";
+import {
+  formatLinkListForCopy,
+  isCopyableUrl,
+  linkCopyPayload,
+  type CopyLinkGroup,
+} from "@/lib/copy-section";
+import {
+  ContestDetailsCover,
+  contestTypeDisplayLabel,
+  platformDisplayLabel,
+} from "./ContestDetailsCover";
+import { BrandOverviewSectionCard } from "@/components/contest/BrandOverviewSectionCard";
+import {
+  buildContestEligibilityDisplayItems,
+  hasAnyContestCreatorRequirement,
+} from "@/lib/creator-requirements";
+import { isVideoContestFormat } from "@/lib/trust-score";
+
 // --- START DUMMY DATA CONFIGURATION ---
 const USE_DUMMY_DATA_FOR_LEADERBOARD = false; // SWITCHED OFF FOR PRODUCTION
 const DUMMY_ENTRIES_COUNT = 250; // Total number of dummy entries to generate
@@ -214,30 +236,30 @@ type SectionConfig = {
 };
 
 const BASE_SECTIONS: SectionConfig[] = [
-  { id: "earning-opportunities", label: "Earning Opportunities" },
+  { id: "earning-opportunities", label: "Earning" },
   {
     id: "prize-structure",
-    label: "Prize Structure",
+    label: "Prizes",
     conditional: "leaderboard",
   },
-  { id: "contest-details", label: "Contest Details" },
-  {
-    id: "creator-eligibility",
-    label: "Creator Eligibility",
-    conditional: "creator-eligibility",
-  },
-  { id: "content-requirements", label: "Content Requirements" },
-  { id: "participation-guidelines", label: "Participation Guidelines" },
-  { id: "resources-tools", label: "Resources & Tools" },
+  { id: "content-requirements", label: "Requirements" },
+  { id: "participation-guidelines", label: "Guidelines" },
+  { id: "resources-tools", label: "Resources" },
   {
     id: "inspiration-links",
-    label: "Inspiration Links",
+    label: "Inspiration",
     conditional: "inspiration-links",
   },
   {
     id: "tracking-links",
-    label: "Tracking Links",
+    label: "Tracking",
     conditional: "tracking-links",
+  },
+  { id: "contest-details", label: "Contest details" },
+  {
+    id: "creator-eligibility",
+    label: "Eligibility",
+    conditional: "creator-eligibility",
   },
 ];
 // LeaderboardEntry type reflects combined data from API
@@ -442,6 +464,50 @@ const generateAllDummyLeaderboardData = (
   return { entries, myRank: tempMyRank };
 };
 
+function EligibilityRequirementCard({
+  icon: Icon,
+  label,
+  value,
+  description,
+  isDark,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: React.ReactNode;
+  description: string;
+  isDark: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "border-b py-3 first:pt-0 last:border-b-0 last:pb-0",
+        isDark ? "border-white/10" : "border-[#e5e5e5]",
+      )}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <p
+          className={cn(
+            "flex items-center gap-2 text-[13px] font-medium",
+            isDark ? "text-slate-400" : "text-[#737373]",
+          )}
+        >
+          <Icon className="h-4 w-4 shrink-0" />
+          {label}
+        </p>
+        <p
+          className={cn(
+            "text-[13px] font-semibold text-right",
+            isDark ? "text-white" : "text-[#0a0a0a]",
+          )}
+        >
+          {value}
+        </p>
+      </div>
+      <p className="text-xs text-muted-foreground mt-1">{description}</p>
+    </div>
+  );
+}
+
 // Client component that receives contestId as a prop
 export function ContestClientPage({
   contestId,
@@ -451,6 +517,34 @@ export function ContestClientPage({
   user: UserResponse["data"]["user"] | null;
 }) {
   const [contest, setContest] = useState<any>(null);
+  const showCreatorEligibilitySection = Boolean(
+    contest &&
+      isVideoContestFormat(contest.contest_format) &&
+      hasAnyContestCreatorRequirement(contest),
+  );
+
+  const eligibilityDisplayItems = useMemo(() => {
+    if (!contest) return [];
+    const iconByKey: Record<
+      string,
+      React.ComponentType<{ className?: string }>
+    > = {
+      "trust-score": CheckCheck,
+      "trust-number": CheckCheck,
+      "best-quality": Star,
+      "min-quality": Star,
+      "avg-quality": Star,
+      "platform-earnings": DollarSign,
+      "platform-views": Eye,
+    };
+
+    return buildContestEligibilityDisplayItems(contest, "brand").map(
+      (item) => ({
+        ...item,
+        icon: iconByKey[item.key] ?? CheckCheck,
+      }),
+    );
+  }, [contest]);
   const {
     items: requirementItems,
     failingItems,
@@ -901,6 +995,7 @@ export function ContestClientPage({
   const sectionRefs = useRef<{ [key: string]: HTMLElement | null }>({});
   const briefCopyRef = useRef<HTMLDivElement | null>(null);
   const rulesCopyRef = useRef<HTMLDivElement | null>(null);
+  const termsCopyRef = useRef<HTMLDivElement | null>(null);
 
   // Multi-platform Contest Details scoping (mirrors advertiser contest details)
   const detailVideoPlatforms = useMemo(
@@ -3602,26 +3697,26 @@ export function ContestClientPage({
 
   const titleClass = cn(
     "font-semibold tracking-tight",
-    isDark ? "text-white" : "text-[#171717]",
+    isDark ? "text-white" : "text-[#0a0a0a]",
   );
-  const mutedClass = cn(isDark ? "text-slate-300" : "text-[#55555F]");
+  const mutedClass = cn(isDark ? "text-slate-300" : "text-[#737373]");
   const surfaceClass = cn(
-    "rounded-2xl border",
-    isDark ? "border-slate-700 bg-[#180438]" : "border-neutral-200 bg-white",
+    "rounded-[20px] border shadow-[0px_2px_12px_0px_rgba(10,10,10,0.04)]",
+    isDark ? "border-slate-700 bg-[#180438]" : "border-[#e5e5e5] bg-white",
   );
   const outlineButtonClass = cn(
-    "h-10 rounded-full px-4 text-sm font-medium shadow-none",
+    "h-10 rounded-xl px-4 text-sm font-medium shadow-none",
     isDark
       ? "border-slate-600 bg-transparent text-slate-100 hover:bg-white/10"
-      : "border-neutral-300 bg-white text-[#171717] hover:bg-neutral-50",
+      : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-neutral-50",
   );
   const primaryButtonClass =
-    "h-11 w-full rounded-full border border-transparent goc-btn-primary px-5 text-sm font-semibold";
+    "h-11 w-full rounded-xl border border-transparent bg-[#0a0a0a] px-5 text-sm font-semibold text-white hover:bg-[#171717]";
   const disabledButtonClass = cn(
-    "h-11 w-full cursor-not-allowed rounded-full border px-5 text-sm font-semibold shadow-none",
+    "h-11 w-full cursor-not-allowed rounded-xl border px-5 text-sm font-semibold shadow-none",
     isDark
       ? "border-white/10 bg-white/5 text-white/40 hover:bg-white/5"
-      : "border-neutral-200 bg-neutral-100 text-neutral-400 hover:bg-neutral-100",
+      : "border-transparent bg-[#f5f5f5] text-[#a3a3a3] hover:bg-[#f5f5f5]",
   );
 
   // Render main content
@@ -3629,760 +3724,248 @@ export function ContestClientPage({
     <div className="w-full">
       <div>
         <WelcomeBanner isDark={isDark} />
-        <div className="mb-8">
-          <div className="mb-6 flex items-center justify-between">
-            <Button
-              variant="outline"
-              className={cn(outlineButtonClass, "gap-2")}
-              onClick={() => router.push("/dashboard/opportunities")}
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span className="hidden sm:inline">Back to Campaigns</span>
-            </Button>
-            <Button
-              variant="outline"
-              className={cn(outlineButtonClass, "gap-2")}
-              onClick={handleShare}
-            >
-              <Share2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Share</span>
-            </Button>
-          </div>
-
-          <div className={cn(surfaceClass, "overflow-hidden")}>
-            <div className="p-5 sm:p-8">
-              <div className="flex flex-col items-start justify-between gap-6 lg:flex-row">
-                <div className="min-w-0 flex-1">
-                  <h1
-                    className={cn(
-                      titleClass,
-                      "text-[28px] leading-tight sm:text-4xl",
-                    )}
-                  >
-                    {contest.title}
-                  </h1>
-
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <Badge
-                      className={cn(
-                        "rounded-full border px-3 py-1 text-xs font-semibold shadow-none",
-                        contest.status === "active"
-                          ? isDark
-                            ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200"
-                            : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          : contest.status === "upcoming"
-                            ? isDark
-                              ? "border-sky-500/40 bg-sky-500/15 text-sky-200"
-                              : "border-sky-200 bg-sky-50 text-sky-700"
-                            : isDark
-                              ? "border-slate-600 bg-slate-800 text-slate-200"
-                              : "border-neutral-200 bg-[#f3f3f4] text-[#44403c]",
-                      )}
-                    >
-                      <span className="flex items-center gap-2">
-                        {contest.status === "active" ? (
-                          <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
-                        ) : contest.status === "upcoming" ? (
-                          <Clock className="h-3.5 w-3.5" />
-                        ) : (
-                          <Calendar className="h-3.5 w-3.5" />
-                        )}
-                        {contest.status === "active"
-                          ? "LIVE NOW"
-                          : contest.status.toUpperCase()}
-                      </span>
-                    </Badge>
-                    {contest.contest_type && (
-                      <Badge
-                        className={cn(
-                          "rounded-full border px-3 py-1 text-xs font-semibold capitalize shadow-none",
-                          isDark
-                            ? "border-slate-600 bg-transparent text-slate-100"
-                            : "border-neutral-200 bg-white text-[#171717]",
-                        )}
-                      >
-                        {contest.contest_type === "cpm"
-                          ? "Performance Based"
-                          : contest.contest_type === "dual_rewards"
-                            ? "Dual Rewards"
-                            : contest.contest_type === "milestone"
-                              ? "Milestone Based"
-                              : "Competition Based"}
-                      </Badge>
-                    )}
-                    {/* Campaign Type Badge for Twitter campaigns */}
-                    {(() => {
-                      const isTwitterTextImage =
-                        (contest.platform?.toLowerCase() === "twitter" ||
-                          contest.platform?.toLowerCase() === "x") &&
-                        contest.contest_format === "text_image";
-
-                      if (isTwitterTextImage) {
-                        const campaignType =
-                          contest.contest_based_details?.twitter_campaign
-                            ?.campaign_type;
-                        if (
-                          campaignType === "raid" ||
-                          campaignType === "awareness"
-                        ) {
-                          return (
-                            <Badge
-                              className={cn(
-                                "rounded-full border px-3 py-1 text-xs font-semibold capitalize shadow-none",
-                                isDark
-                                  ? "border-slate-600 bg-transparent text-slate-100"
-                                  : "border-neutral-200 bg-white text-[#171717]",
-                              )}
-                            >
-                              {campaignType === "raid"
-                                ? "Raid Campaign"
-                                : "Awareness Campaign"}
-                            </Badge>
-                          );
-                        }
-                      }
-                      return null;
-                    })()}
-                    {/* Post-contest status badge for ended contests */}
-                    {contest.status === "ended" &&
-                      postContestStatus &&
-                      renderPostContestStatusBadge(postContestStatus)}
-                  </div>
-
-                  {contest.start_date && contest.end_date && (
-                    <div className="mt-4 inline-flex">
-                      <p
-                        className={cn(
-                          "flex items-center gap-2 text-sm",
-                          mutedClass,
-                        )}
-                      >
-                        <Calendar className="h-4 w-4" />
-                        <span>
-                          {formatLocalDateTime(contest.start_date, {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}{" "}
-                          -{" "}
-                          {formatLocalDateTime(contest.end_date, {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                        </span>
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex w-full flex-shrink-0 flex-col items-stretch gap-3 lg:w-[260px]">
-                  <div
-                    className={cn(
-                      "rounded-2xl border p-5",
-                      isDark
-                        ? "border-slate-700 bg-[#12032c]"
-                        : "border-neutral-200 bg-[#f6f6f7]",
-                    )}
-                  >
-                    <div className={cn("mb-2 text-sm font-medium", mutedClass)}>
-                      {contest.contest_type === "cpm" ||
-                      contest.contest_type === "milestone" ||
-                      contest.contest_type === "dual_rewards"
-                        ? "Total Budget"
-                        : "Prize Pool"}
-                    </div>
-                    <div className={cn(titleClass, "text-[34px] leading-none")}>
-                      {contest.contest_type === "leaderboard"
-                        ? formatMoney(leaderboardPrizePoolCents)
-                        : contest.contest_type === "cpm" ||
-                            contest.contest_type === "milestone" ||
-                            contest.contest_type === "dual_rewards"
-                          ? formatMoney(contestPoolBudgetCents)
-                          : contest.total_prize
-                            ? formatMoney(contest.total_prize || 0)
-                            : "$0.00"}
-                    </div>
-                    {contest.contest_type === "leaderboard" &&
-                      leaderboardWinnerCountDisplay > 0 && (
-                        <div
-                          className={cn("mt-2 text-sm font-medium", mutedClass)}
-                        >
-                          {leaderboardWinnerCountDisplay} winner
-                          {leaderboardWinnerCountDisplay !== 1 ? "s" : ""}
-                        </div>
-                      )}
-                    {isCpmContestType(contest.contest_type) &&
-                      contest.contest_based_details?.cpm_contest
-                        ?.cpm_rate_usd && (
-                        <div
-                          className={cn("mt-2 text-sm font-medium", mutedClass)}
-                        >
-                          {formatMoney(
-                            contest.contest_based_details.cpm_contest
-                              .cpm_rate_usd * 100,
-                          )}{" "}
-                          {contest.platform?.toLowerCase() === "twitter"
-                            ? "per 1000 points"
-                            : "per 1000 views"}
-                        </div>
-                      )}
-                  </div>
-
-                  <Button
-                    size="lg"
-                    onClick={
-                      isTwitterTextImageContest && !hasJoinedTwitterCampaign
-                        ? handleJoinTwitterCampaign
-                        : () => handleSubmitContent("1")
-                    }
-                    disabled={
-                      contest.status?.toLowerCase() !== "active" ||
-                      isRequirementsBlocked ||
-                      joinCampaignLoading ||
-                      (hasSubmitted &&
-                        !(
-                          submissionCount > 0 &&
-                          contest?.multiple_submissions_enabled &&
-                          submissionCount < maxSubmissions
-                        )) ||
-                      (isTwitterTextImageContest && hasJoinedTwitterCampaign) ||
-                      (!!user &&
-                        isTwitterTextImageContest &&
-                        !hasJoinedTwitterCampaign &&
-                        (twitterConnectStatus === "disconnected" ||
-                          twitterConnectStatus === "loading"))
-                    }
-                    className={cn(
-                      "w-full",
-                      contest.status?.toLowerCase() === "active" &&
-                        !isRequirementsBlocked &&
-                        !joinCampaignLoading &&
-                        !(
-                          hasSubmitted &&
-                          !(
-                            submissionCount > 0 &&
-                            contest?.multiple_submissions_enabled &&
-                            submissionCount < maxSubmissions
-                          )
-                        ) &&
-                        !(isTwitterTextImageContest && hasJoinedTwitterCampaign)
-                        ? primaryButtonClass
-                        : disabledButtonClass,
-                    )}
-                  >
-                    <span className="flex items-center justify-center gap-2">
-                      <PlayCircle className="h-5 w-5 shrink-0" />
-                      {contest.status?.toLowerCase() === "upcoming"
-                        ? "Contest Not Started"
-                        : contest.status?.toLowerCase() === "ended" ||
-                            contest.status?.toLowerCase() === "completed"
-                          ? "Contest Ended"
-                          : hasSubmitted &&
-                              submissionCount > 0 &&
-                              contest?.multiple_submissions_enabled &&
-                              submissionCount < maxSubmissions
-                            ? `Submit More (${
-                                maxSubmissions - submissionCount
-                              } left)`
-                            : hasSubmitted
-                              ? "Submitted"
-                              : isTwitterTextImageContest
-                                ? hasJoinedTwitterCampaign
-                                  ? "Joined"
-                                  : joinCampaignLoading
-                                    ? "Joining..."
-                                    : user && twitterConnectStatus === "loading"
-                                      ? "Checking…"
-                                      : "Join Twitter Campaign"
-                                : "Submit Your Entry"}
-                    </span>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="mb-6 flex items-center justify-between">
+          <Button
+            variant="outline"
+            className={cn(outlineButtonClass, "gap-2")}
+            onClick={() => router.push("/dashboard/opportunities")}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Back to Campaigns</span>
+          </Button>
+          <Button
+            variant="outline"
+            className={cn(outlineButtonClass, "gap-2")}
+            onClick={handleShare}
+          >
+            <Share2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Share</span>
+          </Button>
         </div>
 
-        {contest.thumbnail_url && (
-          <div className="mb-8 aspect-video w-full mx-auto relative overflow-hidden rounded-xl shadow-lg">
-            <Image
-              src={contest.thumbnail_url}
-              alt={`${contest.title} thumbnail`}
-              fill
-              style={{ objectFit: "cover" }} // cover makes sure it fills width
-              priority
-              className="bg-slate-100 dark:bg-slate-800"
-            />
-          </div>
-        )}
-
-        {/* Colorful Contest Summary Cards */}
-        <div
-          className={cn(
-            "mb-8 grid grid-cols-1 gap-px overflow-hidden rounded-2xl border md:grid-cols-2 lg:grid-cols-4 [&>div]:!rounded-none [&>div]:!border-0",
-            isDark
-              ? "border-slate-700 bg-slate-700 [&>div]:!bg-[#180438]"
-              : "border-neutral-200 bg-neutral-200 [&>div]:!bg-white",
-          )}
-        >
-          {/* Platform Card */}
-          <div
-            className={cn(
-              "overflow-hidden rounded-2xl border shadow-none",
-              isDark
-                ? "border-slate-700 bg-[#180438]"
-                : "border-neutral-200 bg-white",
-            )}
-          >
-            <CardContent className="p-6 flex justify-between items-center gap-3">
-              <div
-                className={cn(
-                  "flex-1 min-w-0 space-y-2",
-                  isDark ? "text-white" : "text-[#171717]",
-                )}
-              >
-                <p
-                  className={cn(
-                    "text-sm font-medium",
-                    isDark ? "text-slate-200" : "text-slate-600",
-                  )}
-                >
-                  Platform
-                </p>
-                <p
-                  className={cn(
-                    "font-semibold leading-snug break-words",
-                    detailVideoPlatforms.length > 1 ? "text-base" : "text-2xl",
-                    isDark ? "text-white" : "text-[#171717]",
-                  )}
-                >
-                  {detailVideoPlatforms.length > 0
-                    ? detailVideoPlatforms
-                        .map((platform) => VIDEO_PLATFORM_LABELS[platform])
-                        .join(", ")
-                    : contest.platform || "Not specified"}
-                </p>
-              </div>
-              <div
-                className={cn(
-                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]",
-                  detailVideoPlatforms.length > 1
-                    ? "h-10 w-auto gap-1.5 px-2.5"
-                    : "",
-                )}
-              >
-                {(detailVideoPlatforms.length > 0
-                  ? detailVideoPlatforms
-                  : parseVideoContestPlatforms(contest.platform)
-                ).map((platform) => {
-                  const iconClass =
-                    detailVideoPlatforms.length > 1 ? "h-4 w-4" : "h-5 w-5";
-                  if (platform === "youtube") {
-                    return (
-                      <Youtube
-                        key={`summary-white-${platform}`}
-                        className={iconClass}
-                      />
-                    );
-                  }
-                  if (platform === "instagram") {
-                    return (
-                      <Instagram
-                        key={`summary-white-${platform}`}
-                        className={iconClass}
-                      />
-                    );
-                  }
-                  if (platform === "tiktok") {
-                    return (
-                      <svg
-                        key={`summary-white-${platform}`}
-                        viewBox="0 0 24 24"
-                        className={iconClass}
-                        fill="currentColor"
-                      >
-                        <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.2a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.75a8.18 8.18 0 0 0 4.76 1.52v-3.4a4.85 4.85 0 0 1-1-.18z" />
-                      </svg>
-                    );
-                  }
-                  return (
-                    <Share2
-                      key={`summary-white-${platform}`}
-                      className={iconClass}
-                    />
-                  );
-                })}
-                {detailVideoPlatforms.length === 0 &&
-                  !parseVideoContestPlatforms(contest.platform).length && (
-                    <Share2 className="h-5 w-5" />
-                  )}
-              </div>
-            </CardContent>
-          </div>
-          {/* <Card className="bg-red-50 dark:from-red-900/20 dark:to-pink-900/20 border-red-200 dark:border-red-700/50 hover:shadow-lg transition-all duration-300">
-  <CardContent className="p-4">
-    <div className="flex items-center gap-3">
-      <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-        {contest.platform?.toLowerCase() === "youtube" ? (
-          <Youtube className="h-5 w-5 text-red-600 dark:text-red-400" />
-        ) : contest.platform?.toLowerCase() === "instagram" ? (
-          <Instagram className="h-5 w-5 text-pink-600 dark:text-pink-400" />
-        ) : (
-          <Share2 className="h-5 w-5 text-red-600 dark:text-red-400" />
-        )}
-      </div>
-      <div className="flex-1">
-        <p className="text-xs font-medium text-red-800 dark:text-red-300 uppercase tracking-wide">
-          Platform
-        </p>
-        <p className="text-lg font-bold text-red-900 dark:text-red-100 capitalize">
-          {contest.platform || "Not specified"}
-        </p>
-      </div>
-    </div>
-  </CardContent>
-</Card> */}
-          {/* Duration Card */}
-          <div
-            className={cn(
-              "overflow-hidden rounded-2xl border shadow-none",
-
-              isDark
-                ? "border-slate-700 bg-[#180438]"
-                : "border-neutral-200 bg-white",
-            )}
-          >
-            <CardContent className="p-6 flex justify-between items-center">
-              <div className="flex-1 text-slate-800 dark:text-slate-100 space-y-2">
-                <p
-                  className={cn(
-                    "text-sm font-medium",
-
-                    isDark ? "text-slate-200" : "text-slate-600",
-                  )}
-                >
-                  Duration
-                </p>
-                <p
-                  className={cn(
-                    "text-2xl font-semibold",
-
-                    isDark ? "text-white" : "text-[#171717]",
-                  )}
-                >
-                  {(() => {
-                    if (!contest.start_date || !contest.end_date)
-                      return "Not specified";
-                    const start = new Date(contest.start_date);
-                    const end = new Date(contest.end_date);
-                    const diffTime = Math.abs(end.getTime() - start.getTime());
-                    const diffDays = Math.ceil(
-                      diffTime / (1000 * 60 * 60 * 24),
-                    );
-                    return `${diffDays} day${diffDays !== 1 ? "s" : ""}`;
-                  })()}
-                </p>
-                <p
-                  className={cn(
-                    "text-sm",
-
-                    isDark ? "text-slate-200" : "text-slate-600",
-                  )}
-                >
-                  {contest.start_date && contest.end_date
-                    ? `${formatLocalDateTime(contest.start_date, {
-                        month: "short",
-                        day: "numeric",
-                      })} - ${formatLocalDateTime(contest.end_date, {
-                        month: "short",
-                        day: "numeric",
-                      })}`
-                    : "Dates TBD"}
-                </p>
-              </div>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]">
-                <Calendar className="h-7 w-7" />
-              </div>
-            </CardContent>
-          </div>
-          {/* <Card className="bg-green-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700/50 hover:shadow-lg transition-all duration-300">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                  <Calendar className="h-5 w-5 text-green-600 dark:text-green-400" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Duration</p>
-                  <p className="text-lg font-bold text-green-900 dark:text-green-100">
-                    {(() => {
-                      if (!contest.start_date || !contest.end_date) return "Not specified";
-                      const start = new Date(contest.start_date);
-                      const end = new Date(contest.end_date);
-                      const diffTime = Math.abs(end.getTime() - start.getTime());
-                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                      return `${diffDays} day${diffDays !== 1 ? 's' : ''}`;
-                    })()}
-                  </p>
-                  <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
-                    {contest.start_date && contest.end_date ? (
-                      `${formatLocalDateTime(contest.start_date, {
-                        month: 'short',
-                        day: 'numeric',
-                      })} - ${formatLocalDateTime(contest.end_date, {
-                        month: 'short',
-                        day: 'numeric',
-                      })}`
-                    ) : "Dates TBD"}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card> */}
-
-          {/* Prize Pool Card */}
-          <div
-            className={cn(
-              "overflow-hidden rounded-2xl border shadow-none",
-
-              isDark
-                ? "border-slate-700 bg-[#180438]"
-                : "border-neutral-200 bg-white",
-            )}
-          >
-            <CardContent className="p-6 flex justify-between items-center">
-              <div
-                className={cn(
-                  "flex-1 space-y-2",
-                  isDark ? "text-white" : "text-[#171717]",
-                )}
-              >
-                <p
-                  className={cn(
-                    "text-sm font-medium",
-
-                    isDark ? "text-slate-200" : "text-slate-600",
-                  )}
-                >
-                  {contest.contest_type === "cpm" ||
+        <ContestDetailsCover
+          isDark={isDark}
+          title={contest.title}
+          thumbnailUrl={contest.thumbnail_url}
+          status={contest.status}
+          contestType={contest.contest_type}
+          contestTypeLabel={contestTypeDisplayLabel(contest.contest_type)}
+          dateRangeLabel={
+            contest.start_date && contest.end_date
+              ? `${formatLocalDateTime(contest.start_date, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })} – ${formatLocalDateTime(contest.end_date, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}`
+              : ""
+          }
+          durationLabel={(() => {
+            if (!contest.start_date || !contest.end_date) return "Not specified";
+            const start = new Date(contest.start_date);
+            const end = new Date(contest.end_date);
+            const diffDays = Math.ceil(
+              Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24),
+            );
+            return `${diffDays} day${diffDays !== 1 ? "s" : ""}`;
+          })()}
+          durationSubLabel={
+            contest.start_date && contest.end_date
+              ? `${formatLocalDateTime(contest.start_date, {
+                  month: "short",
+                  day: "numeric",
+                })} – ${formatLocalDateTime(contest.end_date, {
+                  month: "short",
+                  day: "numeric",
+                })}`
+              : "Dates TBD"
+          }
+          budgetLabel={
+            contest.contest_type === "cpm" ||
+            contest.contest_type === "milestone" ||
+            contest.contest_type === "dual_rewards"
+              ? "Total Budget"
+              : "Prize Pool"
+          }
+          budgetValue={
+            contest.contest_type === "leaderboard"
+              ? formatMoney(leaderboardPrizePoolCents)
+              : contest.contest_type === "cpm" ||
                   contest.contest_type === "milestone" ||
                   contest.contest_type === "dual_rewards"
-                    ? "Total Budget"
-                    : "Prize Pool"}
-                </p>
-                <p
-                  className={cn(
-                    "text-2xl font-semibold",
-
-                    isDark ? "text-white" : "text-[#171717]",
-                  )}
-                >
-                  {contest.contest_type === "leaderboard"
-                    ? formatMoney(leaderboardPrizePoolCents)
-                    : contest.contest_type === "cpm" ||
-                        contest.contest_type === "milestone" ||
-                        contest.contest_type === "dual_rewards"
-                      ? formatMoney(contestPoolBudgetCents)
-                      : contest.total_prize
-                        ? formatMoney(contest.total_prize || 0)
-                        : "$0.00"}
-                </p>
-                <p
-                  className={cn(
-                    "text-sm",
-
-                    isDark ? "text-slate-200" : "text-slate-600",
-                  )}
-                >
-                  {contest.contest_type === "leaderboard" &&
-                  leaderboardWinnerCountDisplay > 0
-                    ? `${leaderboardWinnerCountDisplay} winner${
-                        leaderboardWinnerCountDisplay !== 1 ? "s" : ""
-                      }`
-                    : contest.contest_type === "cpm"
-                      ? "CPM based"
-                      : contest.contest_type === "milestone"
-                        ? "Milestone based"
-                        : contest.contest_type === "dual_rewards"
-                          ? "CPM + milestones"
-                          : "Total prize"}
-                </p>
-              </div>
-              <div
-                className={cn(
-                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]",
-                )}
-              >
-                <Trophy className="h-7 w-7" />
-              </div>
-            </CardContent>
-          </div>
-          {/* <Card className="bg-purple-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                  <Trophy className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-purple-800 dark:text-purple-300 uppercase tracking-wide">Prize Pool</p>
-                  <p className="text-lg font-bold text-purple-900 dark:text-purple-100">
-                    {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest
-                      ? formatMoney(contest.contest_based_details.cpm_contest.total_budget)
-                      : contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest
-                        ? formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)
-                        : contest.total_prize // Fallback to old field if necessary for older data
-                          ? formatMoney(contest.total_prize || 0)
-                          : "$0.00"}
-                  </p>
-                  <p className="text-xs text-purple-700 dark:text-purple-400 mt-0.5">
-                    {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.winner_count
-                      ? `${contest.contest_based_details.leaderboard_contest.winner_count} winner${contest.contest_based_details.leaderboard_contest.winner_count !== 1 ? 's' : ''}`
-                      : contest.contest_type === 'cpm'
-                        ? 'CPM based'
-                        : 'Total prize'}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card> */}
-
-          {/* Submissions/Participants Card */}
-          {(() => {
+                ? formatMoney(contestPoolBudgetCents)
+                : contest.total_prize
+                  ? formatMoney(contest.total_prize || 0)
+                  : "$0.00"
+          }
+          budgetSubLabel={
+            contest.contest_type === "leaderboard" &&
+            leaderboardWinnerCountDisplay > 0
+              ? `${leaderboardWinnerCountDisplay} winner${
+                  leaderboardWinnerCountDisplay !== 1 ? "s" : ""
+                }`
+              : isCpmContestType(contest.contest_type) &&
+                  contest.contest_based_details?.cpm_contest?.cpm_rate_usd
+                ? `${formatMoney(
+                    contest.contest_based_details.cpm_contest.cpm_rate_usd * 100,
+                  )} ${
+                    contest.platform?.toLowerCase() === "twitter"
+                      ? "per 1000 points"
+                      : "per 1000 views"
+                  }`
+                : null
+          }
+          platformLabel={platformDisplayLabel(
+            detailVideoPlatforms.length > 0
+              ? detailVideoPlatforms
+              : parseVideoContestPlatforms(contest.platform),
+            contest.platform,
+          )}
+          platformSubLabel={
+            detailVideoPlatforms.length > 1
+              ? "Multi-platform"
+              : contest.platform?.toLowerCase() === "instagram"
+                ? "Reels & Shorts"
+                : contest.platform?.toLowerCase() === "youtube"
+                  ? "Shorts & Videos"
+                  : contest.platform?.toLowerCase() === "tiktok"
+                    ? "TikTok videos"
+                    : null
+          }
+          platforms={
+            detailVideoPlatforms.length > 0
+              ? detailVideoPlatforms
+              : parseVideoContestPlatforms(contest.platform)
+          }
+          submissionsLabel={
+            (contest?.platform?.toLowerCase() === "twitter" ||
+              contest?.platform?.toLowerCase() === "x") &&
+            contest?.contest_format === "text_image"
+              ? "Participants"
+              : "Submissions"
+          }
+          submissionsValue={
+            (contest?.platform?.toLowerCase() === "twitter" ||
+              contest?.platform?.toLowerCase() === "x") &&
+            contest?.contest_format === "text_image"
+              ? twitterMetrics?.max_participants
+                ? `${twitterMetrics?.total_participants || 0} / ${twitterMetrics.max_participants}`
+                : twitterMetrics?.total_participants ||
+                  contest?.contest_based_details?.twitter_campaign
+                    ?.max_participants ||
+                  0
+              : creatorDetailSubmissionTotal
+          }
+          submissionsSubLabel={
+            (contest?.platform?.toLowerCase() === "twitter" ||
+              contest?.platform?.toLowerCase() === "x") &&
+            contest?.contest_format === "text_image"
+              ? twitterMetrics?.max_participants
+                ? "Joined / Max limit"
+                : "Total joined"
+              : "Total entries"
+          }
+          statusChip={
+            contest.status === "ended" && postContestStatus
+              ? renderPostContestStatusBadge(postContestStatus)
+              : null
+          }
+          extraBadges={(() => {
             const isTwitterTextImage =
-              (contest?.platform?.toLowerCase() === "twitter" ||
-                contest?.platform?.toLowerCase() === "x") &&
-              contest?.contest_format === "text_image";
-
-            if (isTwitterTextImage) {
-              // For Twitter contests, show participants instead of submissions
-              const participantsCount = twitterMetrics?.total_participants || 0;
-              const maxParticipants =
-                twitterMetrics?.max_participants ||
-                contest?.contest_based_details?.twitter_campaign
-                  ?.max_participants;
-              const displayValue = maxParticipants
-                ? `${participantsCount} / ${maxParticipants}`
-                : participantsCount;
-
-              return (
-                <div
-                  className={cn(
-                    "overflow-hidden rounded-2xl border shadow-none",
-                    isDark
-                      ? "border-slate-700 bg-[#180438]"
-                      : "border-neutral-200 bg-white",
-                  )}
-                >
-                  <CardContent className="p-6 flex justify-between items-center">
-                    <div
-                      className={cn(
-                        "flex-1 space-y-2",
-                        isDark ? "text-white" : "text-[#171717]",
-                      )}
-                    >
-                      <p
-                        className={cn(
-                          "text-sm font-medium",
-                          isDark ? "text-slate-200" : "text-slate-600",
-                        )}
-                      >
-                        Participants
-                      </p>
-                      <p
-                        className={cn(
-                          "text-2xl font-semibold",
-                          isDark ? "text-white" : "text-[#171717]",
-                        )}
-                      >
-                        {displayValue}
-                      </p>
-                      <p
-                        className={cn(
-                          "text-sm",
-                          isDark ? "text-slate-200" : "text-slate-600",
-                        )}
-                      >
-                        {maxParticipants
-                          ? "Joined / Max limit"
-                          : "Total joined"}
-                      </p>
-                    </div>
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]">
-                      <Users className="h-7 w-7" />
-                    </div>
-                  </CardContent>
-                </div>
-              );
-            }
-
-            // For non-Twitter contests, show submissions
+              (contest.platform?.toLowerCase() === "twitter" ||
+                contest.platform?.toLowerCase() === "x") &&
+              contest.contest_format === "text_image";
+            if (!isTwitterTextImage) return null;
+            const campaignType =
+              contest.contest_based_details?.twitter_campaign?.campaign_type;
+            if (campaignType !== "raid" && campaignType !== "awareness")
+              return null;
             return (
-              <div
+              <Badge
                 className={cn(
-                  "overflow-hidden rounded-2xl border shadow-none",
+                  "rounded-full border px-3 py-1 text-xs font-semibold capitalize shadow-none",
                   isDark
-                    ? "border-slate-700 bg-[#180438]"
-                    : "border-neutral-200 bg-white",
+                    ? "border-slate-600 bg-transparent text-slate-100"
+                    : "border-[#e5e5e5] bg-white text-[#0a0a0a]",
                 )}
               >
-                <CardContent className="p-6 flex justify-between items-center">
-                  <div
-                    className={cn(
-                      "flex-1 space-y-2",
-                      isDark ? "text-white" : "text-[#171717]",
-                    )}
-                  >
-                    <p
-                      className={cn(
-                        "text-sm font-medium",
-                        isDark ? "text-slate-200" : "text-slate-600",
-                      )}
-                    >
-                      Submissions
-                    </p>
-                    <p
-                      className={cn(
-                        "text-2xl font-semibold",
-                        isDark ? "text-white" : "text-[#171717]",
-                      )}
-                    >
-                      {creatorDetailSubmissionTotal}
-                    </p>
-                    <p
-                      className={cn(
-                        "text-sm",
-                        isDark ? "text-slate-200" : "text-slate-600",
-                      )}
-                    >
-                      Total entries
-                    </p>
-                  </div>
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]">
-                    <Users className="h-7 w-7" />
-                  </div>
-                </CardContent>
-              </div>
+                {campaignType === "raid" ? "Raid Campaign" : "Awareness Campaign"}
+              </Badge>
             );
           })()}
-          {/* <Card className="bg-purple-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                  <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-purple-800 dark:text-purple-300 uppercase tracking-wide">Submissions</p>
-                  <p className="text-lg font-bold text-purple-900 dark:text-purple-100">
-                    {contest.live_submission_count !== null && contest.live_submission_count >= 0
-                      ? contest.live_submission_count
-                      : 0}
-                  </p>
-                  <p className="text-xs text-purple-700 dark:text-purple-400 mt-0.5">Total entries</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card> */}
-        </div>
+          cta={
+            <Button
+              size="lg"
+              onClick={
+                isTwitterTextImageContest && !hasJoinedTwitterCampaign
+                  ? handleJoinTwitterCampaign
+                  : () => handleSubmitContent("1")
+              }
+              disabled={
+                contest.status?.toLowerCase() !== "active" ||
+                isRequirementsBlocked ||
+                joinCampaignLoading ||
+                (hasSubmitted &&
+                  !(
+                    submissionCount > 0 &&
+                    contest?.multiple_submissions_enabled &&
+                    submissionCount < maxSubmissions
+                  )) ||
+                (isTwitterTextImageContest && hasJoinedTwitterCampaign) ||
+                (!!user &&
+                  isTwitterTextImageContest &&
+                  !hasJoinedTwitterCampaign &&
+                  (twitterConnectStatus === "disconnected" ||
+                    twitterConnectStatus === "loading"))
+              }
+              className={cn(
+                "w-full",
+                contest.status?.toLowerCase() === "active" &&
+                  !isRequirementsBlocked &&
+                  !joinCampaignLoading &&
+                  !(
+                    hasSubmitted &&
+                    !(
+                      submissionCount > 0 &&
+                      contest?.multiple_submissions_enabled &&
+                      submissionCount < maxSubmissions
+                    )
+                  ) &&
+                  !(isTwitterTextImageContest && hasJoinedTwitterCampaign)
+                  ? primaryButtonClass
+                  : disabledButtonClass,
+              )}
+            >
+              <span className="flex items-center justify-center gap-2">
+                <PlayCircle className="h-5 w-5 shrink-0" />
+                {contest.status?.toLowerCase() === "upcoming"
+                  ? "Contest Not Started"
+                  : contest.status?.toLowerCase() === "ended" ||
+                      contest.status?.toLowerCase() === "completed"
+                    ? "Contest Ended"
+                    : hasSubmitted &&
+                        submissionCount > 0 &&
+                        contest?.multiple_submissions_enabled &&
+                        submissionCount < maxSubmissions
+                      ? `Submit More (${maxSubmissions - submissionCount} left)`
+                      : hasSubmitted
+                        ? "Submitted"
+                        : isTwitterTextImageContest
+                          ? hasJoinedTwitterCampaign
+                            ? "Joined"
+                            : joinCampaignLoading
+                              ? "Joining..."
+                              : user && twitterConnectStatus === "loading"
+                                ? "Checking…"
+                                : "Join Twitter Campaign"
+                          : "Submit Your Entry"}
+              </span>
+            </Button>
+          }
+        />
 
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-x-6">
           <div
@@ -4396,13 +3979,13 @@ export function ContestClientPage({
             {activeTab === "details" && (
               <Card
                 className={cn(
-                  "overflow-hidden rounded-2xl border shadow-none",
+                  "overflow-hidden rounded-[20px] border shadow-[0px_2px_12px_0px_rgba(10,10,10,0.04)]",
                   isDark
                     ? "border-slate-700 bg-[#180438]"
-                    : "border-neutral-200 bg-white",
+                    : "border-[#e5e5e5] bg-white",
                 )}
               >
-                <CardContent className="relative p-5 text-left">
+                <CardContent className="relative p-[22px] text-left">
                   {/* Decorative background elements */}
                   {/* <div className="absolute top-0 left-0 w-32 h-32 bg-rose-200/30 dark:from-rose-500/10 dark:to-purple-500/10 rounded-full blur-xl transform -translate-x-16 -translate-y-16"></div>
             <div className="absolute bottom-0 right-0 w-40 h-40 bg-gradient-to-tl from-blue-200/30 to-cyan-200/30 dark:from-blue-500/10 dark:to-cyan-500/10 rounded-full blur-xl transform translate-x-20 translate-y-20"></div> */}
@@ -4538,13 +4121,18 @@ export function ContestClientPage({
                     ) : (
                       <div>
                         <div className="mb-4">
-                          <h2 className={cn(titleClass, "mb-1 text-base")}>
+                          <h2
+                            className={cn(
+                              titleClass,
+                              "mb-1 text-base tracking-[-0.16px]",
+                            )}
+                          >
                             Ready to Showcase Your Talent?
                           </h2>
                           <p
                             className={cn(
-                              "text-sm leading-relaxed",
-                              isDark ? "text-slate-300" : "text-[#55555F]",
+                              "text-[13px] leading-relaxed",
+                              isDark ? "text-slate-300" : "text-[#737373]",
                             )}
                           >
                             {contest.status === "active"
@@ -4754,6 +4342,41 @@ export function ContestClientPage({
               </Card>
             )}
 
+            {activeTab === "details" && showCreatorEligibilitySection && (
+              <div
+                id="creator-eligibility"
+                ref={(el) => {
+                  sectionRefs.current["creator-eligibility"] = el;
+                }}
+              >
+                <BrandOverviewSectionCard
+                  isDark={isDark}
+                  title="Creator Eligibility"
+                  subtitle="Minimum creator requirements to submit to this campaign."
+                  icon={
+                    <img
+                      src="/images/contest-details/guide-alert.svg"
+                      alt=""
+                      className="h-4 w-4"
+                    />
+                  }
+                >
+                  <div className="grid grid-cols-1 gap-0">
+                    {eligibilityDisplayItems.map((item) => (
+                      <EligibilityRequirementCard
+                        key={item.key}
+                        icon={item.icon}
+                        label={item.label}
+                        value={item.value}
+                        description={item.description}
+                        isDark={isDark}
+                      />
+                    ))}
+                  </div>
+                </BrandOverviewSectionCard>
+              </div>
+            )}
+
             {/* Post-Contest Status Section for Ended Contests */}
             {/* {contest.status === "ended" && postContestStatus && (
           <Card className={cn("overflow-hidden shadow-none", surfaceClass)}>
@@ -4893,14 +4516,12 @@ export function ContestClientPage({
                 : "lg:col-span-2 lg:row-start-2",
             )}
           >
-            {/* Tabs */}
+            {/* Tabs — Figma segmented control */}
             <div className="mb-6 mt-2 overflow-x-auto">
             <div
               className={cn(
-                "inline-flex min-w-0 items-center gap-1 rounded-xl border p-1",
-                isDark
-                  ? "border-slate-700 bg-white/[0.04]"
-                  : "border-neutral-200 bg-[#f3f3f4]",
+                "inline-flex min-w-0 items-center gap-0.5 rounded-xl p-1",
+                isDark ? "bg-white/[0.06]" : "bg-[#f5f5f5]",
               )}
             >
               {tabs.map((tab) => {
@@ -4917,18 +4538,18 @@ export function ContestClientPage({
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
                     className={cn(
-                      "flex shrink-0 items-center gap-1.5 rounded-lg border px-4 py-1.5 text-sm font-medium transition-colors",
+                      "flex shrink-0 items-center gap-2 rounded-[9px] px-[18px] py-[9px] text-[13px] transition-colors",
                       selected
                         ? isDark
-                          ? "border-slate-600 bg-white/10 text-white shadow-sm"
-                          : "border-neutral-200 bg-white text-[#171717] shadow-sm"
+                          ? "bg-white/10 font-semibold text-white shadow-[0px_1px_6px_0px_rgba(10,10,10,0.1)]"
+                          : "bg-white font-semibold text-[#0a0a0a] shadow-[0px_1px_6px_0px_rgba(10,10,10,0.1)]"
                         : isDark
-                          ? "border-transparent text-slate-300 hover:text-white"
-                          : "border-transparent text-[#55555F] hover:text-[#171717]",
+                          ? "font-medium text-slate-400 hover:text-white"
+                          : "font-medium text-[#737373] hover:text-[#0a0a0a]",
                     )}
                   >
                     {TabIcon ? (
-                      <TabIcon className="h-3.5 w-3.5 shrink-0" />
+                      <TabIcon className="h-[15px] w-[15px] shrink-0" />
                     ) : null}
                     {tab.label}
                     {tab.id === "leaderboard" &&
@@ -4937,10 +4558,10 @@ export function ContestClientPage({
                         <Badge
                           variant="secondary"
                           className={cn(
-                            "ml-2 px-2 py-0.5 text-xs font-semibold",
+                            "ml-1 px-2 py-0.5 text-xs font-semibold",
                             isDark
                               ? "bg-white/10 text-slate-100"
-                              : "bg-[#f3f3f4] text-[#44403c]",
+                              : "bg-[#f5f5f5] text-[#404040]",
                           )}
                         >
                           {totalLeaderboardEntries}
@@ -4971,46 +4592,56 @@ export function ContestClientPage({
 
             <TabContent activeTab={activeTab}>
               <TabPanel value="details" activeTab={activeTab}>
-                <div className="lg:flex lg:items-start lg:gap-8">
-                  {/* Sticky Section Navigation */}
+                <div className="min-w-0 space-y-5">
+                  {/* Anchor tabs — Figma underline nav */}
                   {activeTab === "details" && contest && (
                     <div
                       className={cn(
-                        "sticky top-16 z-40 -mx-1 mb-4 px-1 py-2 lg:top-24 lg:mx-0 lg:mb-0 lg:w-48 lg:shrink-0 lg:p-0",
+                        "sticky top-16 z-40 -mx-1 overflow-x-auto border-b px-1 lg:top-24",
                         isDark
-                          ? "bg-[#06021D] lg:bg-transparent"
-                          : "bg-[#f6f6f7] lg:bg-transparent",
+                          ? "border-slate-700 bg-[#06021D]/95 backdrop-blur"
+                          : "border-[#e5e5e5] bg-[#f6f6f7]/95 backdrop-blur",
                       )}
                     >
-                      <div className="flex w-full min-w-0 gap-1 overflow-x-auto lg:flex-col">
-                        {visibleSections.map((section) => (
-                          <button
-                            key={section.id}
-                            onClick={() => scrollToSection(section.id)}
-                            className={cn(
-                              "relative shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-left text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#ff7a1a]/40",
-                              activeSection === section.id
-                                ? cn(
-                                    "font-medium before:absolute before:bottom-1.5 before:left-0 before:top-1.5 before:w-0.5 before:rounded-full before:bg-[#ff7a1a]",
-                                    isDark
-                                      ? "bg-white/10 text-white"
-                                      : "bg-[#ececee] text-[#171717]",
-                                  )
-                                : isDark
-                                  ? "text-slate-300 hover:bg-white/5 hover:text-white"
-                                  : "text-[#66666F] hover:bg-[#efeff0] hover:text-[#171717]",
-                            )}
-                          >
-                            {section.label}
-                          </button>
-                        ))}
+                      <div className="flex w-full min-w-0 items-stretch">
+                        {visibleSections.map((section) => {
+                          const selected = activeSection === section.id;
+                          return (
+                            <button
+                              key={section.id}
+                              type="button"
+                              onClick={() => scrollToSection(section.id)}
+                              className={cn(
+                                "relative shrink-0 whitespace-nowrap px-3 py-3.5 text-[13px] outline-none transition-colors",
+                                selected
+                                  ? isDark
+                                    ? "font-semibold text-white"
+                                    : "font-semibold text-[#0a0a0a]"
+                                  : isDark
+                                    ? "font-medium text-slate-400 hover:text-white"
+                                    : "font-medium text-[#737373] hover:text-[#0a0a0a]",
+                              )}
+                            >
+                              {section.label}
+                              <span
+                                className={cn(
+                                  "absolute inset-x-0 bottom-0 h-0.5 rounded-full",
+                                  selected
+                                    ? isDark
+                                      ? "bg-white"
+                                      : "bg-[#0a0a0a]"
+                                    : "bg-transparent",
+                                )}
+                              />
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
                   <div
                     className={cn(
-                      surfaceClass,
-                      "opp-orange min-w-0 flex-1 overflow-hidden",
+                      "opp-orange min-w-0 space-y-5 overflow-hidden",
                     )}
                   >
                     <style jsx global>{`
@@ -5086,60 +4717,60 @@ export function ContestClientPage({
                         border-color: rgba(255, 122, 26, 0.35) !important;
                       }
                     `}</style>
-                    <CardHeader
-                      className={cn(
-                        "border-b px-6 py-5",
-                        isDark ? "border-slate-700" : "border-neutral-200",
-                      )}
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <CardTitle
-                          className={cn(
-                            titleClass,
-                            "flex items-center gap-2 text-xl",
-                          )}
-                        >
-                          Contest Details
-                        </CardTitle>
-                        {detailVideoPlatforms.length >= 2 && (
-                          <ContestDetailPlatformTabs
-                            platforms={detailVideoPlatforms}
-                            active={detailPlatformTab}
-                            onChange={setDetailPlatformTab}
-                            isDark={isDark}
-                          />
+                    {detailVideoPlatforms.length >= 2 && (
+                      <div
+                        className={cn(
+                          surfaceClass,
+                          "flex flex-wrap items-center justify-between gap-3 px-5 py-4",
                         )}
+                      >
+                        <p className={cn(titleClass, "text-sm font-semibold")}>
+                          Platform scope
+                        </p>
+                        <ContestDetailPlatformTabs
+                          platforms={detailVideoPlatforms}
+                          active={detailPlatformTab}
+                          onChange={setDetailPlatformTab}
+                          isDark={isDark}
+                        />
                       </div>
-                    </CardHeader>
-                    <CardContent
-                      className={cn(
-                        "space-y-0 divide-y p-0",
-                        isDark ? "divide-slate-700" : "divide-neutral-200",
-                      )}
-                    >
+                    )}
+                    <div className="space-y-5">
                       {/* 1. EARNINGS OVERVIEW - Clean Card Design */}
                       <div
                         id="earning-opportunities"
                         ref={(el) => {
                           sectionRefs.current["earning-opportunities"] = el;
                         }}
-                        className="empty:hidden"
+                        className={cn(surfaceClass, "empty:hidden overflow-hidden")}
                       >
-                        <div className="p-6">
+                        <div className="p-7">
                           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-                            <div className="flex flex-1 items-center gap-3 sm:gap-4">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]">
+                            <div className="flex flex-1 items-center gap-3.5 sm:gap-4">
+                              <div
+                                className={cn(
+                                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                                  isDark
+                                    ? "bg-white/10 text-white"
+                                    : "bg-[#f5f5f5] text-[#0a0a0a]",
+                                )}
+                              >
                                 <DollarSign className="h-5 w-5" />
                               </div>
 
                               <div className="flex-1">
-                                <h3 className={cn(titleClass, "mb-1 text-xl")}>
+                                <h3
+                                  className={cn(
+                                    titleClass,
+                                    "mb-0.5 text-xl tracking-[-0.3px]",
+                                  )}
+                                >
                                   Earning Opportunities
                                 </h3>
                                 <p
                                   className={cn(
-                                    "text-sm",
-                                    isDark ? "text-gray-300" : "text-slate-600",
+                                    "text-[13px]",
+                                    isDark ? "text-slate-300" : "text-[#737373]",
                                   )}
                                 >
                                   {detailContest?.contest_type === "cpm"
@@ -5157,10 +4788,10 @@ export function ContestClientPage({
                             {/* Platform Badge */}
                             <div
                               className={cn(
-                                "flex items-center gap-2 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg flex-shrink-0 self-start sm:self-auto",
+                                "flex flex-shrink-0 items-center gap-1.5 self-start rounded-full py-[7px] pl-3 pr-3.5 sm:self-auto",
                                 isDark
-                                  ? "bg-[#ff7a1a]/15 border border-[#ffd9b8]"
-                                  : "bg-slate-100",
+                                  ? "bg-white/10"
+                                  : "bg-[#f5f5f5]",
                               )}
                             >
                               {detailScopedPlatform ? (
@@ -5187,8 +4818,8 @@ export function ContestClientPage({
                               )}
                               <span
                                 className={cn(
-                                  "text-sm font-medium",
-                                  isDark ? "text-white" : "text-slate-700",
+                                  "text-xs font-semibold",
+                                  isDark ? "text-white" : "text-[#0a0a0a]",
                                 )}
                               >
                                 {detailPlatformLabel}
@@ -5546,283 +5177,476 @@ export function ContestClientPage({
                                   ?.milestone_contest ||
                                   opportunityMilestoneBonusConfigs.length >
                                     0) && (
-                                  <div className="space-y-6">
-                                    <div className="space-y-4">
-                                      <div className="flex items-center justify-between">
-                                        <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                                          <Trophy className="h-5 w-5 text-[#ff7a1a]" />
-                                          Milestone Rewards Ladder
-                                        </h3>
-                                      </div>
-
-                                      <div className="grid grid-cols-1 gap-3 min-w-0">
-                                        {(
-                                          contest.contest_based_details
-                                            .milestone_contest.milestones || []
-                                        )
-                                          .sort(
-                                            (a: any, b: any) =>
-                                              a.order - b.order,
-                                          )
-                                          .map(
-                                            (milestone: any, index: number) => (
-                                              <div
-                                                key={`${milestone.order}-${index}`}
-                                                className={cn(
-                                                  "rounded-lg border p-4 min-w-0",
-                                                  isDark
-                                                    ? "bg-[#180438] border-slate-700"
-                                                    : "border border-neutral-200 bg-white border-slate-200",
-                                                )}
-                                              >
-                                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
-                                                  <div className="min-w-0 flex-1">
-                                                    <div
-                                                      className={cn(
-                                                        "text-xs font-semibold uppercase tracking-wide",
-                                                        isDark
-                                                          ? "text-[#ffa35c]"
-                                                          : "text-[#ff7a1a]",
-                                                      )}
-                                                    >
-                                                      Milestone {index + 1}
-                                                    </div>
-                                                    <div
-                                                      className={cn(
-                                                        "text-lg sm:text-xl font-bold break-words",
-                                                        isDark
-                                                          ? "text-white"
-                                                          : "text-slate-900",
-                                                      )}
-                                                    >
-                                                      {milestone.target_views?.toLocaleString?.() ||
-                                                        0}{" "}
-                                                      Views
-                                                    </div>
-                                                    {milestone.winner_limit !=
-                                                      null &&
-                                                      (() => {
-                                                        const reachedCount =
-                                                          milestoneDerivedData.winnerCountsByMilestone?.get(
-                                                            Number(
-                                                              milestone.target_views ||
-                                                                0,
-                                                            ),
-                                                          ) || 0;
-                                                        const isFull =
-                                                          reachedCount >=
-                                                          Number(
-                                                            milestone.winner_limit,
-                                                          );
-                                                        return (
-                                                          <div
-                                                            className={cn(
-                                                              "text-xs mt-1 font-semibold",
-                                                              isFull
-                                                                ? "text-red-500 dark:text-red-400"
-                                                                : "text-[#ff7a1a] dark:text-[#ffa35c]",
-                                                            )}
-                                                          >
-                                                            Winner limit:{" "}
-                                                            {reachedCount} /{" "}
-                                                            {
-                                                              milestone.winner_limit
-                                                            }
-                                                          </div>
-                                                        );
-                                                      })()}
-                                                  </div>
-                                                  <div
-                                                    className={cn(
-                                                      "flex items-center justify-between sm:block sm:text-right shrink-0 w-full sm:w-auto border-t pt-3 sm:border-t-0 sm:pt-0",
-                                                      isDark
-                                                        ? "border-slate-700"
-                                                        : "border-slate-200",
-                                                    )}
-                                                  >
-                                                    <div
-                                                      className={cn(
-                                                        "text-xs",
-                                                        isDark
-                                                          ? "text-gray-300"
-                                                          : "text-slate-500",
-                                                      )}
-                                                    >
-                                                      Payout
-                                                    </div>
-                                                    <div
-                                                      className={cn(
-                                                        "text-lg sm:text-xl font-bold",
-                                                        isDark
-                                                          ? "text-[#ffa35c]"
-                                                          : "text-[#ff7a1a]",
-                                                      )}
-                                                    >
-                                                      {formatMoney(
-                                                        milestone.payout_cents ||
-                                                          0,
-                                                      )}
-                                                    </div>
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            ),
-                                          )}
-                                      </div>
-
-                                      <Alert
+                                  <div
+                                    className={cn(
+                                      "overflow-hidden rounded-2xl border shadow-[0px_1px_3px_0px_rgba(10,10,10,0.04)]",
+                                      isDark
+                                        ? "border-white/10 bg-[#111113]"
+                                        : "border-[#e5e5e5] bg-white",
+                                    )}
+                                  >
+                                    <div
+                                      className={cn(
+                                        "flex items-center gap-3 border-b px-5 py-4",
+                                        isDark
+                                          ? "border-white/10"
+                                          : "border-[#e5e5e5]",
+                                      )}
+                                    >
+                                      <div
                                         className={cn(
-                                          "mt-2 border-slate-700 shadow-sm",
-                                          isDark
-                                            ? "bg-white/[0.04] text-slate-100"
-                                            : "bg-[#fafafa] text-slate-900",
+                                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px]",
+                                          isDark ? "bg-white/10" : "bg-[#fafafa]",
                                         )}
                                       >
-                                        <Info className="h-4 w-4" />
-                                        <AlertDescription className="text-sm font-medium mt-0.5">
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                          src="/images/contest-details/earn-trophy.svg"
+                                          alt=""
+                                          width={16}
+                                          height={16}
+                                          className="h-4 w-4"
+                                        />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <h3
+                                          className={cn(
+                                            "flex items-center gap-2 text-[15px] font-semibold",
+                                            isDark ? "text-white" : "text-[#0a0a0a]",
+                                          )}
+                                        >
+                                          Milestone Rewards Ladder
+                                        </h3>
+                                        <p
+                                          className={cn(
+                                            "text-sm",
+                                            isDark ? "text-slate-400" : "text-[#737373]",
+                                          )}
+                                        >
+                                          Higher view thresholds unlock higher payouts
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    <div className="space-y-4 px-5 py-5">
+                                      {(() => {
+                                        const sortedMilestones = (
+                                          contest.contest_based_details
+                                            ?.milestone_contest?.milestones || []
+                                        )
+                                          .slice()
+                                          .sort(
+                                            (a: any, b: any) =>
+                                              (a.order || 0) - (b.order || 0),
+                                          );
+                                        return (
+                                          <div className="flex min-w-0 flex-col gap-2.5">
+                                            {sortedMilestones.map(
+                                              (milestone: any, index: number) => {
+                                                const isFinal =
+                                                  index === sortedMilestones.length - 1;
+                                                const target =
+                                                  Number(milestone.target_views) || 0;
+                                                const reachedCount =
+                                                  milestoneDerivedData.winnerCountsByMilestone?.get(
+                                                    Number(milestone.target_views || 0),
+                                                  ) || 0;
+                                                const payoutLabel = formatMoney(
+                                                  milestone.payout_cents || 0,
+                                                );
+                                                const winnerLimit =
+                                                  milestone.winner_limit != null
+                                                    ? Number(milestone.winner_limit)
+                                                    : null;
+                                                const isFull =
+                                                  winnerLimit != null &&
+                                                  reachedCount >= winnerLimit;
+
+                                                return (
+                                                  <div
+                                                    key={`${milestone.order ?? index}-${milestone.target_views ?? index}`}
+                                                    className={cn(
+                                                      "grid min-w-0 grid-cols-[44px_minmax(0,1fr)] items-center gap-x-4 gap-y-4 overflow-hidden rounded-2xl py-4 pl-5 pr-5 sm:grid-cols-[44px_minmax(0,1fr)_auto] sm:pr-6",
+                                                      isFinal
+                                                        ? "bg-[#0a0a0a] text-white shadow-[0px_10px_20px_0px_rgba(10,10,10,0.2)]"
+                                                        : isDark
+                                                          ? "border border-white/10 bg-white/[0.04]"
+                                                          : "border border-[#e5e5e5] bg-white",
+                                                    )}
+                                                  >
+                                                    <div className="relative flex h-11 w-11 shrink-0 items-center justify-center justify-self-start">
+                                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                      <img
+                                                        src="/images/contest-details/milestone-hex.svg"
+                                                        alt=""
+                                                        width={38}
+                                                        height={44}
+                                                        className="pointer-events-none absolute left-1/2 top-0 h-11 w-[38px] -translate-x-1/2"
+                                                      />
+                                                      <span className="relative z-10 text-lg font-extrabold text-white">
+                                                        {index + 1}
+                                                      </span>
+                                                    </div>
+
+                                                    <div className="min-w-0 space-y-1">
+                                                      <p
+                                                        className={cn(
+                                                          "text-[11px] font-semibold tracking-[1.1px]",
+                                                          isFinal
+                                                            ? "text-[#a3a3a3]"
+                                                            : isDark
+                                                              ? "text-slate-400"
+                                                              : "text-[#737373]",
+                                                        )}
+                                                      >
+                                                        MILESTONE {index + 1}
+                                                      </p>
+                                                      <p
+                                                        className={cn(
+                                                          "truncate text-xl font-semibold tracking-[-0.3px]",
+                                                          isFinal
+                                                            ? "text-white"
+                                                            : isDark
+                                                              ? "text-white"
+                                                              : "text-[#0a0a0a]",
+                                                        )}
+                                                      >
+                                                        {target.toLocaleString()} Views
+                                                      </p>
+                                                      {winnerLimit != null ? (
+                                                        <div
+                                                          className={cn(
+                                                            "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
+                                                            isFinal
+                                                              ? "bg-white/12 text-white"
+                                                              : isFull
+                                                                ? "bg-red-100 text-red-700"
+                                                                : isDark
+                                                                  ? "bg-white/10 text-slate-200"
+                                                                  : "bg-[#f5f5f5] text-[#404040]",
+                                                          )}
+                                                        >
+                                                          Winner limit {reachedCount} / {winnerLimit}
+                                                        </div>
+                                                      ) : null}
+                                                    </div>
+
+                                                    <div className="col-span-2 flex w-full flex-col items-start sm:col-span-1 sm:w-auto sm:items-end">
+                                                      <p
+                                                        className={cn(
+                                                          "text-xs font-medium",
+                                                          isFinal
+                                                            ? "text-[#a3a3a3]"
+                                                            : isDark
+                                                              ? "text-slate-400"
+                                                              : "text-[#737373]",
+                                                        )}
+                                                      >
+                                                        Payout
+                                                      </p>
+                                                      <p
+                                                        className={cn(
+                                                          "whitespace-nowrap text-[26px] font-bold leading-none tracking-[-0.52px]",
+                                                          isFinal
+                                                            ? "text-white"
+                                                            : isDark
+                                                              ? "text-white"
+                                                              : "text-[#0a0a0a]",
+                                                        )}
+                                                      >
+                                                        {payoutLabel}
+                                                      </p>
+                                                    </div>
+                                                  </div>
+                                                );
+                                              },
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+
+                                      <div
+                                        className={cn(
+                                          "flex items-start gap-2.5 rounded-xl border px-4 py-3",
+                                          isDark
+                                            ? "border-white/10 bg-white/[0.04] text-slate-200"
+                                            : "border-[#e5e5e5] bg-[#fafafa] text-[#404040]",
+                                        )}
+                                      >
+                                        <Info className="mt-0.5 h-[18px] w-[18px] shrink-0" />
+                                        <p className="text-[13px] leading-relaxed">
                                           Once a submission reaches the target
                                           view threshold, the corresponding
                                           milestone reward will be granted.
-                                        </AlertDescription>
-                                      </Alert>
-                                    </div>
-
-                                    {(opportunityMostVerifiedViewsBonus ||
-                                      opportunityMostVerifiedReelsBonus) && (
-                                      <div className="space-y-4">
-                                        <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                                          <Gift className="h-5 w-5 text-[#ff7a1a]" />
-                                          Competitive Bonus Tracks
-                                        </h3>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                          {opportunityMostVerifiedViewsBonus && (
-                                            <div
-                                              className={cn(
-                                                "rounded-2xl border p-5",
-                                                isDark
-                                                  ? "bg-white/[0.04] border-slate-700"
-                                                  : "bg-[#fafafa] border-neutral-200",
-                                              )}
-                                            >
-                                              <div className="flex items-center justify-between mb-2">
-                                                <div className="flex items-center gap-2">
-                                                  <Eye className="h-4 w-4 text-[#ff7a1a]" />
-                                                  <span
-                                                    className={cn(
-                                                      "font-semibold",
-                                                      isDark
-                                                        ? "text-slate-100"
-                                                        : "text-slate-900",
-                                                    )}
-                                                  >
-                                                    Most Verified Views
-                                                  </span>
-                                                </div>
-                                                <Badge className="bg-[#fafafa]0 hover:bg-blue-600 text-white border-none">
-                                                  {formatMoney(
-                                                    opportunityMostVerifiedViewsBonus.payout_cents ||
-                                                      0,
-                                                  )}
-                                                </Badge>
-                                              </div>
-                                              <p
-                                                className={cn(
-                                                  "text-sm",
-                                                  isDark
-                                                    ? "text-slate-100/80"
-                                                    : "text-slate-900",
-                                                )}
-                                              >
-                                                {typeof opportunityMostVerifiedViewsBonus.min_total_views ===
-                                                  "number" && (
-                                                  <>
-                                                    Min.{" "}
-                                                    {opportunityMostVerifiedViewsBonus.min_total_views.toLocaleString()}{" "}
-                                                    views required.
-                                                  </>
-                                                )}
-                                                {typeof opportunityMostVerifiedViewsBonus.min_verified_reels ===
-                                                  "number" && (
-                                                  <>
-                                                    <br />
-                                                    Min.{" "}
-                                                    {opportunityMostVerifiedViewsBonus.min_verified_reels.toLocaleString()}{" "}
-                                                    verified reels required.
-                                                  </>
-                                                )}
-                                              </p>
-                                            </div>
-                                          )}
-
-                                          {opportunityMostVerifiedReelsBonus && (
-                                            <div
-                                              className={cn(
-                                                "rounded-2xl border p-5",
-                                                isDark
-                                                  ? "bg-white/[0.04] border-slate-700"
-                                                  : "bg-[#fafafa] border-neutral-200",
-                                              )}
-                                            >
-                                              <div className="flex items-center justify-between mb-2">
-                                                <div className="flex items-center gap-2">
-                                                  <Play className="h-4 w-4 text-[#ff7a1a]" />
-                                                  <span
-                                                    className={cn(
-                                                      "font-semibold",
-                                                      isDark
-                                                        ? "text-slate-100"
-                                                        : "text-slate-900",
-                                                    )}
-                                                  >
-                                                    Most Verified Reels
-                                                  </span>
-                                                </div>
-                                                <Badge className="bg-[#fafafa]0 hover:bg-pink-600 text-white border-none">
-                                                  {formatMoney(
-                                                    opportunityMostVerifiedReelsBonus.payout_cents ||
-                                                      0,
-                                                  )}
-                                                </Badge>
-                                              </div>
-                                              <p
-                                                className={cn(
-                                                  "text-sm",
-                                                  isDark
-                                                    ? "text-slate-100/80"
-                                                    : "text-slate-900",
-                                                )}
-                                              >
-                                                {typeof opportunityMostVerifiedReelsBonus.min_verified_reels ===
-                                                  "number" && (
-                                                  <>
-                                                    Min.{" "}
-                                                    {opportunityMostVerifiedReelsBonus.min_verified_reels.toLocaleString()}{" "}
-                                                    verified reels required.
-                                                  </>
-                                                )}
-                                                {typeof opportunityMostVerifiedReelsBonus.min_total_views ===
-                                                  "number" && (
-                                                  <>
-                                                    <br />
-                                                    Min.{" "}
-                                                    {opportunityMostVerifiedReelsBonus.min_total_views.toLocaleString()}{" "}
-                                                    views required.
-                                                  </>
-                                                )}
-                                              </p>
-                                            </div>
-                                          )}
-                                        </div>
+                                        </p>
                                       </div>
-                                    )}
+
+                                      {(opportunityMostVerifiedViewsBonus ||
+                                        opportunityMostVerifiedReelsBonus) && (
+                                        <div className="space-y-4 pt-2">
+                                          <h3
+                                            className={cn(
+                                              "flex items-center gap-2 text-[15px] font-semibold",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-[#0a0a0a]",
+                                            )}
+                                          >
+                                            <Gift
+                                              className={cn(
+                                                "h-4 w-4",
+                                                isDark
+                                                  ? "text-slate-300"
+                                                  : "text-[#737373]",
+                                              )}
+                                            />
+                                            Competitive Bonus Tracks
+                                          </h3>
+
+                                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                            {opportunityMostVerifiedViewsBonus && (
+                                              <div
+                                                className={cn(
+                                                  "rounded-xl border p-5",
+                                                  isDark
+                                                    ? "border-white/10 bg-white/[0.04]"
+                                                    : "border-[#e5e5e5] bg-[#fafafa]",
+                                                )}
+                                              >
+                                                <div className="mb-4 flex items-start justify-between">
+                                                  <div
+                                                    className={cn(
+                                                      "rounded-[10px] p-2",
+                                                      isDark
+                                                        ? "bg-white/10"
+                                                        : "border border-[#e5e5e5] bg-white",
+                                                    )}
+                                                  >
+                                                    <Eye
+                                                      className={cn(
+                                                        "h-5 w-5",
+                                                        isDark
+                                                          ? "text-white"
+                                                          : "text-[#0a0a0a]",
+                                                      )}
+                                                    />
+                                                  </div>
+                                                  <Badge
+                                                    className={cn(
+                                                      "border-none",
+                                                      isDark
+                                                        ? "bg-white text-[#0a0a0a]"
+                                                        : "bg-[#0a0a0a] text-white",
+                                                    )}
+                                                  >
+                                                    {formatMoney(
+                                                      opportunityMostVerifiedViewsBonus.payout_cents ||
+                                                        0,
+                                                    )}
+                                                  </Badge>
+                                                </div>
+                                                <h4
+                                                  className={cn(
+                                                    "mb-1 text-lg font-bold",
+                                                    isDark
+                                                      ? "text-white"
+                                                      : "text-[#0a0a0a]",
+                                                  )}
+                                                >
+                                                  Most Verified Views
+                                                </h4>
+                                                <p
+                                                  className={cn(
+                                                    "text-sm",
+                                                    isDark
+                                                      ? "text-slate-300"
+                                                      : "text-[#404040]",
+                                                  )}
+                                                >
+                                                  Awarded to the creator with the
+                                                  highest total verified views.
+                                                </p>
+                                                {(typeof opportunityMostVerifiedViewsBonus.min_total_views ===
+                                                  "number" ||
+                                                  typeof opportunityMostVerifiedViewsBonus.min_verified_reels ===
+                                                    "number") && (
+                                                  <div
+                                                    className={cn(
+                                                      "mt-4 border-t pt-4",
+                                                      isDark
+                                                        ? "border-white/10"
+                                                        : "border-[#e5e5e5]",
+                                                    )}
+                                                  >
+                                                    <div className="flex items-start justify-between gap-3 text-xs font-semibold">
+                                                      <span
+                                                        className={cn(
+                                                          "uppercase tracking-tighter",
+                                                          isDark
+                                                            ? "text-slate-400"
+                                                            : "text-[#737373]",
+                                                        )}
+                                                      >
+                                                        Eligibility Condition
+                                                      </span>
+                                                      <div
+                                                        className={cn(
+                                                          "space-y-1 text-right",
+                                                          isDark
+                                                            ? "text-slate-200"
+                                                            : "text-[#0a0a0a]",
+                                                        )}
+                                                      >
+                                                        {typeof opportunityMostVerifiedViewsBonus.min_total_views ===
+                                                          "number" && (
+                                                          <div>
+                                                            Min.{" "}
+                                                            {opportunityMostVerifiedViewsBonus.min_total_views.toLocaleString()}{" "}
+                                                            Views
+                                                          </div>
+                                                        )}
+                                                        {typeof opportunityMostVerifiedViewsBonus.min_verified_reels ===
+                                                          "number" && (
+                                                          <div>
+                                                            Min.{" "}
+                                                            {opportunityMostVerifiedViewsBonus.min_verified_reels.toLocaleString()}{" "}
+                                                            Reels
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            )}
+
+                                            {opportunityMostVerifiedReelsBonus && (
+                                              <div
+                                                className={cn(
+                                                  "rounded-xl border p-5",
+                                                  isDark
+                                                    ? "border-white/10 bg-white/[0.04]"
+                                                    : "border-[#e5e5e5] bg-[#fafafa]",
+                                                )}
+                                              >
+                                                <div className="mb-4 flex items-start justify-between">
+                                                  <div
+                                                    className={cn(
+                                                      "rounded-[10px] p-2",
+                                                      isDark
+                                                        ? "bg-white/10"
+                                                        : "border border-[#e5e5e5] bg-white",
+                                                    )}
+                                                  >
+                                                    <Play
+                                                      className={cn(
+                                                        "h-5 w-5",
+                                                        isDark
+                                                          ? "text-white"
+                                                          : "text-[#0a0a0a]",
+                                                      )}
+                                                    />
+                                                  </div>
+                                                  <Badge
+                                                    className={cn(
+                                                      "border-none",
+                                                      isDark
+                                                        ? "bg-white text-[#0a0a0a]"
+                                                        : "bg-[#0a0a0a] text-white",
+                                                    )}
+                                                  >
+                                                    {formatMoney(
+                                                      opportunityMostVerifiedReelsBonus.payout_cents ||
+                                                        0,
+                                                    )}
+                                                  </Badge>
+                                                </div>
+                                                <h4
+                                                  className={cn(
+                                                    "mb-1 text-lg font-bold",
+                                                    isDark
+                                                      ? "text-white"
+                                                      : "text-[#0a0a0a]",
+                                                  )}
+                                                >
+                                                  Most Verified Reels
+                                                </h4>
+                                                <p
+                                                  className={cn(
+                                                    "text-sm",
+                                                    isDark
+                                                      ? "text-slate-300"
+                                                      : "text-[#404040]",
+                                                  )}
+                                                >
+                                                  Awarded to the creator with the
+                                                  most verified reels.
+                                                </p>
+                                                {(typeof opportunityMostVerifiedReelsBonus.min_verified_reels ===
+                                                  "number" ||
+                                                  typeof opportunityMostVerifiedReelsBonus.min_total_views ===
+                                                    "number") && (
+                                                  <div
+                                                    className={cn(
+                                                      "mt-4 border-t pt-4",
+                                                      isDark
+                                                        ? "border-white/10"
+                                                        : "border-[#e5e5e5]",
+                                                    )}
+                                                  >
+                                                    <div className="flex items-start justify-between gap-3 text-xs font-semibold">
+                                                      <span
+                                                        className={cn(
+                                                          "uppercase tracking-tighter",
+                                                          isDark
+                                                            ? "text-slate-400"
+                                                            : "text-[#737373]",
+                                                        )}
+                                                      >
+                                                        Eligibility Condition
+                                                      </span>
+                                                      <div
+                                                        className={cn(
+                                                          "space-y-1 text-right",
+                                                          isDark
+                                                            ? "text-slate-200"
+                                                            : "text-[#0a0a0a]",
+                                                        )}
+                                                      >
+                                                        {typeof opportunityMostVerifiedReelsBonus.min_verified_reels ===
+                                                          "number" && (
+                                                          <div>
+                                                            Min.{" "}
+                                                            {opportunityMostVerifiedReelsBonus.min_verified_reels.toLocaleString()}{" "}
+                                                            Reels
+                                                          </div>
+                                                        )}
+                                                        {typeof opportunityMostVerifiedReelsBonus.min_total_views ===
+                                                          "number" && (
+                                                          <div>
+                                                            Min.{" "}
+                                                            {opportunityMostVerifiedReelsBonus.min_total_views.toLocaleString()}{" "}
+                                                            Views
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 )}
                             </div>
                           )}
 
-                          {/* Bonus Information */}
-                          <div className="space-y-3">
+                          {/* Bonus Information — Figma Bonuses & Limits */}
+                          <div className="space-y-[22px]">
+                           
                             {/* Bonus Budget Tracker for Leaderboard with flat_fee_bonus */}
                             {detailFlatFeeContestList.map((slice) => {
                               const lb =
@@ -6197,46 +6021,53 @@ export function ContestClientPage({
                             {(contest as any).multiple_submissions_enabled && (
                               <div
                                 className={cn(
-                                  "space-y-3 p-2.5 sm:p-3 rounded-lg border transition-all duration-300",
+                                  "mt-4 flex flex-col gap-3 rounded-2xl border px-5 py-[18px] sm:flex-row sm:items-center sm:gap-4",
                                   isDark
-                                    ? "bg-[#fafafa]0/20 border-slate-700"
-                                    : "bg-[#fafafa] border-neutral-200",
+                                    ? "border-slate-700 bg-white/[0.04]"
+                                    : "border-[#e5e5e5] bg-[#fafafa]",
                                 )}
                               >
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-                                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                                    <CheckCheck
-                                      className={cn(
-                                        "h-5 w-5",
-                                        isDark
-                                          ? "text-[#ffa35c]"
-                                          : "text-[#ff7a1a]",
-                                      )}
-                                    />
+                                <div
+                                  className={cn(
+                                    "flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl",
+                                    isDark ? "bg-white/10" : "bg-white",
+                                  )}
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src="/images/contest-details/bonus-checks.svg"
+                                    alt=""
+                                    width={19}
+                                    height={19}
+                                    className="h-[19px] w-[19px]"
+                                  />
+                                </div>
+                                <div className="min-w-0 flex-1 space-y-1.5">
+                                  <div className="flex flex-wrap items-center gap-1.5">
                                     <span
                                       className={cn(
-                                        "font-medium text-sm sm:text-base",
+                                        "text-[15px] font-semibold",
                                         isDark
-                                          ? "text-slate-100"
-                                          : "text-slate-900",
+                                          ? "text-white"
+                                          : "text-[#0a0a0a]",
                                       )}
                                     >
                                       Multiple Submissions
                                     </span>
                                     <div className="group relative flex-shrink-0">
-                                      <Info
-                                        className={cn(
-                                          "h-3.5 w-3.5 sm:h-4 sm:w-4 cursor-help",
-                                          isDark
-                                            ? "text-[#ffa35c]"
-                                            : "text-[#ff7a1a]",
-                                        )}
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img
+                                        src="/images/contest-details/bonus-info.svg"
+                                        alt=""
+                                        width={14}
+                                        height={14}
+                                        className="h-3.5 w-3.5 cursor-help"
                                       />
                                       <div
                                         className={cn(
-                                          "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2.5 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 w-[180px] sm:w-auto sm:min-w-64 sm:max-w-80 text-center",
+                                          "pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-[180px] -translate-x-1/2 rounded-lg px-2.5 py-1.5 text-center text-[10px] opacity-0 transition-opacity duration-200 group-hover:opacity-100 sm:w-auto sm:min-w-64 sm:max-w-80 sm:px-3 sm:py-2 sm:text-xs",
                                           isDark
-                                            ? "bg-slate-800 text-slate-100 border border-slate-700"
+                                            ? "border border-slate-700 bg-slate-800 text-slate-100"
                                             : "bg-slate-900 text-white",
                                         )}
                                       >
@@ -6255,121 +6086,103 @@ export function ContestClientPage({
                                       />
                                     ) : null}
                                   </div>
-                                  <div
-                                    className={cn(
-                                      "text-base sm:text-lg font-bold",
-                                      isDark
-                                        ? "text-slate-100"
-                                        : "text-slate-900",
-                                    )}
-                                  >
-                                    Up to{" "}
-                                    {
-                                      (contest as any)
-                                        .max_submissions_per_creator
-                                    }{" "}
-                                    entries
-                                  </div>
-                                </div>
-                                {(() => {
-                                  const platformsForCap =
-                                    showDetailMaxEarningsByPlatform
-                                      ? detailVideoPlatforms
-                                      : ([
-                                          detailScopedPlatform ??
-                                            detailVideoPlatforms[0] ??
-                                            (isVideoContestPlatform(
-                                              contest?.platform,
-                                            )
-                                              ? contest.platform
-                                              : null),
-                                        ].filter(
-                                          Boolean,
-                                        ) as VideoContestPlatform[]);
-                                  const caps = platformsForCap
-                                    .map((platform) => ({
-                                      platform: showDetailMaxEarningsByPlatform
-                                        ? platform
-                                        : null,
-                                      cents: maxEarningsCentsForPlatform(
-                                        (contest as any)
-                                          .max_earnings_per_creator,
-                                        (contest as any).bonus_details,
-                                        platform,
-                                      ),
-                                    }))
-                                    .filter((row) => row.cents);
-                                  const displayCaps =
-                                    showDetailMaxEarningsByPlatform
-                                      ? caps
-                                      : caps.slice(0, 1);
-                                  if (displayCaps.length === 0) return null;
+                                  {(() => {
+                                    const platformsForCap =
+                                      showDetailMaxEarningsByPlatform
+                                        ? detailVideoPlatforms
+                                        : ([
+                                            detailScopedPlatform ??
+                                              detailVideoPlatforms[0] ??
+                                              (isVideoContestPlatform(
+                                                contest?.platform,
+                                              )
+                                                ? contest.platform
+                                                : null),
+                                          ].filter(
+                                            Boolean,
+                                          ) as VideoContestPlatform[]);
+                                    const caps = platformsForCap
+                                      .map((platform) => ({
+                                        platform: showDetailMaxEarningsByPlatform
+                                          ? platform
+                                          : null,
+                                        cents: maxEarningsCentsForPlatform(
+                                          (contest as any)
+                                            .max_earnings_per_creator,
+                                          (contest as any).bonus_details,
+                                          platform,
+                                        ),
+                                      }))
+                                      .filter((row) => row.cents);
+                                    const displayCaps =
+                                      showDetailMaxEarningsByPlatform
+                                        ? caps
+                                        : caps.slice(0, 1);
+                                    if (displayCaps.length === 0) return null;
 
-                                  if (showDetailMaxEarningsByPlatform) {
-                                    return (
-                                      <div className="space-y-2">
-                                        {displayCaps.map(
-                                          ({ platform, cents }, idx) =>
-                                            platform ? (
-                                              <div
-                                                key={`cap-${platform}-${idx}`}
-                                                className={cn(
-                                                  "flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2",
-                                                  isDark
-                                                    ? "border-slate-700 bg-white/[0.04]"
-                                                    : "border-neutral-200 bg-white/70",
-                                                )}
-                                              >
-                                                <span className="inline-flex items-center gap-1.5 text-sm font-medium">
+                                    if (showDetailMaxEarningsByPlatform) {
+                                      return (
+                                        <div className="flex flex-wrap gap-2">
+                                          {displayCaps.map(
+                                            ({ platform, cents }, idx) =>
+                                              platform ? (
+                                                <div
+                                                  key={`cap-${platform}-${idx}`}
+                                                  className={cn(
+                                                    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+                                                    isDark
+                                                      ? "bg-white/10 text-slate-200"
+                                                      : "bg-white text-[#404040]",
+                                                  )}
+                                                >
                                                   {getPlatformIcon(
                                                     platform,
                                                     "sm",
                                                   )}
-                                                  <span
-                                                    className={
-                                                      isDark
-                                                        ? "text-slate-100"
-                                                        : "text-slate-800"
-                                                    }
-                                                  >
-                                                    {
-                                                      VIDEO_PLATFORM_LABELS[
-                                                        platform
-                                                      ]
-                                                    }
-                                                  </span>
-                                                </span>
-                                                <span
-                                                  className={cn(
-                                                    "text-sm font-semibold",
-                                                    isDark
-                                                      ? "text-slate-100"
-                                                      : "text-slate-900",
-                                                  )}
-                                                >
                                                   Cap: {formatMoney(cents!)}
-                                                </span>
-                                              </div>
-                                            ) : null,
-                                        )}
-                                      </div>
-                                    );
-                                  }
+                                                </div>
+                                              ) : null,
+                                          )}
+                                        </div>
+                                      );
+                                    }
 
-                                  return displayCaps.map(({ cents }, idx) => (
-                                    <div
-                                      key={`cap-shared-${idx}`}
-                                      className={cn(
-                                        "text-sm font-medium",
-                                        isDark
-                                          ? "text-[#ffa35c]"
-                                          : "text-[#ff7a1a]",
-                                      )}
-                                    >
-                                      Cap: {formatMoney(cents!)}
-                                    </div>
-                                  ));
-                                })()}
+                                    return displayCaps.map(({ cents }, idx) => (
+                                      <div
+                                        key={`cap-shared-${idx}`}
+                                        className={cn(
+                                          "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+                                          isDark
+                                            ? "bg-white/10 text-slate-200"
+                                            : "bg-white text-[#404040]",
+                                        )}
+                                      >
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                          src="/images/contest-details/bonus-dollar.svg"
+                                          alt=""
+                                          width={13}
+                                          height={13}
+                                          className="h-[13px] w-[13px]"
+                                        />
+                                        Cap: {formatMoney(cents!)}
+                                      </div>
+                                    ));
+                                  })()}
+                                </div>
+                                <div
+                                  className={cn(
+                                    "shrink-0 text-[22px] font-bold tracking-[-0.44px]",
+                                    isDark ? "text-white" : "text-[#0a0a0a]",
+                                  )}
+                                >
+                                  Up to{" "}
+                                  {
+                                    (contest as any)
+                                      .max_submissions_per_creator
+                                  }{" "}
+                                  entries
+                                </div>
                               </div>
                             )}
 
@@ -6415,27 +6228,36 @@ export function ContestClientPage({
                                       </div>
                                       <div
                                         className={cn(
-                                          "p-3",
+                                          "flex flex-col gap-4 px-5 pb-[18px] pt-5",
                                           isDark
                                             ? "bg-white/[0.04]"
                                             : "bg-[#fafafa]",
                                         )}
                                       >
-                                        <div className="flex items-center gap-3 mb-3">
-                                          <Star
+                                        <div className="flex items-center gap-3">
+                                          <div
                                             className={cn(
-                                              "h-5 w-5",
+                                              "flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl",
                                               isDark
-                                                ? "text-[#ffa35c]"
-                                                : "text-[#ff7a1a]",
+                                                ? "bg-white/10"
+                                                : "bg-white",
                                             )}
-                                          />
+                                          >
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img
+                                              src="/images/contest-details/bonus-star.svg"
+                                              alt=""
+                                              width={19}
+                                              height={19}
+                                              className="h-[19px] w-[19px]"
+                                            />
+                                          </div>
                                           <span
                                             className={cn(
-                                              "font-medium",
+                                              "text-[15px] font-semibold",
                                               isDark
-                                                ? "text-slate-100"
-                                                : "text-slate-900",
+                                                ? "text-white"
+                                                : "text-[#0a0a0a]",
                                             )}
                                           >
                                             Extra Bonuses
@@ -6443,15 +6265,24 @@ export function ContestClientPage({
                                         </div>
                                         <div
                                           className={cn(
-                                            "prose prose-sm max-w-none",
+                                            "rounded-[14px] border px-5 py-4",
                                             isDark
-                                              ? "prose-invert text-slate-100"
-                                              : "text-slate-900",
+                                              ? "border-amber-900/40 bg-amber-950/30"
+                                              : "border-[#e6d3a3] bg-[#fff3d6]",
                                           )}
-                                          dangerouslySetInnerHTML={{
-                                            __html: bonus.description_html,
-                                          }}
-                                        />
+                                        >
+                                          <div
+                                            className={cn(
+                                              "prose prose-sm max-w-none text-[13px] font-medium",
+                                              isDark
+                                                ? "prose-invert text-slate-100"
+                                                : "text-[#0a0a0a] [&_*]:text-[#0a0a0a]",
+                                            )}
+                                            dangerouslySetInnerHTML={{
+                                              __html: bonus.description_html,
+                                            }}
+                                          />
+                                        </div>
                                       </div>
                                     </div>
                                   );
@@ -6464,108 +6295,127 @@ export function ContestClientPage({
                                   detailVideoPlatforms[0] ??
                                   contest?.platform,
                               )?.description_html && (
-                                <>
-                                  <div
-                                    className={cn(
-                                      "p-3 rounded-lg border transition-all duration-300",
-                                      isDark
-                                        ? "bg-white/[0.04] border-slate-700"
-                                        : "bg-[#fafafa] border-neutral-200",
-                                    )}
-                                  >
-                                    <div className="flex items-center gap-3 mb-3">
-                                      <Star
-                                        className={cn(
-                                          "h-5 w-5",
-                                          isDark
-                                            ? "text-[#ffa35c]"
-                                            : "text-[#ff7a1a]",
-                                        )}
-                                      />
-                                      <span
-                                        className={cn(
-                                          "font-medium flex items-center gap-2",
-                                          isDark
-                                            ? "text-slate-100"
-                                            : "text-slate-900",
-                                        )}
-                                      >
-                                        Extra Bonuses
-                                        {detailVideoPlatforms.length >= 2 &&
-                                        detailPlatformTab ===
-                                          ALL_PLATFORM_TAB ? (
-                                          <ContestDetailSharedAcrossPlatformsHint
-                                            platforms={detailVideoPlatforms}
-                                          />
-                                        ) : null}
-                                      </span>
-                                      <div className="group relative">
-                                        <Info
-                                          className={cn(
-                                            "h-4 w-4 cursor-help",
-                                            isDark
-                                              ? "text-[#ffa35c]"
-                                              : "text-[#ff7a1a]",
-                                          )}
-                                        />
-                                        <div
-                                          className={cn(
-                                            "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center",
-                                            isDark
-                                              ? "bg-slate-800 text-slate-100 border border-slate-700"
-                                              : "bg-slate-900 text-white",
-                                          )}
-                                        >
-                                          These are additional earning
-                                          opportunities. The amount is handled
-                                          and credited by the brand separately
-                                          from the main contest prizes.
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="max-h-40 overflow-y-auto pr-2">
-                                      <div
-                                        className={cn(
-                                          "prose prose-sm max-w-none",
-                                          isDark
-                                            ? "prose-invert text-white [&_*]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_b]:!text-white [&_em]:!text-white [&_i]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_li]:!text-white [&_ul]:!text-white [&_ol]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_a]:!text-white"
-                                            : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700",
-                                        )}
-                                        dangerouslySetInnerHTML={{
-                                          __html:
-                                            bonusDetailsForPlatform(
-                                              (contest as any).bonus_details,
-                                              detailScopedPlatform ??
-                                                detailVideoPlatforms[0] ??
-                                                contest?.platform,
-                                            )?.description_html || "",
-                                        }}
-                                      />
-                                    </div>
+                                <div
+                                  className={cn(
+                                    "flex flex-col gap-4 rounded-2xl border px-5 pb-[18px] pt-5",
+                                    isDark
+                                      ? "border-slate-700 bg-white/[0.04]"
+                                      : "border-[#e5e5e5] bg-[#fafafa]",
+                                  )}
+                                >
+                                  <div className="flex items-center gap-3">
                                     <div
                                       className={cn(
-                                        "mt-2 pt-2 border-t",
-                                        isDark
-                                          ? "border-slate-700"
-                                          : "border-neutral-200",
+                                        "flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl",
+                                        isDark ? "bg-white/10" : "bg-white",
                                       )}
                                     >
-                                      <p
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img
+                                        src="/images/contest-details/bonus-star.svg"
+                                        alt=""
+                                        width={19}
+                                        height={19}
+                                        className="h-[19px] w-[19px]"
+                                      />
+                                    </div>
+                                    <span
+                                      className={cn(
+                                        "flex items-center gap-1.5 text-[15px] font-semibold",
+                                        isDark
+                                          ? "text-white"
+                                          : "text-[#0a0a0a]",
+                                      )}
+                                    >
+                                      Extra Bonuses
+                                      {detailVideoPlatforms.length >= 2 &&
+                                      detailPlatformTab ===
+                                        ALL_PLATFORM_TAB ? (
+                                        <ContestDetailSharedAcrossPlatformsHint
+                                          platforms={detailVideoPlatforms}
+                                        />
+                                      ) : null}
+                                    </span>
+                                    <div className="group relative">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img
+                                        src="/images/contest-details/bonus-info.svg"
+                                        alt=""
+                                        width={14}
+                                        height={14}
+                                        className="h-3.5 w-3.5 cursor-help"
+                                      />
+                                      <div
                                         className={cn(
-                                          "text-xs flex items-center gap-1",
+                                          "pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 min-w-64 max-w-80 -translate-x-1/2 rounded-lg px-3 py-2 text-center text-xs opacity-0 transition-opacity duration-200 group-hover:opacity-100",
                                           isDark
-                                            ? "text-[#ffa35c]"
-                                            : "text-[#ff7a1a]",
+                                            ? "border border-slate-700 bg-slate-800 text-slate-100"
+                                            : "bg-slate-900 text-white",
                                         )}
                                       >
-                                        <Info className="h-3 w-3" />
-                                        These bonuses are handled manually by
-                                        the brand. Read carefully and reach out
-                                        if you have questions!
-                                      </p>
+                                        These are additional earning
+                                        opportunities. The amount is handled
+                                        and credited by the brand separately
+                                        from the main contest prizes.
+                                      </div>
                                     </div>
                                   </div>
-                                </>
+                                  <div
+                                    className={cn(
+                                      "max-h-40 overflow-y-auto rounded-[14px] border px-5 py-4",
+                                      isDark
+                                        ? "border-amber-900/40 bg-amber-950/30"
+                                        : "border-[#e6d3a3] bg-[#fff3d6]",
+                                    )}
+                                  >
+                                    <div
+                                      className={cn(
+                                        "prose prose-sm max-w-none text-[13px] font-medium leading-relaxed",
+                                        isDark
+                                          ? "prose-invert text-white [&_*]:!text-white"
+                                          : "text-[#0a0a0a] [&_*]:text-[#0a0a0a]",
+                                      )}
+                                      dangerouslySetInnerHTML={{
+                                        __html:
+                                          bonusDetailsForPlatform(
+                                            (contest as any).bonus_details,
+                                            detailScopedPlatform ??
+                                              detailVideoPlatforms[0] ??
+                                              contest?.platform,
+                                          )?.description_html || "",
+                                      }}
+                                    />
+                                  </div>
+                                  <div
+                                    className={cn(
+                                      "flex items-center gap-2 border-t pt-4",
+                                      isDark
+                                        ? "border-slate-700"
+                                        : "border-[#e5e5e5]",
+                                    )}
+                                  >
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src="/images/contest-details/bonus-info-2.svg"
+                                      alt=""
+                                      width={14}
+                                      height={14}
+                                      className="h-3.5 w-3.5 shrink-0"
+                                    />
+                                    <p
+                                      className={cn(
+                                        "text-xs leading-relaxed",
+                                        isDark
+                                          ? "text-slate-300"
+                                          : "text-[#737373]",
+                                      )}
+                                    >
+                                      These bonuses are handled manually by the
+                                      brand. Read carefully and reach out if you
+                                      have questions!
+                                    </p>
+                                  </div>
+                                </div>
                               )
                             )}
                           </div>
@@ -6584,18 +6434,25 @@ export function ContestClientPage({
                           ref={(el) => {
                             sectionRefs.current["prize-structure"] = el;
                           }}
-                          className="empty:hidden"
+                          className={cn(surfaceClass, "empty:hidden overflow-hidden")}
                         >
-                          <div className="p-6">
-                            <div className="mb-6 flex items-center gap-3">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]">
-                                <Trophy className="h-5 w-5" />
+                          <div className="p-7">
+                            <div className="mb-6 flex items-center gap-3.5">
+                              <div
+                                className={cn(
+                                  "flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl",
+                                  isDark
+                                    ? "bg-white/10 text-white"
+                                    : "bg-[#f5f5f5] text-[#0a0a0a]",
+                                )}
+                              >
+                                <Trophy className="h-[19px] w-[19px]" />
                               </div>
                               <div className="min-w-0">
                                 <h3
                                   className={cn(
-                                    "text-xl font-bold flex flex-wrap items-center gap-2",
-                                    isDark ? "text-white" : "text-slate-900",
+                                    "flex flex-wrap items-center gap-2 text-xl font-semibold tracking-[-0.2px]",
+                                    isDark ? "text-white" : "text-[#0a0a0a]",
                                   )}
                                 >
                                   Prize Structure
@@ -6609,8 +6466,8 @@ export function ContestClientPage({
                                 </h3>
                                 <p
                                   className={cn(
-                                    "text-sm",
-                                    isDark ? "text-gray-300" : "text-slate-600",
+                                    "text-[13px]",
+                                    isDark ? "text-slate-300" : "text-[#737373]",
                                   )}
                                 >
                                   Complete prize breakdown for all positions
@@ -6630,226 +6487,255 @@ export function ContestClientPage({
                                 ) {
                                   return null;
                                 }
+                                const sortedPrizes = [...lb.prizes].sort(
+                                  (a: any, b: any) => a.position - b.position,
+                                );
+                                const poolCents =
+                                  getLeaderboardPrizePoolCents(lb);
+                                const placeLabel = (position: number) =>
+                                  position === 1
+                                    ? "1st Place"
+                                    : position === 2
+                                      ? "2nd Place"
+                                      : position === 3
+                                        ? "3rd Place"
+                                        : `${position}th Place`;
+                                const poolShare = (amount: number) => {
+                                  if (!poolCents) return "0% of pool";
+                                  const pct = (amount / poolCents) * 100;
+                                  return `${Number.isInteger(pct) ? pct : pct.toFixed(1)}% of pool`;
+                                };
+                                const topPrizes = sortedPrizes.filter(
+                                  (p: any) => p.position <= 3,
+                                );
+                                const otherPrizes = sortedPrizes.filter(
+                                  (p: any) => p.position > 3,
+                                );
+                                const prizeByPos = (pos: number) =>
+                                  topPrizes.find(
+                                    (p: any) => p.position === pos,
+                                  );
+                                const first = prizeByPos(1);
+                                const second = prizeByPos(2);
+                                const third = prizeByPos(3);
+
                                 const prizeBody = (
-                                  <div className="space-y-6">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                  <div className="space-y-[22px]">
+                                    <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
                                       <div
                                         className={cn(
-                                          "rounded-2xl border p-5",
+                                          "rounded-2xl border px-[18px] py-4",
                                           isDark
-                                            ? "bg-white/[0.04] border-slate-700"
-                                            : "bg-[#fafafa] border-neutral-200",
+                                            ? "border-slate-700 bg-white/[0.04]"
+                                            : "border-[#e5e5e5] bg-[#fafafa]",
                                         )}
                                       >
-                                        <div className="flex items-center gap-3">
-                                          <Trophy
-                                            className={cn(
-                                              "h-6 w-6",
-                                              isDark
-                                                ? "text-[#ffa35c]"
-                                                : "text-[#ff7a1a]",
-                                            )}
-                                          />
-                                          <div>
-                                            <div
-                                              className={cn(
-                                                "text-sm font-medium",
-                                                isDark
-                                                  ? "text-slate-100"
-                                                  : "text-slate-900",
-                                              )}
-                                            >
-                                              Total Prize Pool
-                                            </div>
-                                            <div
-                                              className={cn(
-                                                "text-2xl font-bold",
-                                                isDark
-                                                  ? "text-slate-100"
-                                                  : "text-slate-900",
-                                              )}
-                                            >
-                                              {formatMoney(
-                                                getLeaderboardPrizePoolCents(
-                                                  lb,
-                                                ),
-                                              )}
-                                            </div>
-                                          </div>
+                                        <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-[#737373]">
+                                          <Trophy className="h-3.5 w-3.5 text-[#f97316]" />
+                                          Total Prize Pool
                                         </div>
+                                        <p
+                                          className={cn(
+                                            "text-[26px] font-bold tracking-[-0.52px]",
+                                            isDark
+                                              ? "text-white"
+                                              : "text-[#0a0a0a]",
+                                          )}
+                                        >
+                                          {formatMoney(poolCents)}
+                                        </p>
+                                        <p className="mt-1 text-xs text-[#737373]">
+                                          distributed across winners
+                                        </p>
                                       </div>
                                       <div
                                         className={cn(
-                                          "rounded-2xl border p-5",
+                                          "rounded-2xl border px-[18px] py-4",
                                           isDark
                                             ? "border-slate-700 bg-white/[0.04]"
-                                            : "border-neutral-200 bg-[#fafafa]",
+                                            : "border-[#e5e5e5] bg-[#fafafa]",
                                         )}
                                       >
-                                        <div className="flex items-center gap-3">
-                                          <Users
-                                            className={cn(
-                                              "h-6 w-6",
-                                              isDark
-                                                ? "text-[#ffa35c]"
-                                                : "text-[#ff7a1a]",
-                                            )}
-                                          />
-                                          <div>
-                                            <div
-                                              className={cn(
-                                                "text-sm font-medium",
-                                                isDark
-                                                  ? "text-[#ffa35c]"
-                                                  : "text-slate-900",
-                                              )}
-                                            >
-                                              Total Winners
-                                            </div>
-                                            <div
-                                              className={cn(
-                                                "text-2xl font-bold",
-                                                isDark
-                                                  ? "text-slate-100"
-                                                  : "text-slate-900",
-                                              )}
-                                            >
-                                              {lb.winner_count}
-                                            </div>
-                                          </div>
+                                        <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-[#737373]">
+                                          <Users className="h-3.5 w-3.5 text-[#f97316]" />
+                                          Total Winners
                                         </div>
+                                        <p
+                                          className={cn(
+                                            "text-[26px] font-bold tracking-[-0.52px]",
+                                            isDark
+                                              ? "text-white"
+                                              : "text-[#0a0a0a]",
+                                          )}
+                                        >
+                                          {lb.winner_count}
+                                        </p>
+                                        <p className="mt-1 text-xs text-[#737373]">
+                                          positions paid
+                                        </p>
                                       </div>
                                     </div>
 
-                                    <div>
+                                    <div className="space-y-5">
                                       <h4
                                         className={cn(
-                                          "text-lg font-semibold mb-4",
+                                          "text-base font-semibold",
                                           isDark
                                             ? "text-white"
-                                            : "text-slate-900",
+                                            : "text-[#0a0a0a]",
                                         )}
                                       >
                                         Prize Distribution
                                       </h4>
-                                      <div
-                                        className={cn(
-                                          "rounded-lg border max-h-80 overflow-y-auto",
-                                          isDark
-                                            ? "border-slate-700"
-                                            : "border border-neutral-200 bg-white border-slate-200",
-                                        )}
-                                      >
-                                        <div
-                                          className={cn(
-                                            "divide-y",
-                                            isDark
-                                              ? "divide-slate-700"
-                                              : "divide-slate-200",
-                                          )}
-                                        >
-                                          {[...lb.prizes]
-                                            .sort(
-                                              (a: any, b: any) =>
-                                                a.position - b.position,
-                                            )
-                                            .map(
+
+                                      {(first || second || third) && (
+                                        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end">
+                                          {second ? (
+                                            <div
+                                              className={cn(
+                                                "flex flex-1 flex-col items-center justify-center gap-2 rounded-[20px] border px-4 py-5 shadow-[0px_4px_12px_0px_rgba(10,10,10,0.06)] sm:min-h-[204px]",
+                                                isDark
+                                                  ? "border-slate-700 bg-[#12032c]"
+                                                  : "border-[#e5e5e5] bg-white",
+                                              )}
+                                            >
+                                              <div className="flex h-12 w-12 items-center justify-center rounded-full border-[2.5px] border-[#a3a3a3] bg-[#f5f5f5] text-xl font-bold text-[#404040]">
+                                                2
+                                              </div>
+                                              <p className="text-[13px] font-semibold text-[#737373]">
+                                                2nd Place
+                                              </p>
+                                              <p
+                                                className={cn(
+                                                  "text-[28px] font-bold tracking-[-0.56px]",
+                                                  isDark
+                                                    ? "text-white"
+                                                    : "text-[#0a0a0a]",
+                                                )}
+                                              >
+                                                {formatMoney(second.amount)}
+                                              </p>
+                                              <div className="rounded-full bg-[#f5f5f5] px-2.5 py-1 text-[11px] font-semibold text-[#404040]">
+                                                {poolShare(second.amount)}
+                                              </div>
+                                            </div>
+                                          ) : null}
+
+                                          {first ? (
+                                            <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-[20px] border-[1.5px] border-[#e6d3a3] bg-[#fff6e0] px-4 py-5 shadow-[0px_12px_28px_0px_rgba(184,151,90,0.2)] sm:min-h-[244px]">
+                                              <div className="inline-flex items-center gap-1.5 rounded-full bg-[#0a0a0a] px-2.5 py-1 text-[10px] font-bold tracking-[1px] text-white">
+                                                <Trophy className="h-3 w-3 text-[#fbe7b0]" />
+                                                GRAND PRIZE
+                                              </div>
+                                              <div className="flex h-[60px] w-[60px] items-center justify-center rounded-full border-[2.5px] border-[#b8975a] bg-[#fbe7b0] text-[26px] font-bold text-[#7a5a1e]">
+                                                1
+                                              </div>
+                                              <p className="text-[13px] font-semibold text-[#7a5a1e]">
+                                                1st Place
+                                              </p>
+                                              <p className="text-[34px] font-bold tracking-[-0.68px] text-[#0a0a0a]">
+                                                {formatMoney(first.amount)}
+                                              </p>
+                                              <div className="rounded-full border border-[#e6d3a3] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#7a5a1e]">
+                                                {poolShare(first.amount)}
+                                              </div>
+                                            </div>
+                                          ) : null}
+
+                                          {third ? (
+                                            <div
+                                              className={cn(
+                                                "flex flex-1 flex-col items-center justify-center gap-2 rounded-[20px] border px-4 py-5 shadow-[0px_4px_12px_0px_rgba(10,10,10,0.06)] sm:min-h-[188px]",
+                                                isDark
+                                                  ? "border-slate-700 bg-[#12032c]"
+                                                  : "border-[#e5e5e5] bg-white",
+                                              )}
+                                            >
+                                              <div className="flex h-12 w-12 items-center justify-center rounded-full border-[2.5px] border-[#c98b5a] bg-[#fbe9da] text-xl font-bold text-[#8a4b1f]">
+                                                3
+                                              </div>
+                                              <p className="text-[13px] font-semibold text-[#737373]">
+                                                3rd Place
+                                              </p>
+                                              <p
+                                                className={cn(
+                                                  "text-[28px] font-bold tracking-[-0.56px]",
+                                                  isDark
+                                                    ? "text-white"
+                                                    : "text-[#0a0a0a]",
+                                                )}
+                                              >
+                                                {formatMoney(third.amount)}
+                                              </p>
+                                              <div className="rounded-full bg-[#f5f5f5] px-2.5 py-1 text-[11px] font-semibold text-[#404040]">
+                                                {poolShare(third.amount)}
+                                              </div>
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                      )}
+
+                                      {otherPrizes.length > 0 ? (
+                                        <div className="space-y-2.5">
+                                          <p className="text-[11px] font-semibold tracking-[0.88px] text-[#737373]">
+                                            OTHER POSITIONS
+                                          </p>
+                                          <div
+                                            className={cn(
+                                              "overflow-hidden rounded-2xl border",
+                                              isDark
+                                                ? "border-slate-700"
+                                                : "border-[#e5e5e5]",
+                                            )}
+                                          >
+                                            {otherPrizes.map(
                                               (prize: any, index: number) => (
                                                 <div
                                                   key={`${slice.platform ?? "contest"}-${prize.position}-${index}`}
                                                   className={cn(
-                                                    "p-4 transition-colors",
-                                                    isDark
-                                                      ? "hover:bg-white/[0.04]"
-                                                      : "hover:bg-slate-100",
+                                                    "flex items-center gap-3.5 px-5 py-3.5",
+                                                    index > 0 &&
+                                                      (isDark
+                                                        ? "border-t border-slate-700"
+                                                        : "border-t border-[#e5e5e5]"),
                                                   )}
                                                 >
-                                                  <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-4">
-                                                      <div className="w-8 h-8 bg-[#fafafa]0 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md">
-                                                        {prize.position}
-                                                      </div>
-                                                      <div>
-                                                        <div
-                                                          className={cn(
-                                                            "font-medium",
-                                                            isDark
-                                                              ? "text-slate-100"
-                                                              : "text-slate-900",
-                                                          )}
-                                                        >
-                                                          Position{" "}
-                                                          {prize.position}
-                                                          {prize.position ===
-                                                            1 && " 🥇"}
-                                                          {prize.position ===
-                                                            2 && " 🥈"}
-                                                          {prize.position ===
-                                                            3 && " 🥉"}
-                                                        </div>
-                                                        <div
-                                                          className={cn(
-                                                            "text-sm",
-                                                            isDark
-                                                              ? "text-slate-400"
-                                                              : "text-slate-600",
-                                                          )}
-                                                        >
-                                                          {prize.position === 1
-                                                            ? "1st Place"
-                                                            : prize.position ===
-                                                                2
-                                                              ? "2nd Place"
-                                                              : prize.position ===
-                                                                  3
-                                                                ? "3rd Place"
-                                                                : `${prize.position}th Place`}
-                                                        </div>
-                                                      </div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                      <div
-                                                        className={cn(
-                                                          "text-xl font-bold",
-                                                          isDark
-                                                            ? "text-white"
-                                                            : "text-slate-900",
-                                                        )}
-                                                      >
-                                                        {formatMoney(
-                                                          prize.amount,
-                                                        )}
-                                                      </div>
-                                                      <div
-                                                        className={cn(
-                                                          "text-sm",
-                                                          isDark
-                                                            ? "text-slate-400"
-                                                            : "text-slate-600",
-                                                        )}
-                                                      >
-                                                        {(() => {
-                                                          const pool =
-                                                            getLeaderboardPrizePoolCents(
-                                                              lb,
-                                                            );
-                                                          return pool > 0
-                                                            ? (
-                                                                (prize.amount /
-                                                                  pool) *
-                                                                100
-                                                              ).toFixed(1)
-                                                            : "0.0";
-                                                        })()}
-                                                        % of total
-                                                      </div>
-                                                    </div>
+                                                  <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-[#f5f5f5] text-[13px] font-semibold text-[#404040]">
+                                                    {prize.position}
                                                   </div>
+                                                  <div className="min-w-0 flex-1">
+                                                    <p
+                                                      className={cn(
+                                                        "text-sm font-semibold",
+                                                        isDark
+                                                          ? "text-white"
+                                                          : "text-[#0a0a0a]",
+                                                      )}
+                                                    >
+                                                      Position {prize.position}
+                                                    </p>
+                                                    <p className="text-xs text-[#737373]">
+                                                      {placeLabel(
+                                                        prize.position,
+                                                      )}
+                                                    </p>
+                                                  </div>
+                                                  <p
+                                                    className={cn(
+                                                      "text-base font-semibold",
+                                                      isDark
+                                                        ? "text-white"
+                                                        : "text-[#0a0a0a]",
+                                                    )}
+                                                  >
+                                                    {formatMoney(prize.amount)}
+                                                  </p>
                                                 </div>
                                               ),
                                             )}
+                                          </div>
                                         </div>
-                                      </div>
+                                      ) : null}
                                     </div>
                                   </div>
                                 );
@@ -7100,271 +6986,237 @@ export function ContestClientPage({
                         ref={(el) => {
                           sectionRefs.current["contest-details"] = el;
                         }}
-                        className="space-y-4 p-6 empty:hidden"
+                        className={cn(
+                          surfaceClass,
+                          "space-y-[22px] p-7 empty:hidden overflow-hidden",
+                        )}
                       >
-                        <h3
-                          className={cn(
-                            titleClass,
-                            "flex items-center gap-2 text-xl",
-                          )}
-                        >
-                          <Calendar className="h-5 w-5 text-[#ff7a1a]" />
-                          Contest Details
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {/* Start Date Card */}
+                        <div className="flex items-center gap-3.5">
                           <div
                             className={cn(
-                              "rounded-2xl border p-4 shadow-none",
+                              "flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl",
                               isDark
-                                ? "border-slate-700 bg-[#12032c]"
-                                : "border-neutral-200 bg-white",
+                                ? "bg-white/10 text-white"
+                                : "bg-[#f5f5f5] text-[#0a0a0a]",
                             )}
                           >
-                            <div className="flex items-center gap-3">
-                              <div
+                            <Calendar className="h-[19px] w-[19px]" />
+                          </div>
+                          <div>
+                            <h3
+                              className={cn(
+                                titleClass,
+                                "text-xl tracking-[-0.2px]",
+                              )}
+                            >
+                              Contest Details
+                            </h3>
+                            <p
+                              className={cn(
+                                "text-[13px]",
+                                isDark ? "text-slate-300" : "text-[#737373]",
+                              )}
+                            >
+                              Schedule and status
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-3">
+                          <div
+                            className={cn(
+                              "flex flex-1 items-center gap-3.5 rounded-2xl border px-5 py-[18px]",
+                              isDark
+                                ? "border-slate-700 bg-[#12032c]"
+                                : "border-[#e5e5e5] bg-[#fafafa]",
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
+                                isDark
+                                  ? "bg-white/10 text-white"
+                                  : "bg-white text-[#0a0a0a]",
+                              )}
+                            >
+                              <Play className="h-5 w-5" />
+                            </div>
+                            <div className="min-w-0">
+                              <p
                                 className={cn(
-                                  "flex h-10 w-10 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]",
+                                  "text-[10px] font-semibold tracking-[0.8px]",
+                                  isDark ? "text-slate-400" : "text-[#737373]",
                                 )}
                               >
-                                <Play className="h-5 w-5" />
-                              </div>
-                              <div className="flex-1">
+                                START DATE & TIME
+                              </p>
+                              <p
+                                className={cn(
+                                  "text-lg font-bold tracking-[-0.18px]",
+                                  isDark ? "text-white" : "text-[#0a0a0a]",
+                                )}
+                              >
+                                {contest.start_date
+                                  ? formatLocalDateTime(contest.start_date, {
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric",
+                                    })
+                                  : "Not specified"}
+                              </p>
+                              {contest.start_date ? (
                                 <p
                                   className={cn(
-                                    "text-xs font-medium uppercase tracking-wide",
+                                    "text-xs",
                                     isDark
-                                      ? "text-slate-300"
-                                      : "text-slate-600",
+                                      ? "text-slate-400"
+                                      : "text-[#737373]",
                                   )}
                                 >
-                                  Start Date & Time
+                                  {formatLocalDateTime(contest.start_date, {
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                  })}
                                 </p>
-                                <p
-                                  className={cn(
-                                    "text-lg font-bold",
-                                    isDark
-                                      ? "text-slate-100"
-                                      : "text-slate-900",
-                                  )}
-                                >
-                                  {contest.start_date
-                                    ? formatLocalDateTime(contest.start_date)
-                                    : "Not specified"}
-                                </p>
-                              </div>
+                              ) : null}
                             </div>
                           </div>
 
-                          {/* End Date Card */}
+                          {contest.start_date && contest.end_date ? (
+                            <div className="mx-auto shrink-0 rounded-full bg-[#0a0a0a] px-2.5 py-1 text-[11px] font-semibold text-white sm:mx-0">
+                              {(() => {
+                                const start = new Date(contest.start_date);
+                                const end = new Date(contest.end_date);
+                                const diffDays = Math.ceil(
+                                  Math.abs(end.getTime() - start.getTime()) /
+                                    (1000 * 60 * 60 * 24),
+                                );
+                                return `${diffDays} day${diffDays !== 1 ? "s" : ""}`;
+                              })()}
+                            </div>
+                          ) : null}
+
                           <div
                             className={cn(
-                              "rounded-2xl border p-4 shadow-none",
+                              "flex flex-1 items-center gap-3.5 rounded-2xl border px-5 py-[18px]",
                               isDark
                                 ? "border-slate-700 bg-[#12032c]"
-                                : "border-neutral-200 bg-white",
+                                : "border-[#e5e5e5] bg-[#fafafa]",
                             )}
                           >
-                            <div className="flex items-center gap-3">
-                              <div
+                            <div
+                              className={cn(
+                                "flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
+                                isDark
+                                  ? "bg-white/10 text-white"
+                                  : "bg-white text-[#0a0a0a]",
+                              )}
+                            >
+                              <CheckCircle className="h-5 w-5" />
+                            </div>
+                            <div className="min-w-0">
+                              <p
                                 className={cn(
-                                  "flex h-10 w-10 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]",
+                                  "text-[10px] font-semibold tracking-[0.8px]",
+                                  isDark ? "text-slate-400" : "text-[#737373]",
                                 )}
                               >
-                                <Clock className="h-5 w-5" />
-                              </div>
-                              <div className="flex-1">
+                                END DATE & TIME
+                              </p>
+                              <p
+                                className={cn(
+                                  "text-lg font-bold tracking-[-0.18px]",
+                                  isDark ? "text-white" : "text-[#0a0a0a]",
+                                )}
+                              >
+                                {contest.end_date
+                                  ? formatLocalDateTime(contest.end_date, {
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric",
+                                    })
+                                  : "Not specified"}
+                              </p>
+                              {contest.end_date ? (
                                 <p
                                   className={cn(
-                                    "text-xs font-medium uppercase tracking-wide",
+                                    "text-xs",
                                     isDark
-                                      ? "text-slate-300"
-                                      : "text-slate-600",
+                                      ? "text-slate-400"
+                                      : "text-[#737373]",
                                   )}
                                 >
-                                  End Date & Time
+                                  {formatLocalDateTime(contest.end_date, {
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                  })}
                                 </p>
-                                <p
-                                  className={cn(
-                                    "text-lg font-bold",
-                                    isDark
-                                      ? "text-slate-100"
-                                      : "text-slate-900",
-                                  )}
-                                >
-                                  {contest.end_date
-                                    ? formatLocalDateTime(contest.end_date)
-                                    : "Not specified"}
-                                </p>
-                              </div>
+                              ) : null}
                             </div>
                           </div>
+                        </div>
 
-                          {/* Platform Card */}
+                        <div className="flex flex-wrap items-center gap-2">
                           <div
                             className={cn(
-                              "rounded-2xl border p-4 shadow-none",
+                              "inline-flex items-center gap-1.5 rounded-full py-1 pl-2.5 pr-3 text-xs font-medium",
                               isDark
-                                ? "border-slate-700 bg-[#12032c]"
-                                : "border-neutral-200 bg-white",
+                                ? "bg-white/10 text-slate-200"
+                                : "bg-[#f5f5f5] text-[#404040]",
                             )}
                           >
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={cn(
-                                  "flex h-10 w-10 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]",
-                                )}
-                              >
-                                <Monitor className="h-5 w-5" />
-                              </div>
-                              <div className="flex-1">
-                                <p
-                                  className={cn(
-                                    "text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wide",
-                                    isDark
-                                      ? "text-slate-300"
-                                      : "text-slate-600",
-                                  )}
-                                >
-                                  Platform
-                                </p>
-                                <p
-                                  className={cn(
-                                    "text-lg font-bold",
-                                    isDark
-                                      ? "text-slate-100"
-                                      : "text-slate-900",
-                                  )}
-                                >
-                                  {detailPlatformLabel}
-                                </p>
-                              </div>
-                            </div>
+                            <Monitor className="h-3.5 w-3.5" />
+                            {detailPlatformLabel}
                           </div>
-
-                          {/* Status Card */}
                           <div
                             className={cn(
-                              "rounded-2xl border p-4 shadow-none",
+                              "inline-flex items-center gap-1.5 rounded-full py-1 pl-2.5 pr-3 text-xs font-medium capitalize",
                               isDark
-                                ? "border-slate-700 bg-[#12032c]"
-                                : "border-neutral-200 bg-white",
+                                ? "bg-white/10 text-slate-200"
+                                : "bg-[#f5f5f5] text-[#404040]",
                             )}
                           >
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={cn(
-                                  "flex h-10 w-10 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]",
-                                )}
-                              >
-                                <Info className="h-5 w-5 " />
-                              </div>
-                              <div className="flex-1">
-                                <p
-                                  className={cn(
-                                    "text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wide",
-                                    isDark
-                                      ? "text-slate-300"
-                                      : "text-slate-600",
-                                  )}
-                                >
-                                  Status
-                                </p>
-                                <p
-                                  className={cn(
-                                    "text-lg font-bold",
-                                    isDark
-                                      ? "text-slate-100"
-                                      : "text-slate-900",
-                                  )}
-                                >
-                                  {contest.status || "Not specified"}
-                                </p>
-                              </div>
-                            </div>
+                            <Info className="h-3.5 w-3.5" />
+                            {contest.status || "Not specified"}
                           </div>
-
+                          {contest.status === "ended" &&
+                            postContestStatus === "payouts_processed" && (
+                              <div className="inline-flex items-center gap-1.5 rounded-full bg-[#dcfce7] py-1 pl-2.5 pr-3 text-xs font-medium text-[#15803d]">
+                                <CheckCircle className="h-3.5 w-3.5" />
+                                Payouts processed
+                              </div>
+                            )}
                           {/* Campaign Type Card - Only for Twitter campaigns */}
                           {(() => {
                             const isTwitterTextImage =
                               (contest.platform?.toLowerCase() === "twitter" ||
                                 contest.platform?.toLowerCase() === "x") &&
                               contest.contest_format === "text_image";
-
-                            if (isTwitterTextImage) {
-                              const campaignType =
-                                contest.contest_based_details?.twitter_campaign
-                                  ?.campaign_type;
-                              if (
-                                campaignType === "raid" ||
-                                campaignType === "awareness"
-                              ) {
-                                return (
-                                  <div
-                                    className={cn(
-                                      "rounded-2xl p-5 border shadow-sm",
-                                      isDark
-                                        ? campaignType === "raid"
-                                          ? "border-red-400/50 bg-red-900/20"
-                                          : "border-slate-700 bg-white/[0.04]"
-                                        : campaignType === "raid"
-                                          ? "bg-white border-red-200"
-                                          : "bg-white border-neutral-200",
-                                    )}
-                                  >
-                                    <div className="flex items-center gap-3">
-                                      <div
-                                        className={cn(
-                                          "p-3 rounded-full",
-                                          isDark
-                                            ? campaignType === "raid"
-                                              ? "bg-red-500/30 text-red-400"
-                                              : "bg-[#fafafa]0/30 text-[#ffa35c]"
-                                            : campaignType === "raid"
-                                              ? "bg-red-100 text-red-600"
-                                              : "bg-[#fafafa] text-[#ff7a1a]",
-                                        )}
-                                      >
-                                        <Tag className="h-5 w-5" />
-                                      </div>
-                                      <div className="flex-1">
-                                        <p
-                                          className={cn(
-                                            "text-xs font-medium uppercase tracking-wide",
-                                            isDark
-                                              ? campaignType === "raid"
-                                                ? "text-red-300"
-                                                : "text-[#ffa35c]"
-                                              : campaignType === "raid"
-                                                ? "text-red-600"
-                                                : "text-[#ff7a1a]",
-                                          )}
-                                        >
-                                          Campaign Type
-                                        </p>
-                                        <p
-                                          className={cn(
-                                            "text-lg font-bold",
-                                            isDark
-                                              ? campaignType === "raid"
-                                                ? "text-red-100"
-                                                : "text-slate-100"
-                                              : campaignType === "raid"
-                                                ? "text-red-900"
-                                                : "text-slate-900",
-                                          )}
-                                        >
-                                          {campaignType === "raid"
-                                            ? "Raid Campaign"
-                                            : "Awareness Campaign"}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              }
-                            }
-                            return null;
+                            if (!isTwitterTextImage) return null;
+                            const campaignType =
+                              contest.contest_based_details?.twitter_campaign
+                                ?.campaign_type;
+                            if (
+                              campaignType !== "raid" &&
+                              campaignType !== "awareness"
+                            )
+                              return null;
+                            return (
+                              <div
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 rounded-full py-1 pl-2.5 pr-3 text-xs font-medium capitalize",
+                                  campaignType === "raid"
+                                    ? "bg-red-50 text-red-700"
+                                    : isDark
+                                      ? "bg-white/10 text-slate-200"
+                                      : "bg-[#f5f5f5] text-[#404040]",
+                                )}
+                              >
+                                {campaignType === "raid"
+                                  ? "Raid Campaign"
+                                  : "Awareness Campaign"}
+                              </div>
+                            );
                           })()}
                         </div>
 
@@ -7577,34 +7429,49 @@ export function ContestClientPage({
                           })()}
                       </div>
 
-                      {contest && (
-                        <CreatorEligibilitySection
-                          contest={contest}
-                          isDark={isDark}
-                          className="p-6"
-                          sectionRef={(el) => {
-                            sectionRefs.current["creator-eligibility"] = el;
-                          }}
-                        />
-                      )}
-
                       {/* 3. CONTENT REQUIREMENTS - Brief and Content Type */}
                       <div
                         id="content-requirements"
                         ref={(el) => {
                           sectionRefs.current["content-requirements"] = el;
                         }}
-                        className="space-y-6 p-6 empty:hidden"
+                        className={cn(surfaceClass, "space-y-6 p-7 empty:hidden overflow-hidden")}
                       >
-                        <h3
-                          className={cn(
-                            titleClass,
-                            "flex items-center gap-2 text-xl",
-                          )}
-                        >
-                          <FileText className="h-5 w-5 text-[#ff7a1a]" />
-                          Content Requirements
-                        </h3>
+                        <div className="flex items-center gap-3.5">
+                          <div
+                            className={cn(
+                              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                              isDark ? "bg-white/10" : "bg-[#f5f5f5]",
+                            )}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src="/images/contest-details/brief-file.svg"
+                              alt=""
+                              width={20}
+                              height={20}
+                              className="h-5 w-5"
+                            />
+                          </div>
+                          <div>
+                            <h3
+                              className={cn(
+                                "text-xl font-semibold tracking-[-0.3px]",
+                                isDark ? "text-white" : "text-[#0a0a0a]",
+                              )}
+                            >
+                              Content Requirements
+                            </h3>
+                            <p
+                              className={cn(
+                                "text-[13px]",
+                                isDark ? "text-slate-300" : "text-[#737373]",
+                              )}
+                            >
+                              Read the brief carefully before you create
+                            </p>
+                          </div>
+                        </div>
                         {/* Twitter raid details for Twitter contests */}
                         {(() => {
                           const twitterCampaign = (contest as any)
@@ -8149,31 +8016,69 @@ export function ContestClientPage({
                           );
                         })()}
 
-                        {/* Brief Section */}
+                        {/* Brief Section — Figma Content Requirements / Brief Card */}
                         <div
                           className={cn(
-                            "rounded-2xl border p-5",
+                            "overflow-hidden rounded-2xl border",
                             isDark
-                              ? "border-slate-700 bg-[#12032c]"
-                              : "border-neutral-200 bg-[#fafafa]",
+                              ? "border-slate-700 bg-transparent"
+                              : "border-[#e5e5e5] bg-white",
                           )}
                         >
-                          <h4
+                          <div
                             className={cn(
-                              "font-semibold text-lg mb-4 flex items-center gap-2",
-                              isDark ? "text-slate-100" : "text-slate-900",
+                              "flex items-center justify-between border-b px-5 py-3.5",
+                              isDark
+                                ? "border-slate-700 bg-white/[0.04]"
+                                : "border-[#e5e5e5] bg-[#fafafa]",
                             )}
                           >
-                            📝 Brief
-                            {!showDetailBriefByPlatform &&
-                            detailVideoPlatforms.length >= 2 &&
-                            detailPlatformTab === ALL_PLATFORM_TAB ? (
-                              <ContestDetailSharedAcrossPlatformsHint
-                                platforms={detailVideoPlatforms}
-                              />
-                            ) : null}
-                          </h4>
-                          <div ref={briefCopyRef}>
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={cn(
+                                  "flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] border",
+                                  isDark
+                                    ? "border-slate-600 bg-white/10"
+                                    : "border-[#e5e5e5] bg-white",
+                                )}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src="/images/contest-details/brief-file-sm.svg"
+                                  alt=""
+                                  width={15}
+                                  height={15}
+                                  className="h-[15px] w-[15px]"
+                                />
+                              </div>
+                              <h4
+                                className={cn(
+                                  "flex items-center gap-2 text-[15px] font-semibold",
+                                  isDark ? "text-white" : "text-[#0a0a0a]",
+                                )}
+                              >
+                                Brief
+                                {!showDetailBriefByPlatform &&
+                                detailVideoPlatforms.length >= 2 &&
+                                detailPlatformTab === ALL_PLATFORM_TAB ? (
+                                  <ContestDetailSharedAcrossPlatformsHint
+                                    platforms={detailVideoPlatforms}
+                                  />
+                                ) : null}
+                              </h4>
+                            </div>
+                            <CopyContentButton
+                              what="brief"
+                              isDark={isDark}
+                              getContent={() =>
+                                copyPayloadFromElement(briefCopyRef.current)
+                              }
+                            />
+                          </div>
+                          <div
+                            ref={briefCopyRef}
+                            className="space-y-4 px-6 pb-6 pt-[22px]"
+                          >
                             {showDetailBriefByPlatform ? (
                               <div className="space-y-3">
                                 {groupPlatformsByBrief(
@@ -8263,39 +8168,51 @@ export function ContestClientPage({
                           </div>
                         </div>
 
-                        {/* Content Type Info Tag */}
+                        {/* Content Type — Figma CLIPPING row */}
                         {(detailContest as any)?.content_type && (
                           <div
                             className={cn(
-                              "inline-flex items-center gap-2 rounded-lg px-3 py-2",
+                              "flex w-full items-center gap-3 overflow-hidden rounded-[14px] border py-3.5 pl-[18px] pr-5",
                               isDark
-                                ? "bg-white/[0.04] border border-slate-700"
-                                : "bg-[#fafafa] border border-neutral-200",
+                                ? "border-slate-700 bg-white/[0.04]"
+                                : "border-[#e5e5e5] bg-[#fafafa]",
                             )}
                           >
-                            <Tag
+                            <div
                               className={cn(
-                                "h-4 w-4",
-                                isDark ? "text-[#ffa35c]" : "text-[#ff7a1a]",
-                              )}
-                            />
-                            <span
-                              className={cn(
-                                "text-sm font-medium",
-                                isDark ? "text-slate-100" : "text-slate-900",
+                                "flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] border",
+                                isDark
+                                  ? "border-slate-600 bg-white/10"
+                                  : "border-[#e5e5e5] bg-white",
                               )}
                             >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src="/images/contest-details/content-scissors.svg"
+                                alt=""
+                                width={15}
+                                height={15}
+                                className="h-[15px] w-[15px]"
+                              />
+                            </div>
+                            <span className="shrink-0 rounded-md bg-[#0a0a0a] px-2.5 py-1 text-[11px] font-bold tracking-[0.88px] text-white">
                               {(
                                 detailContest as any
-                              ).content_type.toUpperCase()}{" "}
-                              -{" "}
+                              ).content_type.toUpperCase()}
+                            </span>
+                            <p
+                              className={cn(
+                                "min-w-0 flex-1 text-sm font-medium leading-normal",
+                                isDark ? "text-slate-200" : "text-[#404040]",
+                              )}
+                            >
                               {(detailContest as any).content_type === "ugc"
                                 ? "Create Face videos"
                                 : (detailContest as any).content_type ===
                                     "clipping"
                                   ? "Video editing and clipping"
                                   : "Check rules to find out what kind of content you need to create"}
-                            </span>
+                            </p>
                           </div>
                         )}
                       </div>
@@ -8306,48 +8223,122 @@ export function ContestClientPage({
                         ref={(el) => {
                           sectionRefs.current["participation-guidelines"] = el;
                         }}
-                        className="space-y-6 p-6 empty:hidden"
+                        className={cn(surfaceClass, "space-y-6 p-7 empty:hidden overflow-hidden")}
                       >
-                        <h3
-                          className={cn(
-                            titleClass,
-                            "flex items-center gap-2 text-xl",
-                          )}
-                        >
-                          <ScrollText className="h-5 w-5 text-[#ff7a1a]" />
-                          Participation Guidelines
-                        </h3>
-                        {/* Rules & Guidelines Section */}
-                        <div
-                          className={cn(
-                            "rounded-2xl border p-5",
-                            isDark
-                              ? "border-slate-700 bg-[#12032c]"
-                              : "border-neutral-200 bg-[#fafafa]",
-                          )}
-                        >
-                          <h4
+                        <div className="flex items-center gap-3.5">
+                          <div
                             className={cn(
-                              "font-semibold text-lg mb-4 flex items-center gap-2",
-                              isDark ? "text-slate-100" : "text-slate-900",
+                              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                              isDark ? "bg-white/10" : "bg-[#f5f5f5]",
                             )}
                           >
-                            <ScrollText
-                              className={cn(
-                                "h-5 w-5",
-                                isDark ? "text-[#ffa35c]" : "text-[#ff7a1a]",
-                              )}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src="/images/contest-details/guide-book.svg"
+                              alt=""
+                              width={20}
+                              height={20}
+                              className="h-5 w-5"
                             />
-                            Rules & Guidelines
-                            {!showDetailRulesByPlatform &&
-                            detailVideoPlatforms.length >= 2 &&
-                            detailPlatformTab === ALL_PLATFORM_TAB ? (
-                              <ContestDetailSharedAcrossPlatformsHint
-                                platforms={detailVideoPlatforms}
+                          </div>
+                          <div>
+                            <h3
+                              className={cn(
+                                "text-xl font-semibold tracking-[-0.3px]",
+                                isDark ? "text-white" : "text-[#0a0a0a]",
+                              )}
+                            >
+                              Participation Guidelines
+                            </h3>
+                            <p
+                              className={cn(
+                                "text-[13px]",
+                                isDark ? "text-slate-300" : "text-[#737373]",
+                              )}
+                            >
+                              Rules & guidelines — breaking them may lead to
+                              rejection
+                            </p>
+                          </div>
+                        </div>
+                        {/* Rules & Guidelines Section — Figma Rules Card */}
+                        <div
+                          className={cn(
+                            "overflow-hidden rounded-2xl border",
+                            isDark
+                              ? "border-slate-700 bg-transparent"
+                              : "border-[#e5e5e5] bg-white",
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              "flex flex-col gap-3 border-b px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between",
+                              isDark
+                                ? "border-slate-700 bg-white/[0.04]"
+                                : "border-[#e5e5e5] bg-[#fafafa]",
+                            )}
+                          >
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <div
+                                className={cn(
+                                  "flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] border",
+                                  isDark
+                                    ? "border-slate-600 bg-white/10"
+                                    : "border-[#e5e5e5] bg-white",
+                                )}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src="/images/contest-details/guide-scroll.svg"
+                                  alt=""
+                                  width={15}
+                                  height={15}
+                                  className="h-[15px] w-[15px]"
+                                />
+                              </div>
+                              <h4
+                                className={cn(
+                                  "flex flex-wrap items-center gap-2 text-[15px] font-semibold",
+                                  isDark ? "text-white" : "text-[#0a0a0a]",
+                                )}
+                              >
+                                Rules & Guidelines
+                                {!showDetailRulesByPlatform &&
+                                detailVideoPlatforms.length >= 2 &&
+                                detailPlatformTab === ALL_PLATFORM_TAB ? (
+                                  <ContestDetailSharedAcrossPlatformsHint
+                                    platforms={detailVideoPlatforms}
+                                  />
+                                ) : null}
+                              </h4>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <CopyContentButton
+                                what="rules"
+                                isDark={isDark}
+                                getContent={() =>
+                                  copyPayloadFromElement(rulesCopyRef.current)
+                                }
                               />
-                            ) : null}
-                          </h4>
-                          <div ref={rulesCopyRef}>
+                              <div className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full border border-[#e6d3a3] bg-[#fff6e0] py-[5px] pl-2.5 pr-3">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src="/images/contest-details/guide-alert.svg"
+                                  alt=""
+                                  width={13}
+                                  height={13}
+                                  className="h-[13px] w-[13px]"
+                                />
+                                <span className="text-xs font-semibold text-[#8a6a1f]">
+                                  Breaking rules may lead to rejection
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div
+                            ref={rulesCopyRef}
+                            className="space-y-4 px-6 pb-6 pt-[22px]"
+                          >
                             {/* Check multiple possible rule fields */}
                             {showDetailRulesByPlatform ? (
                               <div className="space-y-3">
@@ -8580,45 +8571,85 @@ export function ContestClientPage({
                           </div>
                         </div>
 
-                        {/* Terms & Conditions for CPM contests */}
+                        {/* Terms & Conditions for CPM contests — Figma card */}
                         {isCpmContestType(detailContest?.contest_type) &&
                           detailContest?.contest_based_details?.cpm_contest
                             ?.terms_conditions && (
                             <div
                               className={cn(
-                                "rounded-xl p-6 border mt-6",
+                                "overflow-hidden rounded-2xl border",
                                 isDark
-                                  ? "border-slate-600"
-                                  : "bg-white border-neutral-200",
+                                  ? "border-slate-700 bg-transparent"
+                                  : "border-[#e5e5e5] bg-white",
                               )}
                             >
-                              <h4
-                                className={cn(
-                                  "font-semibold text-lg mb-4",
-                                  isDark ? "text-slate-100" : "text-slate-900",
-                                )}
-                              >
-                                📋 Terms & Conditions
-                              </h4>
                               <div
                                 className={cn(
-                                  "rounded-2xl border p-5",
+                                  "flex w-full items-center gap-2.5 border-b px-5 py-3.5",
                                   isDark
-                                    ? "border-gray-700"
-                                    : "border border-neutral-200 bg-white border-slate-200",
+                                    ? "border-slate-700 bg-white/[0.04]"
+                                    : "border-[#e5e5e5] bg-[#fafafa]",
                                 )}
                               >
-                                <pre
+                                <div
                                   className={cn(
-                                    "whitespace-pre-wrap break-words font-sans text-sm",
-                                    isDark ? "text-white" : "text-slate-700",
+                                    "flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] border",
+                                    isDark
+                                      ? "border-slate-600 bg-white/10"
+                                      : "border-[#e5e5e5] bg-white",
                                   )}
                                 >
-                                  {
-                                    detailContest.contest_based_details
-                                      .cpm_contest.terms_conditions
+                                  <ScrollText
+                                    className={cn(
+                                      "h-[15px] w-[15px]",
+                                      isDark
+                                        ? "text-slate-200"
+                                        : "text-[#404040]",
+                                    )}
+                                  />
+                                </div>
+                                <h4
+                                  className={cn(
+                                    "min-w-0 flex-1 text-[15px] font-semibold",
+                                    isDark ? "text-white" : "text-[#0a0a0a]",
+                                  )}
+                                >
+                                  Terms & Conditions
+                                </h4>
+                                <CopyContentButton
+                                  what="terms"
+                                  isDark={isDark}
+                                  getContent={() =>
+                                    copyPayloadFromElement(termsCopyRef.current)
                                   }
-                                </pre>
+                                />
+                              </div>
+                              <div
+                                ref={termsCopyRef}
+                                className="px-6 pb-6 pt-[22px]"
+                              >
+                                <div
+                                  className={cn(
+                                    "rounded-xl border px-[18px] py-4",
+                                    isDark
+                                      ? "border-slate-700 bg-white/[0.04]"
+                                      : "border-[#e5e5e5] bg-[#fafafa]",
+                                  )}
+                                >
+                                  <pre
+                                    className={cn(
+                                      "whitespace-pre-wrap break-words font-sans text-[13px] leading-[1.7]",
+                                      isDark
+                                        ? "text-slate-200"
+                                        : "text-[#404040]",
+                                    )}
+                                  >
+                                    {
+                                      detailContest.contest_based_details
+                                        .cpm_contest.terms_conditions
+                                    }
+                                  </pre>
+                                </div>
                               </div>
                             </div>
                           )}
@@ -8630,7 +8661,7 @@ export function ContestClientPage({
                         ref={(el) => {
                           sectionRefs.current["resources-tools"] = el;
                         }}
-                        className="space-y-6 p-6 empty:hidden"
+                        className={cn(surfaceClass, "space-y-6 p-7 empty:hidden overflow-hidden")}
                       >
                         {(() => {
                           const resourceGroups =
@@ -8692,6 +8723,34 @@ export function ContestClientPage({
                                 {showSharedIcons ? (
                                   <ContestDetailSharedAcrossPlatformsHint
                                     platforms={detailVideoPlatforms}
+                                  />
+                                ) : null}
+                                {hasAny ? (
+                                  <CopyContentButton
+                                    what="resources"
+                                    isDark={isDark}
+                                    className="ml-auto"
+                                    getContent={() =>
+                                      formatLinkListForCopy(
+                                        "Resources & Tools",
+                                        resourceGroups.map(
+                                          (group): CopyLinkGroup => ({
+                                            label: group.platforms
+                                              ?.map(
+                                                (pl) =>
+                                                  VIDEO_PLATFORM_LABELS[pl],
+                                              )
+                                              .join(", "),
+                                            items: group.items.map(
+                                              (r: any) => ({
+                                                url: r.url,
+                                                title: r.description,
+                                              }),
+                                            ),
+                                          }),
+                                        ),
+                                      )
+                                    }
                                   />
                                 ) : null}
                               </h3>
@@ -8835,6 +8894,21 @@ export function ContestClientPage({
                                                     </div>
                                                   </div>
                                                   <div className="mt-3 flex items-center gap-2 md:mt-0">
+                                                    {isCopyableUrl(
+                                                      resource.url,
+                                                    ) ? (
+                                                      <CopyContentButton
+                                                        what="link"
+                                                        variant="item"
+                                                        isDark={isDark}
+                                                        className="h-9 w-9"
+                                                        getContent={() =>
+                                                          linkCopyPayload(
+                                                            resource.url,
+                                                          )
+                                                        }
+                                                      />
+                                                    ) : null}
                                                     <Button
                                                       size="sm"
                                                       asChild
@@ -8959,12 +9033,12 @@ export function ContestClientPage({
                               ref={(el) => {
                                 sectionRefs.current["inspiration-links"] = el;
                               }}
-                              className="space-y-6 scroll-mt-48 p-6"
+                              className={cn(surfaceClass, "space-y-6 scroll-mt-48 p-7 overflow-hidden")}
                             >
                               <div className="flex items-center gap-3">
                                 <h3
                                   className={cn(
-                                    "text-xl font-semibold flex items-center gap-2",
+                                    "text-xl font-semibold flex flex-1 items-center gap-2",
                                     isDark ? "text-white" : "text-slate-900",
                                   )}
                                 >
@@ -8978,6 +9052,32 @@ export function ContestClientPage({
                                     />
                                   ) : null}
                                 </h3>
+                                <CopyContentButton
+                                  what="inspiration links"
+                                  isDark={isDark}
+                                  getContent={() =>
+                                    formatLinkListForCopy(
+                                      "Inspiration Links",
+                                      inspirationGroups.map(
+                                        (group): CopyLinkGroup => ({
+                                          label: group.platforms
+                                            ?.map(
+                                              (pl) =>
+                                                VIDEO_PLATFORM_LABELS[pl],
+                                            )
+                                            .join(", "),
+                                          items: group.links.map((link) => ({
+                                            url: processUrlWithCreator(
+                                              link.url,
+                                              userProfile?.username || "",
+                                            ),
+                                            note: link.description,
+                                          })),
+                                        }),
+                                      ),
+                                    )
+                                  }
+                                />
                               </div>
 
                               <div className="space-y-6">
@@ -9049,6 +9149,16 @@ export function ContestClientPage({
                                                     </p>
                                                   )}
                                                 </div>
+                                                <CopyContentButton
+                                                  what="link"
+                                                  variant="item"
+                                                  isDark={isDark}
+                                                  getContent={() =>
+                                                    linkCopyPayload(
+                                                      processedUrl,
+                                                    )
+                                                  }
+                                                />
                                               </div>
                                             </div>
                                           );
@@ -9099,17 +9209,44 @@ export function ContestClientPage({
                               ref={(el) => {
                                 sectionRefs.current["tracking-links"] = el;
                               }}
-                              className="space-y-4 scroll-mt-48 p-6"
+                              className={cn(surfaceClass, "space-y-4 scroll-mt-48 p-7 overflow-hidden")}
                             >
-                              <h4
-                                className={cn(
-                                  "text-xl font-semibold flex items-center gap-2",
-                                  isDark ? "text-white" : "text-slate-900",
-                                )}
-                              >
-                                <Copy className="h-5 w-5 text-[#ff7a1a] dark:text-[#ffa35c]" />
-                                Tracking Links
-                              </h4>
+                              <div className="flex items-center gap-3">
+                                <h4
+                                  className={cn(
+                                    "flex flex-1 items-center gap-2 text-xl font-semibold",
+                                    isDark ? "text-white" : "text-slate-900",
+                                  )}
+                                >
+                                  <Copy className="h-5 w-5 text-[#ff7a1a] dark:text-[#ffa35c]" />
+                                  Tracking Links
+                                </h4>
+                                <CopyContentButton
+                                  what="tracking links"
+                                  isDark={isDark}
+                                  getContent={() =>
+                                    formatLinkListForCopy(
+                                      "Tracking Links",
+                                      [
+                                        {
+                                          items: trackingLinks.map(
+                                            (item: {
+                                              url: string;
+                                              description: string;
+                                            }) => ({
+                                              url: processUrlWithCreator(
+                                                item.url,
+                                                userProfile?.username || "",
+                                              ),
+                                              note: item.description,
+                                            }),
+                                          ),
+                                        },
+                                      ],
+                                    )
+                                  }
+                                />
+                              </div>
                               {/* {contest.multiple_submissions_enabled && (
                         <div
                           className={cn(
@@ -9246,7 +9383,7 @@ export function ContestClientPage({
                           </>
                         ) : null;
                       })()}
-                    </CardContent>
+                    </div>
                   </div>
                 </div>
               </TabPanel>

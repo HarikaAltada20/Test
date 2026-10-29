@@ -298,7 +298,7 @@ const moderationStatusConfig = {
 
 // Contest lifecycle status configuration
 const contestStatusConfig = {
-  upcoming: { label: "Upcoming", color: "bg-purple-500", icon: Calendar },
+  upcoming: { label: "Upcoming", color: "bg-zinc-700", icon: Calendar },
   active: { label: "Active", color: "bg-green-600", icon: PlayCircle },
   ended: { label: "Ended", color: "bg-gray-600", icon: StopCircle },
 };
@@ -571,8 +571,10 @@ export function ContestListClient({
       href={getContestDetailHref(contest.id)}
       prefetch={false}
       className={cn(
-        "pointer-events-auto relative z-[2] flex items-center justify-center gap-2 rounded-full",
-        isDark ? "bg-[#7F39EC] text-white" : "bg-[#D9C0FF61] text-[#7F39EC]",
+        "pointer-events-auto relative z-[2] flex items-center justify-center gap-2 rounded-full font-semibold transition-colors shadow-sm",
+        isDark
+          ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+          : "bg-[#1a1a1a] text-white hover:bg-black",
         options?.fullWidth && "w-full",
         className,
       )}
@@ -824,10 +826,10 @@ export function ContestListClient({
       }}
       className={cn(
         "pointer-events-auto relative z-[2] inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isDark
-          ? "border-gray-700 text-purple-300 hover:bg-white/5"
-          : "border-purple-200 text-[#7F39EC] hover:bg-purple-50",
+          ? "border-white/20 text-white/80 hover:bg-white/10 hover:text-white"
+          : "border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-black",
         className,
       )}
     >
@@ -985,64 +987,79 @@ export function ContestListClient({
   const isDark = mode === "dark";
 
   const brandPipelineTabs = useMemo(() => {
-    const countBadge = (n: number) => (
+    const countBadge = (n: number, isTabActive: boolean) => (
       <Badge
         variant="secondary"
         className={cn(
           "ml-1.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
-          isDark
-            ? "border-0 bg-white/20 text-white"
-            : "border-0 bg-white text-gray-800 shadow-sm",
+          isTabActive
+            ? isDark
+              ? "border-0 bg-white text-[#1a1a1a]"
+              : "border-0 bg-[#1a1a1a] text-white"
+            : isDark
+              ? "border-0 bg-white/10 text-white/70"
+              : "border-0 bg-white/80 text-gray-700 shadow-sm",
         )}
       >
         {n}
       </Badge>
     );
-    const row = (text: string, n: number) => (
+    const row = (text: string, n: number, id: string) => (
       <span className="flex items-center justify-center gap-0.5">
         <span>{text}</span>
-        {countBadge(n)}
+        {countBadge(n, selectedTab === id)}
       </span>
     );
     return [
-      { id: "all", label: row("All", serverTabCounts.all) },
-      { id: "draft", label: row("Draft", serverTabCounts.draft) },
+      { id: "all", label: row("All", serverTabCounts.all, "all") },
+      { id: "draft", label: row("Draft", serverTabCounts.draft, "draft") },
       {
         id: "pending_approval",
-        label: row("Pending approval", serverTabCounts.pending_approval),
+        label: row(
+          "Pending approval",
+          serverTabCounts.pending_approval,
+          "pending_approval",
+        ),
       },
-      { id: "ready", label: row("Ready", serverTabCounts.ready) },
+      { id: "ready", label: row("Ready", serverTabCounts.ready, "ready") },
       {
         id: "upcoming",
-        label: row("Upcoming", serverTabCounts.upcoming),
+        label: row("Upcoming", serverTabCounts.upcoming, "upcoming"),
       },
-      { id: "live", label: row("Live", serverTabCounts.live) },
-      { id: "ended", label: row("Ended", serverTabCounts.ended) },
-      { id: "rejected", label: row("Rejected", serverTabCounts.rejected) },
+      { id: "live", label: row("Live", serverTabCounts.live, "live") },
+      { id: "ended", label: row("Ended", serverTabCounts.ended, "ended") },
+      {
+        id: "rejected",
+        label: row("Rejected", serverTabCounts.rejected, "rejected"),
+      },
     ];
-  }, [serverTabCounts, isDark]);
+  }, [serverTabCounts, isDark, selectedTab]);
 
   const brandPostContestTabs = useMemo(() => {
-    const countBadge = (n: number) => (
+    const countBadge = (n: number, isTabActive: boolean) => (
       <Badge
         variant="secondary"
         className={cn(
           "ml-1.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
-          isDark
-            ? "border-0 bg-white/20 text-white"
-            : "border-0 bg-white text-gray-800 shadow-sm",
+          isTabActive
+            ? isDark
+              ? "border-0 bg-white text-[#1a1a1a]"
+              : "border-0 bg-[#1a1a1a] text-white"
+            : isDark
+              ? "border-0 bg-white/10 text-white/70"
+              : "border-0 bg-white/80 text-gray-700 shadow-sm",
         )}
       >
         {n}
       </Badge>
     );
-    const row = (text: string, n: number, title?: string) => (
+    const row = (text: string, n: number, id: string, title?: string) => (
       <span
         className="flex items-center justify-center gap-0.5 max-w-[min(100%,14rem)]"
         title={title}
       >
         <span className="leading-tight text-center">{text}</span>
-        {countBadge(n)}
+        {countBadge(n, postContestPhaseFilter === id)}
       </span>
     );
     const endedTotal = serverTabCounts.ended;
@@ -1052,7 +1069,8 @@ export function ContestListClient({
         label: row(
           "All phases",
           endedTotal,
-          "All ended campaigns ? any payout step",
+          "all",
+          "All ended campaigns — any payout step",
         ),
       },
       {
@@ -1060,6 +1078,7 @@ export function ContestListClient({
         label: row(
           "Pending review",
           postPhaseCounts.post_pending_review,
+          "post_pending_review",
           "Ended campaigns awaiting initial review",
         ),
       },
@@ -1068,6 +1087,7 @@ export function ContestListClient({
         label: row(
           "In review",
           postPhaseCounts.post_in_review,
+          "post_in_review",
           "Verification in progress",
         ),
       },
@@ -1076,7 +1096,8 @@ export function ContestListClient({
         label: row(
           "Payment pending",
           postPhaseCounts.post_payment_pending,
-          "Verification complete ? payment pending",
+          "post_payment_pending",
+          "Verification complete — payment pending",
         ),
       },
       {
@@ -1084,11 +1105,17 @@ export function ContestListClient({
         label: row(
           "Completed paid",
           postPhaseCounts.post_paid,
+          "post_paid",
           "Payout completed",
         ),
       },
     ];
-  }, [serverTabCounts.ended, isDark, postPhaseCounts]);
+  }, [
+    serverTabCounts,
+    postPhaseCounts,
+    isDark,
+    postContestPhaseFilter,
+  ]);
 
   useLayoutEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
@@ -1111,7 +1138,7 @@ export function ContestListClient({
     const Icon = config.icon;
     return (
       <Badge
-        className={`${config.color} text-white px=3 py-1 text-sm bg-[#7F39EC] border-0`}
+        className={`${config.color} text-white px-3 py-1 text-sm border-0`}
       >
         {/* <Icon className="w-3 h-3 mr-1" /> */}
         {config.label}
@@ -1173,14 +1200,14 @@ export function ContestListClient({
                   className={cn(
                     "text-sm px-3 py-1 font-medium border",
                     contest.status === "active" &&
-                      "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
+                      "capitalize bg-emerald-600 text-white border-emerald-600",
                     contest.status === "upcoming" &&
-                      "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
+                      "capitalize bg-zinc-700 text-white border-zinc-700",
                     contest.status === "ended" &&
                       `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
                     !["active", "upcoming", "ended"].includes(
                       contest.status || "",
-                    ) && "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
+                    ) && "capitalize bg-zinc-700 text-white border-zinc-700",
                   )}
                 >
                   {contest.status === "active"
@@ -1250,8 +1277,8 @@ export function ContestListClient({
                         className={cn(
                           "text-[12px]",
                           isDark
-                            ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                            : "bg-purple-50 text-purple-700 border-purple-200",
+                            ? "bg-white/10 text-white/90 border-white/20"
+                            : "bg-slate-100 text-slate-800 border-slate-200",
                         )}
                       >
                         <CheckCheck className="h-3 w-3 mr-1" />
@@ -1512,7 +1539,7 @@ export function ContestListClient({
                         title={`Total Budget Spent: ${formatMoney(tracker.spent)}`}
                       >
                         <div
-                          className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                          className="absolute h-full bg-[#1a1a1a] dark:bg-white rounded-full transition-all duration-500 ease-out"
                           style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
                         ></div>
                       </div>
@@ -1615,7 +1642,7 @@ export function ContestListClient({
                         title={`Total Budget Spent: ${formatMoney(tracker.spent)}`}
                       >
                         <div
-                          className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                          className="absolute h-full bg-[#1a1a1a] dark:bg-white rounded-full transition-all duration-500 ease-out"
                           style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
                         ></div>
                       </div>
@@ -1695,13 +1722,13 @@ export function ContestListClient({
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <Badge
                 variant="outline"
-                className="text-sm  bg-[#7F39EC] text-white py-1"
+                className="text-sm bg-[#1a1a1a] text-white dark:bg-white dark:text-[#1a1a1a] py-1"
               >
                 {formatContestPlatformLabel(contest.platform)}
               </Badge>
               <Badge
                 variant="outline"
-                className="text-sm  bg-[#7F39EC] text-white py-1 capitalize"
+                className="text-sm bg-[#1a1a1a] text-white dark:bg-white dark:text-[#1a1a1a] py-1 capitalize"
               >
                 {getContestTypeLabel(contest.contest_type)}
               </Badge>
@@ -1793,10 +1820,10 @@ export function ContestListClient({
                 <>
                   <button
                     className={cn(
-                      "flex w-full items-center justify-center gap-2  px-3 py-3 rounded-full",
+                      "flex w-full items-center justify-center gap-2 px-3 py-3 rounded-full font-semibold transition-colors shadow-sm",
                       isDark
-                        ? "bg-[#7F39EC] text-white"
-                        : "bg-[#D9C0FF61] text-[#7F39EC]",
+                        ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+                        : "bg-[#1a1a1a] text-white hover:bg-black",
                     )}
                     onClick={async (e) => {
                       e.stopPropagation();
@@ -1825,10 +1852,10 @@ export function ContestListClient({
                     variant="outline"
                     size="md"
                     className={cn(
-                      "text-[13px]",
+                      "text-[13px] border transition-colors",
                       isDark
-                        ? "text-purple-400 border-gray-700"
-                        : "text-purple-500",
+                        ? "text-white border-white/20 hover:bg-white/10"
+                        : "text-zinc-800 border-zinc-300 hover:bg-zinc-100",
                     )}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -1851,10 +1878,10 @@ export function ContestListClient({
                 // Non-published contests: Show Edit Campaign button
                 <button
                   className={cn(
-                    "flex w-full items-center justify-center gap-2  px-3 py-3 rounded-full",
+                    "flex w-full items-center justify-center gap-2 px-3 py-3 rounded-full font-semibold transition-colors shadow-sm",
                     isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#D9C0FF61] text-[#7F39EC]",
+                      ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+                      : "bg-[#1a1a1a] text-white hover:bg-black",
                   )}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1918,9 +1945,9 @@ export function ContestListClient({
                   className={cn(
                     "text-sm px-3 py-1 font-medium border",
                     contest.status === "active" &&
-                      "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
+                      "capitalize bg-emerald-600 text-white border-emerald-600",
                     contest.status === "upcoming" &&
-                      "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
+                      "capitalize bg-zinc-700 text-white border-zinc-700",
                     contest.status === "ended" &&
                       `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
                   )}
@@ -2007,8 +2034,8 @@ export function ContestListClient({
                           className={cn(
                             "text-sm px-3 py-1 font-medium",
                             isDark
-                              ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                              : "bg-purple-50 text-purple-700 border-purple-200",
+                              ? "bg-white/10 text-white/90 border-white/20"
+                              : "bg-slate-100 text-slate-800 border-slate-200",
                           )}
                         >
                           <CheckCheck className="h-3 w-3 mr-1" />
@@ -2315,7 +2342,7 @@ export function ContestListClient({
                           )}
                         >
                           <div
-                            className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                            className="absolute h-full bg-[#1a1a1a] dark:bg-white rounded-full transition-all duration-500 ease-out"
                             style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
                           ></div>
                         </div>
@@ -2418,7 +2445,7 @@ export function ContestListClient({
                           title={`Total Budget Spent: ${formatMoney(tracker.spent)}`}
                         >
                           <div
-                            className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                            className="absolute h-full bg-[#1a1a1a] dark:bg-white rounded-full transition-all duration-500 ease-out"
                             style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
                           ></div>
                         </div>
@@ -2502,13 +2529,13 @@ export function ContestListClient({
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <Badge
                 variant="outline"
-                className="text-sm bg-[#7F39EC] text-white py-1"
+                className="text-sm bg-[#1a1a1a] text-white dark:bg-white dark:text-[#1a1a1a] py-1"
               >
                 {formatContestPlatformLabel(contest.platform)}
               </Badge>
               <Badge
                 variant="outline"
-                className="text-sm bg-[#7F39EC] text-white py-1 capitalize"
+                className="text-sm bg-[#1a1a1a] text-white dark:bg-white dark:text-[#1a1a1a] py-1 capitalize"
               >
                 {getContestTypeLabel(contest.contest_type)}
               </Badge>
@@ -2609,10 +2636,10 @@ export function ContestListClient({
               <>
                 <button
                   className={cn(
-                    "flex items-center justify-center gap-2 px-3 py-3 rounded-full text-sm font-medium whitespace-nowrap",
+                    "flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold whitespace-nowrap shadow-sm transition-colors",
                     isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#D9C0FF61] text-[#7F39EC]",
+                      ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+                      : "bg-[#1a1a1a] text-white hover:bg-black",
                   )}
                   onClick={async (e) => {
                     e.stopPropagation();
@@ -2641,10 +2668,10 @@ export function ContestListClient({
                   variant="outline"
                   size="md"
                   className={cn(
-                    "text-[13px] whitespace-nowrap",
+                    "text-[13px] whitespace-nowrap border transition-colors",
                     isDark
-                      ? "text-purple-400 border-gray-700"
-                      : "text-purple-500",
+                      ? "text-white border-white/20 hover:bg-white/10"
+                      : "text-zinc-800 border-zinc-300 hover:bg-zinc-100",
                   )}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -2673,10 +2700,10 @@ export function ContestListClient({
               <>
                 <button
                   className={cn(
-                    "flex items-center justify-center gap-2 px-5 py-3 rounded-full text-sm font-medium whitespace-nowrap min-w-[140px]",
+                    "flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold whitespace-nowrap min-w-[140px] shadow-sm transition-colors",
                     isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#D9C0FF61] text-[#7F39EC]",
+                      ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+                      : "bg-[#1a1a1a] text-white hover:bg-black",
                   )}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -2998,8 +3025,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   1
@@ -3038,8 +3065,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   2
@@ -3078,8 +3105,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   3
@@ -3107,7 +3134,7 @@ export function ContestListClient({
             </div>
             <button
               type="button"
-              className="w-full bg-purple-600 text-md rounded-lg font-medium text-white py-2 hover:bg-purple-700"
+              className="w-full bg-[#1a1a1a] text-md rounded-lg font-semibold text-white py-2.5 hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-white/90 shadow-sm transition-colors"
               onClick={() =>
                 router.push(
                   "/dashboard/contests/create?new=true&contestType=leaderboard",
@@ -3211,8 +3238,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   1
@@ -3251,8 +3278,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   2
@@ -3291,8 +3318,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   3
@@ -3320,7 +3347,7 @@ export function ContestListClient({
             </div>
             <button
               type="button"
-              className="w-full bg-purple-600 text-md rounded-lg font-medium text-white py-2 hover:bg-purple-700"
+              className="w-full bg-[#1a1a1a] text-md rounded-lg font-semibold text-white py-2.5 hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-white/90 shadow-sm transition-colors"
               onClick={handleCreateCpmContest}
               disabled={isCheckingCpmAccess}
             >
@@ -3421,8 +3448,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   1
@@ -3461,8 +3488,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   2
@@ -3501,8 +3528,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   3
@@ -3531,7 +3558,7 @@ export function ContestListClient({
             </div>
             <button
               type="button"
-              className="w-full bg-purple-600 text-md rounded-lg font-medium text-white py-2 hover:bg-purple-700"
+              className="w-full bg-[#1a1a1a] text-md rounded-lg font-semibold text-white py-2.5 hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-white/90 shadow-sm transition-colors"
               onClick={handleCreateMilestoneContest}
               disabled={isCheckingCpmAccess}
             >
@@ -3632,8 +3659,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   1
@@ -3671,8 +3698,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   2
@@ -3711,8 +3738,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   3
@@ -3741,7 +3768,7 @@ export function ContestListClient({
             </div>
             <button
               type="button"
-              className="w-full bg-purple-600 text-md rounded-lg font-medium text-white py-2 hover:bg-purple-700"
+              className="w-full bg-[#1a1a1a] text-md rounded-lg font-semibold text-white py-2.5 hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-white/90 shadow-sm transition-colors"
               onClick={handleCreateDualRewardsContest}
               disabled={isCheckingCpmAccess}
             >
@@ -3846,10 +3873,10 @@ export function ContestListClient({
                   type="button"
                   variant="outline"
                   className={cn(
-                    "h-11 w-full sm:w-auto shrink-0 rounded-xl font-semibold text-sm",
+                    "h-11 w-full sm:w-auto shrink-0 rounded-xl font-semibold text-sm transition-colors",
                     isDark
-                      ? "border-violet-400/60 text-violet-100 bg-transparent hover:bg-white/10 hover:text-white"
-                      : "border-[#7F39EC] text-[#7F39EC] bg-[#D9C0FF26] hover:bg-[#D9C0FF61]",
+                      ? "border-white/20 text-white bg-white/10 hover:bg-white/20"
+                      : "border-[#1a1a1a] text-white bg-[#1a1a1a] hover:bg-black",
                   )}
                   onClick={() =>
                     brandContestsResultsRef.current?.scrollIntoView({
@@ -3874,24 +3901,26 @@ export function ContestListClient({
                   role="group"
                   aria-label="Contest format"
                   className={cn(
-                    "flex w-full sm:w-auto rounded-xl border p-1 gap-1 min-h-[2.75rem] box-border",
-                    isDark
-                      ? "border-gray-600 bg-[#020817]/60"
-                      : "border-gray-300 bg-gray-50/90",
+                    "flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden w-full sm:w-auto",
+                    isDark ? "bg-white/10" : "bg-[#E4E4E4]",
                   )}
+                  style={{ borderRadius: 9999 }}
                 >
                   <button
                     type="button"
                     onClick={() => setContestFormatFilter("all")}
                     title="All campaigns"
                     className={cn(
-                      "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
+                      "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium leading-none transition-colors",
                       contestFormatFilter === "all"
-                        ? "bg-[#7F39EC] text-white shadow-sm"
+                        ? isDark
+                          ? "bg-white/15 text-white shadow-sm font-semibold"
+                          : "bg-white text-[#1a1a1a] shadow-sm font-semibold"
                         : isDark
-                          ? "text-gray-300 hover:text-white hover:bg-white/10"
-                          : "text-gray-700 hover:bg-white hover:text-gray-900",
+                          ? "text-white/75 hover:bg-white/10 hover:text-white"
+                          : "text-[#3f3f46] hover:bg-white/80 hover:text-[#1a1a1a]",
                     )}
+                    style={{ borderRadius: 9999 }}
                   >
                     <LayoutGrid className="h-4 w-4 shrink-0 opacity-90" />
                     <span>All</span>
@@ -3901,13 +3930,16 @@ export function ContestListClient({
                     onClick={() => setContestFormatFilter("text_image")}
                     title="Text and image campaigns"
                     className={cn(
-                      "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
+                      "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium leading-none transition-colors",
                       contestFormatFilter === "text_image"
-                        ? "bg-[#7F39EC] text-white shadow-sm"
+                        ? isDark
+                          ? "bg-white/15 text-white shadow-sm font-semibold"
+                          : "bg-white text-[#1a1a1a] shadow-sm font-semibold"
                         : isDark
-                          ? "text-gray-300 hover:text-white hover:bg-white/10"
-                          : "text-gray-700 hover:bg-white hover:text-gray-900",
+                          ? "text-white/75 hover:bg-white/10 hover:text-white"
+                          : "text-[#3f3f46] hover:bg-white/80 hover:text-[#1a1a1a]",
                     )}
+                    style={{ borderRadius: 9999 }}
                   >
                     <FileText className="h-4 w-4 shrink-0 opacity-90" />
                     <span>Text & image</span>
@@ -3917,13 +3949,16 @@ export function ContestListClient({
                     onClick={() => setContestFormatFilter("video")}
                     title="Video campaigns"
                     className={cn(
-                      "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
+                      "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium leading-none transition-colors",
                       contestFormatFilter === "video"
-                        ? "bg-[#7F39EC] text-white shadow-sm"
+                        ? isDark
+                          ? "bg-white/15 text-white shadow-sm font-semibold"
+                          : "bg-white text-[#1a1a1a] shadow-sm font-semibold"
                         : isDark
-                          ? "text-gray-300 hover:text-white hover:bg-white/10"
-                          : "text-gray-700 hover:bg-white hover:text-gray-900",
+                          ? "text-white/75 hover:bg-white/10 hover:text-white"
+                          : "text-[#3f3f46] hover:bg-white/80 hover:text-[#1a1a1a]",
                     )}
+                    style={{ borderRadius: 9999 }}
                   >
                     <PlayCircle className="h-4 w-4 shrink-0 opacity-90" />
                     <span>Video</span>
@@ -3935,24 +3970,26 @@ export function ContestListClient({
                 role="group"
                 aria-label="Layout"
                 className={cn(
-                  "hidden lg:flex w-full sm:w-auto shrink-0 rounded-xl border p-1 gap-1 min-h-[2.75rem] items-stretch box-border",
-                  isDark
-                    ? "border-gray-600 bg-[#020817]/60"
-                    : "border-gray-300 bg-gray-50/90",
+                  "hidden lg:flex items-center gap-0.5 overflow-x-auto rounded-full p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink-0",
+                  isDark ? "bg-white/10" : "bg-[#E4E4E4]",
                 )}
+                style={{ borderRadius: 9999 }}
               >
                 <button
                   type="button"
                   onClick={() => setViewMode("grid")}
                   title="Grid view"
                   className={cn(
-                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors min-w-[5.5rem]",
+                    "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium leading-none transition-colors min-w-[5.5rem]",
                     displayViewMode === "grid"
-                      ? "bg-[#7F39EC] text-white shadow-sm"
+                      ? isDark
+                        ? "bg-white/15 text-white shadow-sm font-semibold"
+                        : "bg-white text-[#1a1a1a] shadow-sm font-semibold"
                       : isDark
-                        ? "text-gray-300 hover:text-white hover:bg-white/10"
-                        : "text-gray-700 hover:bg-white hover:text-gray-900",
+                        ? "text-white/75 hover:bg-white/10 hover:text-white"
+                        : "text-[#3f3f46] hover:bg-white/80 hover:text-[#1a1a1a]",
                   )}
+                  style={{ borderRadius: 9999 }}
                 >
                   <LayoutGrid className="h-4 w-4 shrink-0 opacity-90" />
                   <span>Grid</span>
@@ -3962,13 +3999,16 @@ export function ContestListClient({
                   onClick={() => setViewMode("list")}
                   title="List view"
                   className={cn(
-                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors min-w-[5.5rem]",
+                    "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-medium leading-none transition-colors min-w-[5.5rem]",
                     displayViewMode === "list"
-                      ? "bg-[#7F39EC] text-white shadow-sm"
+                      ? isDark
+                        ? "bg-white/15 text-white shadow-sm font-semibold"
+                        : "bg-white text-[#1a1a1a] shadow-sm font-semibold"
                       : isDark
-                        ? "text-gray-300 hover:text-white hover:bg-white/10"
-                        : "text-gray-700 hover:bg-white hover:text-gray-900",
+                        ? "text-white/75 hover:bg-white/10 hover:text-white"
+                        : "text-[#3f3f46] hover:bg-white/80 hover:text-[#1a1a1a]",
                   )}
+                  style={{ borderRadius: 9999 }}
                 >
                   <List className="h-4 w-4 shrink-0 opacity-90" />
                   <span>List</span>
@@ -4131,7 +4171,7 @@ export function ContestListClient({
                     Narrow by payout step ? only applies to{" "}
                     {selectedTab === "all" ? (
                       <>
-                        <span className="font-medium text-[#7F39EC]">
+                        <span className={cn("font-medium", isDark ? "text-white" : "text-[#1a1a1a]")}>
                           ended
                         </span>{" "}
                         contests in this list.

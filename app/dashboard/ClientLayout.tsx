@@ -1331,6 +1331,16 @@ function DashboardContent({
         #__next {
           background-color: hsl(var(--background)) !important;
           min-height: 100dvh;
+          font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+        }
+
+        .dashboard-container,
+        aside,
+        button,
+        input,
+        select,
+        textarea {
+          font-family: inherit;
         }
 
         /* Also ensure main content area inherits theme background */

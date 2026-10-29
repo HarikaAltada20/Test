@@ -80,10 +80,10 @@ export async function ContestsListLoader({
               href="/dashboard/admin/contests/create"
               className={cn(
                 "inline-flex w-full sm:w-auto items-center justify-center gap-2",
-                "h-11 px-4 sm:px-5 text-sm font-semibold rounded-xl text-white shadow-sm",
+                "h-11 px-4 sm:px-5 text-sm font-semibold rounded-xl shadow-sm",
                 "transition-[opacity,box-shadow,transform] hover:opacity-95 active:scale-[0.98]",
-                "bg-[#4A00BE] ring-1 ring-black/5",
-                "dark:bg-[#5F2BB1] dark:ring-white/10",
+                "bg-[#1a1a1a] text-white ring-1 ring-black/10 hover:bg-black",
+                "dark:bg-white dark:text-[#1a1a1a] dark:ring-white/20 dark:hover:bg-white/90",
               )}
             >
               <Plus className="h-4 w-4 shrink-0" aria-hidden />

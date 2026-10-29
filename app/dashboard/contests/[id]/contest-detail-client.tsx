@@ -214,7 +214,11 @@ import {
   ContestDetailSharedAcrossPlatformsHint,
 } from "@/components/contest/ContestDetailPlatformScopeCard";
 import { CreatorWisePlatformCounts } from "@/components/contest/CreatorWisePlatformCounts";
+import { getBrandSubmissionsStyles } from "@/components/contest/brandSubmissionsStyles";
 import { ContestDetailVideoPayoutSections } from "@/components/contest/ContestDetailVideoPayoutSections";
+import { BrandOverviewSectionCard } from "@/components/contest/BrandOverviewSectionCard";
+import { BrandOverviewPrizeStructure } from "@/components/contest/BrandOverviewPrizeStructure";
+import "@/components/contest/brand-analytics.css";
 import {
   BulkVideoDownloadContestStatus,
   BulkVideoDownloadSummaryButton,
@@ -568,43 +572,30 @@ function EligibilityRequirementCard({
   return (
     <div
       className={cn(
-        "border rounded-xl transition-all duration-300",
-        isDark ? "border-gray-600" : "border-gray-300",
+        "border-b py-3 first:pt-0 last:border-b-0 last:pb-0",
+        isDark ? "border-white/10" : "border-[#e5e5e5]",
       )}
     >
-      <CardContent className="p-4">
-        <div className="flex items-start gap-4">
-          <div
-            className={cn(
-              "w-10 h-10 flex items-center justify-center rounded-full shrink-0",
-              isDark
-                ? "bg-[#FFFFFF42] text-white"
-                : "bg-purple-100 text-[#4A00BE]",
-            )}
-          >
-            <Icon className="h-5 w-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p
-              className={cn(
-                "text-md font-medium tracking-wide",
-                isDark ? "text-white" : "text-black",
-              )}
-            >
-              {label}
-            </p>
-            <p
-              className={cn(
-                "text-lg md:text-xl font-bold mt-1",
-                isDark ? "text-white" : "text-black",
-              )}
-            >
-              {value}
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">{description}</p>
-          </div>
-        </div>
-      </CardContent>
+      <div className="flex items-center justify-between gap-3">
+        <p
+          className={cn(
+            "flex items-center gap-2 text-[13px] font-medium",
+            isDark ? "text-slate-400" : "text-[#737373]",
+          )}
+        >
+          <Icon className="h-4 w-4 shrink-0" />
+          {label}
+        </p>
+        <p
+          className={cn(
+            "text-[13px] font-semibold text-right",
+            isDark ? "text-white" : "text-[#0a0a0a]",
+          )}
+        >
+          {value}
+        </p>
+      </div>
+      <p className="text-xs text-muted-foreground mt-1">{description}</p>
     </div>
   );
 }
@@ -1082,8 +1073,8 @@ function SubmissionStatusCountBadge({
     <Badge
       variant="secondary"
       className={cn(
-        "inline-flex items-center gap-1 px-1.5 py-0.5 text-sm h-5 tabular-nums",
-        isDark ? "text-white bg-[#FFFFFF36]" : "text-[#7F39EC] bg-purple-200",
+        "tabular-nums",
+        getBrandSubmissionsStyles(isDark).pillCount,
         className,
       )}
     >
@@ -1130,10 +1121,7 @@ function TwitterContestSubmissionStatusTabs({
   isLoading?: boolean;
 }) {
   const loaded = loadedCounts ?? counts;
-  const badgeClass = cn(
-    "ml-1 px-1.5 py-0.5 text-xs h-5",
-    isDark ? "text-white bg-[#FFFFFF36]" : "text-[#7F39EC] bg-purple-200",
-  );
+  const badgeClass = getBrandSubmissionsStyles(isDark).pillCount;
   return (
     <div className="mb-4 px-4">
       <Tabs
@@ -1144,16 +1132,11 @@ function TwitterContestSubmissionStatusTabs({
         }}
         className="w-full"
       >
-        <TabsList className="flex w-full flex-wrap gap-2 h-auto p-1">
+        <TabsList className={getBrandSubmissionsStyles(isDark).pillList}>
           <TabsTrigger
             value="all"
             disabled={isLoading}
-            className={cn(
-              "flex-1 min-w-[100px] gap-2 text-sm disabled:opacity-100",
-              isDark
-                ? "text-white border border-gray-500"
-                : "data-[state=inactive]:bg-gray-100",
-            )}
+            className={getBrandSubmissionsStyles(isDark).pill}
           >
             <SubmissionStatusTabIcon isLoading={isLoading}>
               <Users className="h-3.5 w-3.5 shrink-0" />
@@ -1170,12 +1153,7 @@ function TwitterContestSubmissionStatusTabs({
           <TabsTrigger
             value="not_rejected"
             disabled={isLoading}
-            className={cn(
-              "flex-1 min-w-[100px] gap-2 text-sm disabled:opacity-100",
-              isDark
-                ? "text-white border border-gray-500"
-                : "data-[state=inactive]:bg-gray-100",
-            )}
+            className={getBrandSubmissionsStyles(isDark).pill}
           >
             <SubmissionStatusTabIcon isLoading={isLoading}>
               <CheckCircle className="h-3.5 w-3.5 shrink-0" />
@@ -1192,12 +1170,7 @@ function TwitterContestSubmissionStatusTabs({
           <TabsTrigger
             value="verified_or_paid"
             disabled={isLoading}
-            className={cn(
-              "flex-1 min-w-[100px] gap-2 text-sm disabled:opacity-100",
-              isDark
-                ? "text-white border border-gray-500"
-                : "data-[state=inactive]:bg-gray-100",
-            )}
+            className={getBrandSubmissionsStyles(isDark).pill}
           >
             <SubmissionStatusTabIcon isLoading={isLoading}>
               <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
@@ -1215,12 +1188,7 @@ function TwitterContestSubmissionStatusTabs({
           <TabsTrigger
             value="pending"
             disabled={isLoading}
-            className={cn(
-              "flex-1 min-w-[100px] gap-2 text-sm disabled:opacity-100",
-              isDark
-                ? "text-white border border-gray-500"
-                : "data-[state=inactive]:bg-gray-100",
-            )}
+            className={getBrandSubmissionsStyles(isDark).pill}
           >
             <SubmissionStatusTabIcon isLoading={isLoading}>
               <Clock className="h-3.5 w-3.5 shrink-0" />
@@ -1237,12 +1205,7 @@ function TwitterContestSubmissionStatusTabs({
           <TabsTrigger
             value="rejected"
             disabled={isLoading}
-            className={cn(
-              "flex-1 min-w-[100px] gap-2 text-sm disabled:opacity-100",
-              isDark
-                ? "text-white border border-gray-500"
-                : "data-[state=inactive]:bg-gray-100",
-            )}
+            className={getBrandSubmissionsStyles(isDark).pill}
           >
             <SubmissionStatusTabIcon isLoading={isLoading}>
               <XCircle className="h-3.5 w-3.5 shrink-0" />
@@ -1253,23 +1216,13 @@ function TwitterContestSubmissionStatusTabs({
               total={counts.rejected}
               isLoading={isLoading}
               isDark={isDark}
-              className={cn(
-                "ml-1 px-1.5 py-0.5 text-xs h-5",
-                isDark
-                  ? "text-white bg-[#FFFFFF36]"
-                  : "text-red-600 bg-red-200",
-              )}
+              className={getBrandSubmissionsStyles(isDark).pillCount}
             />
           </TabsTrigger>
           <TabsTrigger
             value="verified"
             disabled={isLoading}
-            className={cn(
-              "flex-1 min-w-[100px] gap-2 text-sm disabled:opacity-100",
-              isDark
-                ? "text-white border border-gray-500"
-                : "data-[state=inactive]:bg-gray-100",
-            )}
+            className={getBrandSubmissionsStyles(isDark).pill}
           >
             <SubmissionStatusTabIcon isLoading={isLoading}>
               <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
@@ -1286,12 +1239,7 @@ function TwitterContestSubmissionStatusTabs({
           <TabsTrigger
             value="paid"
             disabled={isLoading}
-            className={cn(
-              "flex-1 min-w-[100px] gap-2 text-sm disabled:opacity-100",
-              isDark
-                ? "text-white border border-gray-500"
-                : "data-[state=inactive]:bg-gray-100",
-            )}
+            className={getBrandSubmissionsStyles(isDark).pill}
           >
             <SubmissionStatusTabIcon isLoading={isLoading}>
               <Wallet className="h-3.5 w-3.5 shrink-0" />
@@ -4230,7 +4178,8 @@ export default function ContestDetailClient({
       { id: "overview", label: "Overview" },
       {
         id: "submissions",
-        label: `Submissions (${submissionTotalCount})`,
+        label: "Submissions",
+        count: submissionTotalCount,
       },
       ...(contest?.platform?.toLowerCase() === "twitter"
         ? [{ id: "twitter-feed", label: "Twitter Feed" }]
@@ -4240,9 +4189,8 @@ export default function ContestDetailClient({
         ? [
             {
               id: "applications",
-              label: pendingApplications
-                ? `Applications (${pendingApplications})`
-                : "Applications",
+              label: "Applications",
+              ...(pendingApplications ? { count: pendingApplications } : {}),
             },
           ]
         : []),
@@ -7880,17 +7828,17 @@ export default function ContestDetailClient({
           ? {
               text: "Live",
               className: dark(
-                "bg-green-900/40",
-                "text-green-200",
-                "border-green-500",
+                "bg-emerald-900/30",
+                "text-emerald-300",
+                "border-emerald-700",
               ),
             }
           : {
               text: "Live",
               className: light(
-                "bg-green-100",
-                "text-green-800",
-                "border-green-400",
+                "bg-[#ecfdf5]",
+                "text-[#059669]",
+                "border-[#a7f3d0]",
               ),
             };
       case "upcoming":
@@ -8052,34 +8000,22 @@ export default function ContestDetailClient({
       case "pending":
         return {
           text: "Pending",
-          icon: <AlertTriangle className="h-3 w-3 mr-1.5" />,
-          className: isDark
-            ? "bg-yellow-900/30 text-yellow-300 border-yellow-500/50"
-            : "bg-yellow-100 text-yellow-700 border-yellow-300",
+          icon: <AlertTriangle className="h-3 w-3 mr-1.5" />, className: isDark ? "bg-amber-500/15 text-amber-300 border-transparent" : "bg-[#fffbeb] text-[#d97706] border-transparent",
         };
       case "verified":
         return {
           text: "Verified",
-          icon: <CheckCircle2 className="h-3 w-3 mr-1" />,
-          className: isDark
-            ? "bg-green-900/40 text-green-300 border-green-500/50"
-            : "bg-green-100 text-green-700 border-green-300",
+          icon: <CheckCircle2 className="h-3 w-3 mr-1" />, className: isDark ? "bg-emerald-500/15 text-emerald-300 border-transparent" : "bg-[#ecfdf5] text-[#059669] border-transparent",
         };
       case "rejected":
         return {
           text: "Rejected",
-          icon: <XCircle className="h-3 w-3 mr-1" />,
-          className: isDark
-            ? "bg-red-900/40 text-red-300 border-red-500/50"
-            : "bg-red-100 text-red-700 border-red-300",
+          icon: <XCircle className="h-3 w-3 mr-1" />, className: isDark ? "bg-red-500/15 text-red-300 border-transparent" : "bg-[#fef2f2] text-[#dc2626] border-transparent",
         };
       case "paid":
         return {
           text: "Paid",
-          icon: <DollarSign className="h-3 w-3" />,
-          className: isDark
-            ? "bg-sky-900/40 text-sky-200 border-sky-500/50"
-            : "bg-sky-100 text-sky-700 border-sky-300",
+          icon: <DollarSign className="h-3 w-3" />, className: isDark ? "bg-white/10 text-slate-200 border-transparent" : "bg-[#f5f5f5] text-[#404040] border-transparent",
         };
       default:
         return {
@@ -15788,6 +15724,62 @@ export default function ContestDetailClient({
 
   const contestStatusBadgeInfo = getStatusBadgeProps(currentContest, isDark);
 
+  // Figma "Contest Details Redesign" neutral visual tokens — brand Overview only.
+  // Visual restyle helpers; no behavior/data implications.
+  const brandCardClass = cn(
+    "rounded-2xl border shadow-[0px_1px_3px_0px_rgba(10,10,10,0.04)]",
+    isDark ? "bg-[#111113] border-white/10" : "bg-white border-[#e5e5e5]",
+  );
+  const brandSubtleCardClass = cn(
+    "rounded-2xl border",
+    isDark
+      ? "bg-slate-900/40 border-white/10"
+      : "bg-[#fafafa] border-[#e5e5e5]",
+  );
+  const brandMiniCardClass = cn(
+    "border rounded-xl transition-all duration-300",
+    isDark ? "border-white/10 bg-transparent" : "border-[#e5e5e5] bg-white",
+  );
+  const brandIconTileClass = cn(
+    "flex items-center justify-center rounded-full shrink-0",
+    isDark ? "bg-white/10 text-white" : "bg-[#f5f5f5] text-[#0a0a0a]",
+  );
+  const brandLabelClass = cn(
+    "text-[11px] font-semibold uppercase tracking-wide",
+    isDark ? "text-slate-400" : "text-[#737373]",
+  );
+  const brandValueClass = cn(
+    "text-2xl font-bold",
+    isDark ? "text-white" : "text-[#0a0a0a]",
+  );
+  const brandMutedClass = isDark ? "text-slate-400" : "text-[#737373]";
+  const brandSecondaryTextClass = isDark ? "text-slate-300" : "text-[#404040]";
+  const brandPrimaryTextClass = isDark ? "text-white" : "text-[#0a0a0a]";
+  const brandInfoCardClass = cn(
+    "rounded-2xl border",
+    isDark
+      ? "bg-slate-800/40 border-slate-600/60"
+      : "bg-[#f0f9ff] border-[#bae6fd]",
+  );
+  const brandInfoIconTileClass =
+    "w-10 h-10 flex items-center justify-center rounded-xl text-white shrink-0 bg-[#0284c7]";
+  // KPI strip cell typography (Figma: dot + uppercase label, 24px value, 12px sub-line)
+  const kpiLabelClass = cn(
+    "text-[11px] font-semibold uppercase tracking-[0.66px]",
+    isDark ? "text-slate-400" : "text-[#737373]",
+  );
+  const kpiValueClass = cn(
+    "text-2xl font-bold tracking-[-0.36px] leading-tight",
+    isDark ? "text-white" : "text-[#0a0a0a]",
+  );
+  const kpiSubClass = cn(
+    "text-xs",
+    isDark ? "text-slate-400" : "text-[#737373]",
+  );
+
+  // Brand Submissions tab (Figma redesign) neutral style tokens — class strings only.
+  const sx = getBrandSubmissionsStyles(isDark);
+
   return (
     <div>
       {submissionsFetchError ? (
@@ -15821,17 +15813,22 @@ export default function ContestDetailClient({
       ) : null}
       <header
         className={cn(
-          "mb-8 px-1 pb-6 border-b",
-          isDark ? "border-white/10" : "border-gray-200/90",
+          "mb-6 px-1",
+          isDark ? "border-white/10" : "border-[#e5e5e5]",
         )}
       >
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
           <div className="flex gap-3 min-w-0">
             <Button
-              className="cursor-pointer shrink-0 mt-0.5"
-              variant="ghost"
+              variant="outline"
               size="icon"
               asChild
+              className={cn(
+                "cursor-pointer shrink-0 mt-0.5 h-10 w-10 rounded-[10px]",
+                isDark
+                  ? "border-white/15 bg-transparent text-white hover:bg-white/10"
+                  : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
+              )}
             >
               <Link
                 href={
@@ -15843,11 +15840,25 @@ export default function ContestDetailClient({
                 <ArrowLeft className="h-5 w-5" />
               </Link>
             </Button>
+            {currentContest.thumbnail_url ? (
+              <div
+                className={cn(
+                  "shrink-0 overflow-hidden rounded-[12px] border",
+                  isDark ? "border-white/10" : "border-[#e5e5e5]",
+                )}
+              >
+                <img
+                  src={currentContest.thumbnail_url}
+                  alt={`${currentContest.title} thumbnail`}
+                  className="h-14 w-[96px] object-cover sm:h-[76px] sm:w-[132px]"
+                />
+              </div>
+            ) : null}
             <div className="min-w-0 space-y-3 flex-1">
               <h1
                 className={cn(
-                  "text-2xl sm:text-3xl font-bold tracking-tight text-balance leading-snug",
-                  isDark ? "text-white" : "text-gray-900",
+                  "text-2xl font-bold tracking-[-0.36px] text-balance leading-snug",
+                  isDark ? "text-white" : "text-[#0a0a0a]",
                 )}
               >
                 {currentContest.title}
@@ -15856,20 +15867,31 @@ export default function ContestDetailClient({
                 <Badge
                   className={cn(
                     contestStatusBadgeInfo.className,
-                    "capitalize text-xs sm:text-sm font-medium px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full border",
+                    "inline-flex items-center gap-1.5 capitalize text-xs font-semibold px-2.5 py-1 rounded-full border",
                   )}
                 >
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
                   {contestStatusBadgeInfo.text}
                 </Badge>
                 {currentContest.contest_type && (
                   <Badge
                     className={cn(
-                      "capitalize text-xs sm:text-sm font-medium px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full border",
+                      "inline-flex items-center gap-1.5 capitalize text-xs font-medium px-2.5 py-1 rounded-full border",
                       isDark
-                        ? "bg-purple-500/15 text-purple-200 border-purple-400/50"
-                        : "bg-purple-50 text-purple-900 border-purple-200",
+                        ? "bg-white/5 text-slate-200 border-white/15"
+                        : "bg-white text-[#404040] border-[#e5e5e5]",
                     )}
                   >
+                    {isDualRewardsContestType(currentContest.contest_type) ? (
+                      <Gift className="h-3.5 w-3.5 shrink-0" />
+                    ) : isCpmContestType(currentContest.contest_type) ? (
+                      <DollarSign className="h-3.5 w-3.5 shrink-0" />
+                    ) : isMilestoneContestType(currentContest.contest_type) ? (
+                      <Target className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <Trophy className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                  
                     {isDualRewardsContestType(currentContest.contest_type)
                       ? "Dual Rewards"
                       : isCpmContestType(currentContest.contest_type)
@@ -15884,6 +15906,29 @@ export default function ContestDetailClient({
                     <AccessModeBadge mode={contest.access_mode} size="md" />
                   </span>
                 )}
+                {(overviewVideoPlatforms.length > 0
+                  ? overviewVideoPlatforms
+                  : currentContest.platform
+                    ? [currentContest.platform as VideoContestPlatform]
+                    : []
+                ).map((platform) => (
+                  <Badge
+                    key={`header-platform-${platform}`}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 capitalize text-xs sm:text-sm font-medium px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full border",
+                      isDark
+                        ? "bg-white/5 text-slate-200 border-white/15"
+                        : "bg-white text-[#404040] border-[#e5e5e5]",
+                    )}
+                  >
+                    <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center overflow-hidden [&_div]:!h-3.5 [&_div]:!w-3.5 [&_svg]:!h-3.5 [&_svg]:!w-3.5">
+                      {getPlatformIcon(platform)}
+                    </span>
+                    {VIDEO_PLATFORM_LABELS[
+                      platform as VideoContestPlatform
+                    ] ?? platform}
+                  </Badge>
+                ))}
                 {contest?.access_mode === "restricted" &&
                   (pendingApplications ?? 0) > 0 && (
                     <button
@@ -15910,10 +15955,10 @@ export default function ContestDetailClient({
               variant="outline"
               onClick={() => setDuplicateDialogOpen(true)}
               className={cn(
-                "rounded-xl",
+                "rounded-[10px]",
                 isDark
-                  ? "border-purple-400/60 text-purple-300 hover:bg-white/5"
-                  : "border-purple-400/50 text-purple-700 hover:bg-purple-50",
+                  ? "border-white/15 bg-transparent text-white hover:bg-white/10"
+                  : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
               )}
             >
               <Copy className="h-4 w-4 shrink-0" />
@@ -15952,13 +15997,12 @@ export default function ContestDetailClient({
               <>
                 <Button
                   size="sm"
-                  variant="outline"
                   onClick={() => setStatusUpdateDialog(true)}
                   className={cn(
-                    "rounded-xl",
+                    "rounded-full border border-transparent",
                     isDark
-                      ? "border-purple-400/60 text-purple-300 hover:bg-white/5"
-                      : "border-purple-400/50 text-purple-700 hover:bg-purple-50",
+                      ? "bg-white text-[#0a0a0a] hover:bg-white/90"
+                      : "bg-[#0a0a0a] text-white hover:bg-[#0a0a0a]/90",
                   )}
                 >
                   <Settings className="h-4 w-4 shrink-0" />
@@ -15985,7 +16029,7 @@ export default function ContestDetailClient({
             {contest.moderation_status === "approved" && (
               <Button
                 size="sm"
-                className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl bg-[#4A00BE] hover:bg-[#4A00BE]/90 text-white shadow-sm"
+                className="inline-flex items-center gap-2 text-sm font-semibold rounded-full bg-[#0a0a0a] hover:bg-[#0a0a0a]/90 text-white shadow-sm"
                 onClick={async (e) => {
                   e.stopPropagation();
                   try {
@@ -16015,10 +16059,10 @@ export default function ContestDetailClient({
                 variant="outline"
                 size="sm"
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-xl font-medium transition-colors",
+                  "inline-flex items-center gap-2 rounded-[10px] font-medium transition-colors",
                   isDark
-                    ? "border-white/20 bg-transparent text-white hover:bg-white/10"
-                    : "border-[#4A00BE]/35 bg-white text-[#4A00BE] hover:bg-[#4A00BE]/[0.06]",
+                    ? "border-white/15 bg-transparent text-white hover:bg-white/10"
+                    : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
                 )}
                 onClick={handleShare}
               >
@@ -16032,10 +16076,10 @@ export default function ContestDetailClient({
                 size="sm"
                 variant="outline"
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-xl font-medium transition-colors",
+                  "inline-flex items-center gap-2 rounded-[10px] font-medium transition-colors",
                   isDark
-                    ? "border-white/20 bg-transparent text-white hover:bg-white/10"
-                    : "border-gray-300 bg-white text-gray-900 hover:bg-gray-50",
+                    ? "border-white/15 bg-transparent text-white hover:bg-white/10"
+                    : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
                 )}
                 asChild
               >
@@ -16067,7 +16111,7 @@ export default function ContestDetailClient({
                   "inline-flex rounded-2xl border p-1",
                   isDark
                     ? "border-slate-700 bg-slate-900/60"
-                    : "border-[#D1B7F9] bg-white",
+                    : "border-[#e5e5e5] bg-white",
                 )}
               >
                 <button
@@ -16078,10 +16122,10 @@ export default function ContestDetailClient({
                   className={cn(
                     "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition-all",
                     submissionsLeaderboardMode === "submissions"
-                      ? "bg-[#6C43D0] text-white"
+                      ? "bg-[#0a0a0a] text-white"
                       : isDark
                         ? "text-slate-300 hover:bg-slate-800"
-                        : "text-slate-600 hover:bg-[#F3EBFF]",
+                        : "text-slate-600 hover:bg-[#fafafa]",
                   )}
                 >
                   Submissions
@@ -16098,10 +16142,10 @@ export default function ContestDetailClient({
                   className={cn(
                     "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition-all",
                     submissionsLeaderboardMode === "post_campaign"
-                      ? "bg-[#6C43D0] text-white"
+                      ? "bg-[#0a0a0a] text-white"
                       : isDark
                         ? "text-slate-300 hover:bg-slate-800"
-                        : "text-slate-600 hover:bg-[#F3EBFF]",
+                        : "text-slate-600 hover:bg-[#fafafa]",
                   )}
                 >
                   PC Submissions
@@ -16114,87 +16158,57 @@ export default function ContestDetailClient({
 
       {/* Modern Contest Overview - Redesigned for better UX */}
       <div className="space-y-6 mb-8">
-        {/* Enhanced Contest Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {/* Platform Card */}
+        {/* Enhanced Contest Summary — unified KPI strip (Figma brand Overview) */}
+        <div className={cn(brandCardClass, "mb-8 overflow-hidden")}>
           <div
             className={cn(
-              "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+              "flex flex-col lg:flex-row [&>*]:min-w-0 [&>*]:flex-1",
               isDark
-                ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
-                : "bg-gradient-to-br from-white to-gray-50 border border-gray-100",
+                ? "divide-y divide-white/10 lg:divide-x lg:divide-y-0"
+                : "divide-y divide-[#e5e5e5] lg:divide-x lg:divide-y-0",
             )}
           >
-            <div className="p-6 relative z-10">
-              <div className="mb-4 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div
-                    className={cn(
-                      "h-12 w-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm shrink-0",
-                      isDark
-                        ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                        : "bg-white border border-gray-200",
-                      overviewVideoPlatforms.length > 1 && "w-auto px-2.5",
-                    )}
-                  >
-                    {overviewVideoPlatforms.length > 0 ? (
-                      <div className="flex items-center gap-2">
-                        {overviewVideoPlatforms.map((platform) => (
+          {/* Platform Card */}
+          <div>
+            <div className="p-5 sm:p-6">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-[#ef4444]" />
+                  <p className={kpiLabelClass}>Platform</p>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <div className="flex shrink-0 items-center gap-1.5 [&_div]:!h-5 [&_div]:!w-5 [&_svg]:!h-5 [&_svg]:!w-5">
+                    {overviewVideoPlatforms.length > 0
+                      ? overviewVideoPlatforms.map((platform) => (
                           <span
                             key={`summary-icon-${platform}`}
                             className="inline-flex shrink-0"
                           >
                             {getPlatformIcon(platform)}
                           </span>
-                        ))}
-                      </div>
-                    ) : (
-                      getPlatformIcon(currentContest.platform)
-                    )}
+                        ))
+                      : getPlatformIcon(currentContest.platform)}
                   </div>
-                  <p
-                    className={cn(
-                      "text-sm font-medium uppercase tracking-wide",
-                      isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500",
-                    )}
-                  >
-                    Platform
-                  </p>
+                  {overviewVideoPlatforms.length > 1 ? (
+                    <p
+                      className={cn(
+                        "text-base font-bold leading-snug",
+                        brandPrimaryTextClass,
+                      )}
+                    >
+                      {overviewVideoPlatforms
+                        .map((platform) => VIDEO_PLATFORM_LABELS[platform])
+                        .join(", ")}
+                    </p>
+                  ) : (
+                    <p className={cn("capitalize", kpiValueClass)}>
+                      {overviewVideoPlatforms[0]
+                        ? VIDEO_PLATFORM_LABELS[overviewVideoPlatforms[0]]
+                        : currentContest.platform || "N/A"}
+                    </p>
+                  )}
                 </div>
-                {overviewVideoPlatforms.length > 1 ? (
-                  <p
-                    className={cn(
-                      "text-base font-bold leading-snug",
-                      isDark ? "text-white" : "text-gray-900",
-                    )}
-                  >
-                    {overviewVideoPlatforms
-                      .map((platform) => VIDEO_PLATFORM_LABELS[platform])
-                      .join(", ")}
-                  </p>
-                ) : (
-                  <p
-                    className={cn(
-                      "capitalize text-2xl font-bold",
-                      isDark
-                        ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
-                        : "text-gray-900",
-                    )}
-                  >
-                    {overviewVideoPlatforms[0]
-                      ? VIDEO_PLATFORM_LABELS[overviewVideoPlatforms[0]]
-                      : currentContest.platform || "N/A"}
-                  </p>
-                )}
               </div>
-              <div
-                className={cn(
-                  "h-1 w-full rounded-full",
-                  isDark
-                    ? "bg-gradient-to-r from-pink-400 via-purple-400 to-cyan-400 shadow-lg shadow-purple-400/70 animate-pulse"
-                    : "bg-gradient-to-r from-purple-200 to-purple-300",
-                )}
-              ></div>
             </div>
           </div>
           {/* <div className="bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-red-200 dark:border-red-700/50 hover:shadow-lg transition-all duration-300">
@@ -16212,82 +16226,30 @@ export default function ContestDetailClient({
                     </div> */}
 
           {/* Duration Card */}
-          <div
-            className={cn(
-              "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-              isDark
-                ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
-                : "bg-gradient-to-br from-white to-blue-50 border border-blue-100",
-            )}
-          >
-            <div className="p-6 relative z-10">
-              <div className="flex items-center justify-between mb-4">
-                <div
-                  className={cn(
-                    "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                    isDark
-                      ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                      : "bg-gradient-to-br from-blue-500 to-blue-600 text-white",
-                  )}
-                >
-                  <Calendar
-                    className={cn(
-                      "h-6 w-6",
-                      isDark ? "text-white" : "text-white",
-                    )}
-                  />
-                </div>
-                <div className="text-right">
-                  <p
-                    className={cn(
-                      "text-sm font-medium uppercase tracking-wide",
-                      isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500",
-                    )}
-                  >
-                    Duration
-                  </p>
-                  <p
-                    className={cn(
-                      "text-2xl font-bold mt-1",
-                      isDark
-                        ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-cyan-200 bg-clip-text text-transparent"
-                        : "text-gray-900",
-                    )}
-                  >
-                    {durationDays !== null
-                      ? `${durationDays} ${durationDays === 1 ? "day" : "days"}`
-                      : "N/A"}
-                  </p>
-                </div>
+          <div>
+            <div className="p-5 sm:p-6 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-[#3b82f6]" />
+                <p className={kpiLabelClass}>Duration</p>
               </div>
+              <p className={kpiValueClass}>
+                {durationDays !== null
+                  ? `${durationDays} ${durationDays === 1 ? "day" : "days"}`
+                  : "N/A"}
+              </p>
               {currentContest.start_date && currentContest.end_date && (
-                <div className="mb-3">
-                  <p
-                    className={cn(
-                      "text-sm font-medium",
-                      isDark ? "text-white/80 drop-shadow-sm" : "text-gray-600",
-                    )}
-                  >
-                    {formatLocalDateTime(currentContest.start_date, {
-                      month: "short",
-                      day: "numeric",
-                    })}{" "}
-                    -{" "}
-                    {formatLocalDateTime(currentContest.end_date, {
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </p>
-                </div>
+                <p className={kpiSubClass}>
+                  {formatLocalDateTime(currentContest.start_date, {
+                    month: "short",
+                    day: "numeric",
+                  })}{" "}
+                  -{" "}
+                  {formatLocalDateTime(currentContest.end_date, {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </p>
               )}
-              <div
-                className={cn(
-                  "h-1 w-full rounded-full",
-                  isDark
-                    ? "bg-gradient-to-r from-cyan-400 via-blue-400 to-teal-400 shadow-lg shadow-blue-400/70 animate-pulse"
-                    : "bg-gradient-to-r from-blue-200 to-blue-300",
-                )}
-              ></div>
             </div>
           </div>
           {/* <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700/50 hover:shadow-lg transition-all duration-300">
@@ -16313,44 +16275,16 @@ export default function ContestDetailClient({
           {overviewUniformPayoutContest.contest_type === "leaderboard" &&
             (overviewLeaderboardPrizePoolCents > 0 ||
               overviewLeaderboardPrizeSlices.length > 0) && (
-              <div
-                className={cn(
-                  "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                  isDark
-                    ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-yellow-500/20"
-                    : "bg-gradient-to-br from-white to-yellow-50 border border-yellow-100",
-                )}
-              >
-                <div className="p-6 relative z-10">
-                  <div className="flex items-center justify-between mb-4">
-                    <div
-                      className={cn(
-                        "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm shrink-0",
-                        isDark
-                          ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                          : "bg-gradient-to-br from-yellow-500 to-yellow-600 text-white",
-                      )}
-                    >
-                      <Trophy
-                        className={cn(
-                          "h-6 w-6",
-                          isDark ? "text-white" : "text-white",
-                        )}
-                      />
-                    </div>
-                    <div className="text-right min-w-0 pl-3">
-                      <p
-                        className={cn(
-                          "text-sm font-medium uppercase tracking-wide",
-                          isDark
-                            ? "text-white/90 drop-shadow-sm"
-                            : "text-gray-500",
-                        )}
-                      >
-                        Prize Pool
-                      </p>
+              <div>
+                <div className="p-5 sm:p-6">
+                  <div className="mb-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-[#0a0a0a]" />
+                        <p className={kpiLabelClass}>Prize Pool</p>
+                      </div>
                       {overviewLeaderboardPrizesDiffer ? (
-                        <div className="mt-1 flex flex-wrap items-center justify-end gap-x-2.5 gap-y-1">
+                        <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1">
                           {overviewVideoPlatforms.map((platform) => {
                             const prize = getLeaderboardPrizePoolCents(
                               overviewPersistedCampaigns[platform]
@@ -16378,20 +16312,13 @@ export default function ContestDetailClient({
                           })}
                         </div>
                       ) : (
-                        <p
-                          className={cn(
-                            "text-2xl font-bold mt-1",
-                            isDark
-                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-yellow-200 bg-clip-text text-transparent"
-                              : "text-gray-900",
-                          )}
-                        >
+                        <p className={cn(kpiValueClass, "mt-2")}>
                           {formatMoney(overviewLeaderboardPrizePoolCents)}
                         </p>
                       )}
                     </div>
                   </div>
-                  <div className="mb-3">
+                  <div className="mb-1">
                     {overviewWinnerCountsDiffer ? (
                       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                         {overviewVideoPlatforms.map((platform) => {
@@ -16404,10 +16331,8 @@ export default function ContestDetailClient({
                             <span
                               key={`summary-winners-${platform}`}
                               className={cn(
-                                "inline-flex items-center gap-1 text-sm font-medium",
-                                isDark
-                                  ? "text-white/80 drop-shadow-sm"
-                                  : "text-gray-600",
+                                "inline-flex items-center gap-1 text-xs",
+                                brandMutedClass,
                               )}
                             >
                               <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden [&_div]:!h-4 [&_div]:!w-4 [&_svg]:!h-4 [&_svg]:!w-4">
@@ -16419,14 +16344,7 @@ export default function ContestDetailClient({
                         })}
                       </div>
                     ) : overviewLeaderboardWinnerCountDisplay > 0 ? (
-                      <p
-                        className={cn(
-                          "text-sm font-medium",
-                          isDark
-                            ? "text-white/80 drop-shadow-sm"
-                            : "text-gray-600",
-                        )}
-                      >
+                      <p className={kpiSubClass}>
                         {overviewLeaderboardWinnerCountDisplay} winners
                       </p>
                     ) : null}
@@ -16436,24 +16354,13 @@ export default function ContestDetailClient({
                   {overviewLeaderboardBonusBudgetCents > 0 && (
                     <div
                       className={cn(
-                        "pt-3 mb-3",
-                        isDark
-                          ? "border-t border-white/30"
-                          : "border-t border-yellow-200",
+                        "pt-3 mt-2",
+                        isDark ? "border-t border-white/10" : "border-t border-[#e5e5e5]",
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <p
-                            className={cn(
-                              "text-sm font-medium uppercase tracking-wide",
-                              isDark
-                                ? "text-white/90 drop-shadow-sm"
-                                : "text-gray-500",
-                            )}
-                          >
-                            Total Budget
-                          </p>
+                          <p className={brandLabelClass}>Total Budget</p>
                           {overviewVideoPlatforms.length >= 2 ? (
                             <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
                               {overviewVideoPlatforms.map((platform) => {
@@ -16472,9 +16379,7 @@ export default function ContestDetailClient({
                                     <span
                                       className={cn(
                                         "text-sm font-bold",
-                                        isDark
-                                          ? "text-cyan-300 drop-shadow-sm"
-                                          : "text-blue-600",
+                                        brandPrimaryTextClass,
                                       )}
                                     >
                                       {formatMoney(budget)}
@@ -16484,50 +16389,20 @@ export default function ContestDetailClient({
                               })}
                             </div>
                           ) : (
-                            <p
-                              className={cn(
-                                "text-xl font-bold mt-1",
-                                isDark
-                                  ? "text-cyan-300 drop-shadow-sm"
-                                  : "text-blue-600",
-                              )}
-                            >
+                            <p className={cn("text-xl font-bold mt-1", brandPrimaryTextClass)}>
                               {formatMoney(overviewLeaderboardBonusBudgetCents)}
                             </p>
                           )}
-                          <p
-                            className={cn(
-                              "text-xs mt-1",
-                              isDark
-                                ? "text-white/70 drop-shadow-sm"
-                                : "text-gray-600",
-                            )}
-                          >
-                            For bonuses & extras
+                          <p className={cn("text-xs mt-1", brandMutedClass)}>
+                            For bonuses &amp; extras
                           </p>
                         </div>
-                        <div
-                          className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-lg shrink-0",
-                            isDark
-                              ? "bg-cyan-400/30 text-cyan-300 backdrop-blur-sm"
-                              : "bg-blue-100 text-blue-600",
-                          )}
-                        >
-                          <span className="text-lg">💰</span>
+                        <div className={cn("w-9 h-9 shrink-0", brandIconTileClass)}>
+                          <DollarSign className="h-4 w-4" />
                         </div>
                       </div>
                     </div>
                   )}
-
-                  <div
-                    className={cn(
-                      "h-1 w-full rounded-full",
-                      isDark
-                        ? "bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 shadow-lg shadow-yellow-400/70 animate-pulse"
-                        : "bg-gradient-to-r from-yellow-200 to-yellow-300",
-                    )}
-                  ></div>
                 </div>
               </div>
               // <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-700/50 hover:shadow-lg transition-all duration-300">
@@ -16559,100 +16434,20 @@ export default function ContestDetailClient({
                   ?.campaign_type;
               if (campaignType === "raid" || campaignType === "awareness") {
                 return (
-                  <div
-                    className={cn(
-                      "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                      isDark
-                        ? campaignType === "raid"
-                          ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-red-500/20"
-                          : "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-cyan-500/20"
-                        : campaignType === "raid"
-                          ? "bg-gradient-to-br from-white to-red-50 border border-red-100"
-                          : "bg-gradient-to-br from-white to-cyan-50 border border-cyan-100",
-                    )}
-                  >
-                    <div className="p-6 relative z-10">
-                      <div className="flex items-center justify-between mb-4">
-                        <div
-                          className={cn(
-                            "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                            isDark
-                              ? campaignType === "raid"
-                                ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                                : "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                              : campaignType === "raid"
-                                ? "bg-gradient-to-br from-red-500 to-red-600 text-white"
-                                : "bg-gradient-to-br from-cyan-500 to-cyan-600 text-white",
-                          )}
-                        >
-                          <Tag
-                            className={cn(
-                              "h-6 w-6",
-                              isDark ? "text-white" : "text-white",
-                            )}
-                          />
-                        </div>
-                        <div className="text-right">
-                          <p
-                            className={cn(
-                              "text-sm font-medium uppercase tracking-wide",
-                              isDark
-                                ? campaignType === "raid"
-                                  ? "text-white/90 drop-shadow-sm"
-                                  : "text-white/90 drop-shadow-sm"
-                                : campaignType === "raid"
-                                  ? "text-gray-500"
-                                  : "text-gray-500",
-                            )}
-                          >
-                            Campaign Type
-                          </p>
-                          <p
-                            className={cn(
-                              "text-2xl font-bold mt-1",
-                              isDark
-                                ? campaignType === "raid"
-                                  ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-red-200 bg-clip-text text-transparent"
-                                  : "text-white drop-shadow-lg bg-gradient-to-r from-white to-cyan-200 bg-clip-text text-transparent"
-                                : campaignType === "raid"
-                                  ? "text-gray-900"
-                                  : "text-gray-900",
-                            )}
-                          >
-                            {campaignType === "raid" ? "Raid" : "Awareness"}
-                          </p>
-                        </div>
+                  <div>
+                    <div className="p-5 sm:p-6 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-[#a855f7]" />
+                        <p className={kpiLabelClass}>Campaign Type</p>
                       </div>
-                      <div className="mb-4">
-                        <p
-                          className={cn(
-                            "text-sm font-medium",
-                            isDark
-                              ? campaignType === "raid"
-                                ? "text-white/80 drop-shadow-sm"
-                                : "text-white/80 drop-shadow-sm"
-                              : campaignType === "raid"
-                                ? "text-gray-600"
-                                : "text-gray-600",
-                          )}
-                        >
-                          {campaignType === "raid"
-                            ? "Raid Campaign"
-                            : "Awareness Campaign"}
-                        </p>
-                      </div>
-                      <div
-                        className={cn(
-                          "h-1 w-full rounded-full",
-                          isDark
-                            ? campaignType === "raid"
-                              ? "bg-gradient-to-r from-red-400 via-pink-400 to-orange-400 shadow-lg shadow-red-400/70 animate-pulse"
-                              : "bg-gradient-to-r from-cyan-400 via-blue-400 to-teal-400 shadow-lg shadow-cyan-400/70 animate-pulse"
-                            : campaignType === "raid"
-                              ? "bg-gradient-to-r from-red-200 to-red-300"
-                              : "bg-gradient-to-r from-cyan-200 to-cyan-300",
-                        )}
-                      ></div>
+                      <p className={kpiValueClass}>
+                        {campaignType === "raid" ? "Raid" : "Awareness"}
+                      </p>
+                      <p className={kpiSubClass}>
+                        {campaignType === "raid"
+                          ? "Raid Campaign"
+                          : "Awareness Campaign"}
+                      </p>
                     </div>
                   </div>
                 );
@@ -16679,76 +16474,16 @@ export default function ContestDetailClient({
                 : participantsCount;
 
               return (
-                <div
-                  className={cn(
-                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                    isDark
-                      ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
-                      : "bg-gradient-to-br from-white to-purple-50 border border-purple-100",
-                  )}
-                >
-                  <div className="p-6 relative z-10">
-                    <div className="flex items-center justify-between mb-4">
-                      <div
-                        className={cn(
-                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                          isDark
-                            ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                            : "bg-gradient-to-br from-purple-500 to-purple-600 text-white",
-                        )}
-                      >
-                        <Users
-                          className={cn(
-                            "h-6 w-6",
-                            isDark ? "text-white" : "text-white",
-                          )}
-                        />
-                      </div>
-                      <div className="text-right">
-                        <p
-                          className={cn(
-                            "text-sm font-medium uppercase tracking-wide",
-                            isDark
-                              ? "text-white/90 drop-shadow-sm"
-                              : "text-gray-500",
-                          )}
-                        >
-                          Participants
-                        </p>
-                        <p
-                          className={cn(
-                            "text-2xl font-bold mt-1",
-                            isDark
-                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
-                              : "text-gray-900",
-                          )}
-                        >
-                          {displayValue}
-                        </p>
-                      </div>
+                <div>
+                  <div className="p-5 sm:p-6 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-[#22c55e]" />
+                      <p className={kpiLabelClass}>Participants</p>
                     </div>
-                    <div className="mb-4">
-                      <p
-                        className={cn(
-                          "text-sm font-medium",
-                          isDark
-                            ? "text-white/80 drop-shadow-sm"
-                            : "text-gray-600",
-                        )}
-                      >
-                        {maxParticipants
-                          ? "Joined / Max limit"
-                          : "Total joined"}
-                      </p>
-                    </div>
-                    <div
-                      className={cn(
-                        "h-1 w-full rounded-full",
-                        isDark
-                          ? "bg-gradient-to-r from-purple-400 via-indigo-400 to-violet-400 shadow-lg shadow-purple-400/70 animate-pulse"
-                          : "bg-gradient-to-r from-purple-200 to-purple-300",
-                      )}
-                    ></div>
+                    <p className={kpiValueClass}>{displayValue}</p>
+                    <p className={kpiSubClass}>
+                      {maxParticipants ? "Joined / Max limit" : "Total joined"}
+                    </p>
                   </div>
                 </div>
               );
@@ -16762,97 +16497,41 @@ export default function ContestDetailClient({
               currentContest.contest_based_details,
               currentContest.platform,
             ) > 0 && (
-              <div
-                className={cn(
-                  "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                  isDark
-                    ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-emerald-500/20"
-                    : "bg-white border border-gray-100",
-                )}
-              >
-                <div className="p-6 relative z-10">
-                  <div className="flex items-center justify-between mb-4">
-                    <div
-                      className={cn(
-                        "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                        isDark
-                          ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                          : "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white",
-                      )}
-                    >
-                      <DollarSign
-                        className={cn(
-                          "h-6 w-6",
-                          isDark ? "text-white" : "text-white",
-                        )}
-                      />
-                    </div>
-                    <div className="text-right">
-                      <p
-                        className={cn(
-                          "text-sm font-medium uppercase tracking-wide",
-                          isDark
-                            ? "text-white/90 drop-shadow-sm"
-                            : "text-gray-500",
-                        )}
-                      >
-                        Total Budget
-                      </p>
-                      <p
-                        className={cn(
-                          "text-2xl font-bold mt-1",
-                          isDark
-                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-emerald-200 bg-clip-text text-transparent"
-                            : "text-gray-900",
-                        )}
-                      >
-                        {formatMoney(
-                          resolveContestPoolBudgetCents(
-                            currentContest.contest_type,
-                            currentContest.contest_based_details,
-                            currentContest.platform,
-                          ),
-                        )}
-                      </p>
-                    </div>
+              <div>
+                <div className="p-5 sm:p-6 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-[#0a0a0a]" />
+                    <p className={kpiLabelClass}>Total Budget</p>
                   </div>
-                  <div className="mb-4">
-                    <p
-                      className={cn(
-                        "text-sm font-medium",
-                        isDark
-                          ? "text-white/80 drop-shadow-sm"
-                          : "text-gray-600",
-                      )}
-                    >
-                      {(() => {
-                        const platformCpmText = formatContestListCpmRatesText(
-                          resolveContestPlatformCpmRates(
-                            currentContest.contest_based_details as
-                              | Record<string, unknown>
-                              | null
-                              | undefined,
-                            currentContest.platform,
-                          ),
-                          formatMoney,
-                        );
-                        if (platformCpmText) return platformCpmText;
-                        const rootRate =
-                          currentContest.contest_based_details?.cpm_contest
-                            ?.cpm_rate_usd;
-                        if (rootRate == null || rootRate === "") return null;
-                        return `$${rootRate} CPM`;
-                      })()}
-                    </p>
-                  </div>
-                  <div
-                    className={cn(
-                      "h-1 w-full rounded-full",
-                      isDark
-                        ? "bg-gradient-to-r from-emerald-400 via-green-400 to-teal-400 shadow-lg shadow-emerald-400/70 animate-pulse"
-                        : "bg-gradient-to-r from-emerald-200 to-emerald-300",
+                  <p className={kpiValueClass}>
+                    {formatMoney(
+                      resolveContestPoolBudgetCents(
+                        currentContest.contest_type,
+                        currentContest.contest_based_details,
+                        currentContest.platform,
+                      ),
                     )}
-                  ></div>
+                  </p>
+                  <p className={kpiSubClass}>
+                    {(() => {
+                      const platformCpmText = formatContestListCpmRatesText(
+                        resolveContestPlatformCpmRates(
+                          currentContest.contest_based_details as
+                            | Record<string, unknown>
+                            | null
+                            | undefined,
+                          currentContest.platform,
+                        ),
+                        formatMoney,
+                      );
+                      if (platformCpmText) return platformCpmText;
+                      const rootRate =
+                        currentContest.contest_based_details?.cpm_contest
+                          ?.cpm_rate_usd;
+                      if (rootRate == null || rootRate === "") return null;
+                      return `$${rootRate} CPM`;
+                    })()}
+                  </p>
                 </div>
               </div>
               // <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-700/50 hover:shadow-lg transition-all duration-300">
@@ -16891,150 +16570,41 @@ export default function ContestDetailClient({
               currentContest.contest_based_details,
               currentContest.platform,
             ) > 0 && (
-              <div
-                className={cn(
-                  "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                  isDark
-                    ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
-                    : "bg-white border border-gray-100",
-                )}
-              >
-                <div className="p-6 relative z-10">
-                  <div className="flex items-center justify-between mb-4">
-                    <div
-                      className={cn(
-                        "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                        isDark
-                          ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                          : "bg-gradient-to-br from-blue-500 to-blue-600 text-white",
-                      )}
-                    >
-                      <Wallet
-                        className={cn(
-                          "h-6 w-6",
-                          isDark ? "text-white" : "text-white",
-                        )}
-                      />
-                    </div>
-                    <div className="text-right">
-                      <p
-                        className={cn(
-                          "text-sm font-medium uppercase tracking-wide",
-                          isDark
-                            ? "text-white/90 drop-shadow-sm"
-                            : "text-gray-500",
-                        )}
-                      >
-                        Total Budget
-                      </p>
-                      <p
-                        className={cn(
-                          "text-2xl font-bold mt-1",
-                          isDark
-                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
-                            : "text-gray-900",
-                        )}
-                      >
-                        {formatMoney(
-                          resolveContestPoolBudgetCents(
-                            currentContest.contest_type,
-                            currentContest.contest_based_details,
-                            currentContest.platform,
-                          ),
-                        )}
-                      </p>
-                    </div>
+              <div>
+                <div className="p-5 sm:p-6 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-[#0a0a0a]" />
+                    <p className={kpiLabelClass}>Total Budget</p>
                   </div>
-                  <div className="mb-4">
-                    <p
-                      className={cn(
-                        "text-sm font-medium",
-                        isDark
-                          ? "text-white/80 drop-shadow-sm"
-                          : "text-gray-600",
-                      )}
-                    >
-                      Total reserved for milestone payouts
-                    </p>
-                  </div>
-                  <div
-                    className={cn(
-                      "h-1 w-full rounded-full",
-                      isDark
-                        ? "bg-gradient-to-r from-blue-400 via-sky-400 to-cyan-400 shadow-lg shadow-blue-400/70 animate-pulse"
-                        : "bg-gradient-to-r from-blue-200 to-blue-300",
+                  <p className={kpiValueClass}>
+                    {formatMoney(
+                      resolveContestPoolBudgetCents(
+                        currentContest.contest_type,
+                        currentContest.contest_based_details,
+                        currentContest.platform,
+                      ),
                     )}
-                  ></div>
+                  </p>
+                  <p className={kpiSubClass}>
+                    Total reserved for milestone payouts
+                  </p>
                 </div>
               </div>
             )}
 
           {/* Submissions Count Card */}
-          <div
-            className={cn(
-              "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-              isDark
-                ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
-                : "bg-gradient-to-br from-white to-purple-50 border border-purple-100",
-            )}
-          >
-            <div className="p-6 relative z-10">
-              <div className="flex items-center justify-between mb-4">
-                <div
-                  className={cn(
-                    "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                    isDark
-                      ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                      : "bg-gradient-to-br from-purple-500 to-purple-600 text-white",
-                  )}
-                >
-                  <Users
-                    className={cn(
-                      "h-6 w-6",
-                      isDark ? "text-white" : "text-white",
-                    )}
-                  />
-                </div>
-                <div className="text-right">
-                  <p
-                    className={cn(
-                      "text-sm font-medium uppercase tracking-wide",
-                      isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500",
-                    )}
-                  >
-                    Submissions
-                  </p>
-                  <p
-                    className={cn(
-                      "text-2xl font-bold mt-1",
-                      isDark
-                        ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
-                        : "text-gray-900",
-                    )}
-                  >
-                    {submissionTotalCount}
-                  </p>
-                </div>
+          <div>
+            <div className="p-5 sm:p-6 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-[#22c55e]" />
+                <p className={kpiLabelClass}>Submissions</p>
               </div>
-              <div className="mb-4">
-                <p
-                  className={cn(
-                    "text-sm font-medium",
-                    isDark ? "text-white/80 drop-shadow-sm" : "text-gray-600",
-                  )}
-                >
-                  Total entries
-                </p>
-              </div>
-              <div
-                className={cn(
-                  "h-1 w-full rounded-full",
-                  isDark
-                    ? "bg-gradient-to-r from-purple-400 via-violet-400 to-fuchsia-400 shadow-lg shadow-purple-400/70 animate-pulse"
-                    : "bg-gradient-to-r from-purple-200 to-purple-300",
-                )}
-              ></div>
+              <p className={kpiValueClass}>{submissionTotalCount}</p>
+              <p className={kpiSubClass}>
+                Total entries
+              </p>
             </div>
+          </div>
           </div>
         </div>
 
@@ -17045,30 +16615,11 @@ export default function ContestDetailClient({
             currentContest.contest_based_details,
             currentContest.platform,
           ) > 0 && (
-            <div
-              className={cn(
-                "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                isDark
-                  ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-indigo-500/20"
-                  : "bg-gradient-to-br from-white to-indigo-50 border border-indigo-100",
-              )}
-            >
-              <div className="p-6 relative z-10">
+            <div className={brandInfoCardClass}>
+              <div className="p-6">
                 <div className="flex items-center mb-4">
-                  <div
-                    className={cn(
-                      "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm mr-4",
-                      isDark
-                        ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                        : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white",
-                    )}
-                  >
-                    <BarChart3
-                      className={cn(
-                        "h-6 w-6",
-                        isDark ? "text-white" : "text-white",
-                      )}
-                    />
+                  <div className={cn(brandInfoIconTileClass, "mr-3")}>
+                    <BarChart3 className="h-5 w-5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
@@ -17076,30 +16627,16 @@ export default function ContestDetailClient({
                         <Loader2
                           className={cn(
                             "h-4 w-4 animate-spin shrink-0",
-                            isDark ? "text-white" : "text-indigo-600",
+                            isDark ? "text-white" : "text-[#0284c7]",
                           )}
                           aria-hidden
                         />
                       )}
-                      <h3
-                        className={cn(
-                          "text-lg font-bold",
-                          isDark
-                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-indigo-200 bg-clip-text text-transparent"
-                            : "text-gray-900",
-                        )}
-                      >
+                      <h3 className={cn("text-base font-semibold", brandPrimaryTextClass)}>
                         Budget Tracker
                       </h3>
                     </div>
-                    <p
-                      className={cn(
-                        "text-sm",
-                        isDark
-                          ? "text-white/80 drop-shadow-sm"
-                          : "text-gray-600",
-                      )}
-                    >
+                    <p className={cn("text-xs", brandMutedClass)}>
                       Monitor spending progress
                     </p>
                   </div>
@@ -17147,25 +16684,11 @@ export default function ContestDetailClient({
         {/* Budget Progress Tracker - For Leaderboard with total_budget */}
         {overviewUniformPayoutContest.contest_type === "leaderboard" &&
           overviewLeaderboardBonusBudgetCents > 0 && (
-            <div
-              className={cn(
-                "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                isDark
-                  ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-emerald-500/20"
-                  : "bg-gradient-to-br from-white to-emerald-50 border border-emerald-100",
-              )}
-            >
-              <div className="p-6 relative z-10">
+            <div className={brandInfoCardClass}>
+              <div className="p-6">
                 <div className="flex items-center mb-4">
-                  <div
-                    className={cn(
-                      "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm mr-4",
-                      isDark
-                        ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                        : "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white",
-                    )}
-                  >
-                    <BarChart3 className="h-6 w-6 text-white" />
+                  <div className={cn(brandInfoIconTileClass, "mr-3")}>
+                    <BarChart3 className="h-5 w-5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
@@ -17173,30 +16696,16 @@ export default function ContestDetailClient({
                         <Loader2
                           className={cn(
                             "h-4 w-4 animate-spin shrink-0",
-                            isDark ? "text-white" : "text-emerald-600",
+                            isDark ? "text-white" : "text-[#0284c7]",
                           )}
                           aria-hidden
                         />
                       )}
-                      <h3
-                        className={cn(
-                          "text-lg font-bold",
-                          isDark
-                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-emerald-200 bg-clip-text text-transparent"
-                            : "text-gray-900",
-                        )}
-                      >
+                      <h3 className={cn("text-base font-semibold", brandPrimaryTextClass)}>
                         Budget Tracker
                       </h3>
                     </div>
-                    <p
-                      className={cn(
-                        "text-sm",
-                        isDark
-                          ? "text-white/80 drop-shadow-sm"
-                          : "text-gray-600",
-                      )}
-                    >
+                    <p className={cn("text-xs", brandMutedClass)}>
                       Monitor bonus spending progress
                     </p>
                   </div>
@@ -17231,25 +16740,11 @@ export default function ContestDetailClient({
             currentContest.contest_based_details,
             currentContest.platform,
           ) > 0 && (
-            <div
-              className={cn(
-                "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
-                isDark
-                  ? "bg-[#161616] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
-                  : "bg-gradient-to-br from-white to-blue-50 border border-blue-100",
-              )}
-            >
-              <div className="p-6 relative z-10">
+            <div className={brandInfoCardClass}>
+              <div className="p-6">
                 <div className="flex items-center mb-4">
-                  <div
-                    className={cn(
-                      "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm mr-4",
-                      isDark
-                        ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                        : "bg-gradient-to-br from-blue-500 to-blue-600 text-white",
-                    )}
-                  >
-                    <BarChart3 className="h-6 w-6 text-white" />
+                  <div className={cn(brandInfoIconTileClass, "mr-3")}>
+                    <BarChart3 className="h-5 w-5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
@@ -17257,30 +16752,16 @@ export default function ContestDetailClient({
                         <Loader2
                           className={cn(
                             "h-4 w-4 animate-spin shrink-0",
-                            isDark ? "text-white" : "text-blue-600",
+                            isDark ? "text-white" : "text-[#0284c7]",
                           )}
                           aria-hidden
                         />
                       )}
-                      <h3
-                        className={cn(
-                          "text-lg font-bold",
-                          isDark
-                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
-                            : "text-gray-900",
-                        )}
-                      >
+                      <h3 className={cn("text-base font-semibold", brandPrimaryTextClass)}>
                         Budget Tracker
                       </h3>
                     </div>
-                    <p
-                      className={cn(
-                        "text-sm",
-                        isDark
-                          ? "text-white/80 drop-shadow-sm"
-                          : "text-gray-600",
-                      )}
-                    >
+                    <p className={cn("text-xs", brandMutedClass)}>
                       Monitor milestone payout spending progress
                     </p>
                   </div>
@@ -17359,93 +16840,37 @@ export default function ContestDetailClient({
         tabs={displayTabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        className="mt-12 mb-6"
+        className="mt-12 mb-6 gap-7 overflow-x-auto flex-nowrap"
         isDark={isDark}
         light={!isDark}
+        variant="underline"
       />
       <div className="mt-8">
         <TabContent activeTab={activeTab}>
           <TabPanel value="overview" activeTab={activeTab}>
-            <div
-              className={cn(
-                "px-4 pt-5 pb-4 border-b rounded-t-xl font-semibold shadow-xl flex flex-wrap items-center justify-between gap-3",
-                isDark
-                  ? "bg-[#170337] border-gray-600 text-white"
-                  : "bg-white text-purple-500 ",
-              )}
-            >
-              <h1 className="text-xl flex items-center gap-2">
-                Campaign Details
-              </h1>
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {overviewVideoPlatforms.length >= 2 && (
-                  <ContestDetailPlatformTabs
-                    platforms={overviewVideoPlatforms}
-                    active={overviewPlatformTab}
-                    onChange={setOverviewPlatformTab}
-                    isDark={isDark}
-                    disabled={false} /* browse unlocked during refresh */
-                  />
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={
-                    isHydratingSubmissions || currentSubmissions.length === 0
+            <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-6 lg:items-start">
+              <div className="min-w-0 space-y-6">
+                <BrandOverviewSectionCard
+                  isDark={isDark}
+                  title="Brief"
+                  subtitle="Shown to creators on the campaign page"
+                  icon={
+                    <img
+                      src="/images/contest-details/brief-file.svg"
+                      alt=""
+                      className="h-4 w-4"
+                    />
                   }
-                  className={cn(
-                    "gap-2 shrink-0 disabled:opacity-100",
-                    isDark
-                      ? "border-slate-600 text-slate-300 hover:bg-slate-800"
-                      : "border-slate-300 text-slate-700 hover:bg-slate-50",
-                  )}
-                  onClick={() => {
-                    if (isHydratingSubmissions) return;
-                    setFullReportDialogOpen(true);
-                  }}
-                >
-                  {isHydratingSubmissions ? (
-                    <Loader2 className="h-4 w-4 animate-spin shrink-0 text-[#7F39EC]" />
-                  ) : (
-                    <Download className="h-4 w-4 shrink-0" />
-                  )}
-                  Download full report
-                </Button>
-              </div>
-            </div>
-            <div
-              className={cn(
-                "p-4 bg-white rounded-b-xl shadow-xl min-w-0 overflow-x-hidden",
-                isDark ? "bg-[#170337]" : "bg-white",
-              )}
-            >
-              <CardContent className="space-y-6 py-6 px-4">
-                {currentContest.thumbnail_url && (
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-lg text-foreground">
-                      Thumbnail
-                    </h3>
-                    <div className="flex justify-center">
-                      <img
-                        src={currentContest.thumbnail_url}
-                        alt={`${currentContest.title} thumbnail`}
-                        className="max-w-full max-h-80 object-contain shadow-sm"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-lg flex items-center gap-2">
-                    Brief
-                    {overviewVideoPlatforms.length >= 2 &&
+                  badge={
+                    overviewVideoPlatforms.length >= 2 &&
                     overviewPlatformTab === ALL_PLATFORM_TAB &&
                     !overviewBriefsDiffer ? (
                       <ContestDetailSharedAcrossPlatformsHint
                         platforms={overviewVideoPlatforms}
                       />
-                    ) : null}
-                  </h3>
+                    ) : null
+                  }
+                >
                   {overviewVideoPlatforms.length >= 2 &&
                   overviewPlatformTab === ALL_PLATFORM_TAB &&
                   overviewBriefsDiffer ? (
@@ -17519,8 +16944,8 @@ export default function ContestDetailClient({
                           className={cn(
                             "prose prose-md max-w-none p-4 rounded-lg border [&_a]:break-words [&_a]:hover:underline",
                             isDark
-                              ? "bg-[#170337] text-white border-gray-600 [&_*]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_em]:!text-white [&_a]:!text-blue-300 [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_table]:!text-white [&_th]:!text-white [&_td]:!text-white"
-                              : "bg-white text-foreground",
+                              ? "bg-white/5 text-white border-white/10 [&_*]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_em]:!text-white [&_a]:!text-blue-300 [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_table]:!text-white [&_th]:!text-white [&_td]:!text-white"
+                              : "bg-[#fafafa] text-foreground border-[#e5e5e5]",
                           )}
                           style={isDark ? { color: "white" } : undefined}
                           dangerouslySetInnerHTML={{
@@ -17534,287 +16959,31 @@ export default function ContestDetailClient({
                       );
                     })()
                   )}
-                </div>
-
-                {/* Contest Details */}
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-lg text-foreground">
-                    Contest Details
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Platform Card */}
-                    <div
-                      className={cn(
-                        "border rounded-xl transition-all duration-300",
-                        isDark ? "border-gray-600" : "border-gray-300",
-                      )}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-4">
-                          <div
-                            className={cn(
-                              "w-10 h-10 flex items-center justify-center rounded-full ",
-                              isDark
-                                ? "bg-[#FFFFFF42] text-white"
-                                : "bg-purple-100 text-[#4A00BE]",
-                            )}
-                          >
-                            <Monitor className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p
-                              className={cn(
-                                "text-md font-medium tracking-wide",
-                                isDark ? "text-white" : "text-black",
-                              )}
-                            >
-                              Platform
-                            </p>
-                            <p
-                              className={cn(
-                                "text-lg md:text-xl font-bold capitalize",
-                                isDark ? "text-white" : "text-black",
-                              )}
-                            >
-                              {(overviewScopedPlatform
-                                ? [overviewScopedPlatform]
-                                : overviewVideoPlatforms.length > 0
-                                  ? overviewVideoPlatforms
-                                  : []
-                              ).length > 0
-                                ? (overviewScopedPlatform
-                                    ? [overviewScopedPlatform]
-                                    : overviewVideoPlatforms
-                                  )
-                                    .map(
-                                      (platform) =>
-                                        VIDEO_PLATFORM_LABELS[platform],
-                                    )
-                                    .join(", ")
-                                : currentContest.platform}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </div>
-
-                    {/* Status Card */}
-                    <div
-                      className={cn(
-                        "border rounded-xl transition-all duration-300",
-                        isDark ? "border-gray-600" : "border-gray-300",
-                      )}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-4">
-                          <div
-                            className={cn(
-                              "w-10 h-10 flex items-center justify-center rounded-full ",
-                              isDark
-                                ? "bg-[#FFFFFF42] text-white"
-                                : "bg-purple-100 text-[#4A00BE]",
-                            )}
-                          >
-                            <Info className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1">
-                            <p
-                              className={cn(
-                                "text-md font-medium tracking-wide",
-                                isDark ? "text-white" : "text-black",
-                              )}
-                            >
-                              Status
-                            </p>
-                            <p
-                              className={cn(
-                                "text-lg md:text-xl font-bold capitalize",
-                                isDark ? "text-white" : "text-black",
-                              )}
-                            >
-                              {contestStatusBadgeInfo.text}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </div>
-                  </div>
-
-                  {/* Date & Time Cards */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Start Date Card */}
-                    <div
-                      className={cn(
-                        "border rounded-xl transition-all duration-300",
-                        isDark ? "border-gray-600" : "border-gray-300",
-                      )}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "w-10 h-10 flex items-center justify-center rounded-full ",
-                              isDark
-                                ? "bg-[#FFFFFF42] text-white"
-                                : "bg-purple-100 text-[#4A00BE]",
-                            )}
-                          >
-                            <Play className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-md font-medium tracking-wide">
-                              Start Date & Time
-                            </p>
-                            <p className="text-lg font-bold ">
-                              {formatLocalDateTime(currentContest.start_date)}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </div>
-
-                    {/* End Date Card */}
-                    <div
-                      className={cn(
-                        "border rounded-xl transition-all duration-300",
-                        isDark ? "border-gray-600" : "border-gray-300",
-                      )}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "w-10 h-10 flex items-center justify-center rounded-full ",
-                              isDark
-                                ? "bg-[#FFFFFF42] text-white"
-                                : "bg-purple-100 text-[#4A00BE]",
-                            )}
-                          >
-                            <Clock className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium tracking-wide">
-                              End Date & Time
-                            </p>
-                            <p className="text-lg font-bold">
-                              {formatLocalDateTime(currentContest.end_date)}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </div>
-                  </div>
-                </div>
-
-                {showCreatorEligibilitySection && (
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-lg text-foreground">
-                      Creator Eligibility
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Minimum creator requirements to submit to this campaign.
-                    </p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {eligibilityDisplayItems.map((item) => (
-                        <EligibilityRequirementCard
-                          key={item.key}
-                          icon={item.icon}
-                          label={item.label}
-                          value={item.value}
-                          description={item.description}
-                          isDark={isDark}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Regions Card */}
-                {currentContest.region &&
-                  Object.keys(currentContest.region).length > 0 && (
-                    <div className="space-y-3">
-                      <h3 className="font-semibold text-lg text-foreground">
-                        Available Regions
-                      </h3>
-                      <div
-                        className={cn(
-                          "border rounded-xl transition-all duration-300",
-                          isDark ? "border-gray-600" : "border-gray-300",
-                        )}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex items-start gap-4">
-                            <div
-                              className={cn(
-                                "w-10 h-10 flex items-center justify-center rounded-full flex-shrink-0",
-                                isDark
-                                  ? "bg-[#FFFFFF42] text-white"
-                                  : "bg-purple-100 text-[#4A00BE]",
-                              )}
-                            >
-                              <Globe className="h-5 w-5" />
-                            </div>
-                            <div className="flex-1 space-y-3">
-                              {Object.entries(currentContest.region).map(
-                                ([regionName, countries]) => (
-                                  <div
-                                    key={regionName}
-                                    className={cn(
-                                      "p-3 rounded-lg border",
-                                      isDark
-                                        ? "bg-[#170337] border-gray-600"
-                                        : "bg-gray-50 border-gray-200",
-                                    )}
-                                  >
-                                    <p
-                                      className={cn(
-                                        "font-semibold text-base mb-2",
-                                        isDark ? "text-white" : "text-gray-900",
-                                      )}
-                                    >
-                                      {regionName}
-                                    </p>
-                                    <div className="flex flex-wrap gap-2">
-                                      {countries.map((country) => (
-                                        <Badge
-                                          key={country}
-                                          variant="secondary"
-                                          className={cn(
-                                            "text-xs",
-                                            isDark
-                                              ? "bg-gray-700 text-gray-200 border-gray-600"
-                                              : "bg-white text-gray-700 border-gray-300",
-                                          )}
-                                        >
-                                          {country}
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ),
-                              )}
-                            </div>
-                          </div>
-                        </CardContent>
-                      </div>
-                    </div>
-                  )}
+                </BrandOverviewSectionCard>
 
                 {/* Conditional Prize Structure / CPM Details */}
                 {overviewLeaderboardPrizeSlices.length > 0 && (
-                  <div className="space-y-4">
-                    <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                      Prize Structure
-                      {overviewVideoPlatforms.length >= 2 &&
+                  <BrandOverviewSectionCard
+                    isDark={isDark}
+                    title="Prize Structure"
+                    subtitle="How the prize pool is split between winners"
+                    icon={
+                      <img
+                        src="/images/contest-details/earn-trophy.svg"
+                        alt=""
+                        className="h-4 w-4"
+                      />
+                    }
+                    badge={
+                      overviewVideoPlatforms.length >= 2 &&
                       overviewPlatformTab === ALL_PLATFORM_TAB &&
-                      !overviewLeaderboardPrizeSlices.some(
-                        (s) => s.showLabel,
-                      ) ? (
+                      !overviewLeaderboardPrizeSlices.some((s) => s.showLabel) ? (
                         <ContestDetailSharedAcrossPlatformsHint
                           platforms={overviewVideoPlatforms}
                         />
-                      ) : null}
-                    </h3>
+                      ) : null
+                    }
+                  >
                     {overviewLeaderboardPrizeSlices.map((slice) => {
                       const leaderboard =
                         slice.contest.contest_based_details
@@ -17822,121 +16991,15 @@ export default function ContestDetailClient({
                       if (!leaderboard) return null;
                       const prizeBody = (
                         <div className="space-y-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div
-                              className={cn(
-                                "border rounded-xl transition-all duration-300",
-                                isDark ? "border-gray-600" : "border-gray-300",
-                              )}
-                            >
-                              <CardContent className="p-4">
-                                <div className="flex items-center gap-3">
-                                  <div
-                                    className={cn(
-                                      "w-10 h-10 flex items-center justify-center rounded-full ",
-                                      isDark
-                                        ? "bg-[#FFFFFF42] text-white"
-                                        : "bg-purple-100 text-[#4A00BE]",
-                                    )}
-                                  >
-                                    <Trophy className="h-5 w-5" />
-                                  </div>
-                                  <div className="flex-1">
-                                    <p className="text-md font-medium tracking-wide">
-                                      Total Prize Pool
-                                    </p>
-                                    <p className="text-lg md:text-xl font-bold ">
-                                      {formatMoney(
-                                        getLeaderboardPrizePoolCents(
-                                          leaderboard,
-                                        ),
-                                      )}
-                                    </p>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </div>
-
-                            <div
-                              className={cn(
-                                "border rounded-xl transition-all duration-300",
-                                isDark ? "border-gray-600" : "border-gray-300",
-                              )}
-                            >
-                              <CardContent className="p-4">
-                                <div className="flex items-center gap-3">
-                                  <div
-                                    className={cn(
-                                      "w-10 h-10 flex items-center justify-center rounded-full ",
-                                      isDark
-                                        ? "bg-[#FFFFFF42] text-white"
-                                        : "bg-purple-100 text-[#4A00BE]",
-                                    )}
-                                  >
-                                    <Users className="h-5 w-5" />
-                                  </div>
-                                  <div className="flex-1">
-                                    <p className="text-md font-medium tracking-wide">
-                                      Total Winners
-                                    </p>
-                                    <p className=" text-lg md:text-xl font-bold">
-                                      {leaderboard.winner_count}
-                                    </p>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </div>
-                          </div>
-
-                          <div className="py-1">
-                            <h4 className="font-medium text-lg text-foreground mb-3 flex items-center gap-2">
-                              Prize Distribution
-                            </h4>
-                            <div className="space-y-4">
-                              {Array.isArray(leaderboard.prizes) &&
-                                [...leaderboard.prizes]
-                                  .sort(
-                                    (a: any, b: any) => a.position - b.position,
-                                  )
-                                  .map((prize: any, index: number) => (
-                                    <div
-                                      key={`${slice.platform ?? "contest"}-${prize.position}-${index}`}
-                                      className={cn(
-                                        "flex items-center justify-between py-3 px-3 rounded-lg border",
-                                        isDark
-                                          ? "border-gray-600"
-                                          : "border-gray-400",
-                                      )}
-                                    >
-                                      <div className="flex items-center gap-3">
-                                        <div
-                                          className={cn(
-                                            "w-8 h-8 rounded-full flex items-center justify-center border font-bold text-sm",
-                                            isDark
-                                              ? "border-gray-500 text-gray-300"
-                                              : "border-gray-500 text-gray-500",
-                                          )}
-                                        >
-                                          {prize.position}
-                                        </div>
-                                        <span className="font-medium text-foreground">
-                                          Position {prize.position}
-                                        </span>
-                                      </div>
-                                      <span
-                                        className={cn(
-                                          "font-bold text-lg",
-                                          isDark
-                                            ? "text-gray-300"
-                                            : "text-gray-600",
-                                        )}
-                                      >
-                                        {formatMoney(prize.amount)}
-                                      </span>
-                                    </div>
-                                  ))}
-                            </div>
-                          </div>
+                          <BrandOverviewPrizeStructure
+                            isDark={isDark}
+                            leaderboard={leaderboard}
+                            poolCents={getLeaderboardPrizePoolCents(
+                              leaderboard,
+                            )}
+                            formatMoney={formatMoney}
+                            keyPrefix={`${slice.platform ?? "contest"}`}
+                          />
                         </div>
                       );
                       if (slice.showLabel && slice.platform) {
@@ -17959,7 +17022,7 @@ export default function ContestDetailClient({
                         </div>
                       );
                     })}
-                  </div>
+                  </BrandOverviewSectionCard>
                 )}
 
                 {overviewPayoutGroups.map((group) => {
@@ -18019,11 +17082,54 @@ export default function ContestDetailClient({
                   if (!hasPointsConfig) return null;
 
                   return (
-                    <div className="space-y-3">
-                      <h3 className="font-semibold text-lg text-foreground">
-                        Points Configuration
-                      </h3>
-                      <div className="space-y-4">
+                    <div
+                      className={cn(
+                        "overflow-hidden rounded-2xl border shadow-[0px_1px_3px_0px_rgba(10,10,10,0.04)]",
+                        isDark
+                          ? "border-white/10 bg-[#111113]"
+                          : "border-[#e5e5e5] bg-white",
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "flex items-center gap-3 border-b px-5 py-4",
+                          isDark ? "border-white/10" : "border-[#e5e5e5]",
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px]",
+                            isDark
+                              ? "bg-white/10 text-white"
+                              : "bg-[#fafafa] text-[#0a0a0a]",
+                          )}
+                        >
+                          <Zap className="h-4 w-4" />
+                        </div>
+                        <h3
+                          className={cn(
+                            "text-[15px] font-semibold leading-tight",
+                            isDark ? "text-white" : "text-[#0a0a0a]",
+                          )}
+                        >
+                          Points Configuration
+                        </h3>
+                      </div>
+                      <div
+                        className={cn(
+                          "space-y-4 px-5 py-5",
+                          // Figma table-like rows: flat rows with bottom dividers (styling only)
+                          "[&_.grid]:!grid-cols-1 [&_.grid]:!gap-0",
+                          "[&_.rounded-md.border]:!rounded-none [&_.rounded-md.border]:!border-x-0 [&_.rounded-md.border]:!border-t-0 [&_.rounded-md.border]:!px-0 [&_.rounded-md.border]:!py-3",
+                          isDark
+                            ? "[&_.rounded-md.border]:!border-white/10"
+                            : "[&_.rounded-md.border]:!border-[#e5e5e5]",
+                          "[&_h4]:!text-[11px] [&_h4]:!font-semibold [&_h4]:!uppercase [&_h4]:!tracking-[0.88px] [&_h5]:!text-[11px] [&_h5]:!font-semibold [&_h5]:!tracking-[0.88px]",
+                          isDark
+                            ? "[&_h4]:!text-slate-400 [&_h5]:!text-slate-400"
+                            : "[&_h4]:!text-[#737373] [&_h5]:!text-[#737373]",
+                        )}
+                      >
                         {/* Twitter CPM Points Config */}
                         {twitterPointsConfig && (
                           <div className="space-y-3">
@@ -19251,449 +18357,6 @@ export default function ContestDetailClient({
                   );
                 })()}
 
-                {/* Payment Information */}
-                {(currentContest as any).payment_details && (
-                  <div className="space-y-4">
-                    <h3
-                      className={cn(
-                        "font-semibold text-lg",
-                        isDark ? "text-white" : "text-foreground",
-                      )}
-                    >
-                      Payment Information
-                    </h3>
-
-                    <div
-                      className={cn(
-                        "rounded-xl p-4",
-                        isDark
-                          ? "bg-gradient-to-r from-blue-900/20 to-indigo-900/20 border border-blue-700/50"
-                          : "bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200",
-                      )}
-                    >
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "p-2 rounded-lg",
-                              isDark ? "bg-blue-800/30" : "bg-blue-100",
-                            )}
-                          >
-                            <Trophy
-                              className={cn(
-                                "h-5 w-5",
-                                isDark ? "text-blue-400" : "text-blue-600",
-                              )}
-                            />
-                          </div>
-                          <div>
-                            <p
-                              className={cn(
-                                "text-xs font-medium uppercase tracking-wide",
-                                isDark ? "text-blue-300" : "text-blue-800",
-                              )}
-                            >
-                              Prize Pool
-                            </p>
-                            <p
-                              className={cn(
-                                "text-xl font-bold",
-                                isDark ? "text-blue-100" : "text-blue-900",
-                              )}
-                            >
-                              {(() => {
-                                const paymentDetails =
-                                  typeof (currentContest as any)
-                                    .payment_details === "string"
-                                    ? JSON.parse(
-                                        (currentContest as any).payment_details,
-                                      )
-                                    : (currentContest as any).payment_details;
-                                return formatMoney(
-                                  paymentDetails.total_prize_pool || 0,
-                                );
-                              })()}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "p-2 rounded-lg",
-                              isDark ? "bg-purple-800/30" : "bg-purple-100",
-                            )}
-                          >
-                            <CreditCard
-                              className={cn(
-                                "h-5 w-5",
-                                isDark ? "text-purple-400" : "text-purple-600",
-                              )}
-                            />
-                          </div>
-                          <div>
-                            <p
-                              className={cn(
-                                "text-xs font-medium uppercase tracking-wide",
-                                isDark ? "text-purple-300" : "text-purple-800",
-                              )}
-                            >
-                              Commission (
-                              {(() => {
-                                const paymentDetails =
-                                  typeof (currentContest as any)
-                                    .payment_details === "string"
-                                    ? JSON.parse(
-                                        (currentContest as any).payment_details,
-                                      )
-                                    : (currentContest as any).payment_details;
-                                return (
-                                  paymentDetails.commission_percentage || 0
-                                );
-                              })()}
-                              %)
-                            </p>
-                            <p
-                              className={cn(
-                                "text-xl font-bold",
-                                isDark ? "text-purple-100" : "text-purple-900",
-                              )}
-                            >
-                              {(() => {
-                                const paymentDetails =
-                                  typeof (currentContest as any)
-                                    .payment_details === "string"
-                                    ? JSON.parse(
-                                        (currentContest as any).payment_details,
-                                      )
-                                    : (currentContest as any).payment_details;
-                                return formatMoney(
-                                  paymentDetails.commission_amount || 0,
-                                );
-                              })()}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Total Paid and Payment Method */}
-                      <div
-                        className={cn(
-                          "mt-4 pt-4 border-t",
-                          isDark ? "border-blue-700/50" : "border-blue-200",
-                        )}
-                      >
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={cn(
-                                "p-2 rounded-lg",
-                                isDark ? "bg-green-800/30" : "bg-green-100",
-                              )}
-                            >
-                              <DollarSign
-                                className={cn(
-                                  "h-5 w-5",
-                                  isDark ? "text-green-400" : "text-green-600",
-                                )}
-                              />
-                            </div>
-                            <div>
-                              <p
-                                className={cn(
-                                  "text-xs font-medium uppercase tracking-wide",
-                                  isDark ? "text-green-300" : "text-green-800",
-                                )}
-                              >
-                                Total Paid
-                              </p>
-                              <p
-                                className={cn(
-                                  "text-lg font-bold",
-                                  isDark ? "text-green-100" : "text-green-900",
-                                )}
-                              >
-                                {(() => {
-                                  const paymentDetails =
-                                    typeof (currentContest as any)
-                                      .payment_details === "string"
-                                      ? JSON.parse(
-                                          (currentContest as any)
-                                            .payment_details,
-                                        )
-                                      : (currentContest as any).payment_details;
-                                  return formatMoney(
-                                    paymentDetails.total_amount_paid || 0,
-                                  );
-                                })()}
-                              </p>
-                            </div>
-                          </div>
-
-                          {(() => {
-                            const paymentDetails =
-                              typeof (currentContest as any).payment_details ===
-                              "string"
-                                ? JSON.parse(
-                                    (currentContest as any).payment_details,
-                                  )
-                                : (currentContest as any).payment_details;
-                            const walletUsed =
-                              paymentDetails.wallet_amount_used || 0;
-                            const stripeUsed =
-                              paymentDetails.stripe_amount_paid || 0;
-
-                            if (walletUsed > 0 && stripeUsed > 0) {
-                              // Split payment
-                              return (
-                                <>
-                                  <div className="flex items-center gap-3">
-                                    <div
-                                      className={cn(
-                                        "p-2 rounded-lg",
-                                        isDark
-                                          ? "bg-emerald-800/30"
-                                          : "bg-emerald-100",
-                                      )}
-                                    >
-                                      <Wallet
-                                        className={cn(
-                                          "h-5 w-5",
-                                          isDark
-                                            ? "text-emerald-400"
-                                            : "text-emerald-600",
-                                        )}
-                                      />
-                                    </div>
-                                    <div>
-                                      <p
-                                        className={cn(
-                                          "text-xs font-medium uppercase tracking-wide",
-                                          isDark
-                                            ? "text-emerald-300"
-                                            : "text-emerald-800",
-                                        )}
-                                      >
-                                        From Wallet
-                                      </p>
-                                      <p
-                                        className={cn(
-                                          "text-lg font-bold",
-                                          isDark
-                                            ? "text-emerald-100"
-                                            : "text-emerald-900",
-                                        )}
-                                      >
-                                        {formatMoney(walletUsed)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-3">
-                                    <div
-                                      className={cn(
-                                        "p-2 rounded-lg",
-                                        isDark
-                                          ? "bg-indigo-800/30"
-                                          : "bg-indigo-100",
-                                      )}
-                                    >
-                                      <CreditCard
-                                        className={cn(
-                                          "h-5 w-5",
-                                          isDark
-                                            ? "text-indigo-400"
-                                            : "text-indigo-600",
-                                        )}
-                                      />
-                                    </div>
-                                    <div>
-                                      <p
-                                        className={cn(
-                                          "text-xs font-medium uppercase tracking-wide",
-                                          isDark
-                                            ? "text-indigo-300"
-                                            : "text-indigo-800",
-                                        )}
-                                      >
-                                        From Card
-                                      </p>
-                                      <p
-                                        className={cn(
-                                          "text-lg font-bold",
-                                          isDark
-                                            ? "text-indigo-100"
-                                            : "text-indigo-900",
-                                        )}
-                                      >
-                                        {formatMoney(stripeUsed)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </>
-                              );
-                            } else if (walletUsed > 0) {
-                              // Wallet only
-                              return (
-                                <div className="flex items-center gap-3">
-                                  <div
-                                    className={cn(
-                                      "p-2 rounded-lg",
-                                      isDark
-                                        ? "bg-emerald-800/30"
-                                        : "bg-emerald-100",
-                                    )}
-                                  >
-                                    <Wallet
-                                      className={cn(
-                                        "h-5 w-5",
-                                        isDark
-                                          ? "text-emerald-400"
-                                          : "text-emerald-600",
-                                      )}
-                                    />
-                                  </div>
-                                  <div>
-                                    <p
-                                      className={cn(
-                                        "text-xs font-medium uppercase tracking-wide",
-                                        isDark
-                                          ? "text-emerald-300"
-                                          : "text-emerald-800",
-                                      )}
-                                    >
-                                      Payment Method
-                                    </p>
-                                    <p
-                                      className={cn(
-                                        "text-lg font-bold",
-                                        isDark
-                                          ? "text-emerald-100"
-                                          : "text-emerald-900",
-                                      )}
-                                    >
-                                      Wallet
-                                    </p>
-                                  </div>
-                                </div>
-                              );
-                            } else if (stripeUsed > 0) {
-                              // Credit card only
-                              return (
-                                <div className="flex items-center gap-3">
-                                  <div
-                                    className={cn(
-                                      "p-2 rounded-lg",
-                                      isDark
-                                        ? "bg-indigo-800/30"
-                                        : "bg-indigo-100",
-                                    )}
-                                  >
-                                    <CreditCard
-                                      className={cn(
-                                        "h-5 w-5",
-                                        isDark
-                                          ? "text-indigo-400"
-                                          : "text-indigo-600",
-                                      )}
-                                    />
-                                  </div>
-                                  <div>
-                                    <p
-                                      className={cn(
-                                        "text-xs font-medium uppercase tracking-wide",
-                                        isDark
-                                          ? "text-indigo-300"
-                                          : "text-indigo-800",
-                                      )}
-                                    >
-                                      Payment Method
-                                    </p>
-                                    <p
-                                      className={cn(
-                                        "text-lg font-bold",
-                                        isDark
-                                          ? "text-indigo-100"
-                                          : "text-indigo-900",
-                                      )}
-                                    >
-                                      Credit Card
-                                    </p>
-                                  </div>
-                                </div>
-                              );
-                            }
-                            return null;
-                          })()}
-                        </div>
-
-                        {/* Payment Status and Date */}
-                        <div
-                          className={cn(
-                            "mt-4 pt-4 border-t flex items-center justify-between",
-                            isDark ? "border-blue-700/50" : "border-blue-200",
-                          )}
-                        >
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2
-                              className={cn(
-                                "h-4 w-4",
-                                isDark ? "text-green-400" : "text-green-600",
-                              )}
-                            />
-                            <span
-                              className={cn(
-                                "text-sm font-medium",
-                                isDark ? "text-green-300" : "text-green-800",
-                              )}
-                            >
-                              Payment{" "}
-                              {(() => {
-                                const paymentDetails =
-                                  typeof (currentContest as any)
-                                    .payment_details === "string"
-                                    ? JSON.parse(
-                                        (currentContest as any).payment_details,
-                                      )
-                                    : (currentContest as any).payment_details;
-                                return paymentDetails.payment_status ===
-                                  "completed"
-                                  ? "Completed"
-                                  : "Pending";
-                              })()}
-                            </span>
-                          </div>
-                          {(() => {
-                            const paymentDetails =
-                              typeof (currentContest as any).payment_details ===
-                              "string"
-                                ? JSON.parse(
-                                    (currentContest as any).payment_details,
-                                  )
-                                : (currentContest as any).payment_details;
-                            return paymentDetails.paid_at ? (
-                              <span
-                                className={cn(
-                                  "text-xs",
-                                  isDark ? "text-blue-400" : "text-blue-700",
-                                )}
-                              >
-                                Paid on{" "}
-                                {formatLocalDateTime(paymentDetails.paid_at, {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </span>
-                            ) : null;
-                          })()}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 {isDualRewardsContestType(overviewDetailContest.contest_type) &&
                   resolveContestPoolBudgetCents(
                     overviewDetailContest.contest_type,
@@ -19703,10 +18366,10 @@ export default function ContestDetailClient({
                     <div className="space-y-3">
                       <div
                         className={cn(
-                          "rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2",
+                          "rounded-2xl border p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2",
                           isDark
-                            ? "bg-gray-900/30 border-gray-600"
-                            : "bg-gray-50 border-gray-200",
+                            ? "bg-white/[0.04] border-white/10"
+                            : "bg-[#fafafa] border-[#e5e5e5]",
                         )}
                       >
                         <h2
@@ -19738,10 +18401,17 @@ export default function ContestDetailClient({
                 {overviewVideoPlatforms.length >= 2 &&
                 overviewPlatformTab === ALL_PLATFORM_TAB &&
                 overviewRulesDiffer ? (
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-lg text-foreground">
-                      Rules
-                    </h3>
+                  <BrandOverviewSectionCard
+                    isDark={isDark}
+                    title="Rules"
+                    icon={
+                      <img
+                        src="/images/contest-details/guide-book.svg"
+                        alt=""
+                        className="h-4 w-4"
+                      />
+                    }
+                  >
                     <div className="space-y-3">
                       {groupPlatformsByRules(
                         contestState as {
@@ -19772,10 +18442,10 @@ export default function ContestDetailClient({
                           >
                             <div
                               className={cn(
-                                "prose prose-md max-w-none [&_a]:break-words [&_a]:overflow-wrap-anywhere [&_a]:hover:underline",
+                                "prose prose-sm max-w-none text-[13px] leading-relaxed [&_a]:break-words [&_a]:overflow-wrap-anywhere [&_a]:hover:underline [&_li]:my-1 [&_ul]:my-2 [&_p]:my-2 [&_h1]:text-[15px] [&_h2]:text-[14px] [&_h3]:text-[13px] [&_h4]:text-[13px] [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-bold [&_h4]:font-bold [&_strong]:font-bold",
                                 isDark
-                                  ? "text-white prose-invert"
-                                  : "text-foreground",
+                                  ? "text-slate-200 prose-invert [&_h1]:text-white [&_h2]:text-white [&_h3]:text-white [&_h4]:text-white"
+                                  : "text-[#404040] [&_h1]:text-[#0a0a0a] [&_h2]:text-[#0a0a0a] [&_h3]:text-[#0a0a0a] [&_h4]:text-[#0a0a0a] [&_strong]:text-[#0a0a0a]",
                               )}
                               dangerouslySetInnerHTML={{ __html: html }}
                             />
@@ -19783,7 +18453,7 @@ export default function ContestDetailClient({
                         );
                       })}
                     </div>
-                  </div>
+                  </BrandOverviewSectionCard>
                 ) : (
                   (() => {
                     const sharedRulesHtml =
@@ -19807,34 +18477,38 @@ export default function ContestDetailClient({
                       overviewVideoPlatforms.length >= 2 &&
                       overviewPlatformTab === ALL_PLATFORM_TAB;
                     return (
-                      <div className="space-y-3">
-                        <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                          Rules
-                          {showSharedHint ? (
+                      <BrandOverviewSectionCard
+                        isDark={isDark}
+                        title="Rules"
+                        icon={
+                          <img
+                            src="/images/contest-details/guide-book.svg"
+                            alt=""
+                            className="h-4 w-4"
+                          />
+                        }
+                        badge={
+                          showSharedHint ? (
                             <ContestDetailSharedAcrossPlatformsHint
                               platforms={overviewVideoPlatforms}
                             />
-                          ) : null}
-                        </h3>
-                        <div
-                          className={cn(
-                            "border rounded-lg p-4",
-                            isDark ? "border-gray-600" : "border-gray-300",
-                          )}
-                        >
+                          ) : null
+                        }
+                      >
+                        <div>
                           <div
                             className={cn(
-                              "prose prose-md max-w-none [&_a]:break-words [&_a]:overflow-wrap-anywhere [&_a]:hover:underline",
+                              "prose prose-sm max-w-none text-[13px] leading-relaxed [&_a]:break-words [&_a]:overflow-wrap-anywhere [&_a]:hover:underline [&_li]:my-1 [&_ul]:my-2 [&_p]:my-2 [&_h1]:text-[15px] [&_h2]:text-[14px] [&_h3]:text-[13px] [&_h4]:text-[13px] [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-bold [&_h4]:font-bold [&_strong]:font-bold",
                               isDark
-                                ? "bg-[#170337] text-white prose-invert border-gray-600"
-                                : "bg-white text-foreground",
+                                ? "text-slate-200 prose-invert [&_h1]:text-white [&_h2]:text-white [&_h3]:text-white [&_h4]:text-white"
+                                : "text-[#404040] [&_h1]:text-[#0a0a0a] [&_h2]:text-[#0a0a0a] [&_h3]:text-[#0a0a0a] [&_h4]:text-[#0a0a0a] [&_strong]:text-[#0a0a0a]",
                             )}
                             dangerouslySetInnerHTML={{
                               __html: sharedRulesHtml || "",
                             }}
                           />
                         </div>
-                      </div>
+                      </BrandOverviewSectionCard>
                     );
                   })()
                 )}
@@ -19842,16 +18516,16 @@ export default function ContestDetailClient({
                 {hasTwitterRequirements && (
                   <div
                     className={cn(
-                      "rounded-xl p-4 border space-y-3",
+                      "rounded-2xl p-5 border space-y-3 shadow-[0px_1px_3px_0px_rgba(10,10,10,0.04)]",
                       isDark
-                        ? "bg-slate-900/40 border-slate-700"
-                        : "bg-slate-50 border-slate-200",
+                        ? "bg-[#111113] border-white/10"
+                        : "bg-white border-[#e5e5e5]",
                     )}
                   >
                     <h4
                       className={cn(
-                        "font-semibold text-sm flex items-center gap-2",
-                        isDark ? "text-slate-100" : "text-slate-900",
+                        "font-semibold text-[15px] flex items-center gap-2",
+                        isDark ? "text-white" : "text-[#0a0a0a]",
                       )}
                     >
                       Required Keywords & Mentions
@@ -19861,8 +18535,8 @@ export default function ContestDetailClient({
                         <div>
                           <p
                             className={cn(
-                              "text-xs uppercase tracking-wide font-medium mb-1",
-                              isDark ? "text-slate-300" : "text-slate-600",
+                              "text-[11px] uppercase tracking-[0.88px] font-semibold mb-1.5",
+                              isDark ? "text-slate-400" : "text-[#737373]",
                             )}
                           >
                             Keywords & Hashtags
@@ -19873,10 +18547,10 @@ export default function ContestDetailClient({
                                 key={`admin-keyword-${keyword}-${idx}`}
                                 variant="outline"
                                 className={cn(
-                                  "rounded-full text-xs px-3 py-1",
+                                  "rounded-full text-xs font-medium px-3 py-1",
                                   isDark
-                                    ? "border-slate-600 text-slate-100"
-                                    : "border-slate-300 text-slate-800",
+                                    ? "border-white/10 bg-white/10 text-slate-100"
+                                    : "border-[#e5e5e5] bg-[#f5f5f5] text-[#404040]",
                                 )}
                               >
                                 {keyword}
@@ -19889,8 +18563,8 @@ export default function ContestDetailClient({
                         <div>
                           <p
                             className={cn(
-                              "text-xs uppercase tracking-wide font-medium mb-1",
-                              isDark ? "text-slate-300" : "text-slate-600",
+                              "text-[11px] uppercase tracking-[0.88px] font-semibold mb-1.5",
+                              isDark ? "text-slate-400" : "text-[#737373]",
                             )}
                           >
                             Accounts to Mention
@@ -19901,10 +18575,10 @@ export default function ContestDetailClient({
                                 key={`admin-mention-${mention}-${idx}`}
                                 variant="outline"
                                 className={cn(
-                                  "rounded-full text-xs px-3 py-1",
+                                  "rounded-full text-xs font-medium px-3 py-1",
                                   isDark
-                                    ? "border-slate-600 text-slate-100"
-                                    : "border-slate-300 text-slate-800",
+                                    ? "border-white/10 bg-white/10 text-slate-100"
+                                    : "border-[#e5e5e5] bg-[#f5f5f5] text-[#404040]",
                                 )}
                               >
                                 {mention}
@@ -19920,31 +18594,42 @@ export default function ContestDetailClient({
                 {/* New Features Sections (2025-10-01) */}
                 {/* Content Type Section */}
                 {(currentContest as any).content_type && (
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                      <Tag className="h-5 w-5 text-blue-600" />
-                      Content Type
-                    </h3>
+                  <BrandOverviewSectionCard
+                    isDark={isDark}
+                    title="Content Type"
+                    icon={<Tag className="h-4 w-4" />}
+                  >
                     <div
                       className={cn(
-                        "border rounded-xl p-4",
+                        "flex w-full items-center gap-3 overflow-hidden rounded-[14px] border py-3.5 pl-[18px] pr-5",
                         isDark
-                          ? "border-blue-600 bg-blue-950/50"
-                          : "border-blue-300 bg-blue-50/50",
+                          ? "border-slate-700 bg-white/[0.04]"
+                          : "border-[#e5e5e5] bg-[#fafafa]",
                       )}
                     >
-                      <p
+                      <div
                         className={cn(
-                          "text-lg font-semibold uppercase tracking-wide",
-                          isDark ? "text-blue-300" : "text-blue-900",
+                          "flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] border",
+                          isDark
+                            ? "border-slate-600 bg-white/10"
+                            : "border-[#e5e5e5] bg-white",
                         )}
                       >
+                        <img
+                          src="/images/contest-details/content-scissors.svg"
+                          alt=""
+                          width={15}
+                          height={15}
+                          className="h-[15px] w-[15px]"
+                        />
+                      </div>
+                      <span className="shrink-0 rounded-md bg-[#0a0a0a] px-2.5 py-1 text-[11px] font-bold tracking-[0.88px] text-white">
                         {(currentContest as any).content_type.toUpperCase()}
-                      </p>
+                      </span>
                       <p
                         className={cn(
-                          "text-sm mt-1",
-                          isDark ? "text-blue-400" : "text-blue-700",
+                          "min-w-0 flex-1 text-sm font-medium leading-normal",
+                          isDark ? "text-slate-200" : "text-[#404040]",
                         )}
                       >
                         This contest is looking for{" "}
@@ -19959,50 +18644,41 @@ export default function ContestDetailClient({
                           : ""}
                       </p>
                     </div>
-                  </div>
+                  </BrandOverviewSectionCard>
                 )}
 
                 {/* Categories Section */}
                 {currentContest.categories &&
                   Array.isArray(currentContest.categories) &&
                   currentContest.categories.length > 0 && (
-                    <div className="space-y-3">
-                      <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                        <Tag className="h-5 w-5 text-purple-600" />
-                        Categories
-                      </h3>
-                      <div
-                        className={cn(
-                          "border rounded-xl p-4",
-                          isDark
-                            ? "border-purple-600 bg-purple-950/50"
-                            : "border-purple-300 bg-purple-50/50",
+                    <BrandOverviewSectionCard
+                      isDark={isDark}
+                      title="Categories"
+                      icon={<Tag className="h-4 w-4" />}
+                    >
+                      <div className="flex flex-wrap gap-2">
+                        {currentContest.categories.map(
+                          (categoryId: string) => {
+                            const category = CONTENT_TYPE_CATEGORIES.find(
+                              (cat) => cat.id === categoryId,
+                            );
+                            return (
+                              <span
+                                key={categoryId}
+                                className={cn(
+                                  "inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border",
+                                  isDark
+                                    ? "bg-white/5 text-slate-200 border-white/15"
+                                    : "bg-[#fafafa] text-[#0a0a0a] border-[#e5e5e5]",
+                                )}
+                              >
+                                {category ? category.name : categoryId}
+                              </span>
+                            );
+                          },
                         )}
-                      >
-                        <div className="flex flex-wrap gap-2">
-                          {currentContest.categories.map(
-                            (categoryId: string) => {
-                              const category = CONTENT_TYPE_CATEGORIES.find(
-                                (cat) => cat.id === categoryId,
-                              );
-                              return (
-                                <span
-                                  key={categoryId}
-                                  className={cn(
-                                    "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
-                                    isDark
-                                      ? "bg-purple-600/30 text-purple-200 border border-purple-500/50"
-                                      : "bg-purple-100 text-purple-800 border border-purple-300",
-                                  )}
-                                >
-                                  {category ? category.name : categoryId}
-                                </span>
-                              );
-                            },
-                          )}
-                        </div>
                       </div>
-                    </div>
+                    </BrandOverviewSectionCard>
                   )}
 
                 {/* Subcategories Section */}
@@ -20040,47 +18716,38 @@ export default function ContestDetailClient({
                     }
 
                     return subcategoriesToDisplay.length > 0 ? (
-                      <div className="space-y-3">
-                        <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                          <Tag className="h-5 w-5 text-indigo-600" />
-                          Subcategories
-                        </h3>
-                        <div
-                          className={cn(
-                            "border rounded-xl p-4",
-                            isDark
-                              ? "border-indigo-600 bg-indigo-950/50"
-                              : "border-indigo-300 bg-indigo-50/50",
+                      <BrandOverviewSectionCard
+                        isDark={isDark}
+                        title="Subcategories"
+                        icon={<Tag className="h-4 w-4" />}
+                      >
+                        <div className="flex flex-wrap gap-2">
+                          {subcategoriesToDisplay.map(
+                            (
+                              item: { category: string; subcategory: string },
+                              index: number,
+                            ) => {
+                              const category = CONTENT_TYPE_CATEGORIES.find(
+                                (cat) => cat.id === item.category,
+                              );
+                              return (
+                                <span
+                                  key={`${item.category}-${item.subcategory}-${index}`}
+                                  className={cn(
+                                    "inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border",
+                                    isDark
+                                      ? "bg-white/5 text-slate-200 border-white/15"
+                                      : "bg-[#fafafa] text-[#0a0a0a] border-[#e5e5e5]",
+                                  )}
+                                >
+                                  {category ? category.name : item.category}:{" "}
+                                  {item.subcategory}
+                                </span>
+                              );
+                            },
                           )}
-                        >
-                          <div className="flex flex-wrap gap-2">
-                            {subcategoriesToDisplay.map(
-                              (
-                                item: { category: string; subcategory: string },
-                                index: number,
-                              ) => {
-                                const category = CONTENT_TYPE_CATEGORIES.find(
-                                  (cat) => cat.id === item.category,
-                                );
-                                return (
-                                  <span
-                                    key={`${item.category}-${item.subcategory}-${index}`}
-                                    className={cn(
-                                      "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
-                                      isDark
-                                        ? "bg-indigo-600/30 text-indigo-200 border border-indigo-500/50"
-                                        : "bg-indigo-100 text-indigo-800 border border-indigo-300",
-                                    )}
-                                  >
-                                    {category ? category.name : item.category}:{" "}
-                                    {item.subcategory}
-                                  </span>
-                                );
-                              },
-                            )}
-                          </div>
                         </div>
-                      </div>
+                      </BrandOverviewSectionCard>
                     ) : null;
                   })()}
 
@@ -20088,52 +18755,52 @@ export default function ContestDetailClient({
                 {currentContest.interests &&
                   Array.isArray(currentContest.interests) &&
                   currentContest.interests.length > 0 && (
-                    <div className="space-y-3">
-                      <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                        <Star className="h-5 w-5 text-yellow-600" />
-                        Interests
-                      </h3>
-                      <div
-                        className={cn(
-                          "border rounded-xl p-4",
-                          isDark
-                            ? "border-yellow-600 bg-yellow-950/50"
-                            : "border-yellow-300 bg-yellow-50/50",
-                        )}
-                      >
-                        <div className="flex flex-wrap gap-2">
-                          {currentContest.interests.map((interest: string) => (
-                            <span
-                              key={interest}
-                              className={cn(
-                                "inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium",
-                                isDark
-                                  ? "bg-yellow-600/30 text-yellow-200 border border-yellow-500/50"
-                                  : "bg-yellow-100 text-yellow-800 border border-yellow-300",
-                              )}
-                            >
-                              {interest}
-                            </span>
-                          ))}
-                        </div>
+                    <BrandOverviewSectionCard
+                      isDark={isDark}
+                      title="Interests"
+                      icon={<Star className="h-4 w-4" />}
+                    >
+                      <div className="flex flex-wrap gap-2">
+                        {currentContest.interests.map((interest: string) => (
+                          <span
+                            key={interest}
+                            className={cn(
+                              "inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border",
+                              isDark
+                                ? "bg-white/5 text-slate-200 border-white/15"
+                                : "bg-[#fafafa] text-[#0a0a0a] border-[#e5e5e5]",
+                            )}
+                          >
+                            {interest}
+                          </span>
+                        ))}
                       </div>
-                    </div>
+                    </BrandOverviewSectionCard>
                   )}
 
                 {/* Flat Fee Bonus Section */}
                 {overviewFlatFeeSlices.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                      <Gift className="h-5 w-5 text-green-600" />
-                      Guaranteed Flat Bonus
-                      {overviewVideoPlatforms.length >= 2 &&
+                  <BrandOverviewSectionCard
+                    isDark={isDark}
+                    title="Guaranteed Flat Bonus"
+                    icon={
+                      <img
+                        src="/images/contest-details/bonus-dollar.svg"
+                        alt=""
+                        className="h-4 w-4"
+                      />
+                    }
+                    badge={
+                      overviewVideoPlatforms.length >= 2 &&
                       overviewPlatformTab === ALL_PLATFORM_TAB &&
                       !overviewFlatFeeSlices.some((s) => s.showLabel) ? (
                         <ContestDetailSharedAcrossPlatformsHint
                           platforms={overviewVideoPlatforms}
                         />
-                      ) : null}
-                    </h3>
+                      ) : null
+                    }
+                    bodyClassName="space-y-3"
+                  >
                     {overviewFlatFeeSlices.map((slice) => {
                       const cap = isCpmContestType(slice.contest.contest_type)
                         ? Number(
@@ -20145,53 +18812,59 @@ export default function ContestDetailClient({
                         : 0;
                       const cardBody = (
                         <>
-                          <p
-                            className={cn(
-                              "text-2xl font-bold mb-2",
-                              isDark ? "text-green-300" : "text-green-900",
-                            )}
-                          >
-                            {formatMoney(slice.bonus)} per verified submission
-                          </p>
-                          <p
-                            className={cn(
-                              "text-sm",
-                              isDark ? "text-green-400" : "text-green-700",
-                            )}
-                          >
-                            🎁 Each creator earns this guaranteed amount for
-                            EVERY verified submission, regardless of views or
-                            ranking! Paid after the campaign ends along with
-                            other earnings.
-                          </p>
-                          {cap > 0 && (
+                          <div className="flex items-start gap-3">
                             <div
                               className={cn(
-                                "mt-3 pt-3 border-t",
+                                "flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]",
                                 isDark
-                                  ? "border-green-700/50"
-                                  : "border-green-200",
+                                  ? "bg-white/10 text-white"
+                                  : "bg-white text-[#0a0a0a] border border-[#e5e5e5]",
                               )}
                             >
+                              <Gift className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
                               <p
                                 className={cn(
-                                  "text-sm font-medium",
-                                  isDark ? "text-green-200" : "text-green-800",
+                                  "text-base font-semibold mb-0.5",
+                                  brandPrimaryTextClass,
                                 )}
                               >
-                                💰 Flat Fee Bonus Cap: {formatMoney(cap)}
+                                {formatMoney(slice.bonus)} per verified
+                                submission
                               </p>
-                              <p
-                                className={cn(
-                                  "text-xs mt-1",
-                                  isDark ? "text-green-400" : "text-green-600",
-                                )}
-                              >
-                                Maximum total flat fee bonus to distribute
-                                across all creators. Once this cap is reached,
-                                no more flat fee bonuses will be given.
+                              <p className={cn("text-xs", brandMutedClass)}>
+                                Each creator earns this guaranteed amount for
+                                EVERY verified submission, regardless of views
+                                or ranking! Paid after the campaign ends along
+                                with other earnings.
                               </p>
                             </div>
+                            {cap > 0 && (
+                              <p
+                                className={cn(
+                                  "shrink-0 text-right text-sm font-semibold",
+                                  brandPrimaryTextClass,
+                                )}
+                              >
+                                Flat Fee Bonus Cap: {formatMoney(cap)}
+                              </p>
+                            )}
+                          </div>
+                          {cap > 0 && (
+                            <p
+                              className={cn(
+                                "text-xs mt-3 pt-3 border-t",
+                                brandMutedClass,
+                                isDark
+                                  ? "border-white/10"
+                                  : "border-[#e5e5e5]",
+                              )}
+                            >
+                              Maximum total flat fee bonus to distribute across
+                              all creators. Once this cap is reached, no more
+                              flat fee bonuses will be given.
+                            </p>
                           )}
                         </>
                       );
@@ -20217,43 +18890,42 @@ export default function ContestDetailClient({
                         <div
                           key={`flat-fee-${slice.platform ?? "contest"}`}
                           className={cn(
-                            "border p-4 rounded-lg",
+                            "border p-4 rounded-xl",
                             isDark
-                              ? "bg-green-950/40 border-green-800"
-                              : "border-green-300 bg-green-50/50 rounded-xl p-4",
+                              ? "bg-white/5 border-white/10"
+                              : "border-[#e5e5e5] bg-[#fafafa]",
                           )}
                         >
                           {cardBody}
                         </div>
                       );
                     })}
-                  </div>
+                  </BrandOverviewSectionCard>
                 )}
 
                 {/* Multiple Submissions Section */}
                 {(currentContest as any).multiple_submissions_enabled && (
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                      <CheckCheck
-                        className={cn(
-                          "h-5 w-5",
-                          isDark ? "text-purple-400" : "text-purple-600",
-                        )}
+                  <BrandOverviewSectionCard
+                    isDark={isDark}
+                    title="Multiple Submissions Allowed"
+                    icon={
+                      <img
+                        src="/images/contest-details/bonus-checks.svg"
+                        alt=""
+                        className="h-4 w-4"
                       />
-                      Multiple Submissions Allowed
-                    </h3>
-                    <div
-                      className={cn(
-                        "border rounded-xl p-4",
-                        isDark
-                          ? "border-purple-600/50 bg-purple-900/20"
-                          : "border-purple-300 bg-purple-50/50",
-                      )}
-                    >
+                    }
+                    bodyClassName={cn(
+                      "m-5 rounded-2xl border px-5 py-[18px]",
+                      isDark
+                        ? "border-slate-700 bg-white/[0.04]"
+                        : "border-[#e5e5e5] bg-[#fafafa]",
+                    )}
+                  >
                       <p
                         className={cn(
-                          "text-lg font-semibold mb-2",
-                          isDark ? "text-purple-200" : "text-purple-900",
+                          "text-[15px] font-semibold mb-2",
+                          brandPrimaryTextClass,
                         )}
                       >
                         Creators can submit up to{" "}
@@ -20263,7 +18935,7 @@ export default function ContestDetailClient({
                       <p
                         className={cn(
                           "text-sm mb-3",
-                          isDark ? "text-purple-300" : "text-purple-700",
+                          brandSecondaryTextClass,
                         )}
                       >
                         Allow multiple submissions to maximize creator
@@ -20304,8 +18976,8 @@ export default function ContestDetailClient({
                             className={cn(
                               "mt-3 pt-3 border-t space-y-3",
                               isDark
-                                ? "border-purple-700/50"
-                                : "border-purple-200",
+                                ? "border-white/10"
+                                : "border-[#e5e5e5]",
                             )}
                           >
                             {showAllCapsSplit
@@ -20320,12 +18992,10 @@ export default function ContestDetailClient({
                                       <p
                                         className={cn(
                                           "text-sm font-medium",
-                                          isDark
-                                            ? "text-purple-200"
-                                            : "text-purple-800",
+                                          brandPrimaryTextClass,
                                         )}
                                       >
-                                        💡 Earnings Cap: {formatMoney(cents!)}
+                                        Earnings Cap: {formatMoney(cents!)}
                                       </p>
                                     </ContestDetailPlatformScopeCard>
                                   ) : null,
@@ -20335,12 +19005,10 @@ export default function ContestDetailClient({
                                     key={`cap-shared-${idx}`}
                                     className={cn(
                                       "text-sm font-medium flex items-center gap-2",
-                                      isDark
-                                        ? "text-purple-200"
-                                        : "text-purple-800",
+                                      brandPrimaryTextClass,
                                     )}
                                   >
-                                    💡 Earnings Cap: {formatMoney(cents!)}
+                                    Earnings Cap: {formatMoney(cents!)}
                                     {!showAllCapsSplit &&
                                     overviewVideoPlatforms.length >= 2 &&
                                     overviewPlatformTab === ALL_PLATFORM_TAB ? (
@@ -20353,7 +19021,7 @@ export default function ContestDetailClient({
                             <p
                               className={cn(
                                 "text-xs mt-1",
-                                isDark ? "text-purple-400" : "text-purple-600",
+                                brandMutedClass,
                               )}
                             >
                               Creators can still submit after reaching this cap,
@@ -20364,8 +19032,7 @@ export default function ContestDetailClient({
                           </div>
                         ) : null;
                       })()}
-                    </div>
-                  </div>
+                  </BrandOverviewSectionCard>
                 )}
 
                 {/* Additional Bonus Opportunities Section */}
@@ -20397,14 +19064,21 @@ export default function ContestDetailClient({
                     : bonusRows.slice(0, 1);
                   if (displayBonusRows.length === 0) return null;
                   return (
-                    <div className="space-y-3">
+                    <div
+                      className={cn(
+                        "space-y-3 rounded-2xl border p-5 shadow-[0px_1px_3px_0px_rgba(10,10,10,0.04)]",
+                        isDark
+                          ? "border-white/10 bg-[#111113]"
+                          : "border-[#e5e5e5] bg-white",
+                      )}
+                    >
                       <h3
                         className={cn(
-                          "font-semibold text-lg flex items-center gap-2",
-                          isDark ? "text-white" : "text-foreground",
+                          "font-semibold text-[15px] flex items-center gap-2",
+                          isDark ? "text-white" : "text-[#0a0a0a]",
                         )}
                       >
-                        <Star className="h-5 w-5 text-amber-600" />
+                        <Star className="h-4 w-4 text-amber-600" />
                         Additional Bonus Opportunities
                         {!showAllBonusSplit &&
                         overviewVideoPlatforms.length >= 2 &&
@@ -20473,33 +19147,47 @@ export default function ContestDetailClient({
                   currentContest.content_type === "raid" &&
                   currentContest.contest_based_details?.twitter_campaign
                     ?.raid_target && (
-                    <div className="space-y-6">
-                      <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        "overflow-hidden rounded-2xl border shadow-[0px_1px_3px_0px_rgba(10,10,10,0.04)]",
+                        isDark
+                          ? "border-white/10 bg-[#111113]"
+                          : "border-[#e5e5e5] bg-white",
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "flex items-center gap-3 border-b px-5 py-4",
+                          isDark ? "border-white/10" : "border-[#e5e5e5]",
+                        )}
+                      >
                         <h3
                           className={cn(
-                            "text-xl font-semibold flex items-center gap-2",
-                            isDark ? "text-white" : "text-gray-900",
+                            "text-[15px] font-semibold leading-tight flex items-center gap-2",
+                            isDark ? "text-white" : "text-[#0a0a0a]",
                           )}
                         >
-                          <Share2 className="h-5 w-5" />
+                          <Share2 className="h-4 w-4" />
                           Target Tweet
                         </h3>
                       </div>
 
-                      <div className="grid gap-4">
+                      <div className="grid gap-4 px-5 py-5">
                         <div
                           className={cn(
-                            "border rounded-xl p-6 transition-all duration-200",
-                            isDark ? "border-gray-600" : "border-gray-300",
+                            "rounded-xl border p-4 transition-all duration-200",
+                            isDark
+                              ? "border-white/10 bg-white/[0.04]"
+                              : "border-[#e5e5e5] bg-[#fafafa]",
                           )}
                         >
                           <div className="flex items-start gap-4">
                             <div
                               className={cn(
-                                "p-3 rounded-full flex-shrink-0",
+                                "p-2.5 rounded-[10px] flex-shrink-0",
                                 isDark
-                                  ? "bg-[#FFFFFF42] text-white"
-                                  : "bg-sky-100 text-sky-600",
+                                  ? "bg-white/10 text-white"
+                                  : "bg-white border border-[#e5e5e5] text-[#0a0a0a]",
                               )}
                             >
                               <ExternalLink className="h-5 w-5 " />
@@ -20549,7 +19237,15 @@ export default function ContestDetailClient({
 
                               {currentContest.contest_based_details
                                 ?.twitter_campaign?.raid_target?.metrics && (
-                                <div className="flex flex-wrap gap-4 mt-2 text-sm">
+                                <div
+                                  className={cn(
+                                    "flex flex-wrap gap-3 mt-2 text-sm",
+                                    "[&>div]:rounded-xl [&>div]:border [&>div]:px-3 [&>div]:py-2",
+                                    isDark
+                                      ? "[&>div]:border-white/10 [&>div]:bg-white/[0.04]"
+                                      : "[&>div]:border-[#e5e5e5] [&>div]:bg-white",
+                                  )}
+                                >
                                   {typeof currentContest.contest_based_details
                                     ?.twitter_campaign?.raid_target?.metrics
                                     ?.likes === "number" && (
@@ -20619,10 +19315,10 @@ export default function ContestDetailClient({
                                             <span
                                               key={idx}
                                               className={cn(
-                                                "inline-flex items-center px-2 py-1 rounded-full text-xs",
+                                                "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
                                                 isDark
-                                                  ? "bg-purple-900/50 text-purple-200 border border-purple-500/60"
-                                                  : "bg-purple-50 text-purple-700 border border-purple-200",
+                                                  ? "bg-white/10 text-slate-100 border border-white/10"
+                                                  : "bg-[#f5f5f5] text-[#404040] border border-[#e5e5e5]",
                                               )}
                                             >
                                               <Tag className="h-3 w-3 mr-1" />
@@ -20645,10 +19341,10 @@ export default function ContestDetailClient({
                                             <span
                                               key={idx}
                                               className={cn(
-                                                "inline-flex items-center px-2 py-1 rounded-full text-xs",
+                                                "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
                                                 isDark
-                                                  ? "bg-slate-800 text-slate-100 border border-slate-600"
-                                                  : "bg-slate-50 text-slate-700 border border-slate-200",
+                                                  ? "bg-white/10 text-slate-100 border border-white/10"
+                                                  : "bg-[#f5f5f5] text-[#404040] border border-[#e5e5e5]",
                                               )}
                                             >
                                               @{m.replace(/^@/, "")}
@@ -20735,22 +19431,18 @@ export default function ContestDetailClient({
                       inspirationGroups.length === 1 &&
                       inspirationGroups[0]?.platforms == null;
                     return (
-                      <div className="space-y-6">
-                        <div className="flex items-center gap-3">
-                          <h3
-                            className={cn(
-                              "text-xl font-semibold flex items-center gap-2",
-                              isDark ? "text-white" : "text-gray-900",
-                            )}
-                          >
-                            Inspiration Links
-                            {showSharedHint ? (
-                              <ContestDetailSharedAcrossPlatformsHint
-                                platforms={overviewVideoPlatforms}
-                              />
-                            ) : null}
-                          </h3>
-                        </div>
+                      <BrandOverviewSectionCard
+                        isDark={isDark}
+                        title="Inspiration Links"
+                        icon={<ExternalLink className="h-4 w-4" />}
+                        badge={
+                          showSharedHint ? (
+                            <ContestDetailSharedAcrossPlatformsHint
+                              platforms={overviewVideoPlatforms}
+                            />
+                          ) : null
+                        }
+                      >
 
                         <div className="space-y-4">
                           {inspirationGroups.map((group) => {
@@ -20760,22 +19452,22 @@ export default function ContestDetailClient({
                                   <div
                                     key={`${group.key}-${idx}`}
                                     className={cn(
-                                      "border rounded-xl p-6 transition-all duration-200",
+                                      "border rounded-xl p-4 transition-all duration-200",
                                       isDark
-                                        ? "border-gray-600"
-                                        : "border-gray-300",
+                                        ? "border-white/10"
+                                        : "border-[#e5e5e5] bg-white",
                                     )}
                                   >
-                                    <div className="flex items-start gap-4">
+                                    <div className="flex items-start gap-3">
                                       <div
                                         className={cn(
-                                          "p-3 rounded-full flex-shrink-0",
+                                          "flex h-9 w-9 items-center justify-center rounded-[10px] flex-shrink-0",
                                           isDark
-                                            ? "bg-[#FFFFFF42] text-white"
-                                            : "bg-purple-100 text-purple-600",
+                                            ? "bg-white/10 text-white"
+                                            : "bg-[#f5f5f5] text-[#0a0a0a]",
                                         )}
                                       >
-                                        <ExternalLink className="h-5 w-5 " />
+                                        <ExternalLink className="h-4 w-4" />
                                       </div>
                                       <div className="flex-1 min-w-0">
                                         <a
@@ -20783,20 +19475,20 @@ export default function ContestDetailClient({
                                           target="_blank"
                                           rel="noopener noreferrer"
                                           className={cn(
-                                            "block text-base font-medium hover:underline mb-2 break-all",
+                                            "block text-sm font-medium hover:underline mb-1 break-all",
                                             isDark
-                                              ? "text-purple-300"
-                                              : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300",
+                                              ? "text-sky-300"
+                                              : "text-[#0284c7] hover:text-[#0369a1]",
                                           )}
                                         >
                                           {item.url}
                                         </a>
                                         <div
                                           className={cn(
-                                            "text-sm leading-relaxed",
+                                            "text-[13px] leading-relaxed",
                                             isDark
-                                              ? "text-white"
-                                              : "text-gray-700 dark:text-gray-300",
+                                              ? "text-slate-300"
+                                              : "text-[#404040]",
                                           )}
                                         >
                                           {item.description}
@@ -20821,19 +19513,31 @@ export default function ContestDetailClient({
                             return <div key={group.key}>{linksGrid}</div>;
                           })}
                         </div>
-                      </div>
+                      </BrandOverviewSectionCard>
                     );
                   })()}
 
                 {/* Render tracking links if present */}
                 {Array.isArray(currentContest.tracking_links) &&
                   currentContest.tracking_links.length > 0 && (
-                    <div className="space-y-6">
-                      <div className="flex flex-col gap-3">
+                    <div
+                      className={cn(
+                        "overflow-hidden rounded-2xl border shadow-[0px_1px_3px_0px_rgba(10,10,10,0.04)]",
+                        isDark
+                          ? "border-white/10 bg-[#111113]"
+                          : "border-[#e5e5e5] bg-white",
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "flex flex-col gap-3 border-b px-5 py-4",
+                          isDark ? "border-white/10" : "border-[#e5e5e5]",
+                        )}
+                      >
                         <h3
                           className={cn(
-                            "px-2 text-xl font-semibold",
-                            isDark ? "text-white" : "text-gray-900",
+                            "text-[15px] font-semibold leading-tight",
+                            isDark ? "text-white" : "text-[#0a0a0a]",
                           )}
                         >
                           Tracking Links
@@ -20852,7 +19556,7 @@ export default function ContestDetailClient({
                         </div> */}
                       </div>
 
-                      <div className="grid gap-4">
+                      <div className="grid gap-4 px-5 py-5">
                         {currentContest.tracking_links.map((item, idx) => {
                           // Process URL to replace [creator] with current user's username
                           const username = getCurrentUserUsername();
@@ -20865,25 +19569,25 @@ export default function ContestDetailClient({
                             <div
                               key={idx}
                               className={cn(
-                                "border rounded-xl p-6 transition-all duration-200",
+                                "border rounded-xl p-4 transition-all duration-200",
                                 isDark
-                                  ? "border-gray-600"
-                                  : "border-gray-300 bg-white",
+                                  ? "border-white/10"
+                                  : "border-[#e5e5e5] bg-white",
                               )}
                             >
-                              <div className="flex items-start gap-4">
+                              <div className="flex items-start gap-3">
                                 <div
                                   className={cn(
-                                    "p-3 rounded-full flex-shrink-0",
-                                    isDark ? "bg-green-900/40" : "bg-green-100",
+                                    "flex h-9 w-9 items-center justify-center rounded-[10px] flex-shrink-0",
+                                    isDark ? "bg-white/10" : "bg-[#f5f5f5]",
                                   )}
                                 >
                                   <ExternalLink
                                     className={cn(
-                                      "h-5 w-5",
+                                      "h-4 w-4",
                                       isDark
-                                        ? "text-green-400"
-                                        : "text-green-600",
+                                        ? "text-white"
+                                        : "text-[#0a0a0a]",
                                     )}
                                   />
                                 </div>
@@ -20894,10 +19598,10 @@ export default function ContestDetailClient({
                                       // target="_blank"
                                       // rel="noopener noreferrer"
                                       className={cn(
-                                        "text-base font-medium hover:underline break-all flex-1",
+                                        "text-sm font-medium hover:underline break-all flex-1",
                                         isDark
-                                          ? "text-purple-300"
-                                          : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300",
+                                          ? "text-sky-300"
+                                          : "text-[#0284c7] hover:text-[#0369a1]",
                                       )}
                                     >
                                       {processedUrl}
@@ -20907,10 +19611,10 @@ export default function ContestDetailClient({
                                         handleCopyTrackingLink(processedUrl)
                                       }
                                       className={cn(
-                                        "p-1.5 rounded-md transition-colors duration-200 flex-shrink-0",
+                                        "p-1.5 rounded-[10px] border transition-colors duration-200 flex-shrink-0",
                                         isDark
-                                          ? "text-gray-300"
-                                          : "hover:bg-gray-100 text-gray-600",
+                                          ? "border-white/15 text-gray-300 hover:bg-white/10"
+                                          : "border-[#e5e5e5] bg-white hover:bg-[#fafafa] text-[#404040]",
                                       )}
                                       title="Copy link"
                                     >
@@ -20919,10 +19623,10 @@ export default function ContestDetailClient({
                                   </div>
                                   <div
                                     className={cn(
-                                      "text-sm leading-relaxed",
+                                      "text-[13px] leading-relaxed",
                                       isDark
-                                        ? "text-white"
-                                        : "text-gray-700 dark:text-gray-300",
+                                        ? "text-slate-300"
+                                        : "text-[#404040]",
                                     )}
                                   >
                                     {item.description}
@@ -21009,11 +19713,11 @@ export default function ContestDetailClient({
                       <div
                         key={idx}
                         className={cn(
-                          "border rounded-xl p-6 transition-all duration-200",
-                          isDark ? "border-gray-600" : "border-gray-300",
+                          "border rounded-xl p-4 transition-all duration-200",
+                          isDark ? "border-white/10" : "border-[#e5e5e5] bg-white",
                         )}
                       >
-                        <div className="flex flex-col md:flex-row justify-between">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between">
                           <div className="flex items-center gap-4 flex-1 min-w-0">
                             {isInternal && isImage && !isPdf ? (
                               <img
@@ -21065,10 +19769,10 @@ export default function ContestDetailClient({
                             ) : (
                               <div
                                 className={cn(
-                                  "p-3 rounded-full flex-shrink-0",
+                                  "flex h-12 w-12 items-center justify-center rounded-[10px] flex-shrink-0",
                                   isDark
-                                    ? "bg-[#FFFFFF42] text-white"
-                                    : "bg-purple-100 text-purple-600",
+                                    ? "bg-white/10 text-white"
+                                    : "bg-[#f5f5f5] text-[#0a0a0a]",
                                 )}
                               >
                                 <ExternalLink className="h-5 w-5" />
@@ -21077,16 +19781,16 @@ export default function ContestDetailClient({
                             <div className="min-w-0">
                               <h4
                                 className={cn(
-                                  "text-base font-semibold mb-1",
-                                  isDark ? "text-white" : "text-gray-900 ",
+                                  "text-sm font-semibold mb-0.5",
+                                  isDark ? "text-white" : "text-[#0a0a0a]",
                                 )}
                               >
                                 {resource.description}
                               </h4>
                               <p
                                 className={cn(
-                                  "text-sm",
-                                  isDark ? "text-white" : "text-gray-600",
+                                  "text-xs",
+                                  isDark ? "text-slate-400" : "text-[#737373]",
                                 )}
                               >
                                 {resource.type === "external"
@@ -21099,7 +19803,12 @@ export default function ContestDetailClient({
                             variant="outline"
                             size="sm"
                             asChild
-                            className="bg-[#6C43D0] hover:bg-[#6C43D0] mt-3 md:mt-0 rounded-xl text-white px-4 py-2 text-md"
+                            className={cn(
+                              "mt-3 md:mt-0 rounded-[10px] px-4 py-2 text-sm font-medium",
+                              isDark
+                                ? "border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white"
+                                : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa] hover:text-[#0a0a0a]",
+                            )}
                           >
                             <a
                               href={resource.url}
@@ -21123,23 +19832,24 @@ export default function ContestDetailClient({
                   };
 
                   return (
-                    <div className="space-y-6">
-                      <div className="flex items-center gap-3">
-                        <h3
-                          className={cn(
-                            "text-xl font-semibold flex items-center gap-2",
-                            isDark ? "text-white" : "text-gray-900",
-                          )}
-                        >
-                          Resources
-                          {showSharedHint ? (
-                            <ContestDetailSharedAcrossPlatformsHint
-                              platforms={overviewVideoPlatforms}
-                            />
-                          ) : null}
-                        </h3>
-                      </div>
-
+                    <BrandOverviewSectionCard
+                      isDark={isDark}
+                      title="Resources"
+                      icon={
+                        <img
+                          src="/images/contest-details/guide-scroll.svg"
+                          alt=""
+                          className="h-4 w-4"
+                        />
+                      }
+                      badge={
+                        showSharedHint ? (
+                          <ContestDetailSharedAcrossPlatformsHint
+                            platforms={overviewVideoPlatforms}
+                          />
+                        ) : null
+                      }
+                    >
                       <div className="space-y-4">
                         {resourceGroups.map((group) => {
                           const items = (
@@ -21166,10 +19876,501 @@ export default function ContestDetailClient({
                           return <div key={group.key}>{items}</div>;
                         })}
                       </div>
-                    </div>
+                    </BrandOverviewSectionCard>
                   );
                 })()}
-              </CardContent>
+              </div>
+
+              <aside className="mt-6 space-y-6 lg:mt-0 lg:sticky lg:top-24 lg:self-start">
+                <BrandOverviewSectionCard
+                  isDark={isDark}
+                  title="Campaign Report"
+                  subtitle="All submissions, metrics and payouts in one file"
+                  icon={<img src="/images/contest-details/earn-trend.svg" alt="" className="h-4 w-4" />}
+                  bodyClassName="space-y-3"
+                >
+                {overviewVideoPlatforms.length >= 2 && (
+                  <ContestDetailPlatformTabs
+                    platforms={overviewVideoPlatforms}
+                    active={overviewPlatformTab}
+                    onChange={setOverviewPlatformTab}
+                    isDark={isDark}
+                    disabled={false} /* browse unlocked during refresh */
+                  />
+                )}
+                <Button
+                  size="sm"
+                  disabled={
+                    isHydratingSubmissions || currentSubmissions.length === 0
+                  }
+                  className={cn(
+                    "w-full gap-2 rounded-[10px] text-white shadow-sm disabled:opacity-100",
+                    "bg-gradient-to-r from-[#7F39EC] to-[#6366F1] hover:from-[#6d28d9] hover:to-[#4f46e5]",
+                  )}
+                  onClick={() => {
+                    if (isHydratingSubmissions) return;
+                    setFullReportDialogOpen(true);
+                  }}
+                >
+                  {isHydratingSubmissions ? (
+                    <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                  ) : (
+                    <Download className="h-4 w-4 shrink-0" />
+                  )}
+                  Download full report
+                </Button>
+                </BrandOverviewSectionCard>
+
+                <BrandOverviewSectionCard
+                  isDark={isDark}
+                  title="Contest Details"
+                  icon={<img src="/images/contest-details/guide-book.svg" alt="" className="h-4 w-4" />}
+                  bodyClassName="space-y-3"
+                >
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {/* Platform Card */}
+                    <div className={cn(brandMiniCardClass, "!rounded-xl")}>
+                      <CardContent className="p-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className={cn("text-[11px] font-semibold uppercase tracking-[0.66px] mb-1", brandMutedClass)}>
+                              Platform
+                            </p>
+                            <p
+                              className={cn(
+                                "text-sm font-semibold capitalize",
+                                brandPrimaryTextClass,
+                              )}
+                            >
+                              {(overviewScopedPlatform
+                                ? [overviewScopedPlatform]
+                                : overviewVideoPlatforms.length > 0
+                                  ? overviewVideoPlatforms
+                                  : []
+                              ).length > 0
+                                ? (overviewScopedPlatform
+                                    ? [overviewScopedPlatform]
+                                    : overviewVideoPlatforms
+                                  )
+                                    .map(
+                                      (platform) =>
+                                        VIDEO_PLATFORM_LABELS[platform],
+                                    )
+                                    .join(", ")
+                                : currentContest.platform}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </div>
+
+                    {/* Status Card */}
+                    <div className={cn(brandMiniCardClass, "!rounded-xl")}>
+                      <CardContent className="p-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className={cn("text-[11px] font-semibold uppercase tracking-[0.66px] mb-1", brandMutedClass)}>
+                              Status
+                            </p>
+                            <p
+                              className={cn(
+                                "flex items-center gap-1.5 text-sm font-semibold capitalize",
+                                brandPrimaryTextClass,
+                              )}
+                            >
+                              <span className="h-2 w-2 shrink-0 rounded-full bg-[#22c55e]" />
+                              {contestStatusBadgeInfo.text}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </div>
+
+                    {/* Start Date Card */}
+                    <div className={cn(brandMiniCardClass, "!rounded-xl")}>
+                      <CardContent className="p-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className={cn("text-[11px] font-semibold uppercase tracking-[0.66px] mb-1", brandMutedClass)}>
+                              Start Date & Time
+                            </p>
+                            <p className={cn("text-sm font-semibold", brandPrimaryTextClass)}>
+                              {formatLocalDateTime(currentContest.start_date)}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </div>
+
+                    {/* End Date Card */}
+                    <div className={cn(brandMiniCardClass, "!rounded-xl")}>
+                      <CardContent className="p-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className={cn("text-[11px] font-semibold uppercase tracking-[0.66px] mb-1", brandMutedClass)}>
+                              End Date & Time
+                            </p>
+                            <p className={cn("text-sm font-semibold", brandPrimaryTextClass)}>
+                              {formatLocalDateTime(currentContest.end_date)}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </div>
+
+                    {/* Campaign type (existing contest type value, full width) */}
+                    {currentContest.contest_type ? (
+                      <div
+                        className={cn(
+                          brandMiniCardClass,
+                          "!rounded-xl col-span-2",
+                        )}
+                      >
+                        <CardContent className="p-3.5">
+                          <p className={cn("text-[11px] font-semibold uppercase tracking-[0.66px] mb-1", brandMutedClass)}>
+                            Campaign type
+                          </p>
+                          <p className={cn("text-sm font-semibold", brandPrimaryTextClass)}>
+                            {isDualRewardsContestType(currentContest.contest_type)
+                              ? "Dual Rewards"
+                              : isCpmContestType(currentContest.contest_type)
+                                ? "CPM"
+                                : isMilestoneContestType(currentContest.contest_type)
+                                  ? "Milestone"
+                                  : "Leaderboard"}
+                          </p>
+                        </CardContent>
+                      </div>
+                    ) : null}
+                  </div>
+                </BrandOverviewSectionCard>
+
+                {(currentContest as any).payment_details && (
+                <BrandOverviewSectionCard
+                  isDark={isDark}
+                  title="Payment Information"
+                  icon={<img src="/images/contest-details/earn-dollar.svg" alt="" className="h-4 w-4" />}
+                >
+                  <div
+                    className={cn(
+                      brandSubtleCardClass,
+                      "p-4 !rounded-xl",
+                      // Figma plain key/value rows: hide decorative icon tiles, label left / value right (styling only)
+                      "[&_.rounded-lg.shrink-0]:!hidden [&_.gap-3>div]:contents [&_.flex.items-center.gap-3]:!justify-between",
+                      "[&_p.uppercase]:!normal-case [&_p.uppercase]:!tracking-normal [&_p.uppercase]:!text-[13px] [&_p.uppercase]:!font-medium",
+                      "[&_p.font-bold]:!text-[13px] [&_p.font-bold]:!font-semibold",
+                    )}
+                  >
+                      <div className="grid grid-cols-1 gap-2.5">
+                        <div className="flex items-center gap-3">
+                          <div className={cn("p-2 rounded-lg shrink-0", brandIconTileClass)}>
+                            <Trophy className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className={brandLabelClass}>Prize Pool</p>
+                            <p className={cn("text-xl font-bold", brandPrimaryTextClass)}>
+                              {(() => {
+                                const paymentDetails =
+                                  typeof (currentContest as any)
+                                    .payment_details === "string"
+                                    ? JSON.parse(
+                                        (currentContest as any).payment_details,
+                                      )
+                                    : (currentContest as any).payment_details;
+                                return formatMoney(
+                                  paymentDetails.total_prize_pool || 0,
+                                );
+                              })()}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <div className={cn("p-2 rounded-lg shrink-0", brandIconTileClass)}>
+                            <CreditCard className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className={brandLabelClass}>
+                              Commission (
+                              {(() => {
+                                const paymentDetails =
+                                  typeof (currentContest as any)
+                                    .payment_details === "string"
+                                    ? JSON.parse(
+                                        (currentContest as any).payment_details,
+                                      )
+                                    : (currentContest as any).payment_details;
+                                return (
+                                  paymentDetails.commission_percentage || 0
+                                );
+                              })()}
+                              %)
+                            </p>
+                            <p className={cn("text-xl font-bold", brandPrimaryTextClass)}>
+                              {(() => {
+                                const paymentDetails =
+                                  typeof (currentContest as any)
+                                    .payment_details === "string"
+                                    ? JSON.parse(
+                                        (currentContest as any).payment_details,
+                                      )
+                                    : (currentContest as any).payment_details;
+                                return formatMoney(
+                                  paymentDetails.commission_amount || 0,
+                                );
+                              })()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Total Paid and Payment Method */}
+                      <div
+                        className={cn(
+                          "mt-4 pt-4 border-t",
+                          isDark ? "border-white/10" : "border-[#e5e5e5]",
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "grid grid-cols-1 gap-2.5",
+                            "[&>div:first-child]:rounded-lg [&>div:first-child]:px-3 [&>div:first-child]:py-2.5",
+                            isDark
+                              ? "[&>div:first-child]:bg-white/10"
+                              : "[&>div:first-child]:bg-[#ececec]",
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={cn("p-2 rounded-lg shrink-0", brandIconTileClass)}>
+                              <DollarSign className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <p className={brandLabelClass}>Total Paid</p>
+                              <p className={cn("text-lg font-bold", brandPrimaryTextClass)}>
+                                {(() => {
+                                  const paymentDetails =
+                                    typeof (currentContest as any)
+                                      .payment_details === "string"
+                                      ? JSON.parse(
+                                          (currentContest as any)
+                                            .payment_details,
+                                        )
+                                      : (currentContest as any).payment_details;
+                                  return formatMoney(
+                                    paymentDetails.total_amount_paid || 0,
+                                  );
+                                })()}
+                              </p>
+                            </div>
+                          </div>
+
+                          {(() => {
+                            const paymentDetails =
+                              typeof (currentContest as any).payment_details ===
+                              "string"
+                                ? JSON.parse(
+                                    (currentContest as any).payment_details,
+                                  )
+                                : (currentContest as any).payment_details;
+                            const walletUsed =
+                              paymentDetails.wallet_amount_used || 0;
+                            const stripeUsed =
+                              paymentDetails.stripe_amount_paid || 0;
+
+                            if (walletUsed > 0 && stripeUsed > 0) {
+                              // Split payment
+                              return (
+                                <>
+                                  <div className="flex items-center gap-3">
+                                    <div className={cn("p-2 rounded-lg shrink-0", brandIconTileClass)}>
+                                      <Wallet className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                      <p className={brandLabelClass}>From Wallet</p>
+                                      <p className={cn("text-lg font-bold", brandPrimaryTextClass)}>
+                                        {formatMoney(walletUsed)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <div className={cn("p-2 rounded-lg shrink-0", brandIconTileClass)}>
+                                      <CreditCard className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                      <p className={brandLabelClass}>From Card</p>
+                                      <p className={cn("text-lg font-bold", brandPrimaryTextClass)}>
+                                        {formatMoney(stripeUsed)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </>
+                              );
+                            } else if (walletUsed > 0) {
+                              // Wallet only
+                              return (
+                                <div className="flex items-center gap-3">
+                                  <div className={cn("p-2 rounded-lg shrink-0", brandIconTileClass)}>
+                                    <Wallet className="h-5 w-5" />
+                                  </div>
+                                  <div>
+                                    <p className={brandLabelClass}>Payment Method</p>
+                                    <p className={cn("text-lg font-bold", brandPrimaryTextClass)}>
+                                      Wallet
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            } else if (stripeUsed > 0) {
+                              // Credit card only
+                              return (
+                                <div className="flex items-center gap-3">
+                                  <div className={cn("p-2 rounded-lg shrink-0", brandIconTileClass)}>
+                                    <CreditCard className="h-5 w-5" />
+                                  </div>
+                                  <div>
+                                    <p className={brandLabelClass}>Payment Method</p>
+                                    <p className={cn("text-lg font-bold", brandPrimaryTextClass)}>
+                                      Credit Card
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
+
+                        {/* Payment Status and Date */}
+                        <div
+                          className={cn(
+                            "mt-4 pt-4 border-t flex items-center justify-between",
+                            isDark ? "border-white/10" : "border-[#e5e5e5]",
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2
+                              className={cn(
+                                "h-4 w-4",
+                                isDark ? "text-emerald-400" : "text-emerald-600",
+                              )}
+                            />
+                            <span className={cn("text-sm font-medium", brandPrimaryTextClass)}>
+                              Payment{" "}
+                              {(() => {
+                                const paymentDetails =
+                                  typeof (currentContest as any)
+                                    .payment_details === "string"
+                                    ? JSON.parse(
+                                        (currentContest as any).payment_details,
+                                      )
+                                    : (currentContest as any).payment_details;
+                                return paymentDetails.payment_status ===
+                                  "completed"
+                                  ? "Completed"
+                                  : "Pending";
+                              })()}
+                            </span>
+                          </div>
+                          {(() => {
+                            const paymentDetails =
+                              typeof (currentContest as any).payment_details ===
+                              "string"
+                                ? JSON.parse(
+                                    (currentContest as any).payment_details,
+                                  )
+                                : (currentContest as any).payment_details;
+                            return paymentDetails.paid_at ? (
+                              <span className={cn("text-xs", brandMutedClass)}>
+                                Paid on{" "}
+                                {formatLocalDateTime(paymentDetails.paid_at, {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                            ) : null;
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                </BrandOverviewSectionCard>
+                )}
+
+                {showCreatorEligibilitySection && (
+                <BrandOverviewSectionCard
+                  isDark={isDark}
+                  title="Creator Eligibility"
+                  subtitle="Minimum creator requirements to submit to this campaign."
+                  icon={<img src="/images/contest-details/guide-alert.svg" alt="" className="h-4 w-4" />}
+                >
+                    <div className="grid grid-cols-1 gap-0">
+                      {eligibilityDisplayItems.map((item) => (
+                        <EligibilityRequirementCard
+                          key={item.key}
+                          icon={item.icon}
+                          label={item.label}
+                          value={item.value}
+                          description={item.description}
+                          isDark={isDark}
+                        />
+                      ))}
+                    </div>
+                </BrandOverviewSectionCard>
+                )}
+
+                {currentContest.region &&
+                  Object.keys(currentContest.region).length > 0 && (
+                <BrandOverviewSectionCard
+                  isDark={isDark}
+                  title="Available Regions"
+                  icon={<img src="/images/contest-details/guide-scroll.svg" alt="" className="h-4 w-4" />}
+                >
+                  <div>
+                        <CardContent className="p-0">
+                          <div className="flex items-start gap-4">
+                            <div className="flex-1 space-y-3">
+                              {Object.entries(currentContest.region).map(
+                                ([regionName, countries]) => (
+                                  <div
+                                    key={regionName}
+                                    className="space-y-2"
+                                  >
+                                    <p
+                                      className={cn(
+                                        "font-semibold text-[13px]",
+                                        brandPrimaryTextClass,
+                                      )}
+                                    >
+                                      {regionName}
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {countries.map((country) => (
+                                        <Badge
+                                          key={country}
+                                          variant="secondary"
+                                          className={cn(
+                                            "text-xs font-medium rounded-full",
+                                            isDark
+                                              ? "bg-white/10 text-slate-200 border-white/10"
+                                              : "bg-[#f5f5f5] text-[#404040] border-[#e5e5e5]",
+                                          )}
+                                        >
+                                          {country}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ),
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </div>
+                </BrandOverviewSectionCard>
+                  )}
+              </aside>
             </div>
             <FullCampaignReportExportDialog
               open={fullReportDialogOpen}
@@ -21222,18 +20423,13 @@ export default function ContestDetailClient({
               </div>
             ) : isPostCampaignLeaderboard && !hasPostCampaignData ? (
               <Card
-                className={cn(
-                  "shadow-sm border-0",
-                  isDark ? "bg-[#170337]" : "bg-purple-50",
-                )}
+                className={sx.card}
               >
                 <CardContent className="py-16 flex flex-col items-center justify-center text-center">
                   <div
                     className={cn(
                       "p-4 rounded-full mb-6",
-                      isDark
-                        ? "bg-[#FFFFFF36] text-white"
-                        : "bg-purple-200 text-purple-500",
+                      isDark ? "bg-white/10 text-white" : "bg-[#f5f5f5] text-[#737373]",
                     )}
                   >
                     <FileText className="h-12 w-12 " />
@@ -21263,8 +20459,7 @@ export default function ContestDetailClient({
                       type="button"
                       onClick={() => void syncPostCampaignSubmissions()}
                       className={cn(
-                        "flex items-center gap-2 py-2.5 px-5 rounded-2xl transition-all",
-                        "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
+                        "flex items-center gap-2 py-2.5 px-5 rounded-[10px] text-[13px] font-medium transition-all", isDark ? "bg-white text-[#0a0a0a] hover:bg-slate-200" : "bg-[#0a0a0a] text-white hover:bg-[#262626]",
                       )}
                     >
                       <RefreshCw className="h-4 w-4" />
@@ -21275,7 +20470,7 @@ export default function ContestDetailClient({
                     <Loader2
                       className={cn(
                         "h-6 w-6 animate-spin",
-                        isDark ? "text-white" : "text-[#6C43D0]",
+                        isDark ? "text-white" : "text-[#737373]",
                       )}
                     />
                   )}
@@ -21289,12 +20484,7 @@ export default function ContestDetailClient({
               <div className="space-y-6">
                 {/* Enhanced Header Section */}
                 <div
-                  className={cn(
-                    "rounded-2xl border shadow-sm",
-                    isDark
-                      ? "border-slate-700/80 bg-slate-900/40"
-                      : "border-[#D1B7F9] bg-white",
-                  )}
+                  className={sx.card}
                 >
                   <CardContent className="p-4 sm:p-5 lg:p-6">
                     <div className="space-y-4">
@@ -21303,9 +20493,7 @@ export default function ContestDetailClient({
                           <div
                             className={cn(
                               "p-2.5 rounded-xl mt-0.5",
-                              isDark
-                                ? "bg-[#FFFFFF24] text-white"
-                                : "bg-[#D8C3FF] text-[#4A00BE]",
+                              isDark ? "bg-white/10 text-white" : "bg-[#f5f5f5] text-[#0a0a0a]",
                             )}
                           >
                             <Trophy className="h-4.5 w-4.5" />
@@ -21331,8 +20519,7 @@ export default function ContestDetailClient({
                                 {isLoadingSubmissionsHydrate &&
                                   !isPostCampaignLeaderboard && (
                                     <Loader2
-                                      className="h-3.5 w-3.5 animate-spin shrink-0 text-[#7F39EC]"
-                                      aria-hidden
+                                      className="h-3.5 w-3.5 animate-spin shrink-0 text-[#737373]" aria-hidden
                                     />
                                   )}
                                 {isHydratingSubmissions &&
@@ -21399,12 +20586,12 @@ export default function ContestDetailClient({
                                         }
                                         disabled={syncDisabled}
                                         className={cn(
-                                          "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all border",
+                                          "flex items-center py-2 px-4 gap-2 rounded-[10px] text-[13px] font-medium transition-all border",
                                           syncDisabled
                                             ? "bg-gray-400 text-white cursor-not-allowed opacity-60 border-transparent"
                                             : isDark
                                               ? "border-slate-600 bg-slate-800 text-white hover:bg-slate-700"
-                                              : "border-[#D1B7F9] bg-white text-[#4A00BE] hover:bg-purple-50",
+                                              : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
                                         )}
                                         title="Copy status, paid, and earnings from Submissions into Post Campaign (keeps refreshed views)."
                                       >
@@ -21422,10 +20609,10 @@ export default function ContestDetailClient({
                                       onClick={handleRefreshMetrics}
                                       disabled={isDisabled}
                                       className={cn(
-                                        "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all",
+                                        "flex items-center py-2 px-4 gap-2 rounded-[10px] text-[13px] font-medium transition-all",
                                         isDisabled
                                           ? "bg-gray-400 text-white cursor-not-allowed opacity-60"
-                                          : "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
+                                          : isDark ? "bg-white text-[#0a0a0a] hover:bg-slate-200" : "bg-[#0a0a0a] text-white hover:bg-[#262626]",
                                       )}
                                       title={
                                         disabledReason ||
@@ -21457,8 +20644,7 @@ export default function ContestDetailClient({
                                 className={cn(
                                   "flex items-center gap-2 px-3 py-2 rounded-xl border text-xs flex-wrap",
                                   isDark
-                                    ? "border-purple-500/60 bg-purple-900/40 text-purple-100"
-                                    : "border-purple-300 bg-purple-50 text-purple-800",
+                                    ? "border-white/10 bg-white/5 text-slate-100" : "border-[#e5e5e5] bg-[#fafafa] text-[#404040]",
                                 )}
                               >
                                 <span className="font-semibold">
@@ -21468,8 +20654,7 @@ export default function ContestDetailClient({
                                   className={cn(
                                     "px-2 py-0.5 rounded-md text-[11px] font-medium",
                                     isDark
-                                      ? "bg-purple-800/60 text-purple-100"
-                                      : "bg-purple-100 text-purple-900",
+                                      ? "bg-white/10 text-slate-100" : "bg-[#f5f5f5] text-[#0a0a0a]",
                                   )}
                                 >
                                   Current:{" "}
@@ -21512,8 +20697,7 @@ export default function ContestDetailClient({
                                   className={cn(
                                     "w-16 px-2 py-1 rounded-md border text-xs bg-transparent",
                                     isDark
-                                      ? "border-purple-500/70 text-purple-50"
-                                      : "border-purple-400 text-purple-900",
+                                      ? "border-white/20 text-slate-50" : "border-[#e5e5e5] text-[#0a0a0a]",
                                   )}
                                   placeholder="%"
                                 />
@@ -21567,8 +20751,7 @@ export default function ContestDetailClient({
                                   className={cn(
                                     "px-2 py-1 rounded-md border text-xs bg-transparent",
                                     isDark
-                                      ? "border-purple-500/70 text-purple-50"
-                                      : "border-purple-400 text-purple-900",
+                                      ? "border-white/20 text-slate-50" : "border-[#e5e5e5] text-[#0a0a0a]",
                                   )}
                                 >
                                   {isDualRewardsContestType(
@@ -21617,9 +20800,7 @@ export default function ContestDetailClient({
                                   size="sm"
                                   className={cn(
                                     "text-xs h-7 px-3",
-                                    isDark
-                                      ? "bg-purple-600 hover:bg-purple-700 text-white"
-                                      : "bg-purple-600 hover:bg-purple-700 text-white",
+                                    isDark ? "bg-white text-[#0a0a0a] hover:bg-slate-200" : "bg-[#0a0a0a] text-white hover:bg-[#262626]",
                                   )}
                                   onClick={async () => {
                                     const pct =
@@ -21730,10 +20911,8 @@ export default function ContestDetailClient({
                                 onClick={() => setAdminControlsModalOpen(true)}
                                 disabled={youtubeAdminControlsDisabled}
                                 className={cn(
-                                  "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm",
-                                  "border-slate-400 text-slate-600 hover:bg-slate-100 hover:border-slate-500",
-                                  isDark &&
-                                    "text-slate-400 border-slate-500 hover:bg-slate-800 hover:border-slate-400",
+                                  "flex items-center py-2 px-3 gap-2 rounded-[10px] border transition-all text-[13px] font-medium",
+                                  "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]", isDark && "border-white/10 bg-transparent text-slate-200 hover:bg-white/10",
                                   youtubeAdminControlsDisabled &&
                                     "opacity-60 cursor-not-allowed",
                                 )}
@@ -21761,12 +20940,12 @@ export default function ContestDetailClient({
                                     }
                                     disabled={syncDisabled}
                                     className={cn(
-                                      "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all border",
+                                      "flex items-center py-2 px-4 gap-2 rounded-[10px] text-[13px] font-medium transition-all border",
                                       syncDisabled
                                         ? "bg-gray-400 text-white cursor-not-allowed opacity-60 border-transparent"
                                         : isDark
                                           ? "border-slate-600 bg-slate-800 text-white hover:bg-slate-700"
-                                          : "border-[#D1B7F9] bg-white text-[#4A00BE] hover:bg-purple-50",
+                                          : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
                                     )}
                                     title="Copy status, paid, and earnings from Submissions into Post Campaign (keeps refreshed views)."
                                   >
@@ -21784,10 +20963,10 @@ export default function ContestDetailClient({
                                   onClick={handleRefreshMetrics}
                                   disabled={isDisabled}
                                   className={cn(
-                                    "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all",
+                                    "flex items-center py-2 px-4 gap-2 rounded-[10px] text-[13px] font-medium transition-all",
                                     isDisabled
                                       ? "bg-gray-400 text-white cursor-not-allowed opacity-60"
-                                      : "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
+                                      : isDark ? "bg-white text-[#0a0a0a] hover:bg-slate-200" : "bg-[#0a0a0a] text-white hover:bg-[#262626]",
                                   )}
                                   title={
                                     disabledReason ||
@@ -21838,7 +21017,7 @@ export default function ContestDetailClient({
                               {}
                             : details?.youtube_metrics_last_updated || {};
                           const btnClass =
-                            "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm";
+                            "flex items-center py-2 px-3 gap-2 rounded-[10px] border transition-all text-[13px] font-medium";
                           const disabledDetail =
                             isRefreshingCore ||
                             isRefreshingTraffic ||
@@ -21918,13 +21097,13 @@ export default function ContestDetailClient({
                                           anyRefreshInProgress
                                         }
                                         className={cn(
-                                          "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all border",
+                                          "flex items-center py-2 px-4 gap-2 rounded-[10px] text-[13px] font-medium transition-all border",
                                           isLoadingPostCampaignMetrics ||
                                             anyRefreshInProgress
                                             ? "bg-gray-400 text-white cursor-not-allowed opacity-60 border-transparent"
                                             : isDark
                                               ? "border-slate-600 bg-slate-800 text-white hover:bg-slate-700"
-                                              : "border-[#D1B7F9] bg-white text-[#4A00BE] hover:bg-purple-50",
+                                              : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
                                         )}
                                         title="Copy status, paid, and earnings from Submissions into Post Campaign (keeps refreshed views)."
                                       >
@@ -21944,10 +21123,10 @@ export default function ContestDetailClient({
                                       onClick={handleRefreshMetrics}
                                       disabled={isDisabled || disabledDetail}
                                       className={cn(
-                                        "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all",
+                                        "flex items-center py-2 px-4 gap-2 rounded-[10px] text-[13px] font-medium transition-all",
                                         isDisabled || disabledDetail
                                           ? "bg-gray-400 text-white cursor-not-allowed opacity-60"
-                                          : "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
+                                          : isDark ? "bg-white text-[#0a0a0a] hover:bg-slate-200" : "bg-[#0a0a0a] text-white hover:bg-[#262626]",
                                       )}
                                       title={
                                         disabledReason ||
@@ -22004,7 +21183,7 @@ export default function ContestDetailClient({
                                       }
                                       className={cn(
                                         btnClass,
-                                        "bg-[#5A35B8] text-white border-[#5A35B8] hover:bg-[#4a2d99]",
+                                        isDark ? "bg-white text-[#0a0a0a] border-white hover:bg-slate-200" : "bg-[#0a0a0a] text-white border-[#0a0a0a] hover:bg-[#262626]",
                                         (anyRefreshInProgress ||
                                           !allCooldownInfo.canRefresh ||
                                           (!isPostCampaignLeaderboard &&
@@ -22140,7 +21319,7 @@ export default function ContestDetailClient({
                                         detailedBaseDisabled ||
                                           !coreCooldownInfo.canRefresh
                                           ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60"
-                                          : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
+                                          : isDark ? "border-white/10 bg-transparent text-slate-100 hover:bg-white/10" : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
                                       )}
                                       title={
                                         getDetailedDisabledReason(
@@ -22191,7 +21370,7 @@ export default function ContestDetailClient({
                                         detailedBaseDisabled ||
                                           !trafficCooldownInfo.canRefresh
                                           ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60"
-                                          : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
+                                          : isDark ? "border-white/10 bg-transparent text-slate-100 hover:bg-white/10" : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
                                       )}
                                       title={
                                         getDetailedDisabledReason(
@@ -22242,7 +21421,7 @@ export default function ContestDetailClient({
                                         detailedBaseDisabled ||
                                           !demographicsCooldownInfo.canRefresh
                                           ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60"
-                                          : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
+                                          : isDark ? "border-white/10 bg-transparent text-slate-100 hover:bg-white/10" : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
                                       )}
                                       title={
                                         getDetailedDisabledReason(
@@ -22705,7 +21884,7 @@ export default function ContestDetailClient({
                 {/* Enhanced Status Filter Tabs — Twitter text/image uses compact row near table only */}
                 {!isTwitterTextImageContest && (
                   <div>
-                    <div className="py-4">
+                    <div className={cn(sx.card, "p-3")}>
                       <Tabs
                         value={activeStatusTab}
                         onValueChange={(value) => {
@@ -22715,17 +21894,14 @@ export default function ContestDetailClient({
                         }}
                         className="w-full"
                       >
-                        <TabsList className="flex flex-wrap gap-2 w-full h-auto p-1">
+                        <TabsList className={sx.pillList}>
                           <TabsTrigger
                             value="all"
                             disabled={
                               isHydratingSubmissions
                             }
                             className={cn(
-                              "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
-                              isDark
-                                ? "text-white border-gray-400"
-                                : "text-[#7F39EC] border-[#7F39EC]",
+                              sx.pill,
                             )}
                           >
                             <div className="flex items-center gap-1">
@@ -22752,10 +21928,7 @@ export default function ContestDetailClient({
                               isHydratingSubmissions
                             }
                             className={cn(
-                              "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
-                              isDark
-                                ? "text-white border-gray-400"
-                                : "text-[#7F39EC] border-[#7F39EC]",
+                              sx.pill,
                             )}
                           >
                             <div className="flex items-center gap-1">
@@ -22782,10 +21955,7 @@ export default function ContestDetailClient({
                               isHydratingSubmissions
                             }
                             className={cn(
-                              "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
-                              isDark
-                                ? "text-white border-gray-400"
-                                : "text-[#7F39EC] border-[#7F39EC]",
+                              sx.pill,
                             )}
                           >
                             <div className="flex items-center gap-1">
@@ -22817,10 +21987,7 @@ export default function ContestDetailClient({
                               isHydratingSubmissions
                             }
                             className={cn(
-                              "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
-                              isDark
-                                ? "text-white border-gray-400"
-                                : "text-[#7F39EC] border-[#7F39EC]",
+                              sx.pill,
                             )}
                           >
                             <div className="flex items-center gap-1">
@@ -22847,10 +22014,7 @@ export default function ContestDetailClient({
                               isHydratingSubmissions
                             }
                             className={cn(
-                              "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
-                              isDark
-                                ? "text-white border-gray-400"
-                                : "text-[#7F39EC] border-[#7F39EC]",
+                              sx.pill,
                             )}
                           >
                             <div className="flex items-center gap-1">
@@ -22877,10 +22041,7 @@ export default function ContestDetailClient({
                               isHydratingSubmissions
                             }
                             className={cn(
-                              "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
-                              isDark
-                                ? "text-white border-gray-400"
-                                : "text-[#7F39EC] border-[#7F39EC]",
+                              sx.pill,
                             )}
                           >
                             <div className="flex items-center gap-1">
@@ -22907,10 +22068,7 @@ export default function ContestDetailClient({
                               isHydratingSubmissions
                             }
                             className={cn(
-                              "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
-                              isDark
-                                ? "text-white border-gray-400"
-                                : "text-[#7F39EC] border-[#7F39EC]",
+                              sx.pill,
                             )}
                           >
                             <div className="flex items-center gap-1">
@@ -22939,13 +22097,7 @@ export default function ContestDetailClient({
 
                 {/* Platform filter (multi-platform video contests) — above reward totals */}
                 {overviewVideoPlatforms.length >= 2 && (
-                  <div className="py-2">
-                    <ContestDetailPlatformTabs
-                      platforms={overviewVideoPlatforms}
-                      active={submissionsPlatformTab}
-                      onChange={setSubmissionsPlatformTab}
-                      isDark={isDark}
-                      fullWidth
+                  <div className={cn(sx.card, "p-3")}> <ContestDetailPlatformTabs platforms={overviewVideoPlatforms} active={submissionsPlatformTab} onChange={setSubmissionsPlatformTab} isDark={isDark} fullWidth neutral
                       counts={submissionsPlatformTabCounts}
                       disabled={false} /* browse unlocked during refresh */
                     />
@@ -22968,27 +22120,9 @@ export default function ContestDetailClient({
                       tot.totalExpectedReward + tot.totalBonusExpected;
                     const grantedTotal =
                       tot.totalRewardGranted + tot.totalBonusGranted;
-                    const cardClass = cn(
-                      "rounded-xl border px-4 py-3",
-                      isDark
-                        ? "border-gray-600 bg-gray-800/50"
-                        : "border-slate-200 bg-slate-50",
-                    );
-                    const labelClass = cn(
-                      "text-xs font-medium uppercase tracking-wide",
-                      isDark ? "text-gray-400" : "text-slate-500",
-                    );
-                    const valueClass = (green?: boolean) =>
-                      cn(
-                        "text-lg font-bold mt-0.5",
-                        green
-                          ? isDark
-                            ? "text-green-400"
-                            : "text-green-600"
-                          : isDark
-                            ? "text-white"
-                            : "text-slate-900",
-                      );
+                    const cardClass = sx.statTile;
+                    const labelClass = sx.statLabel;
+                    const valueClass = (green?: boolean) => sx.statValue(green);
                     return (
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 py-3">
                         {/* Always show reward cards */}
@@ -23050,14 +22184,11 @@ export default function ContestDetailClient({
                           }
                           className="w-full"
                         >
-                          <TabsList className="flex gap-3 w-full h-auto p-1">
+                          <TabsList className={sx.pillList}>
                             <TabsTrigger
                               value="all"
                               className={cn(
-                                "flex-1 gap-2 items-center px-2 border",
-                                isDark
-                                  ? "text-white border-gray-400"
-                                  : "text-[#7F39EC] border-[#7F39EC]",
+                                sx.pill,
                               )}
                             >
                               <div className="flex items-center gap-1">
@@ -23068,12 +22199,7 @@ export default function ContestDetailClient({
                               </div>
                               <Badge
                                 variant="secondary"
-                                className={cn(
-                                  "px-1.5 py-0.5 text-xs h-5",
-                                  isDark
-                                    ? "text-white bg-[#FFFFFF36]"
-                                    : "text-[#7F39EC] bg-purple-200",
-                                )}
+                                className={sx.pillCount}
                               >
                                 {
                                   currentSubmissions.filter(
@@ -23085,10 +22211,7 @@ export default function ContestDetailClient({
                             <TabsTrigger
                               value="eligible"
                               className={cn(
-                                "flex-1 gap-2 items-center px-2 border",
-                                isDark
-                                  ? "text-white border-gray-400"
-                                  : "text-[#7F39EC] border-[#7F39EC]",
+                                sx.pill,
                               )}
                             >
                               <div className="flex items-center gap-1">
@@ -23099,12 +22222,7 @@ export default function ContestDetailClient({
                               </div>
                               <Badge
                                 variant="secondary"
-                                className={cn(
-                                  "px-1.5 py-0.5 text-xs h-5",
-                                  isDark
-                                    ? "text-white bg-[#FFFFFF36]"
-                                    : "text-[#7F39EC] bg-purple-200",
-                                )}
+                                className={sx.pillCount}
                               >
                                 {
                                   currentSubmissions.filter(
@@ -23118,10 +22236,7 @@ export default function ContestDetailClient({
                             <TabsTrigger
                               value="not_eligible"
                               className={cn(
-                                "flex-1 gap-2 items-center px-2 border",
-                                isDark
-                                  ? "text-white border-gray-400"
-                                  : "text-[#7F39EC] border-[#7F39EC]",
+                                sx.pill,
                               )}
                             >
                               <div className="flex items-center gap-1">
@@ -23132,12 +22247,7 @@ export default function ContestDetailClient({
                               </div>
                               <Badge
                                 variant="secondary"
-                                className={cn(
-                                  "px-1.5 py-0.5 text-xs h-5",
-                                  isDark
-                                    ? "text-white bg-[#FFFFFF36]"
-                                    : "text-[#7F39EC] bg-purple-200",
-                                )}
+                                className={sx.pillCount}
                               >
                                 {
                                   currentSubmissions.filter(
@@ -23157,8 +22267,8 @@ export default function ContestDetailClient({
                 {/* Enhanced Submissions Table */}
                 <div
                   className={cn(
-                    "min-w-0 max-w-full p-4 rounded-xl shadow-xl",
-                    isDark ? "bg-[#170337]" : "bg-white ",
+                    "min-w-0 max-w-full p-4",
+                    sx.card,
                   )}
                 >
                   <CardContent className="p-0">
@@ -23168,7 +22278,8 @@ export default function ContestDetailClient({
                         <div className="flex flex-col gap-2 text-md sm:flex-row sm:items-center sm:gap-3">
                           <span
                             className={cn(
-                              isDark ? "text-white" : "text-slate-600",
+                              "text-[13px] font-medium",
+                              isDark ? "text-slate-300" : "text-[#737373]",
                             )}
                           >
                             View
@@ -23183,13 +22294,13 @@ export default function ContestDetailClient({
                           >
                             <SelectTrigger
                               className={cn(
-                                "h-12 w-full sm:w-[180px] disabled:opacity-100",
-                                isDark ? "border-gray-500" : "border-gray-300",
+                                sx.control,
+                                "w-full sm:w-[180px]",
                               )}
                             >
                               <div className="flex items-center gap-2 truncate">
                                 {isHydratingSubmissions && (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0 text-[#7F39EC]" />
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0 text-[#737373]" />
                                 )}
                                 <SelectValue placeholder="View mode" />
                               </div>
@@ -23209,8 +22320,8 @@ export default function ContestDetailClient({
                           <div className="flex flex-col gap-2 text-md sm:flex-row sm:items-center sm:gap-3">
                             <span
                               className={cn(
-                                "text-md",
-                                isDark ? "text-white" : "text-slate-700",
+                                "text-[13px] font-medium",
+                                isDark ? "text-slate-300" : "text-[#737373]",
                               )}
                             >
                               Sort by
@@ -23225,15 +22336,13 @@ export default function ContestDetailClient({
                             >
                               <SelectTrigger
                                 className={cn(
-                                  "h-12 w-full sm:w-[220px] disabled:opacity-100",
-                                  isDark
-                                    ? "border-gray-500"
-                                    : "border-slate-300",
+                                  sx.control,
+                                  "w-full sm:w-[220px]",
                                 )}
                               >
                                 <div className="flex items-center gap-2 truncate">
                                   {isHydratingSubmissions && (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0 text-[#7F39EC]" />
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0 text-[#737373]" />
                                   )}
                                   <SelectValue placeholder="Sort submissions" />
                                 </div>
@@ -23342,18 +22451,16 @@ export default function ContestDetailClient({
                                   size="sm"
                                   disabled={isHydratingSubmissions}
                                   className={cn(
-                                    "h-12 w-full sm:w-[220px] rounded-xl justify-start text-left font-semibold text-sm shadow-none disabled:opacity-100",
-                                    isDark
-                                      ? "border-slate-600 bg-[#1e293b] text-slate-100 hover:bg-slate-800"
-                                      : "border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
+                                    sx.control,
+                                    "w-full sm:w-[220px] justify-start text-left font-normal",
                                   )}
                                 >
                                   {isHydratingSubmissions ? (
-                                    <Loader2 className="h-4 w-4 mr-2 shrink-0 animate-spin text-[#7F39EC]" />
+                                    <Loader2 className="h-4 w-4 mr-2 shrink-0 animate-spin text-[#737373]" />
                                   ) : (
-                                    <Star className="h-4 w-4 mr-2 shrink-0 text-[#7F39EC]" />
+                                    <Star className="h-4 w-4 mr-2 shrink-0 text-[#737373]" />
                                   )}
-                                  <span className="truncate text-sm font-semibold">
+                                  <span className="truncate text-[13px] font-normal">
                                     {submissionQualityScoreFilterButtonLabel}
                                   </span>
                                   <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-50 rotate-90" />
@@ -23381,9 +22488,7 @@ export default function ContestDetailClient({
                                     <div
                                       className={cn(
                                         "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                                        submissionQualityScoreFilters.length ===
-                                          0
-                                          ? "bg-[#4211a1] border-[#4211a1]"
+                                        submissionQualityScoreFilters.length === 0 ? "bg-[#0a0a0a] border-[#0a0a0a]"
                                           : isDark
                                             ? "border-slate-700 bg-slate-900"
                                             : "border-slate-300 bg-white",
@@ -23439,21 +22544,7 @@ export default function ContestDetailClient({
                                             : "hover:bg-slate-50",
                                         )}
                                         onClick={() => {
-                                          setSubmissionQualityScoreFilters(
-                                            (prev) =>
-                                              prev.includes(opt.value)
-                                                ? prev.filter(
-                                                    (v) => v !== opt.value,
-                                                  )
-                                                : [...prev, opt.value],
-                                          );
-                                        }}
-                                      >
-                                        <div
-                                          className={cn(
-                                            "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                                            checked
-                                              ? "bg-[#4211a1] border-[#4211a1]"
+                                          setSubmissionQualityScoreFilters( (prev) => prev.includes(opt.value) ? prev.filter( (v) => v !== opt.value, ) : [...prev, opt.value], ); }} > <div className={cn( "w-4 h-4 rounded border flex items-center justify-center transition-all", checked ? "bg-[#0a0a0a] border-[#0a0a0a]"
                                               : isDark
                                                 ? "border-slate-700 bg-slate-900"
                                                 : "border-slate-300 bg-white",
@@ -23495,10 +22586,7 @@ export default function ContestDetailClient({
                                   size="sm"
                                   disabled={anyYtRefreshInProgress}
                                   className={cn(
-                                    "h-12 gap-2",
-                                    isDark
-                                      ? "border-slate-600 text-slate-300 hover:bg-slate-800"
-                                      : "border-slate-300 text-slate-700 hover:bg-slate-50",
+                                    sx.outlineBtn,
                                     anyYtRefreshInProgress &&
                                       "opacity-60 cursor-not-allowed",
                                   )}
@@ -23635,7 +22723,7 @@ export default function ContestDetailClient({
                                 size="sm"
                                 disabled={!canOpenReviewMode}
                                 onClick={() => openReviewMode()}
-                                className="h-12 gap-2 bg-[#7F39EC] text-white hover:bg-[#6d2fd4] disabled:opacity-60"
+                                className={sx.primaryBtn}
                                 title="Watch submissions one at a time and approve, reject or select them"
                               >
                                 <PlaySquare className="h-4 w-4 shrink-0" />
@@ -23653,10 +22741,7 @@ export default function ContestDetailClient({
                               anyYtRefreshInProgress
                             }
                             className={cn(
-                              "h-12 gap-2 disabled:opacity-100",
-                              isDark
-                                ? "border-slate-600 text-slate-300 hover:bg-slate-800"
-                                : "border-slate-300 text-slate-700 hover:bg-slate-50",
+                              sx.outlineBtn,
                               anyYtRefreshInProgress &&
                                 "opacity-60 cursor-not-allowed",
                             )}
@@ -23671,7 +22756,7 @@ export default function ContestDetailClient({
                             }}
                           >
                             {isHydratingSubmissions ? (
-                              <Loader2 className="h-4 w-4 animate-spin shrink-0 text-[#7F39EC]" />
+                              <Loader2 className="h-4 w-4 animate-spin shrink-0 text-[#737373]" />
                             ) : (
                               <Download className="h-4 w-4 shrink-0" />
                             )}
@@ -23779,20 +22864,12 @@ export default function ContestDetailClient({
                         showNormalViewSelectionUi &&
                         normalViewSelectedSubmissions.size > 0 && (
                           <div
-                            className={cn(
-                              "border-b p-2 sm:p-3 mb-3 rounded-lg",
-                              isDark ? "bg-blue-900/20" : "bg-blue-50",
-                            )}
+                            className={sx.bulkBar}
                           >
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
                               <div className="flex shrink-0 items-center gap-2">
                                 <span
-                                  className={cn(
-                                    "text-sm font-medium",
-                                    isDark ? "text-blue-300" : "text-blue-900",
-                                  )}
-                                >
-                                  {normalViewSelectedSubmissions.size} selected
+                                  className={sx.bulkText} > {normalViewSelectedSubmissions.size} selected
                                 </span>
                                 <Button
                                   size="sm"
@@ -23801,12 +22878,7 @@ export default function ContestDetailClient({
                                     setNormalViewSelectedSubmissions(new Set())
                                   }
                                   disabled={normalViewBulkStatusActionsBusy}
-                                  className={cn(
-                                    "h-8 text-sm",
-                                    isDark ? "text-white" : "text-gray-600",
-                                  )}
-                                >
-                                  Clear
+                                  className={cn( "h-8 text-[13px] font-medium", isDark ? "text-slate-300" : "text-[#737373]", )} > Clear
                                 </Button>
                               </div>
                               {showNormalViewBulkModeration && (
@@ -23823,12 +22895,7 @@ export default function ContestDetailClient({
                                       "verify",
                                     )}
                                     disabled={normalViewBulkStatusActionsBusy}
-                                    className={cn(
-                                      "h-8 shrink-0 whitespace-nowrap rounded-md",
-                                      isDark
-                                        ? "border bg-green-900/30 text-green-400 border-green-500"
-                                        : "bg-green-600 text-white hover:bg-green-700",
-                                    )}
+                                    className={cn("h-8 shrink-0 whitespace-nowrap", sx.smPrimaryBtn)}
                                   >
                                     <CheckCircle className="h-4 w-4 mr-1" />
                                     Mark as Verified
@@ -23845,12 +22912,7 @@ export default function ContestDetailClient({
                                       "reject",
                                     )}
                                     disabled={normalViewBulkStatusActionsBusy}
-                                    className={cn(
-                                      "h-8 shrink-0 whitespace-nowrap rounded-md",
-                                      isDark
-                                        ? "border bg-red-900/30 text-red-400 border-red-500"
-                                        : "bg-red-600 text-white hover:bg-red-700",
-                                    )}
+                                    className={cn("h-8 shrink-0 whitespace-nowrap", sx.dangerOutlineBtn)}
                                   >
                                     <XCircle className="h-4 w-4 mr-1" />
                                     Mark as Rejected
@@ -23867,12 +22929,7 @@ export default function ContestDetailClient({
                                       "pending",
                                     )}
                                     disabled={normalViewBulkStatusActionsBusy}
-                                    className={cn(
-                                      "h-8 shrink-0 whitespace-nowrap rounded-md",
-                                      isDark
-                                        ? "border bg-yellow-900/30 text-yellow-400 border-yellow-500"
-                                        : "bg-yellow-600 text-white hover:bg-yellow-700",
-                                    )}
+                                    className={cn("h-8 shrink-0 whitespace-nowrap", sx.smOutlineBtn)}
                                   >
                                     <Clock className="h-4 w-4 mr-1" />
                                     Mark as Pending
@@ -23889,7 +22946,7 @@ export default function ContestDetailClient({
                                       Array.from(normalViewSelectedSubmissions),
                                     )
                                   }
-                                  className="h-8 shrink-0 gap-1 whitespace-nowrap rounded-md"
+                                  className={cn("h-8 shrink-0 gap-1 whitespace-nowrap", sx.smOutlineBtn)}
                                 >
                                   <PlaySquare className="h-4 w-4" />
                                   Review selected (
@@ -23906,12 +22963,7 @@ export default function ContestDetailClient({
                                   }
                                   loading={normalViewBulkDownloading}
                                   loadingText="Downloading..."
-                                  className={cn(
-                                    "h-8 shrink-0 whitespace-nowrap rounded-md",
-                                    isDark
-                                      ? "border bg-purple-900/30 text-purple-400 border-purple-500 hover:bg-purple-900/50"
-                                      : "bg-purple-600 text-white hover:bg-purple-700",
-                                  )}
+                                  className={cn("h-8 shrink-0 whitespace-nowrap", sx.smOutlineBtn)}
                                 >
                                   <Download className="h-4 w-4 mr-1" />
                                   Download Videos (ZIP)
@@ -23924,19 +22976,10 @@ export default function ContestDetailClient({
                         <>
                           <Table
                             className="min-w-max"
-                            wrapperClassName={
-                              submissionsVirtualTable.scrollClassName
-                            }
+                            wrapperClassName={cn( submissionsVirtualTable.scrollClassName, sx.tableScroll, )}
                           >
                             <TableHeader>
-                              <TableRow
-                                className={cn(
-                                  "border-b",
-                                  isDark
-                                    ? "bg-[#391A6A] border-gray-600"
-                                    : "bg-slate-100 hover:bg-slate-100 border-slate-200",
-                                )}
-                              >
+                              <TableRow className={sx.headRow}>
                                 {showNormalViewSelectionUi && (
                                   <TableHead className="w-12">
                                     <Checkbox
@@ -24579,19 +23622,7 @@ export default function ContestDetailClient({
                                         submissionsVirtualTable.measureElement
                                       }
                                       data-index={virtualIndex}
-                                      className={cn(
-                                        CONTEST_VIRTUAL_ROW_CLASS,
-                                        "transition-colors duration-200",
-                                        isDeleted && "opacity-60",
-                                        isDark
-                                          ? ""
-                                          : "bg-white hover:bg-slate-100",
-                                        rank <= 3 &&
-                                          !isDeleted &&
-                                          (isDark
-                                            ? "bg-gradient-to-r from-violet-900/20 to-transparent border-l-4 border-l-violet-400"
-                                            : "bg-gradient-to-r from-yellow-50 to-transparent border-l-4 border-l-yellow-400"),
-                                      )}
+                                      className={cn( CONTEST_VIRTUAL_ROW_CLASS, sx.bodyRow, isDeleted && "opacity-60", )}
                                     >
                                       {showNormalViewSelectionUi && (
                                         <TableCell>
@@ -24659,8 +23690,7 @@ export default function ContestDetailClient({
                                                 onClick={() =>
                                                   openReviewMode(submission.id)
                                                 }
-                                                className="absolute right-2 top-2 z-50 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[11px] font-semibold text-white backdrop-blur-sm transition-colors hover:bg-[#7F39EC]"
-                                                title="Open in Review Mode"
+                                                className="absolute right-2 top-2 z-50 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[11px] font-semibold text-white backdrop-blur-sm transition-colors hover:bg-black" title="Open in Review Mode"
                                               >
                                                 <PlaySquare className="h-3.5 w-3.5" />
                                                 Review
@@ -24671,7 +23701,7 @@ export default function ContestDetailClient({
                                       )}
                                       <TableCell>
                                         <div className="flex items-center gap-3">
-                                          <Avatar className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
+                                          <Avatar className="bg-[#f5f5f5] text-[#404040] font-semibold text-xs sm:text-base">
                                             <AvatarImage
                                               src={
                                                 submission.creator
@@ -24684,7 +23714,7 @@ export default function ContestDetailClient({
                                                 "Creator"
                                               }
                                             />
-                                            <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
+                                            <AvatarFallback className="bg-[#f5f5f5] text-[#404040] font-semibold text-xs sm:text-base">
                                               {(
                                                 submission.creator_display_name ||
                                                 submission.creator_username
@@ -24706,15 +23736,7 @@ export default function ContestDetailClient({
                                                 "Unknown Creator"}
                                             </p>
                                             <p
-                                              className={cn(
-                                                "text-xs font-mono",
-                                                isDark
-                                                  ? "text-white"
-                                                  : "text-slate-600",
-                                              )}
-                                            >
-                                              {submission.creator_username ||
-                                                "unknown"}
+                                              className={cn( "text-xs", isDark ? "text-slate-400" : "text-[#737373]", )} > {submission.creator_username || "unknown"}
                                             </p>
                                             {submission.content_link && (
                                               <div className="flex items-center gap-2 mt-1">
@@ -24726,9 +23748,7 @@ export default function ContestDetailClient({
                                                   rel="noopener noreferrer"
                                                   className={cn(
                                                     "text-xs hover:underline flex items-center gap-1 transition-colors whitespace-nowrap",
-                                                    isDark
-                                                      ? "text-purple-400"
-                                                      : "text-blue-600 hover:text-blue-800",
+                                                    sx.rowLink,
                                                   )}
                                                 >
                                                   <PlayCircle className="h-3 w-3" />
@@ -24753,9 +23773,7 @@ export default function ContestDetailClient({
                                                     }
                                                     className={cn(
                                                       "text-xs hover:underline flex items-center gap-1 transition-colors whitespace-nowrap",
-                                                      isDark
-                                                        ? "text-purple-400 hover:text-purple-300"
-                                                        : "text-blue-600 hover:text-blue-800",
+                                                      sx.rowLink,
                                                       downloadingSubmissionId ===
                                                         submission.id &&
                                                         "opacity-50 cursor-not-allowed",
@@ -24807,8 +23825,7 @@ export default function ContestDetailClient({
                                                       "quote" ||
                                                     submission.other_stats
                                                       ?.tweet_type === "retweet"
-                                                    ? "bg-purple-100 text-purple-700 border-purple-300"
-                                                    : "bg-blue-100 text-blue-700 border-blue-300",
+                                                    ? "bg-[#f5f5f5] text-[#404040] border-transparent" : "bg-[#f5f5f5] text-[#404040] border-transparent",
                                                 )}
                                               >
                                                 {submission.other_stats
@@ -24870,13 +23887,7 @@ export default function ContestDetailClient({
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className={cn(
-                                                  "text-xs flex items-center gap-1 hover:underline",
-                                                  isDark
-                                                    ? "text-purple-400"
-                                                    : "text-purple-600",
-                                                )}
-                                              >
-                                                Click to view tweet
+                                                  "text-xs flex items-center gap-1 hover:underline", sx.rowLink, )} > Click to view tweet
                                                 <ExternalLink className="h-3 w-3" />
                                               </a>
                                             )}
@@ -25020,7 +24031,7 @@ export default function ContestDetailClient({
                                           <TableCell className="text-center">
                                             <div className="flex flex-col items-center">
                                               <div className="flex items-center gap-1">
-                                                <ThumbsUp className="h-3 w-3 text-purple-400" />
+                                                <ThumbsUp className="h-3 w-3 text-[#737373]" />
                                                 <span
                                                   className={cn(
                                                     "font-bold text-sm",
@@ -25051,7 +24062,7 @@ export default function ContestDetailClient({
                                           <TableCell className="text-center">
                                             <div className="flex flex-col items-center">
                                               <div className="flex items-center gap-1">
-                                                <MessageCircle className="h-3 w-3 text-purple-400" />
+                                                <MessageCircle className="h-3 w-3 text-[#737373]" />
                                                 <span
                                                   className={cn(
                                                     "font-bold text-sm",
@@ -25138,7 +24149,7 @@ export default function ContestDetailClient({
                                           <TableCell className="text-center">
                                             <div className="flex flex-col items-center">
                                               <div className="flex items-center gap-1">
-                                                <Eye className="h-3 w-3 text-purple-400" />
+                                                <Eye className="h-3 w-3 text-[#737373]" />
                                                 <span
                                                   className={cn(
                                                     "font-bold text-sm",
@@ -25252,7 +24263,7 @@ export default function ContestDetailClient({
                                             <TableCell className="text-center">
                                               <div className="flex flex-col items-center">
                                                 <div className="flex items-center gap-1">
-                                                  <ThumbsUp className="h-3 w-3 text-purple-400" />
+                                                  <ThumbsUp className="h-3 w-3 text-[#737373]" />
                                                   <span
                                                     className={cn(
                                                       "font-bold text-sm",
@@ -25289,7 +24300,7 @@ export default function ContestDetailClient({
                                             <TableCell className="text-center">
                                               <div className="flex flex-col items-center">
                                                 <div className="flex items-center gap-1">
-                                                  <MessageCircle className="h-3 w-3 text-purple-400" />
+                                                  <MessageCircle className="h-3 w-3 text-[#737373]" />
                                                   <span
                                                     className={cn(
                                                       "font-bold text-sm",
@@ -25353,7 +24364,7 @@ export default function ContestDetailClient({
                                       {showSubmissionsSharesColumn && (
                                         <TableCell className="text-center font-mono text-sm">
                                           <div className="flex items-center justify-center gap-1">
-                                            <Share2 className="h-3 w-3 text-purple-500" />
+                                            <Share2 className="h-3 w-3 text-[#737373]" />
                                             {formatMetricValue(metrics.shares)}
                                           </div>
                                         </TableCell>
@@ -25941,7 +24952,7 @@ export default function ContestDetailClient({
                                                         "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
                                                         isDark
                                                           ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
-                                                          : "bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700",
+                                                          : "bg-[#f5f5f5] hover:bg-[#e5e5e5] text-[#404040] hover:text-[#0a0a0a]",
                                                       )}
                                                       title="View full analytics breakdown"
                                                     >
@@ -26733,7 +25744,7 @@ export default function ContestDetailClient({
                                                 </span>
                                               ) : (
                                                 <div className="flex flex-col items-center gap-1">
-                                                  <span className="inline-flex items-center rounded-full bg-violet-100 text-violet-700 px-2 py-0.5 text-[10px] font-semibold">
+                                                  <span className="inline-flex items-center rounded-full bg-[#f5f5f5] text-[#404040] px-2 py-0.5 text-[10px] font-semibold">
                                                     {milestonePrimaryLabel}
                                                   </span>
                                                   <span
@@ -26927,12 +25938,7 @@ export default function ContestDetailClient({
                                       ) : null}
                                       {showNormalViewQualityScoreColumn && (
                                         <TableCell className="text-center">
-                                          <SubmissionQualityScoreCell
-                                            qualityScore={
-                                              submission.quality_score
-                                            }
-                                            isDark={isDark}
-                                          />
+                                          <SubmissionQualityScoreCell qualityScore={ submission.quality_score } isDark={isDark} className={cn( "border-0 bg-transparent px-0 text-[13px] font-medium", isDark ? "text-slate-100" : "text-[#0a0a0a]", )} />
                                         </TableCell>
                                       )}
                                       {(submissionsTablePlatform.includes(
@@ -26945,8 +25951,7 @@ export default function ContestDetailClient({
                                             <Badge
                                               variant="outline"
                                               className={cn(
-                                                "text-xs inline-flex items-center gap-1 px-3 py-1 font-medium",
-                                                submissionStatus.className,
+                                                "text-xs inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-medium", submissionStatus.className,
                                               )}
                                             >
                                               {submissionStatus.icon}{" "}
@@ -27049,16 +26054,7 @@ export default function ContestDetailClient({
                                       <TableCell className="text-center">
                                         <DropdownMenu>
                                           <DropdownMenuTrigger asChild>
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              disabled={isLoading}
-                                            >
-                                              {isLoading ? (
-                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                              ) : (
-                                                <MoreVertical className="h-4 w-4" />
-                                              )}
+                                            <Button variant="ghost" size="sm" disabled={isLoading} className={cn( "h-8 w-8 rounded-[10px] p-0", isDark ? "text-slate-300 hover:bg-white/10" : "text-[#737373] hover:bg-[#f5f5f5]", )} > {isLoading ? ( <Loader2 className="h-4 w-4 animate-spin" /> ) : ( <MoreVertical className="h-4 w-4" /> )}
                                               <span className="sr-only">
                                                 Actions
                                               </span>
@@ -27078,7 +26074,7 @@ export default function ContestDetailClient({
                                                   submission,
                                                 ) && (
                                                   <>
-                                                    <DropdownMenuLabel className="text-purple-500">
+                                                    <DropdownMenuLabel className="text-[#737373]">
                                                       Moderation
                                                     </DropdownMenuLabel>
                                                     <DropdownMenuSeparator />
@@ -27118,7 +26114,7 @@ export default function ContestDetailClient({
                                                     <DropdownMenuSeparator />
                                                   </>
                                                 )}
-                                                <DropdownMenuLabel className="text-purple-500">
+                                                <DropdownMenuLabel className="text-[#737373]">
                                                   Points
                                                 </DropdownMenuLabel>
                                                 <DropdownMenuItem
@@ -27145,7 +26141,7 @@ export default function ContestDetailClient({
                                                   submission,
                                                 ) && (
                                                   <>
-                                                    <DropdownMenuLabel className="text-purple-500">
+                                                    <DropdownMenuLabel className="text-[#737373]">
                                                       Change Status
                                                     </DropdownMenuLabel>
                                                     <DropdownMenuSeparator />
@@ -27350,7 +26346,7 @@ export default function ContestDetailClient({
                                               ) && (
                                                 <>
                                                   <DropdownMenuSeparator />
-                                                  <DropdownMenuLabel className="text-purple-500">
+                                                  <DropdownMenuLabel className="text-[#737373]">
                                                     Analytics
                                                   </DropdownMenuLabel>
                                                   <DropdownMenuItem
@@ -27529,7 +26525,7 @@ export default function ContestDetailClient({
                                                     ] === "all" ? (
                                                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                                     ) : (
-                                                      <RefreshCw className="h-4 w-4 mr-2 text-purple-500" />
+                                                      <RefreshCw className="h-4 w-4 mr-2 text-[#737373]" />
                                                     )}
                                                     Refresh All Metrics
                                                     {(() => {
@@ -27601,9 +26597,7 @@ export default function ContestDetailClient({
                       {/* Pagination Controls for submission table views */}
                       {isSubmissionTableView &&
                         sortedSubmissions.length > 0 && (
-                          <div className="mt-6 px-4">
-                            <PaginationControls
-                              page={safePage}
+                          <div className={cn("mt-4 px-4 pb-1", sx.pagination)}> <PaginationControls page={safePage}
                               limit={itemsPerPage}
                               total={sortedSubmissions.length}
                               totalPages={totalPages}
@@ -27640,23 +26634,11 @@ export default function ContestDetailClient({
                             {showCreatorWiseSelectionUi &&
                               creatorWiseSelectedCreators.size > 0 && (
                                 <div
-                                  className={cn(
-                                    "mx-4 mb-4 rounded-xl border p-3",
-                                    isDark
-                                      ? "border-blue-500/30 bg-blue-950/20"
-                                      : "border-blue-200 bg-blue-50",
-                                  )}
+                                  className={cn("mx-4 mb-4", sx.bulkBar)}
                                 >
                                   <div className="flex flex-wrap items-center gap-2">
                                     <span
-                                      className={cn(
-                                        "text-sm font-medium",
-                                        isDark
-                                          ? "text-blue-200"
-                                          : "text-blue-900",
-                                      )}
-                                    >
-                                      {creatorWiseSelectedCreators.size} creator
+                                      className={sx.bulkText} > {creatorWiseSelectedCreators.size} creator
                                       {creatorWiseSelectedCreators.size === 1
                                         ? ""
                                         : "s"}{" "}
@@ -27696,12 +26678,7 @@ export default function ContestDetailClient({
                                           disabled={
                                             creatorWiseBulkStatusActionsBusy
                                           }
-                                          className={cn(
-                                            "h-8 shrink-0 whitespace-nowrap rounded-md",
-                                            isDark
-                                              ? "border bg-green-900/30 text-green-400 border-green-500"
-                                              : "bg-green-600 text-white hover:bg-green-700",
-                                          )}
+                                          className={cn("h-8 shrink-0 whitespace-nowrap", sx.smPrimaryBtn)}
                                         >
                                           <CheckCircle className="h-4 w-4 mr-1" />
                                           Mark as Verified
@@ -27723,12 +26700,7 @@ export default function ContestDetailClient({
                                           disabled={
                                             creatorWiseBulkStatusActionsBusy
                                           }
-                                          className={cn(
-                                            "h-8 shrink-0 whitespace-nowrap rounded-md",
-                                            isDark
-                                              ? "border bg-red-900/30 text-red-400 border-red-500"
-                                              : "bg-red-600 text-white hover:bg-red-700",
-                                          )}
+                                          className={cn("h-8 shrink-0 whitespace-nowrap", sx.dangerOutlineBtn)}
                                         >
                                           <XCircle className="h-4 w-4 mr-1" />
                                           Mark as Rejected
@@ -27750,12 +26722,7 @@ export default function ContestDetailClient({
                                           disabled={
                                             creatorWiseBulkStatusActionsBusy
                                           }
-                                          className={cn(
-                                            "h-8 shrink-0 whitespace-nowrap rounded-md",
-                                            isDark
-                                              ? "border bg-yellow-900/30 text-yellow-400 border-yellow-500"
-                                              : "bg-yellow-600 text-white hover:bg-yellow-700",
-                                          )}
+                                          className={cn("h-8 shrink-0 whitespace-nowrap", sx.smOutlineBtn)}
                                         >
                                           <Clock className="h-4 w-4 mr-1" />
                                           Mark as Pending
@@ -27774,7 +26741,7 @@ export default function ContestDetailClient({
                                           disabled={
                                             creatorWiseBulkStatusActionsBusy
                                           }
-                                          className="h-8 border border-blue-500/80 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
+                                          className={cn("h-8", sx.smOutlineBtn)}
                                         >
                                           {isCreatorWiseBulkPayBtnLoading(
                                             "standard",
@@ -27829,7 +26796,7 @@ export default function ContestDetailClient({
                                               disabled={
                                                 creatorWiseBulkStatusActionsBusy
                                               }
-                                              className="h-8 border border-purple-500/80 bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:text-purple-300"
+                                              className={cn("h-8", sx.smOutlineBtn)}
                                             >
                                               {isCreatorWiseBulkPayBtnLoading(
                                                 "both",
@@ -27853,19 +26820,10 @@ export default function ContestDetailClient({
                               )}
                             <Table
                               className="min-w-max"
-                              wrapperClassName={
-                                creatorWiseVirtualTable.scrollClassName
-                              }
+                              wrapperClassName={cn( creatorWiseVirtualTable.scrollClassName, sx.tableScroll, )}
                             >
                               <TableHeader>
-                                <TableRow
-                                  className={cn(
-                                    "border-b",
-                                    isDark
-                                      ? "bg-[#391A6A] border-gray-600"
-                                      : "bg-slate-100 hover:bg-slate-100 border-slate-200",
-                                  )}
-                                >
+                                <TableRow className={sx.headRow}>
                                   {showCreatorWiseSelectionUi && (
                                     <TableHead className="w-12 text-center">
                                       <Checkbox
@@ -28546,11 +27504,7 @@ export default function ContestDetailClient({
                                             ref={
                                               creatorWiseVirtualTable.measureElement
                                             }
-                                            data-index={virtualIndex}
-                                            className={
-                                              CONTEST_VIRTUAL_ROW_CLASS
-                                            }
-                                          >
+                                            data-index={virtualIndex} className={cn( CONTEST_VIRTUAL_ROW_CLASS, sx.bodyRow, )} >
                                             {showCreatorWiseSelectionUi && (
                                               <TableCell className="text-center">
                                                 <Checkbox
@@ -28584,7 +27538,7 @@ export default function ContestDetailClient({
                                                       undefined
                                                     }
                                                   />
-                                                  <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
+                                                  <AvatarFallback className="bg-[#f5f5f5] text-[#404040] font-semibold text-xs sm:text-base">
                                                     {(creatorFullName ||
                                                       creatorUsername)?.[0]?.toUpperCase() ||
                                                       "U"}
@@ -28975,7 +27929,7 @@ export default function ContestDetailClient({
                                                       )}
                                                       {group.statusCounts.paid >
                                                         0 && (
-                                                        <Badge className="bg-blue-100 text-blue-700 border border-blue-200 text-xs whitespace-nowrap">
+                                                        <Badge className="bg-[#f5f5f5] text-[#404040] border border-[#e5e5e5] text-xs whitespace-nowrap">
                                                           Paid:{" "}
                                                           {
                                                             group.statusCounts
@@ -29276,7 +28230,7 @@ export default function ContestDetailClient({
                                                 {showSubmissionsSharesColumn && (
                                                   <TableCell className="text-center font-mono text-sm">
                                                     <div className="flex items-center justify-center gap-1">
-                                                      <Share2 className="h-3 w-3 text-purple-500" />
+                                                      <Share2 className="h-3 w-3 text-[#737373]" />
                                                       {formatMetricValue(
                                                         group.metrics.shares ||
                                                           0,
@@ -29699,7 +28653,7 @@ export default function ContestDetailClient({
                                                                           <Badge
                                                                             className={cn(
                                                                               "text-[11px] font-semibold px-2 py-0.5 border",
-                                                                              "bg-violet-100 text-violet-900 border-violet-200 dark:bg-violet-950/40 dark:text-violet-200 dark:border-violet-800",
+                                                                              "bg-[#f5f5f5] text-[#404040] border-[#e5e5e5] dark:bg-white/10 dark:text-slate-200 dark:border-white/10",
                                                                             )}
                                                                           >
                                                                             Milestone{" "}
@@ -29726,7 +28680,7 @@ export default function ContestDetailClient({
                                                                     type="button"
                                                                     variant="ghost"
                                                                     size="sm"
-                                                                    className="h-7 px-2 text-[11px] font-medium underline underline-offset-2 text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300"
+                                                                    className="h-7 px-2 text-[11px] font-medium underline underline-offset-2 text-[#404040] hover:text-[#0a0a0a] dark:text-slate-300 dark:hover:text-white"
                                                                     aria-expanded={
                                                                       milestonesExpanded
                                                                     }
@@ -29898,7 +28852,7 @@ export default function ContestDetailClient({
                                                                             <Badge
                                                                               className={cn(
                                                                                 "text-[11px] font-semibold px-2 py-0.5 border",
-                                                                                "bg-violet-100 text-violet-900 border-violet-200 dark:bg-violet-950/40 dark:text-violet-200 dark:border-violet-800",
+                                                                                "bg-[#f5f5f5] text-[#404040] border-[#e5e5e5] dark:bg-white/10 dark:text-slate-200 dark:border-white/10",
                                                                               )}
                                                                             >
                                                                               Milestone{" "}
@@ -29925,7 +28879,7 @@ export default function ContestDetailClient({
                                                                       type="button"
                                                                       variant="ghost"
                                                                       size="sm"
-                                                                      className="h-7 px-2 text-[11px] font-medium underline underline-offset-2 text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300"
+                                                                      className="h-7 px-2 text-[11px] font-medium underline underline-offset-2 text-[#404040] hover:text-[#0a0a0a] dark:text-slate-300 dark:hover:text-white"
                                                                       aria-expanded={
                                                                         milestonesExpanded
                                                                       }
@@ -30372,7 +29326,7 @@ export default function ContestDetailClient({
                                                           group.creator.id,
                                                         )
                                                       }
-                                                      className="gap-1.5 bg-[#7F39EC] text-white hover:bg-[#6d2fd4]"
+                                                      className={cn("gap-1.5", sx.smPrimaryBtn)}
                                                       title="Watch this creator's clips one at a time"
                                                     >
                                                       <PlaySquare className="h-4 w-4" />
@@ -30389,9 +29343,7 @@ export default function ContestDetailClient({
                                                         variant="outline"
                                                         className={cn(
                                                           "border min-w-[8.5rem] inline-flex items-center justify-center gap-1.5",
-                                                          isDark
-                                                            ? "bg-[#170337] border-purple-500/50 text-white"
-                                                            : "border-purple-300 bg-purple-50 text-purple-900",
+                                                          isDark ? "bg-white/5 border-white/10 text-slate-100" : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
                                                         )}
                                                         disabled={
                                                           igAnalyticsLoadingCreatorId ===
@@ -30444,7 +29396,7 @@ export default function ContestDetailClient({
                                                           </Button>
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
-                                                          <DropdownMenuLabel className="text-purple-500">
+                                                          <DropdownMenuLabel className="text-[#737373]">
                                                             Analytics
                                                           </DropdownMenuLabel>
                                                           <DropdownMenuSeparator />
@@ -30556,7 +29508,7 @@ export default function ContestDetailClient({
                                                               )
                                                             }
                                                           >
-                                                            <RefreshCw className="h-4 w-4 mr-2 text-purple-500" />
+                                                            <RefreshCw className="h-4 w-4 mr-2 text-[#737373]" />
                                                             Refresh All Metrics
                                                           </DropdownMenuItem>
                                                           {renderMilestoneVerifiedBonusMenuItems(
@@ -31013,9 +29965,7 @@ export default function ContestDetailClient({
                       {viewMode === "creator-wise" &&
                         filteredCreatorGroups &&
                         filteredCreatorGroups.length > 0 && (
-                          <div className="mt-6 px-4">
-                            <PaginationControls
-                              page={safeCreatorWisePage}
+                          <div className={cn("mt-4 px-4 pb-1", sx.pagination)}> <PaginationControls page={safeCreatorWisePage}
                               limit={creatorWiseItemsPerPage}
                               total={filteredCreatorGroups.length}
                               totalPages={creatorWiseTotalPages}
@@ -31036,18 +29986,13 @@ export default function ContestDetailClient({
               </div>
             ) : (
               <Card
-                className={cn(
-                  "shadow-sm border-0",
-                  isDark ? "bg-[#170337]" : "bg-purple-50",
-                )}
+                className={sx.card}
               >
                 <CardContent className="py-16 flex flex-col items-center justify-center text-center">
                   <div
                     className={cn(
                       "p-4 rounded-full mb-6",
-                      isDark
-                        ? "bg-[#FFFFFF36] text-white"
-                        : "bg-purple-200 text-purple-500",
+                      isDark ? "bg-white/10 text-white" : "bg-[#f5f5f5] text-[#737373]",
                     )}
                   >
                     <FileText className="h-12 w-12 " />
@@ -31102,14 +30047,18 @@ export default function ContestDetailClient({
 
           <TabPanel value="analytics" activeTab={activeTab}>
             <div
-              className={cn(
-                "rounded-xl shadow-md p-2",
-                isDark ? "bg-[#161616]" : "bg-white",
-              )}
+              data-brand-analytics
+              data-theme={isDark ? "dark" : "light"}
+              className="space-y-4"
             >
-              <CardHeader>
+              <CardHeader className={cn(brandCardClass, "p-5 space-y-0")}>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <CardTitle className="shrink-0">
+                  <CardTitle
+                    className={cn(
+                      "shrink-0 text-lg font-semibold leading-tight tracking-normal",
+                      brandPrimaryTextClass,
+                    )}
+                  >
                     {isPostCampaignLeaderboard
                       ? "Campaign Analytics (PC Submissions)"
                       : "Campaign Analytics"}
@@ -31124,16 +30073,21 @@ export default function ContestDetailClient({
                             size="sm"
                             disabled={isHydratingSubmissions}
                             className={cn(
-                              "h-9 w-full sm:w-[200px] rounded-lg justify-start text-left font-semibold text-sm shadow-none disabled:opacity-100",
+                              "h-9 w-full sm:w-[200px] rounded-[10px] justify-start text-left font-medium text-sm shadow-none disabled:opacity-100",
                               isDark
-                                ? "border-slate-600 bg-[#1e293b] text-slate-100 hover:bg-slate-800"
-                                : "border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
+                                ? "border-white/10 bg-[#111113] text-slate-100 hover:bg-white/5"
+                                : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
                             )}
                           >
                             {isHydratingSubmissions ? (
                               <Loader2 className="h-4 w-4 mr-2 shrink-0 animate-spin text-[#7F39EC]" />
                             ) : (
-                              <Star className="h-4 w-4 mr-2 shrink-0 text-[#7F39EC]" />
+                              <Star
+                                className={cn(
+                                  "h-4 w-4 mr-2 shrink-0",
+                                  brandMutedClass,
+                                )}
+                              />
                             )}
                             <span className="truncate font-semibold text-sm">
                               {analyticsQualityScoreFilterButtonLabel}
@@ -31143,8 +30097,10 @@ export default function ContestDetailClient({
                         </PopoverTrigger>
                         <PopoverContent
                           className={cn(
-                            "w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800",
-                            isDark ? "bg-[#0f172a]" : "bg-white",
+                            "w-[240px] p-2 rounded-xl",
+                            isDark
+                              ? "bg-[#111113] border-white/10"
+                              : "bg-white border-[#e5e5e5]",
                           )}
                           align="end"
                         >
@@ -31266,10 +30222,7 @@ export default function ContestDetailClient({
                         analyticsQualityFilteredSubmissions.length === 0
                       }
                       className={cn(
-                        "gap-2 shrink-0 disabled:opacity-100",
-                        isDark
-                          ? "border-slate-600 text-slate-300 hover:bg-slate-800"
-                          : "border-slate-300 text-slate-700 hover:bg-slate-50",
+                        "gap-2 shrink-0 rounded-[10px] border-0 bg-gradient-to-r from-[#7F39EC] to-[#6366F1] text-white shadow-none hover:from-[#7F39EC] hover:to-[#6366F1] hover:text-white hover:opacity-90 disabled:opacity-60",
                       )}
                       onClick={() => {
                         if (isHydratingSubmissions) return;
@@ -31277,7 +30230,7 @@ export default function ContestDetailClient({
                       }}
                     >
                       {isHydratingSubmissions ? (
-                        <Loader2 className="h-4 w-4 animate-spin shrink-0 text-[#7F39EC]" />
+                        <Loader2 className="h-4 w-4 animate-spin shrink-0 text-white" />
                       ) : (
                         <Download className="h-4 w-4 shrink-0" />
                       )}
@@ -31307,7 +30260,10 @@ export default function ContestDetailClient({
                     }}
                     className="w-full"
                   >
-                    <TabsList className="flex flex-wrap gap-1 w-full h-auto p-1">
+                    <TabsList
+                      data-brand-pill-tabs
+                      className="flex flex-wrap gap-2 w-full h-auto p-0 bg-transparent"
+                    >
                       <TabsTrigger
                         value="all"
                         disabled={isHydratingSubmissions}
@@ -31477,7 +30433,7 @@ export default function ContestDetailClient({
                   </div>
                 )}
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-0">
                 {isPostCampaignLeaderboard &&
                   postCampaignMetricsLoaded &&
                   !hasPostCampaignData && (
@@ -31652,22 +30608,24 @@ export default function ContestDetailClient({
                             <>
                               {/* Target Tweet Section */}
                               {targetTweetUrl && (
-                                <div className="mb-6">
+                                <div
+                                  data-brand-section
+                                  className={cn(brandCardClass, "p-5")}
+                                >
                                   <h3
                                     className={cn(
-                                      "text-lg font-semibold mb-4 flex items-center gap-2",
-                                      isDark ? "text-white" : "text-slate-900",
+                                      "text-[15px] font-semibold mb-4 flex items-center gap-2",
+                                      brandPrimaryTextClass,
                                     )}
                                   >
-                                    <Share2 className="h-5 w-5 text-sky-500" />
+                                    <Share2 className="h-4 w-4 text-sky-500" />
                                     Target Tweet
                                   </h3>
                                   <div
                                     className={cn(
-                                      "rounded-xl p-6 border",
-                                      isDark
-                                        ? "bg-slate-900/40 border-slate-700"
-                                        : "bg-slate-50 border-slate-200",
+                                      "p-4",
+                                      brandSubtleCardClass,
+                                      "rounded-xl",
                                     )}
                                   >
                                     <a
@@ -31700,13 +30658,14 @@ export default function ContestDetailClient({
                                     targetQuoteReposts > 0);
 
                                 return hasTargetMetrics ? (
-                                  <div className="mb-6">
+                                  <div
+                                    data-brand-section
+                                    className={cn(brandCardClass, "p-5")}
+                                  >
                                     <h3
                                       className={cn(
-                                        "text-lg font-semibold mb-4",
-                                        isDark
-                                          ? "text-white"
-                                          : "text-slate-900",
+                                        "text-[15px] font-semibold mb-4",
+                                        brandPrimaryTextClass,
                                       )}
                                     >
                                       Target Metrics
@@ -31919,13 +30878,14 @@ export default function ContestDetailClient({
                                   twitterMetrics.targets_reached !== null;
 
                                 return hasCurrentMetrics ? (
-                                  <div className="mb-6">
+                                  <div
+                                    data-brand-section
+                                    className={cn(brandCardClass, "p-5")}
+                                  >
                                     <h3
                                       className={cn(
-                                        "text-lg font-semibold mb-4",
-                                        isDark
-                                          ? "text-white"
-                                          : "text-slate-900",
+                                        "text-[15px] font-semibold mb-4",
+                                        brandPrimaryTextClass,
                                       )}
                                     >
                                       Current Progress
@@ -32567,16 +31527,19 @@ export default function ContestDetailClient({
                         })()}
 
                         {/* Campaign Metrics Section */}
-                        <div>
+                        <div
+                          data-brand-section
+                          className={cn(brandCardClass, "p-5")}
+                        >
                           <h3
                             className={cn(
-                              "text-lg font-semibold mb-4",
-                              isDark ? "text-white" : "text-slate-900",
+                              "text-[15px] font-semibold mb-4",
+                              brandPrimaryTextClass,
                             )}
                           >
                             Campaign Metrics
                           </h3>
-                          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 mb-6">
+                          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                             {(() => {
                               const renderMetricCard = (
                                 icon: React.ReactNode,
@@ -32588,19 +31551,20 @@ export default function ContestDetailClient({
                               ) => (
                                 <div
                                   className={cn(
-                                    "group rounded-xl shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden relative min-w-0",
-                                    isDark
-                                      ? "bg-[#161616] border border-white/20 backdrop-blur-2xl"
-                                      : "bg-gradient-to-br from-white to-blue-50 border border-blue-100",
+                                    "group transition-all duration-300 overflow-hidden relative min-w-0",
+                                    brandSubtleCardClass,
+                                    "rounded-xl",
                                   )}
                                   title={hint}
                                 >
                                   <div className="p-3 sm:p-4 relative z-10">
-                                    <div className="flex items-start gap-3 mb-2">
+                                    <div className="flex items-start gap-3">
                                       <div
                                         className={cn(
-                                          "w-10 h-10 shrink-0 flex items-center justify-center rounded-lg shadow-md backdrop-blur-sm",
-                                          iconBgClass,
+                                          "h-8 w-8 shrink-0 flex items-center justify-center rounded-[10px] border [&>svg]:h-4 [&>svg]:w-4 [&>svg]:text-current",
+                                          isDark
+                                            ? "bg-white/10 border-white/10 text-white"
+                                            : "bg-white border-[#e5e5e5] text-[#0a0a0a]",
                                         )}
                                       >
                                         {icon}
@@ -32609,9 +31573,7 @@ export default function ContestDetailClient({
                                         <p
                                           className={cn(
                                             "text-[11px] sm:text-xs font-medium uppercase tracking-wide leading-tight line-clamp-2",
-                                            isDark
-                                              ? "text-white/90 drop-shadow-sm"
-                                              : "text-gray-500",
+                                            brandMutedClass,
                                           )}
                                         >
                                           {label}
@@ -32619,9 +31581,7 @@ export default function ContestDetailClient({
                                         <p
                                           className={cn(
                                             "text-lg sm:text-xl font-bold mt-0.5 tabular-nums",
-                                            isDark
-                                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
-                                              : "text-gray-900",
+                                            brandPrimaryTextClass,
                                           )}
                                         >
                                           {typeof value === "number"
@@ -32630,12 +31590,6 @@ export default function ContestDetailClient({
                                         </p>
                                       </div>
                                     </div>
-                                    <div
-                                      className={cn(
-                                        "h-1 w-full rounded-full",
-                                        barGradientClass,
-                                      )}
-                                    ></div>
                                   </div>
                                 </div>
                               );
@@ -32766,8 +31720,12 @@ export default function ContestDetailClient({
                           isDark ? "text-white" : "text-black",
                         )}
                       >
-                        <p className="text-lg font-medium">Total Submissions</p>
-                        <p className="text-xl font-bold">
+                        <p
+                          className={cn("text-[13px] font-medium", brandMutedClass)}
+                        >
+                          Total Submissions
+                        </p>
+                        <p className="text-3xl font-bold leading-none">
                           {analyticsPlatformScopedSubmissions.length || 0}
                         </p>
                         {/* <p className="text-md">Total entries</p> */}
@@ -32882,11 +31840,14 @@ export default function ContestDetailClient({
                 {currentContest?.platform?.toLowerCase() !== "twitter" &&
                   currentContest?.platform?.toLowerCase() !== "x" &&
                   analyticsCampaignMetricCards.length > 0 && (
-                    <div className="mb-6">
+                    <div
+                      data-brand-section
+                      className={cn(brandCardClass, "p-5 mb-6")}
+                    >
                       <h3
                         className={cn(
-                          "font-medium mb-4",
-                          isDark ? "text-white" : "text-gray-900",
+                          "text-[15px] font-semibold mb-4",
+                          brandPrimaryTextClass,
                         )}
                       >
                         Campaign Metrics
@@ -32914,18 +31875,16 @@ export default function ContestDetailClient({
                             <div
                               key={metric.label}
                               className={cn(
-                                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 sm:p-3 flex flex-col items-center text-center flex-1 min-w-[4.75rem] sm:min-w-[5.5rem]",
-                                isDark
-                                  ? "bg-[#170337] text-white border border-[#D1B7F9]"
-                                  : "bg-white text-black",
+                                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 flex flex-col items-start text-left flex-1 min-w-[6rem] sm:min-w-[6.5rem]",
+                                isDark ? "text-white" : "text-black",
                               )}
                             >
                               <div
                                 className={cn(
-                                  "w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded-full mb-1 sm:mb-2",
+                                  "w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded-[10px] mb-1 sm:mb-2 border",
                                   isDark
-                                    ? "bg-[#FFFFFF36] text-white"
-                                    : "bg-[#D8C3FF] text-[#4A00BE]",
+                                    ? "bg-white/10 border-white/10 text-white"
+                                    : "bg-white border-[#e5e5e5] text-[#0a0a0a]",
                                 )}
                               >
                                 <Icon className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -32933,7 +31892,7 @@ export default function ContestDetailClient({
                               <span
                                 className={cn(
                                   "text-[10px] sm:text-[12px] font-medium mb-1",
-                                  isDark ? "text-gray-300" : "text-gray-700",
+                                  brandMutedClass,
                                 )}
                               >
                                 {metric.label}
@@ -32957,9 +31916,19 @@ export default function ContestDetailClient({
 
                 <div className="space-y-6">
                   {/* Views Statistics */}
-                  <div>
-                    <h3 className="font-medium mb-4">Views Statistics</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <div
+                    data-brand-section
+                    className={cn(brandCardClass, "p-5")}
+                  >
+                    <h3
+                      className={cn(
+                        "text-[15px] font-semibold mb-4",
+                        brandPrimaryTextClass,
+                      )}
+                    >
+                      Views Statistics
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       {/* Total Views */}
                       <div
                         className={cn(
@@ -33160,9 +32129,19 @@ export default function ContestDetailClient({
                   {(currentContest?.platform?.toLowerCase() === "twitter" ||
                     currentContest?.platform?.toLowerCase() === "x") &&
                     currentContest?.contest_format === "text_image" && (
-                      <div className="mt-8">
-                        <h3 className="font-medium mb-4">Points Statistics</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                      <div
+                        data-brand-section
+                        className={cn(brandCardClass, "p-5 mt-6")}
+                      >
+                        <h3
+                          className={cn(
+                            "text-[15px] font-semibold mb-4",
+                            brandPrimaryTextClass,
+                          )}
+                        >
+                          Points Statistics
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {/* Total Points */}
                           <div
                             className={cn(
@@ -33402,27 +32381,38 @@ export default function ContestDetailClient({
                     )}
 
                   {/* ROI/Benefit Analysis - Collapsible Section */}
-                  <div className="mt-8">
-                    <details className="group">
+                  <div className="mt-6">
+                    <details
+                      data-brand-section
+                      className={cn("group overflow-hidden", brandCardClass)}
+                    >
                       <summary
                         className={cn(
-                          "flex items-center justify-between cursor-pointer p-4 rounded-lg transition-colors",
-                          isDark
-                            ? "border border-[#D1B7F9]"
-                            : "bg-gray-50 hover:bg-gray-100",
+                          "flex items-center justify-between cursor-pointer px-5 py-4 transition-colors",
+                          isDark ? "hover:bg-white/5" : "hover:bg-[#fafafa]",
                         )}
                       >
                         <h3
                           className={cn(
-                            "font-medium",
-                            isDark ? "text-white" : "text-gray-800",
+                            "text-[15px] font-semibold",
+                            brandPrimaryTextClass,
                           )}
                         >
                           ROI & Benefit Analysis
                         </h3>
-                        <ChevronDown className="h-5 w-5 text-gray-500 group-open:rotate-180 transition-transform" />
+                        <ChevronDown
+                          className={cn(
+                            "h-5 w-5 group-open:rotate-180 transition-transform",
+                            brandMutedClass,
+                          )}
+                        />
                       </summary>
-                      <div className="mt-4 space-y-6">
+                      <div
+                        className={cn(
+                          "border-t px-5 py-5 space-y-6",
+                          isDark ? "border-white/10" : "border-[#e5e5e5]",
+                        )}
+                      >
                         <div
                           className={cn(
                             "grid grid-cols-1 md:grid-cols-2 gap-4",
@@ -34040,16 +33030,16 @@ export default function ContestDetailClient({
                         {/* Summary Card */}
                         <div
                           className={cn(
-                            "rounded-xl p-6 border",
+                            "rounded-xl p-5 border",
                             isDark
-                              ? "bg-gradient-to-r from-purple-900/30 to-blue-900/30 border-white/20 backdrop-blur-2xl"
-                              : "bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200",
+                              ? "bg-white/[0.04] border-white/10"
+                              : "bg-[#fafafa] border-[#e5e5e5]",
                           )}
                         >
                           <h4
                             className={cn(
-                              "font-semibold text-lg mb-3",
-                              isDark ? "text-white" : "text-gray-800",
+                              "font-semibold text-[15px] mb-3",
+                              brandPrimaryTextClass,
                             )}
                           >
                             Performance Summary
@@ -34167,13 +33157,16 @@ export default function ContestDetailClient({
                       : "No creators to display";
 
                     return (
-                      <div>
+                      <div
+                        data-brand-section
+                        className={cn(brandCardClass, "p-5")}
+                      >
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
                           <div className="min-w-0">
                             <h3
                               className={cn(
-                                "font-medium text-sm sm:text-base",
-                                isDark ? "text-white" : "text-gray-900",
+                                "text-[15px] font-semibold",
+                                brandPrimaryTextClass,
                               )}
                             >
                               {viewsDistributionMode === "creator"
@@ -34184,7 +33177,7 @@ export default function ContestDetailClient({
                               <p
                                 className={cn(
                                   "text-xs mt-1",
-                                  isDark ? "text-white/60" : "text-gray-500",
+                                  brandMutedClass,
                                 )}
                               >
                                 Top 10 combined:{" "}
@@ -34194,10 +33187,10 @@ export default function ContestDetailClient({
                           </div>
                           <div
                             className={cn(
-                              "flex w-full sm:w-auto rounded-lg border p-1 sm:self-start",
+                              "flex w-full sm:w-auto rounded-[10px] border p-1 sm:self-start",
                               isDark
-                                ? "border-white/20 bg-white/5"
-                                : "border-gray-200 bg-gray-50",
+                                ? "border-white/10 bg-white/5"
+                                : "border-[#e5e5e5] bg-[#fafafa]",
                             )}
                           >
                             <button
@@ -34209,11 +33202,11 @@ export default function ContestDetailClient({
                                 "flex-1 sm:flex-none px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors",
                                 viewsDistributionMode === "submission"
                                   ? isDark
-                                    ? "bg-[#4A00BE] text-white"
-                                    : "bg-white text-[#4A00BE] shadow-sm"
+                                    ? "bg-white text-[#0a0a0a]"
+                                    : "bg-[#0a0a0a] text-white"
                                   : isDark
                                     ? "text-white/70 hover:text-white"
-                                    : "text-gray-600 hover:text-gray-900",
+                                    : "text-[#737373] hover:text-[#0a0a0a]",
                               )}
                             >
                               Submission wise
@@ -34227,11 +33220,11 @@ export default function ContestDetailClient({
                                 "flex-1 sm:flex-none px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors",
                                 viewsDistributionMode === "creator"
                                   ? isDark
-                                    ? "bg-[#4A00BE] text-white"
-                                    : "bg-white text-[#4A00BE] shadow-sm"
+                                    ? "bg-white text-[#0a0a0a]"
+                                    : "bg-[#0a0a0a] text-white"
                                   : isDark
                                     ? "text-white/70 hover:text-white"
-                                    : "text-gray-600 hover:text-gray-900",
+                                    : "text-[#737373] hover:text-[#0a0a0a]",
                               )}
                             >
                               Creator wise
@@ -34239,12 +33232,7 @@ export default function ContestDetailClient({
                           </div>
                         </div>
                         <div
-                          className={cn(
-                            "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4 sm:p-6",
-                            isDark
-                              ? "bg-[#161616] border border-white/20 backdrop-blur-2xl"
-                              : "bg-white",
-                          )}
+                          className="p-0"
                         >
                           {activeItems.length > 0 ? (
                             <div className="space-y-3 sm:space-y-4">
@@ -34259,10 +33247,10 @@ export default function ContestDetailClient({
                                   >
                                     <div
                                       className={cn(
-                                        "w-7 sm:w-8 shrink-0 pt-0.5 text-xs sm:text-sm font-medium",
+                                        "h-6 min-w-[1.5rem] px-1.5 shrink-0 flex items-center justify-center rounded-full text-[11px] font-semibold",
                                         isDark
-                                          ? "text-white/70"
-                                          : "text-gray-600",
+                                          ? "bg-white/10 text-white/80"
+                                          : "bg-[#f5f5f5] text-[#404040]",
                                       )}
                                     >
                                       #{item.rank}
@@ -34316,18 +33304,18 @@ export default function ContestDetailClient({
                                       </div>
                                       <div
                                         className={cn(
-                                          "w-full rounded-full h-2",
+                                          "w-full rounded-full h-1.5",
                                           isDark
-                                            ? "bg-white/20"
-                                            : "bg-gray-200",
+                                            ? "bg-white/10"
+                                            : "bg-[#f5f5f5]",
                                         )}
                                       >
                                         <div
                                           className={cn(
-                                            "h-2 rounded-full transition-all duration-300",
+                                            "h-1.5 rounded-full transition-all duration-300",
                                             isDark
-                                              ? "bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 shadow-lg shadow-purple-400/50"
-                                              : "bg-gradient-to-r from-blue-500 to-purple-600",
+                                              ? "bg-white"
+                                              : "bg-[#0a0a0a]",
                                           )}
                                           style={{ width: `${percentage}%` }}
                                         />

@@ -285,10 +285,10 @@ export function ContestsPageClient({
             onClick={handleCreateContestClick}
             disabled={loading}
             className={cn(
-              "inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl text-white shadow-sm transition-[opacity,box-shadow] hover:opacity-95",
+              "inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl shadow-sm transition-[opacity,box-shadow] hover:opacity-95",
               isDark
-                ? "bg-[#5F2BB1] ring-1 ring-white/10"
-                : "bg-[#4A00BE] ring-1 ring-black/5"
+                ? "bg-white text-[#1a1a1a] ring-1 ring-white/20 hover:bg-white/90"
+                : "bg-[#1a1a1a] text-white ring-1 ring-black/10 hover:bg-black"
             )}
           >
             {loading ? (

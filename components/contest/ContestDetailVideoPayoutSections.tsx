@@ -1,22 +1,20 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { CardContent } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import {
   ContestDetailPlatformIcons,
   ContestDetailPlatformScopeCard,
 } from "@/components/contest/ContestDetailPlatformScopeCard";
-import { getPlatformIcon } from "@/lib/platform-icons";
 import {
   isCpmContestType,
   isDualRewardsContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
 import type { VideoContestPlatform } from "@/lib/video-platform-campaigns";
-import { Eye, Gift, Info, Play, Trophy, Wallet, Zap } from "lucide-react";
+import { Eye, Gift, Info, Play, Wallet } from "lucide-react";
 
 type PayoutContestSlice = {
   contest_type?: string | null;
@@ -66,6 +64,54 @@ type ContestDetailVideoPayoutSectionsProps = {
   winnerCountsByMilestone?: Map<number, number>;
 };
 
+function PayoutStatTile({
+  label,
+  value,
+  hint,
+  isDark,
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: ReactNode;
+  isDark?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border p-4",
+        isDark ? "border-white/10 bg-white/[0.04]" : "border-[#e5e5e5] bg-[#fafafa]",
+      )}
+    >
+      <p
+        className={cn(
+          "text-[11px] font-semibold uppercase tracking-[0.66px]",
+          isDark ? "text-slate-400" : "text-[#737373]",
+        )}
+      >
+        {label}
+      </p>
+      <p
+        className={cn(
+          "mt-2 text-xl font-bold tracking-[-0.3px]",
+          isDark ? "text-white" : "text-[#0a0a0a]",
+        )}
+      >
+        {value}
+      </p>
+      {hint ? (
+        <p
+          className={cn(
+            "mt-1 text-xs",
+            isDark ? "text-slate-400" : "text-[#737373]",
+          )}
+        >
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function ContestDetailVideoPayoutSections({
   contest,
   isDark = false,
@@ -88,116 +134,116 @@ export function ContestDetailVideoPayoutSections({
       : platform
         ? [platform]
         : [];
-  const singleLabelPlatform =
-    labelPlatforms.length === 1 ? labelPlatforms[0]! : null;
 
   if (!showCpm && !showMilestone) return null;
 
   const body = (
     <div className="space-y-6">
       {showCpm && cpm && (
-        <div className="space-y-3">
-          <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-            CPM Configuration
-            {sharedPlatformIcons && sharedPlatformIcons.length >= 2 ? (
-              <ContestDetailPlatformIcons platforms={sharedPlatformIcons} />
-            ) : null}
-          </h3>
-          <div className="grid grid-col-1 md:grid-cols-2 gap-4">
+        <div
+          className={cn(
+            "overflow-hidden rounded-2xl border shadow-[0px_1px_3px_0px_rgba(10,10,10,0.04)]",
+            isDark ? "border-white/10 bg-[#111113]" : "border-[#e5e5e5] bg-white",
+          )}
+        >
+          <div
+            className={cn(
+              "flex items-center gap-3 border-b px-5 py-4",
+              isDark ? "border-white/10" : "border-[#e5e5e5]",
+            )}
+          >
             <div
               className={cn(
-                "flex justify-between items-center p-3 rounded-md border",
-                isDark ? "border-gray-600" : "border-gray-400",
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px]",
+                isDark ? "bg-white/10" : "bg-[#fafafa]",
               )}
             >
-              <span
-                className={cn(
-                  "text-md font-medium tracking-wide",
-                  isDark ? "text-white" : "text-black",
-                )}
-              >
-                CPM Rate:
-              </span>
-              <span className="font-semibold text-md text-foreground">
-                ${parseFloat(String(cpm.cpm_rate_usd ?? 0)).toFixed(2)} per 1000{" "}
-                {isTwitterCpmCampaign ? "points" : "views"}
-              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/images/contest-details/earn-dollar.svg"
+                alt=""
+                width={16}
+                height={16}
+                className="h-4 w-4"
+              />
             </div>
-            {!isDualRewardsContestType(contestType) && (
-              <div
+            <div className="min-w-0">
+              <h3
                 className={cn(
-                  "flex justify-between items-center p-3 rounded-md border",
-                  isDark ? "border-gray-600" : "border-gray-400",
+                  "flex items-center gap-2 text-[15px] font-semibold",
+                  isDark ? "text-white" : "text-[#0a0a0a]",
                 )}
               >
-                <span
-                  className={cn(
-                    "text-md font-medium tracking-wide",
-                    isDark ? "text-white" : "text-black",
-                  )}
-                >
-                  Total Budget:
-                </span>
-                <span className="font-semibold text-md text-foreground">
-                  {formatMoney(cpm.total_budget)}
-                </span>
-              </div>
-            )}
-            {cpm.min_views != null && (
-              <div
+                {isDualRewardsContestType(contestType)
+                  ? "CPM Payout Model"
+                  : "CPM Configuration"}
+                {sharedPlatformIcons && sharedPlatformIcons.length >= 2 ? (
+                  <ContestDetailPlatformIcons platforms={sharedPlatformIcons} />
+                ) : null}
+              </h3>
+              <p
                 className={cn(
-                  "flex justify-between items-center p-3 rounded-md border",
-                  isDark ? "border-gray-600" : "border-gray-400",
+                  "text-xs",
+                  isDark ? "text-slate-400" : "text-[#737373]",
                 )}
               >
-                <span
-                  className={cn(
-                    "text-md font-medium",
-                    isDark ? "text-white" : "text-black",
-                  )}
-                >
-                  Min Views:
-                </span>
-                <span className="font-semibold text-md text-foreground">
-                  {cpm.min_views.toLocaleString()}
-                </span>
-              </div>
-            )}
-            {cpm.max_views != null && (
-              <div
-                className={cn(
-                  "flex justify-between items-center p-3 rounded-md border",
-                  isDark ? "border-gray-600" : "border-gray-400",
-                )}
-              >
-                <span
-                  className={cn(
-                    "text-md font-medium",
-                    isDark ? "text-white" : "text-black",
-                  )}
-                >
-                  Max Views (Cap):
-                </span>
-                <span className="font-semibold text-md text-foreground">
-                  {cpm.max_views.toLocaleString()}
-                </span>
-              </div>
-            )}
+                Pay creators based on verified views
+              </p>
+            </div>
           </div>
-          <div>
-            <h4 className="text-md font-semibold mt-4 mb-2 text-foreground">
-              Terms & Conditions
-            </h4>
-            <div
-              className={cn(
-                "p-3 border rounded-lg text-[13px] text-black",
-                isDark
-                  ? "border-gray-600 text-white"
-                  : "border-gray-400 text-black",
+
+          <div className="space-y-4 px-5 py-5">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <PayoutStatTile
+                isDark={isDark}
+                label="Pay rate (CPM)"
+                value={`$${parseFloat(String(cpm.cpm_rate_usd ?? 0)).toFixed(2)}`}
+                hint={`per 1,000 ${isTwitterCpmCampaign ? "points" : "views"}`}
+              />
+              {!isDualRewardsContestType(contestType) && (
+                <PayoutStatTile
+                  isDark={isDark}
+                  label="Total Budget"
+                  value={formatMoney(cpm.total_budget)}
+                />
               )}
-            >
-              <div className="whitespace-pre-wrap break-words">
-                {cpm.terms_conditions || "No specific terms provided."}
+              {cpm.min_views != null && (
+                <PayoutStatTile
+                  isDark={isDark}
+                  label="Min. views to qualify"
+                  value={cpm.min_views.toLocaleString()}
+                  hint="per submission"
+                />
+              )}
+              {cpm.max_views != null && (
+                <PayoutStatTile
+                  isDark={isDark}
+                  label="Max Views (Cap)"
+                  value={cpm.max_views.toLocaleString()}
+                />
+              )}
+            </div>
+
+            <div>
+              <h4
+                className={cn(
+                  "mb-2 text-sm font-semibold",
+                  isDark ? "text-white" : "text-[#0a0a0a]",
+                )}
+              >
+                Terms & Conditions
+              </h4>
+              <div
+                className={cn(
+                  "rounded-xl border p-3 text-[13px]",
+                  isDark
+                    ? "border-white/10 bg-white/[0.04] text-white"
+                    : "border-[#e5e5e5] bg-[#fafafa] text-[#404040]",
+                )}
+              >
+                <div className="whitespace-pre-wrap break-words">
+                  {cpm.terms_conditions || "No specific terms provided."}
+                </div>
               </div>
             </div>
           </div>
@@ -205,324 +251,438 @@ export function ContestDetailVideoPayoutSections({
       )}
 
       {showMilestone && milestone && (
-        <div className="space-y-6">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                <Trophy className="h-5 w-5 text-yellow-500" />
+        <div
+          className={cn(
+            "overflow-hidden rounded-2xl border shadow-[0px_1px_3px_0px_rgba(10,10,10,0.04)]",
+            isDark ? "border-white/10 bg-[#111113]" : "border-[#e5e5e5] bg-white",
+          )}
+        >
+          <div
+            className={cn(
+              "flex items-center gap-3 border-b px-5 py-4",
+              isDark ? "border-white/10" : "border-[#e5e5e5]",
+            )}
+          >
+            <div
+              className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px]",
+                isDark ? "bg-white/10" : "bg-[#fafafa]",
+              )}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/images/contest-details/earn-trophy.svg"
+                alt=""
+                width={16}
+                height={16}
+                className="h-4 w-4"
+              />
+            </div>
+            <div className="min-w-0">
+              <h3
+                className={cn(
+                  "flex items-center gap-2 text-[15px] font-semibold",
+                  isDark ? "text-white" : "text-[#0a0a0a]",
+                )}
+              >
                 Milestone Rewards Ladder
                 {sharedPlatformIcons && sharedPlatformIcons.length >= 2 ? (
                   <ContestDetailPlatformIcons platforms={sharedPlatformIcons} />
                 ) : null}
               </h3>
+              <p
+                className={cn(
+                  "text-xs",
+                  isDark ? "text-slate-400" : "text-[#737373]",
+                )}
+              >
+                Higher view thresholds unlock higher payouts
+              </p>
             </div>
+          </div>
 
-            <div className="grid grid-cols-1 gap-4 min-w-0">
-              {(milestone.milestones || [])
+          <div className="space-y-4 px-5 py-5">
+            {(() => {
+              const sortedMilestones = (milestone.milestones || [])
                 .slice()
-                .sort((a, b) => (a.order || 0) - (b.order || 0))
-                .map((row, index) => (
-                  <div
-                    key={`${row.order ?? index}-${row.target_views ?? index}`}
-                    className={cn(
-                      "relative overflow-hidden rounded-xl border transition-all duration-300 group min-w-0",
-                      isDark
-                        ? "bg-[#170337] border-gray-600 hover:border-purple-500/50"
-                        : "bg-white border-gray-200 hover:border-purple-400 font-bold",
-                    )}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                    <CardContent className="p-4 sm:p-5 relative z-10">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
-                        <div className="flex items-start gap-3 sm:gap-5 min-w-0 flex-1">
-                          <div
-                            className={cn(
-                              "w-10 h-10 sm:w-12 sm:h-12 shrink-0 flex items-center justify-center rounded-2xl shadow-inner",
-                              isDark
-                                ? "bg-purple-900/40 text-purple-300 border border-purple-500/20"
-                                : "bg-purple-50 text-purple-600 border border-purple-100",
-                            )}
-                          >
-                            {showPlatformLabel && singleLabelPlatform ? (
-                              getPlatformIcon(singleLabelPlatform)
-                            ) : (
-                              <Zap className="h-5 w-5 sm:h-6 sm:w-6" />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
-                              <p
-                                className={cn(
-                                  "text-xs sm:text-sm font-semibold uppercase tracking-wider",
-                                  isDark ? "text-purple-400" : "text-purple-600",
-                                )}
-                              >
-                                Milestone {index + 1}
-                              </p>
-                              {row.winner_limit
-                                ? (() => {
-                                    const reachedCount =
-                                      winnerCountsByMilestone?.get(
-                                        Number(row.target_views),
-                                      ) || 0;
-                                    const isFull =
-                                      reachedCount >= row.winner_limit;
-                                    return (
-                                      <Badge
-                                        variant="secondary"
-                                        className={cn(
-                                          "text-[10px] h-4 px-1.5 shrink-0",
-                                          isFull
-                                            ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-500/30"
-                                            : "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-500/30",
-                                        )}
-                                      >
-                                        Limit: {reachedCount} /{" "}
-                                        {row.winner_limit}
-                                      </Badge>
-                                    );
-                                  })()
-                                : null}
-                            </div>
-                            <p
-                              className={cn(
-                                "text-xl sm:text-2xl font-black break-words",
-                                isDark ? "text-white" : "text-gray-900",
-                              )}
-                            >
-                              {(row.target_views || 0).toLocaleString()}{" "}
-                              <span className="text-sm font-medium opacity-70">
-                                Views
-                              </span>
-                            </p>
-                          </div>
+                .sort((a, b) => (a.order || 0) - (b.order || 0));
+              return (
+                <div className="flex min-w-0 flex-col gap-2.5">
+                  {sortedMilestones.map((row, index) => {
+                    const isFinal = index === sortedMilestones.length - 1;
+                    const target = Number(row.target_views) || 0;
+                    const reachedCount =
+                      winnerCountsByMilestone?.get(Number(row.target_views)) ||
+                      0;
+                    const payoutLabel = formatMoney(
+                      Number(row.payout_cents) || 0,
+                    );
+                    return (
+                      <div
+                        key={`${row.order ?? index}-${row.target_views ?? index}`}
+                        className={cn(
+                          "grid min-w-0 grid-cols-[44px_minmax(0,1fr)] items-center gap-x-4 gap-y-3 overflow-hidden rounded-2xl py-4 pl-5 pr-5 sm:grid-cols-[44px_minmax(0,1fr)_auto] sm:pr-6",
+                          isFinal
+                            ? "bg-[#0a0a0a] text-white shadow-[0px_10px_20px_0px_rgba(10,10,10,0.2)]"
+                            : isDark
+                              ? "border border-white/10 bg-white/[0.04]"
+                              : "border border-[#e5e5e5] bg-white",
+                        )}
+                      >
+                        <div className="relative flex h-11 w-11 shrink-0 items-center justify-center justify-self-start">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src="/images/contest-details/milestone-hex.svg"
+                            alt=""
+                            width={38}
+                            height={44}
+                            className="pointer-events-none absolute left-1/2 top-0 h-11 w-[38px] -translate-x-1/2"
+                          />
+                          <span className="relative z-10 text-lg font-extrabold text-white">
+                            {index + 1}
+                          </span>
                         </div>
-                        <div
-                          className={cn(
-                            "flex items-center justify-between sm:block sm:text-right shrink-0 w-full sm:w-auto border-t pt-3 sm:border-t-0 sm:pt-0",
-                            isDark ? "border-gray-600" : "border-gray-200",
-                          )}
-                        >
+
+                        <div className="min-w-0 space-y-1">
                           <p
                             className={cn(
-                              "text-xs font-medium sm:mb-1",
-                              isDark ? "text-gray-400" : "text-gray-500",
+                              "text-[11px] font-semibold tracking-[1.1px]",
+                              isFinal
+                                ? "text-[#a3a3a3]"
+                                : isDark
+                                  ? "text-slate-400"
+                                  : "text-[#737373]",
+                            )}
+                          >
+                            MILESTONE {index + 1}
+                          </p>
+                          <p
+                            className={cn(
+                              "truncate text-xl font-semibold tracking-[-0.3px]",
+                              isFinal
+                                ? "text-white"
+                                : isDark
+                                  ? "text-white"
+                                  : "text-[#0a0a0a]",
+                            )}
+                          >
+                            {target.toLocaleString()} Views
+                          </p>
+                          {row.winner_limit ? (
+                            <div
+                              className={cn(
+                                "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
+                                isFinal
+                                  ? "bg-white/12 text-white"
+                                  : reachedCount >= row.winner_limit
+                                    ? "bg-red-100 text-red-700"
+                                    : isDark
+                                      ? "bg-white/10 text-slate-200"
+                                      : "bg-[#f5f5f5] text-[#404040]",
+                              )}
+                            >
+                              Winner limit {reachedCount} / {row.winner_limit}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div className="col-span-2 flex w-full flex-col items-start sm:col-span-1 sm:w-auto sm:items-end">
+                          <p
+                            className={cn(
+                              "text-xs font-medium",
+                              isFinal
+                                ? "text-[#a3a3a3]"
+                                : isDark
+                                  ? "text-slate-400"
+                                  : "text-[#737373]",
                             )}
                           >
                             Payout
                           </p>
                           <p
                             className={cn(
-                              "text-xl sm:text-2xl font-bold",
-                              isDark ? "text-green-400" : "text-green-600",
+                              "whitespace-nowrap text-[26px] font-bold leading-none tracking-[-0.52px]",
+                              isFinal
+                                ? "text-white"
+                                : isDark
+                                  ? "text-white"
+                                  : "text-[#0a0a0a]",
                             )}
                           >
-                            {formatMoney(row.payout_cents)}
+                            {payoutLabel}
                           </p>
                         </div>
                       </div>
-                    </CardContent>
-                  </div>
-                ))}
-            </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
-            <Alert
-              className={cn(
-                "mt-4 border-purple-600 shadow-sm",
-                isDark
-                  ? "bg-purple-900/20 text-purple-200"
-                  : "bg-purple-50 text-purple-800",
-              )}
-            >
-              <Info className="h-4 w-4" />
-              <AlertDescription className="text-sm font-medium mt-0.5">
-                Once a submission reaches the target view threshold, the
-                corresponding milestone reward will be granted.
-              </AlertDescription>
-            </Alert>
-          </div>
-
-          {milestone.bonus?.enabled && (
-            <div className="space-y-4 pt-4">
-              <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                <Gift className="h-5 w-5 text-pink-500" />
-                Competitive Bonus Tracks
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {milestone.bonus.most_verified_views && (
-                  <div
-                    className={cn(
-                      "rounded-xl border p-5 relative overflow-hidden",
-                      isDark
-                        ? "bg-gradient-to-br from-blue-900/20 to-purple-900/20 border-blue-500/30"
-                        : "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200",
-                    )}
-                  >
-                    <div className="flex items-start justify-between mb-4">
-                      <div
-                        className={cn(
-                          "p-2 rounded-lg",
-                          isDark ? "bg-blue-900/40" : "bg-blue-100",
-                        )}
-                      >
-                        <Eye className="h-5 w-5 text-blue-500" />
-                      </div>
-                      <Badge className="bg-blue-500 hover:bg-blue-600 text-white border-none">
-                        {formatMoney(
-                          milestone.bonus.most_verified_views.payout_cents,
-                        )}
-                      </Badge>
-                    </div>
-                    <h4
-                      className={cn(
-                        "font-bold text-lg mb-1",
-                        isDark ? "text-white" : "text-blue-900",
-                      )}
-                    >
-                      Most Verified Views
-                    </h4>
-                    <p
-                      className={cn(
-                        "text-sm",
-                        isDark ? "text-blue-200/70" : "text-blue-700",
-                      )}
-                    >
-                      Awarded to the creator with the highest total verified
-                      views.
-                    </p>
-                    <div className="mt-4 pt-4 border-t border-blue-500/20">
-                      <div className="flex items-start justify-between gap-3 text-xs font-semibold">
-                        <span className="opacity-70 uppercase tracking-tighter">
-                          Eligibility Condition
-                        </span>
-                        <div className="text-blue-500 text-right space-y-1">
-                          {typeof milestone.bonus.most_verified_views
-                            .min_total_views === "number" && (
-                            <div>
-                              Min.{" "}
-                              {milestone.bonus.most_verified_views.min_total_views.toLocaleString()}{" "}
-                              Views
-                            </div>
-                          )}
-                          {typeof milestone.bonus.most_verified_views
-                            .min_verified_reels === "number" && (
-                            <div>
-                              Min.{" "}
-                              {milestone.bonus.most_verified_views.min_verified_reels.toLocaleString()}{" "}
-                              Reels
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {milestone.bonus.most_verified_reels && (
-                  <div
-                    className={cn(
-                      "rounded-xl border p-5 relative overflow-hidden",
-                      isDark
-                        ? "bg-gradient-to-br from-pink-900/20 to-purple-900/20 border-pink-500/30"
-                        : "bg-gradient-to-br from-pink-50 to-purple-50 border-pink-200",
-                    )}
-                  >
-                    <div className="flex items-start justify-between mb-4">
-                      <div
-                        className={cn(
-                          "p-2 rounded-lg",
-                          isDark ? "bg-pink-900/40" : "bg-pink-100",
-                        )}
-                      >
-                        <Play className="h-5 w-5 text-pink-500" />
-                      </div>
-                      <Badge className="bg-pink-500 hover:bg-pink-600 text-white border-none">
-                        {formatMoney(
-                          milestone.bonus.most_verified_reels.payout_cents,
-                        )}
-                      </Badge>
-                    </div>
-                    <h4
-                      className={cn(
-                        "font-bold text-lg mb-1",
-                        isDark ? "text-white" : "text-pink-900",
-                      )}
-                    >
-                      Most Verified Reels
-                    </h4>
-                    <p
-                      className={cn(
-                        "text-sm",
-                        isDark
-                          ? "text-pink-200/70"
-                          : "text-pink-700 font-bold",
-                      )}
-                    >
-                      Awarded to the creator with the most reels hitting target
-                      views.
-                    </p>
-                    <div className="mt-4 pt-4 border-t border-pink-500/20">
-                      <div className="flex items-start justify-between gap-3 text-xs font-semibold">
-                        <span className="opacity-70 uppercase tracking-tighter">
-                          Eligibility Condition
-                        </span>
-                        <div className="text-pink-500 text-right space-y-1">
-                          {typeof milestone.bonus.most_verified_reels
-                            .min_verified_reels === "number" && (
-                            <div>
-                              Min.{" "}
-                              {milestone.bonus.most_verified_reels.min_verified_reels.toLocaleString()}{" "}
-                              Reels
-                            </div>
-                          )}
-                          {typeof milestone.bonus.most_verified_reels
-                            .min_total_views === "number" && (
-                            <div>
-                              Min.{" "}
-                              {milestone.bonus.most_verified_reels.min_total_views.toLocaleString()}{" "}
-                              Views
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {!isDualRewardsContestType(contestType) && (
             <div
               className={cn(
-                "mt-6 p-4 rounded-xl border flex items-center justify-between",
+                "flex items-start gap-2.5 rounded-xl border px-4 py-3",
                 isDark
-                  ? "bg-gray-900/30 border-gray-600"
-                  : "bg-gray-50 border-gray-200",
+                  ? "border-white/10 bg-white/[0.04] text-slate-200"
+                  : "border-[#e5e5e5] bg-[#fafafa] text-[#404040]",
               )}
             >
-              <div className="flex items-center gap-3">
-                <Wallet className="h-5 w-5 text-emerald-500" />
-                <span
+              <Info className="mt-0.5 h-[18px] w-[18px] shrink-0" />
+              <p className="text-[13px] leading-relaxed">
+                Once a submission reaches the target view threshold, the
+                corresponding milestone reward will be granted.
+              </p>
+            </div>
+
+            {milestone.bonus?.enabled && (
+              <div className="space-y-4 pt-2">
+                <h3
                   className={cn(
-                    "text-sm font-medium",
-                    isDark ? "text-gray-300" : "text-gray-600",
+                    "flex items-center gap-2 text-[15px] font-semibold",
+                    isDark ? "text-white" : "text-[#0a0a0a]",
                   )}
                 >
-                  Total Budget
-                </span>
+                  <Gift
+                    className={cn(
+                      "h-4 w-4",
+                      isDark ? "text-slate-300" : "text-[#737373]",
+                    )}
+                  />
+                  Competitive Bonus Tracks
+                </h3>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {milestone.bonus.most_verified_views && (
+                    <div
+                      className={cn(
+                        "rounded-xl border p-5",
+                        isDark
+                          ? "border-white/10 bg-white/[0.04]"
+                          : "border-[#e5e5e5] bg-[#fafafa]",
+                      )}
+                    >
+                      <div className="mb-4 flex items-start justify-between">
+                        <div
+                          className={cn(
+                            "rounded-[10px] p-2",
+                            isDark ? "bg-white/10" : "bg-white border border-[#e5e5e5]",
+                          )}
+                        >
+                          <Eye
+                            className={cn(
+                              "h-5 w-5",
+                              isDark ? "text-white" : "text-[#0a0a0a]",
+                            )}
+                          />
+                        </div>
+                        <Badge
+                          className={cn(
+                            "border-none",
+                            isDark
+                              ? "bg-white text-[#0a0a0a]"
+                              : "bg-[#0a0a0a] text-white",
+                          )}
+                        >
+                          {formatMoney(
+                            milestone.bonus.most_verified_views.payout_cents,
+                          )}
+                        </Badge>
+                      </div>
+                      <h4
+                        className={cn(
+                          "mb-1 text-lg font-bold",
+                          isDark ? "text-white" : "text-[#0a0a0a]",
+                        )}
+                      >
+                        Most Verified Views
+                      </h4>
+                      <p
+                        className={cn(
+                          "text-sm",
+                          isDark ? "text-slate-300" : "text-[#404040]",
+                        )}
+                      >
+                        Awarded to the creator with the highest total verified
+                        views.
+                      </p>
+                      <div
+                        className={cn(
+                          "mt-4 border-t pt-4",
+                          isDark ? "border-white/10" : "border-[#e5e5e5]",
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-3 text-xs font-semibold">
+                          <span
+                            className={cn(
+                              "uppercase tracking-tighter",
+                              isDark ? "text-slate-400" : "text-[#737373]",
+                            )}
+                          >
+                            Eligibility Condition
+                          </span>
+                          <div
+                            className={cn(
+                              "space-y-1 text-right",
+                              isDark ? "text-slate-200" : "text-[#0a0a0a]",
+                            )}
+                          >
+                            {typeof milestone.bonus.most_verified_views
+                              .min_total_views === "number" && (
+                              <div>
+                                Min.{" "}
+                                {milestone.bonus.most_verified_views.min_total_views.toLocaleString()}{" "}
+                                Views
+                              </div>
+                            )}
+                            {typeof milestone.bonus.most_verified_views
+                              .min_verified_reels === "number" && (
+                              <div>
+                                Min.{" "}
+                                {milestone.bonus.most_verified_views.min_verified_reels.toLocaleString()}{" "}
+                                Reels
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {milestone.bonus.most_verified_reels && (
+                    <div
+                      className={cn(
+                        "rounded-xl border p-5",
+                        isDark
+                          ? "border-white/10 bg-white/[0.04]"
+                          : "border-[#e5e5e5] bg-[#fafafa]",
+                      )}
+                    >
+                      <div className="mb-4 flex items-start justify-between">
+                        <div
+                          className={cn(
+                            "rounded-[10px] p-2",
+                            isDark ? "bg-white/10" : "bg-white border border-[#e5e5e5]",
+                          )}
+                        >
+                          <Play
+                            className={cn(
+                              "h-5 w-5",
+                              isDark ? "text-white" : "text-[#0a0a0a]",
+                            )}
+                          />
+                        </div>
+                        <Badge
+                          className={cn(
+                            "border-none",
+                            isDark
+                              ? "bg-white text-[#0a0a0a]"
+                              : "bg-[#0a0a0a] text-white",
+                          )}
+                        >
+                          {formatMoney(
+                            milestone.bonus.most_verified_reels.payout_cents,
+                          )}
+                        </Badge>
+                      </div>
+                      <h4
+                        className={cn(
+                          "mb-1 text-lg font-bold",
+                          isDark ? "text-white" : "text-[#0a0a0a]",
+                        )}
+                      >
+                        Most Verified Reels
+                      </h4>
+                      <p
+                        className={cn(
+                          "text-sm",
+                          isDark ? "text-slate-300" : "text-[#404040]",
+                        )}
+                      >
+                        Awarded to the creator with the most reels hitting
+                        target views.
+                      </p>
+                      <div
+                        className={cn(
+                          "mt-4 border-t pt-4",
+                          isDark ? "border-white/10" : "border-[#e5e5e5]",
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-3 text-xs font-semibold">
+                          <span
+                            className={cn(
+                              "uppercase tracking-tighter",
+                              isDark ? "text-slate-400" : "text-[#737373]",
+                            )}
+                          >
+                            Eligibility Condition
+                          </span>
+                          <div
+                            className={cn(
+                              "space-y-1 text-right",
+                              isDark ? "text-slate-200" : "text-[#0a0a0a]",
+                            )}
+                          >
+                            {typeof milestone.bonus.most_verified_reels
+                              .min_verified_reels === "number" && (
+                              <div>
+                                Min.{" "}
+                                {milestone.bonus.most_verified_reels.min_verified_reels.toLocaleString()}{" "}
+                                Reels
+                              </div>
+                            )}
+                            {typeof milestone.bonus.most_verified_reels
+                              .min_total_views === "number" && (
+                              <div>
+                                Min.{" "}
+                                {milestone.bonus.most_verified_reels.min_total_views.toLocaleString()}{" "}
+                                Views
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-              <span
+            )}
+
+            {!isDualRewardsContestType(contestType) && (
+              <div
                 className={cn(
-                  "text-lg font-bold",
-                  isDark ? "text-white" : "text-gray-900",
+                  "flex items-center justify-between rounded-xl border p-4",
+                  isDark
+                    ? "border-white/10 bg-white/[0.04]"
+                    : "border-[#e5e5e5] bg-[#fafafa]",
                 )}
               >
-                {formatMoney(milestone.total_budget_cents)}
-              </span>
-            </div>
-          )}
+                <div className="flex items-center gap-3">
+                  <Wallet
+                    className={cn(
+                      "h-5 w-5",
+                      isDark ? "text-slate-300" : "text-[#737373]",
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-sm font-medium",
+                      isDark ? "text-slate-300" : "text-[#404040]",
+                    )}
+                  >
+                    Total Budget
+                  </span>
+                </div>
+                <span
+                  className={cn(
+                    "text-lg font-bold",
+                    isDark ? "text-white" : "text-[#0a0a0a]",
+                  )}
+                >
+                  {formatMoney(milestone.total_budget_cents)}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
