@@ -121,7 +121,11 @@ import {
   DEFAULT_APPLICANT_VISIBILITY,
 } from "@/components/campaign-access/ApplicantVisibilityEditor";
 import { applicantVisibilityApi } from "@/components/campaign-access/api";
-import type { ApplicantVisibility } from "@/lib/campaign-applicant-profile";
+import {
+  parseApplicantVisibility,
+  type ApplicantVisibility,
+} from "@/lib/campaign-applicant-profile";
+import { CopiedFromBanner, CopiedInvitesNote } from "@/components/campaign-duplicate/WizardCopyNotes";
 import { RestrictedPreviewDialog } from "@/components/campaign-access/RestrictedPreviewDialog";
 import { SkipRequirementsSwitch } from "@/components/campaign-access/SkipRequirementsSwitch";
 import { ApplicationQuestionsEditor } from "@/components/campaign-access/ApplicationQuestionsEditor";
@@ -555,6 +559,13 @@ export default function CreateContestPage({
   const [applicantVisibility, setApplicantVisibility] = useState<ApplicantVisibility>(
     DEFAULT_APPLICANT_VISIBILITY,
   );
+  // The draft already hid something (e.g. copied from another campaign), so
+  // saving must also send "everything visible" if the admin turns them back on.
+  const draftHadHiddenApplicantFieldsRef = useRef(false);
+  // Set when this draft was made with "Copy an existing campaign".
+  const [copiedFrom, setCopiedFrom] = useState<{ id: string; title: string } | null>(null);
+  // Creators already on this draft's access list (copied from the original).
+  const [existingInviteCount, setExistingInviteCount] = useState(0);
   const hasCreatorRequirement =
     trustScoreEnabled ||
     trustNumberEnabled ||
@@ -4498,7 +4509,11 @@ export default function CreateContestPage({
             if ("error" in parsed) throw new Error(parsed.error);
             const saved = await questionsApi.save(newContestId, parsed.questions);
             setApplicationQuestions(saved.questions);
-            if (isAdmin && Object.values(applicantVisibility).some((v) => !v)) {
+            if (
+              isAdmin &&
+              (Object.values(applicantVisibility).some((v) => !v) ||
+                draftHadHiddenApplicantFieldsRef.current)
+            ) {
               // A failure here doesn't block the campaign; it can be changed later on the edit page.
               await applicantVisibilityApi
                 .save(newContestId, applicantVisibility)
@@ -6219,6 +6234,34 @@ export default function CreateContestPage({
     // Set draft/contest IDs first
     setDraftId(draft.id);
     setContestId(draft.id);
+
+    // Drafts made with "Copy an existing campaign": banner + copied invites.
+    if (draft.duplicated_from_contest_id && draft.moderation_status === "draft") {
+      const sourceId = String(draft.duplicated_from_contest_id);
+      // Brands only see the banner for a copy of their own campaign; an admin
+      // copy from another brand never shows that brand's campaign to them.
+      let sourceQuery = supabase.from("contests").select("title").eq("id", sourceId);
+      if (!isAdmin) sourceQuery = sourceQuery.eq("advertiser_id", draft.advertiser_id);
+      sourceQuery.maybeSingle().then(({ data }) =>
+        setCopiedFrom(data ? { id: sourceId, title: data.title || "Untitled campaign" } : null),
+      );
+    } else {
+      setCopiedFrom(null);
+    }
+    if (draft.id && draft.access_mode && draft.access_mode !== "public") {
+      supabase
+        .from("contest_access_list")
+        .select("user_id", { count: "exact", head: true })
+        .eq("contest_id", draft.id)
+        .then(({ count }) => setExistingInviteCount(count ?? 0));
+    } else {
+      setExistingInviteCount(0);
+    }
+    if (isAdmin && draft.applicant_visibility) {
+      const visibility = parseApplicantVisibility(draft.applicant_visibility);
+      draftHadHiddenApplicantFieldsRef.current = Object.values(visibility).some((v) => !v);
+      setApplicantVisibility(visibility);
+    }
 
     // Basic contest fields
     setTitle(draft.title || "");
@@ -10953,6 +10996,7 @@ export default function CreateContestPage({
             Build your campaign in 4 simple steps
           </p>
         </div>
+        {copiedFrom && <CopiedFromBanner sourceTitle={copiedFrom.title} />}
       </div>
 
       {/* Modern Progress Stepper */}
@@ -11861,6 +11905,14 @@ export default function CreateContestPage({
                       description="They get access without applying."
                     >
                       <div className="space-y-4">
+                        {existingInviteCount > 0 && (contestId || draftId) && (
+                          <CopiedInvitesNote
+                            count={existingInviteCount}
+                            contestId={(contestId || draftId)!}
+                            advertiserId={isAdmin ? effectiveAdvertiserId : null}
+                            onChanged={setExistingInviteCount}
+                          />
+                        )}
                         <AllowlistPicker
                           value={allowlistSelection}
                           onChange={setAllowlistSelection}
@@ -11888,11 +11940,21 @@ export default function CreateContestPage({
                       title="Add creators"
                       description="Only these creators will see the campaign. You can add more later from the Access tab."
                     >
-                      <AllowlistPicker
-                        value={allowlistSelection}
-                        onChange={setAllowlistSelection}
-                        advertiserId={isAdmin ? effectiveAdvertiserId : null}
-                      />
+                      <div className="space-y-4">
+                        {existingInviteCount > 0 && (contestId || draftId) && (
+                          <CopiedInvitesNote
+                            count={existingInviteCount}
+                            contestId={(contestId || draftId)!}
+                            advertiserId={isAdmin ? effectiveAdvertiserId : null}
+                            onChanged={setExistingInviteCount}
+                          />
+                        )}
+                        <AllowlistPicker
+                          value={allowlistSelection}
+                          onChange={setAllowlistSelection}
+                          advertiserId={isAdmin ? effectiveAdvertiserId : null}
+                        />
+                      </div>
                     </AccessStep>
                     <AccessStep
                       step={2}

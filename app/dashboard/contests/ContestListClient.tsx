@@ -49,8 +49,10 @@ import {
   X,
   RefreshCw,
   Hourglass,
+  Copy,
 } from "lucide-react";
 import { DeleteContestButton } from "@/components/delete-contest-button";
+import { DuplicateCampaignDialog } from "@/components/campaign-duplicate/DuplicateCampaignDialog";
 import { formatLocalDateTime, cn } from "@/lib/utils";
 import { AccessModeBadge } from "@/components/campaign-access/AccessBadge";
 import { CampaignAccessInfo } from "@/components/campaign-access/CampaignAccessInfo";
@@ -806,6 +808,32 @@ export function ContestListClient({
       editDates?: boolean;
     };
   }>({});
+
+  // "Duplicate" on a card opens the copy dialog for that campaign.
+  const [duplicateSourceId, setDuplicateSourceId] = useState<string | null>(null);
+
+  const renderDuplicateButton = (contest: Contest, className?: string) => (
+    <button
+      type="button"
+      title="Duplicate"
+      aria-label={`Duplicate ${contest.title || "campaign"}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        setDuplicateSourceId(contest.id);
+      }}
+      className={cn(
+        "pointer-events-auto relative z-[2] inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]",
+        isDark
+          ? "border-gray-700 text-purple-300 hover:bg-white/5"
+          : "border-purple-200 text-[#7F39EC] hover:bg-purple-50",
+        className,
+      )}
+    >
+      <Copy className="h-4 w-4" />
+    </button>
+  );
 
   // Helper functions for loading states
   const setButtonLoading = (
@@ -1607,10 +1635,13 @@ export function ContestListClient({
 
               <ContestListStatsFooter contest={contest} isDark={isDark} />
 
-              {renderViewDetailsLink(contest, "px-3 py-3", {
-                fullWidth: true,
-                eyeClassName: "mr-1",
-              })}
+              <div className="pointer-events-auto relative z-[2] flex items-center gap-2">
+                {renderViewDetailsLink(contest, "px-3 py-3", {
+                  fullWidth: true,
+                  eyeClassName: "mr-1",
+                })}
+                {renderDuplicateButton(contest)}
+              </div>
             </CardContent>
           </div>
         </Card>
@@ -1854,6 +1885,7 @@ export function ContestListClient({
                   className="flex items-center gap-2"
                 />
               )}
+              {renderDuplicateButton(contest)}
             </div>
           </CardContent>
         </div>
@@ -2414,6 +2446,7 @@ export function ContestListClient({
               {renderViewDetailsLink(contest, "px-4 py-3 whitespace-nowrap", {
                 textClassName: "text-sm font-medium",
               })}
+              {renderDuplicateButton(contest)}
             </div>
           </div>
         </Card>
@@ -2674,6 +2707,7 @@ export function ContestListClient({
                 fullWidth: true,
               })
             )}
+            {renderDuplicateButton(contest)}
           </div>
         </div>
       </Card>
@@ -3751,6 +3785,15 @@ export function ContestListClient({
         isOpen={showCpmUpgradeModal}
         onClose={() => setShowCpmUpgradeModal(false)}
         featureName={upgradeFeatureName}
+      />
+      <DuplicateCampaignDialog
+        open={duplicateSourceId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDuplicateSourceId(null);
+        }}
+        isAdmin={!!isAdminView}
+        sourceContestId={duplicateSourceId}
+        allowChangeTarget={!!isAdminView}
       />
       {hasCreatedContests ? (
         <>

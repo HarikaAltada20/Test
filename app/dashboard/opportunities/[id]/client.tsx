@@ -170,6 +170,13 @@ import {
   hasLinkableDraft,
 } from "@/components/content-drafts/CampaignDraftPanel";
 import type { CampaignDraftStatus } from "@/lib/content-drafts";
+import { CopyContentButton, copyPayloadFromElement } from "@/components/contest/CopyContentButton";
+import {
+  formatLinkListForCopy,
+  isCopyableUrl,
+  linkCopyPayload,
+  type CopyLinkGroup,
+} from "@/lib/copy-section";
 // --- START DUMMY DATA CONFIGURATION ---
 const USE_DUMMY_DATA_FOR_LEADERBOARD = false; // SWITCHED OFF FOR PRODUCTION
 const DUMMY_ENTRIES_COUNT = 250; // Total number of dummy entries to generate
@@ -838,6 +845,8 @@ export function ContestClientPage({
   // Scroll spy state and functionality
   const [activeSection, setActiveSection] = useState("earning-opportunities");
   const sectionRefs = useRef<{ [key: string]: HTMLElement | null }>({});
+  const briefCopyRef = useRef<HTMLDivElement | null>(null);
+  const rulesCopyRef = useRef<HTMLDivElement | null>(null);
 
   // Multi-platform Contest Details scoping (mirrors advertiser contest details)
   const detailVideoPlatforms = useMemo(
@@ -7840,7 +7849,14 @@ export function ContestClientPage({
                           platforms={detailVideoPlatforms}
                         />
                       ) : null}
+                      <CopyContentButton
+                        what="brief"
+                        isDark={isDark}
+                        className="ml-auto"
+                        getContent={() => copyPayloadFromElement(briefCopyRef.current)}
+                      />
                     </h4>
+                    <div ref={briefCopyRef}>
                     {showDetailBriefByPlatform ? (
                       <div className="space-y-3">
                         {groupPlatformsByBrief(
@@ -7920,6 +7936,7 @@ export function ContestClientPage({
                         );
                       })()
                     )}
+                    </div>
                   </div>
 
                   {/* Content Type Info Tag */}
@@ -7994,7 +8011,14 @@ export function ContestClientPage({
                           platforms={detailVideoPlatforms}
                         />
                       ) : null}
+                      <CopyContentButton
+                        what="rules"
+                        isDark={isDark}
+                        className="ml-auto"
+                        getContent={() => copyPayloadFromElement(rulesCopyRef.current)}
+                      />
                     </h4>
+                    <div ref={rulesCopyRef}>
                     {/* Check multiple possible rule fields */}
                     {showDetailRulesByPlatform ? (
                       <div className="space-y-3">
@@ -8192,6 +8216,7 @@ export function ContestClientPage({
                         );
                       })()
                     )}
+                    </div>
                   </div>
 
                   {/* Terms & Conditions for CPM contests */}
@@ -8295,6 +8320,29 @@ export function ContestClientPage({
                           {showSharedIcons ? (
                             <ContestDetailSharedAcrossPlatformsHint
                               platforms={detailVideoPlatforms}
+                            />
+                          ) : null}
+                          {hasAny ? (
+                            <CopyContentButton
+                              what="resources"
+                              isDark={isDark}
+                              className="ml-auto"
+                              getContent={() =>
+                                formatLinkListForCopy(
+                                  "Resources & Tools",
+                                  resourceGroups.map(
+                                    (group): CopyLinkGroup => ({
+                                      label: group.platforms
+                                        ?.map((pl) => VIDEO_PLATFORM_LABELS[pl])
+                                        .join(", "),
+                                      items: group.items.map((r: any) => ({
+                                        url: r.url,
+                                        title: r.description,
+                                      })),
+                                    }),
+                                  ),
+                                )
+                              }
                             />
                           ) : null}
                         </h3>
@@ -8427,10 +8475,20 @@ export function ContestClientPage({
                                             </p>
                                           </div>
                                         </div>
+                                        <div className="mt-3 flex items-center gap-2 md:mt-0">
+                                        {isCopyableUrl(resource.url) ? (
+                                          <CopyContentButton
+                                            what="link"
+                                            variant="item"
+                                            isDark={isDark}
+                                            className="h-9 w-9"
+                                            getContent={() => linkCopyPayload(resource.url)}
+                                          />
+                                        ) : null}
                                         <Button
                                           size="sm"
                                           asChild
-                                          className="bg-[#6C43D0] hover:bg-[#6C43D0] mt-3 md:mt-0 rounded-xl text-white px-4 py-2 text-md"
+                                          className="bg-[#6C43D0] hover:bg-[#6C43D0] rounded-xl text-white px-4 py-2 text-md"
                                         >
                                           <a
                                             href={resource.url}
@@ -8448,6 +8506,7 @@ export function ContestClientPage({
                                                   : "View Resource"}
                                           </a>
                                         </Button>
+                                        </div>
                                       </div>
                                     </div>
                                   );
@@ -8559,6 +8618,30 @@ export function ContestClientPage({
                               />
                             ) : null}
                           </h3>
+                          <CopyContentButton
+                            what="inspiration links"
+                            isDark={isDark}
+                            className="ml-auto"
+                            getContent={() =>
+                              formatLinkListForCopy(
+                                "Inspiration Links",
+                                inspirationGroups.map(
+                                  (group): CopyLinkGroup => ({
+                                    label: group.platforms
+                                      ?.map((pl) => VIDEO_PLATFORM_LABELS[pl])
+                                      .join(", "),
+                                    items: group.links.map((link) => ({
+                                      url: processUrlWithCreator(
+                                        link.url,
+                                        userProfile?.username || "",
+                                      ),
+                                      note: link.description,
+                                    })),
+                                  }),
+                                ),
+                              )
+                            }
+                          />
                         </div>
 
                         <div className="space-y-6">
@@ -8630,6 +8713,12 @@ export function ContestClientPage({
                                                 </p>
                                               )}
                                             </div>
+                                            <CopyContentButton
+                                              what="link"
+                                              variant="item"
+                                              isDark={isDark}
+                                              getContent={() => linkCopyPayload(processedUrl)}
+                                            />
                                           </div>
                                         </div>
                                       );
