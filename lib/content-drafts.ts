@@ -413,6 +413,20 @@ export function draftTrustScore(approved: number, rejected: number): number {
   return Math.max(0, Math.min(100, Math.round(((approved - rejected) / approved) * 100)));
 }
 
+/**
+ * A creator's own record from their draft counts (all campaigns), matching
+ * creator_draft_records: posted drafts count as approved.
+ */
+export function draftRecordFromCounts(counts: DraftListPage["counts"]): {
+  approved: number;
+  rejected: number;
+  trust: number;
+} {
+  const approved = (counts.approved ?? 0) + (counts.posted ?? 0);
+  const rejected = counts.rejected ?? 0;
+  return { approved, rejected, trust: draftTrustScore(approved, rejected) };
+}
+
 /** "14 approved · 2 rejected · 5 revisions". */
 export function formatDraftRecord(record: DraftRecord | null | undefined): string {
   if (!record) return "No drafts yet";

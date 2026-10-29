@@ -8,6 +8,7 @@ import {
   draftBlockMessage,
   draftNotificationHref,
   draftPosterPath,
+  draftRecordFromCounts,
   draftReviewResultMessage,
   draftSendResultMessage,
   draftSubmissionErrorMessage,
@@ -105,6 +106,15 @@ describe("display helpers", () => {
     assert.equal(draftTrustScore(14, 2), 86);
     assert.equal(draftTrustScore(1, 2), 0);
     assert.equal(draftTrustScore(3, 0), 100);
+  });
+
+  it("builds a creator's own record from their draft counts", () => {
+    assert.deepEqual(draftRecordFromCounts({ approved: 4, posted: 10, rejected: 2, pending_review: 3 }), {
+      approved: 14,
+      rejected: 2,
+      trust: 86,
+    });
+    assert.deepEqual(draftRecordFromCounts({}), { approved: 0, rejected: 0, trust: 100 });
   });
 
   it("summarises a draft record", () => {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formatDistanceToNowStrict } from "date-fns";
-import { ChevronRight, Clapperboard, Loader2, SearchX, X } from "lucide-react";
+import { ChevronRight, Clapperboard, Loader2, SearchX, ShieldCheck, X } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
@@ -13,6 +13,7 @@ import {
   DRAFT_FILTER_LABELS,
   MY_DRAFT_FILTERS,
   draftNextStep,
+  draftRecordFromCounts,
   parseMyDraftFilter,
   type DraftListPage,
   type DraftListRow,
@@ -99,6 +100,24 @@ export function MyDraftsPanel({ isDark, onActionCountChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId, status]);
 
+  // The record covers every campaign, so with a campaign filter it is loaded separately.
+  const [overallCounts, setOverallCounts] = useState<DraftListPage["counts"] | null>(null);
+  useEffect(() => {
+    if (!campaignId) {
+      if (page) setOverallCounts(page.counts);
+      return;
+    }
+    let cancelled = false;
+    listMyDrafts({ status: "all", offset: 0, limit: 1 })
+      .then((res) => {
+        if (!cancelled) setOverallCounts(res.counts);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [campaignId, page]);
+
   const rows = page?.rows ?? [];
   const posters = useDraftPosters(rows.map((r) => r.current_version?.id));
   const counts = page?.counts ?? {};
@@ -108,6 +127,8 @@ export function MyDraftsPanel({ isDark, onActionCountChange }: Props) {
 
   return (
     <div className={cn("space-y-4", isDark && "dark")}>
+      {overallCounts && <MyDraftRecord counts={overallCounts} />}
+
       <div className="flex flex-wrap items-center gap-2">
         <div role="tablist" aria-label="Draft status" className="flex max-w-full gap-1.5 overflow-x-auto pb-1">
           {MY_DRAFT_FILTERS.map((f) => (
@@ -222,6 +243,27 @@ export function MyDraftsPanel({ isDark, onActionCountChange }: Props) {
         onChanged={() => load({ silent: true })}
         isDark={isDark}
       />
+    </div>
+  );
+}
+
+/** The creator's draft trust and record, as brands see it when reviewing. */
+function MyDraftRecord({ counts }: { counts: DraftListPage["counts"] }) {
+  const total = Object.values(counts).reduce((a, b) => a + (b ?? 0), 0);
+  if (total === 0) return null;
+  const { approved, rejected, trust } = draftRecordFromCounts(counts);
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-gray-200 px-4 py-3 text-sm dark:border-white/10">
+      <span className="inline-flex items-center gap-1.5 font-semibold text-gray-900 dark:text-white">
+        <ShieldCheck className="h-4 w-4 text-[#7F39EC] dark:text-purple-300" aria-hidden="true" />
+        Draft trust {trust}%
+      </span>
+      <span className="text-gray-600 dark:text-gray-300">
+        {approved} approved · {rejected} rejected
+      </span>
+      <span className="basis-full text-xs text-gray-500 dark:text-gray-400 sm:ml-auto sm:basis-auto">
+        Brands see this when they review your drafts. Each rejection lowers it.
+      </span>
     </div>
   );
 }
