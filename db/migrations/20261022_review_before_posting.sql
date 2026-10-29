@@ -240,7 +240,7 @@ GRANT ALL ON TABLE public.content_drafts, public.content_draft_versions, public.
   TO service_role;
 
 -- ---------------------------------------------------------------------------
--- 5. Storage: private bucket. 250 MB per file (the project's global upload
+-- 5. Storage: private bucket. 100 MB per file (the project's global upload
 --    limit in Storage settings must allow it).
 -- ---------------------------------------------------------------------------
 
@@ -249,7 +249,7 @@ VALUES (
   'content-drafts',
   'content-drafts',
   false,
-  262144000,
+  104857600,
   ARRAY['video/mp4', 'video/quicktime', 'video/webm', 'image/jpeg']::text[]
 )
 ON CONFLICT (id) DO UPDATE SET
@@ -711,7 +711,7 @@ BEGIN
   IF v_file.mime_type NOT IN ('video/mp4', 'video/quicktime', 'video/webm') THEN
     RETURN 'invalid_file:type';
   END IF;
-  IF v_file.size_bytes <= 0 OR v_file.size_bytes > 262144000 THEN
+  IF v_file.size_bytes <= 0 OR v_file.size_bytes > 104857600 THEN
     RETURN 'invalid_file:size';
   END IF;
   RETURN NULL;

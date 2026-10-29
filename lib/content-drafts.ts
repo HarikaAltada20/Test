@@ -7,8 +7,8 @@
 
 export const CONTENT_DRAFTS_BUCKET = "content-drafts";
 
-/** Matches the bucket's file_size_limit (250 MB). */
-export const MAX_DRAFT_FILE_BYTES = 250 * 1024 * 1024;
+/** Matches the bucket's file_size_limit (100 MB). */
+export const MAX_DRAFT_FILE_BYTES = 100 * 1024 * 1024;
 /** Longest video accepted, in seconds (the database allows one second of rounding). */
 export const MAX_DRAFT_DURATION_SEC = 180;
 export const MAX_DRAFT_TITLE_LENGTH = 200;

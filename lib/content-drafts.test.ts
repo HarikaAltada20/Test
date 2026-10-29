@@ -58,7 +58,7 @@ describe("draft files", () => {
     assert.match(validateDraftFile({ type: "video/mp4", name: "a.mp4", size: 0 }) ?? "", /empty/);
     assert.match(
       validateDraftFile({ type: "video/mp4", name: "a.mp4", size: MAX_DRAFT_FILE_BYTES + 1 }) ?? "",
-      /limit is 250 MB/,
+      /limit is 100 MB/,
     );
     assert.match(validateDraftFile({ type: "video/mp4", name: "a.mp4", size: 10 }, 200) ?? "", /3:20 long/);
     // One second of rounding allowed, as in the database.
@@ -142,7 +142,7 @@ describe("result messages", () => {
   it("explains send results, including limit details", () => {
     assert.equal(draftSendResultMessage("submitted"), "Sent for review.");
     assert.match(draftSendResultMessage("open_limit_reached", "5"), /5 drafts/);
-    assert.match(draftSendResultMessage("invalid_file", "size"), /250 MB/);
+    assert.match(draftSendResultMessage("invalid_file", "size"), /100 MB/);
     assert.match(draftSendResultMessage("invalid_state", "pending_review"), /already in review/);
     assert.match(draftSendResultMessage("no_access"), /access/);
   });
