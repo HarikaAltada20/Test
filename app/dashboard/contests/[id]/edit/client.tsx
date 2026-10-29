@@ -2969,6 +2969,7 @@ export default function EditContestPage({
                   applyPlatformContentColumnsToSnapshots(
                     parsedVideoPlatforms,
                     {
+                      content_type: data.content_type,
                       brief_html: data.brief_html,
                       brief_json: data.brief_json,
                       rules_html: data.rules_html,

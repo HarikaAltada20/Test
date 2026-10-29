@@ -2197,6 +2197,8 @@ function readRichTextPayload(value: unknown): PlatformRichTextPayload | null {
 export function applyPlatformContentColumnsToSnapshots(
   platforms: VideoContestPlatform[],
   columns: {
+    /** Shared by every platform; platform payout objects don't store it. */
+    content_type?: string | null;
     brief_html?: string | null;
     brief_json?: unknown;
     rules_html?: string | null;
@@ -2218,6 +2220,14 @@ export function applyPlatformContentColumnsToSnapshots(
     const snap = clonePlatformCampaignSnapshot(
       next[platform] ?? createDefaultPlatformCampaignSnapshot(),
     );
+
+    if (
+      columns.content_type === "ugc" ||
+      columns.content_type === "clipping" ||
+      columns.content_type === "other"
+    ) {
+      snap.contentType = columns.content_type;
+    }
 
     if (briefKeyed) {
       const payload = readRichTextPayload(

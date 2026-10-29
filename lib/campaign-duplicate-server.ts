@@ -21,6 +21,7 @@ import {
   type DuplicateWarning,
 } from "@/lib/campaign-duplicate";
 import { parseVideoContestPlatforms } from "@/lib/video-platform-campaigns";
+import { normalizeDraftReviewSettings } from "@/lib/content-drafts";
 import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 
 export const CONTEST_ASSETS_BUCKET = "contest-assets";
@@ -237,6 +238,9 @@ export function availableSections(
   if (hasText(source.thumbnail_url)) out.push("thumbnail");
   if (facts.accessMode === "restricted" && counts.questions > 0) out.push("questions");
   if (facts.accessMode !== "public" && counts.invites > 0) out.push("invites");
+  if (!facts.isTextImage && source.review_before_posting === true) {
+    out.push("review_before_posting");
+  }
   if (hasContent(source.brief_html, source.brief_json)) out.push("brief");
   if (hasContent(source.rules_html, source.rules_json)) out.push("rules");
   if (twitter && TWITTER_SETUP_KEYS.some((k) => twitter[k] != null)) {
@@ -383,6 +387,12 @@ export function buildDuplicateRow(input: BuildDuplicateRowInput): BuildDuplicate
     if (isPlainObject(source.applicant_visibility)) {
       row.applicant_visibility = source.applicant_visibility;
     }
+  }
+
+  // Only set when copied, so copying still works where the review columns
+  // don't exist yet; otherwise the copy takes the column defaults (off).
+  if (has("review_before_posting") && has("setup") && !facts.isTextImage) {
+    Object.assign(row, normalizeDraftReviewSettings({ ...source, review_before_posting: true }));
   }
 
   if (has("brief")) {
