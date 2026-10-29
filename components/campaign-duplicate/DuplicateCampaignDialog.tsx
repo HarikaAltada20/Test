@@ -439,6 +439,9 @@ function SectionChooser({
       if (k === "invites" && preview.facts.accessMode === "public") return "Only for Restricted or Private campaigns";
       if (k === "requirements" && preview.facts.isTextImage) return "Only for video campaigns";
       if (k === "post_requirements" && !preview.facts.isTextImage) return "Only for X campaigns";
+      if (k === "review_before_posting") {
+        return preview.facts.isTextImage ? "Only for video campaigns" : "Off on this campaign";
+      }
       return "Nothing to copy";
     }
     const missing = blocked[k];

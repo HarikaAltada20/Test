@@ -6322,6 +6322,37 @@ export default function CreateContestPage({
     setPreviewDescription(draft.preview_description ?? "");
     setApplicationsOpen(draft.applications_open !== false);
     setListOnlyToEligible(!!draft.list_only_to_eligible);
+
+    // Per-creator limits and creator requirements (same as the edit page).
+    setMultipleSubmissionsEnabled(draft.multiple_submissions_enabled === true);
+    setMaxSubmissionsPerCreator(
+      draft.multiple_submissions_enabled === true &&
+        Number(draft.max_submissions_per_creator) > 0
+        ? Number(draft.max_submissions_per_creator)
+        : 1,
+    );
+    const storedNumber = (value: unknown): number | null => {
+      if (value === null || value === undefined || value === "") return null;
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    };
+    const requirements: Array<
+      [unknown, (on: boolean) => void, (v: number | "") => void, number?]
+    > = [
+      [draft.trust_score, setTrustScoreEnabled, setContestTrustScore],
+      [draft.trust_number, setTrustNumberEnabled, setContestTrustNumber],
+      [draft.min_best_quality_score, setBestQualityEnabled, setContestMinBestQuality],
+      [draft.min_avg_quality_score, setAvgQualityEnabled, setContestMinAvgQuality],
+      [draft.min_quality_score, setMinQualityEnabled, setContestMinQuality],
+      // Stored in cents, shown in dollars.
+      [draft.min_platform_earnings, setMinEarningsEnabled, setContestMinEarnings, 100],
+      [draft.min_platform_views, setMinViewsEnabled, setContestMinViews],
+    ];
+    for (const [value, setEnabled, setValue, divisor] of requirements) {
+      const n = storedNumber(value);
+      setEnabled(n !== null);
+      setValue(n === null ? "" : divisor ? n / divisor : n);
+    }
     if (draft.access_mode === "restricted" && draft.id) {
       questionsApi
         .get(draft.id)
@@ -7020,6 +7051,7 @@ export default function CreateContestPage({
         applyPlatformContentColumnsToSnapshots(
           draftVideoPlatforms,
           {
+            content_type: draft.content_type,
             brief_html: draft.brief_html,
             brief_json: draft.brief_json,
             rules_html: draft.rules_html,

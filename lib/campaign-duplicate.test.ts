@@ -327,6 +327,36 @@ describe("buildDuplicateRow", () => {
     assert.equal("applications_open" in row, false);
   });
 
+  it("copies Review before posting and its limits when ticked", () => {
+    const source = paidLiveSource({
+      review_before_posting: true,
+      draft_max_open: 8,
+      draft_max_revisions: 2,
+      draft_max_rejections: null,
+    });
+    const { row } = buildDuplicateRow({ source, sections: ALL, targetAdvertiserId: target, title: null, now });
+    assert.equal(row.review_before_posting, true);
+    assert.equal(row.draft_max_open, 8);
+    assert.equal(row.draft_max_revisions, 2);
+    assert.equal(row.draft_max_rejections, null);
+
+    // Unticked, or without the setup it depends on: the columns are left to their defaults.
+    for (const sections of [["setup"], ["review_before_posting"]] as const) {
+      const { row: plain } = buildDuplicateRow({ source, sections, targetAdvertiserId: target, title: null, now });
+      assert.equal("review_before_posting" in plain, false);
+      assert.equal("draft_max_open" in plain, false);
+    }
+
+    const { row: text } = buildDuplicateRow({
+      source: { ...source, contest_format: "text_image", platform: "twitter" },
+      sections: ALL,
+      targetAdvertiserId: target,
+      title: null,
+      now,
+    });
+    assert.equal("review_before_posting" in text, false);
+  });
+
   it("says when dates were moved", () => {
     const { warnings } = buildDuplicateRow({
       source: paidLiveSource(),
@@ -433,6 +463,21 @@ describe("availableSections", () => {
     assert.equal(available.includes("tracking_links"), false);
     assert.equal(available.includes("dates"), false);
     assert.equal(available.includes("post_requirements"), false);
+  });
+
+  it("offers Review before posting only when it is on for a video campaign", () => {
+    const counts = { questions: 0, invites: 0 };
+    assert.equal(availableSections(paidLiveSource(), counts).includes("review_before_posting"), false);
+    assert.ok(
+      availableSections(paidLiveSource({ review_before_posting: true }), counts).includes("review_before_posting"),
+    );
+    assert.equal(
+      availableSections(
+        paidLiveSource({ review_before_posting: true, contest_format: "text_image", platform: "twitter" }),
+        counts,
+      ).includes("review_before_posting"),
+      false,
+    );
   });
 
   it("never offers questions on a public campaign", () => {

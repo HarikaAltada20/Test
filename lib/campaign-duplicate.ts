@@ -17,6 +17,7 @@ export const DUPLICATE_SECTION_KEYS = [
   "access",
   "questions",
   "invites",
+  "review_before_posting",
   "brief",
   "rules",
   "post_requirements",
@@ -42,6 +43,7 @@ export const DUPLICATE_SECTION_LABELS: Record<DuplicateSectionKey, string> = {
   access: "Access setting",
   questions: "Application questions",
   invites: "Invited creators",
+  review_before_posting: "Review before posting",
   brief: "Brief",
   rules: "Rules",
   post_requirements: "Post requirements (X)",
@@ -58,6 +60,7 @@ export const DUPLICATE_SECTION_HINTS: Partial<Record<DuplicateSectionKey, string
   setup: "Video or text/image, campaign type, and the platforms it runs on.",
   access: "Public, Restricted or Private, plus the preview and joining options.",
   invites: "Creators who were invited directly or from a saved list.",
+  review_before_posting: "Creators send their video for approval before posting, with the same draft limits.",
   rewards: "Prizes, CPM rate, milestones and budget. Nothing is paid until you submit.",
   creator_limits: "Max earnings per creator and multiple submissions.",
   dates: "Old dates are moved forward if they have passed.",
@@ -84,7 +87,8 @@ export const DUPLICATE_SECTION_GROUPS: DuplicateSectionGroup[] = [
       "thumbnail",
     ],
   },
-  { key: "access", label: "Who can join", sections: ["access", "questions", "invites"] },
+  { key: "access", label: "Who can join", sections: ["access", "questions", "invites", "review_before_posting"],
+  },
   { key: "brief", label: "Create brief", sections: ["brief", "rules", "post_requirements"] },
   {
     key: "resources",
@@ -139,6 +143,7 @@ export function getSectionDependencies(
     rewards: ["setup"],
     questions: ["access"],
     invites: ["access"],
+    review_before_posting: ["setup"],
   };
   if (facts.isMultiPlatform) {
     for (const key of [
