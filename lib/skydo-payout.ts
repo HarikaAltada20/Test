@@ -23,14 +23,39 @@ export const SKYDO_STATUS_DESCRIPTIONS: Record<SkydoStatus, string> = {
   verified: "Ready for withdrawals.",
 };
 
+/** Prefer `getSkydoStatusBadgeClasses(status, isDark)` — dashboard dark mode is
+ * driven by `data-mode` / `isDark`, so relying only on Tailwind `dark:` here
+ * can leave light mint backgrounds with washed-out text. */
 export const SKYDO_STATUS_BADGE_CLASSES: Record<SkydoStatus, string> = {
   email_pending:
-    "border-amber-400 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-200",
+    "border-amber-500/40 bg-amber-500/15 text-amber-800 dark:border-amber-400/40 dark:bg-amber-500/15 dark:text-amber-200",
   email_sent:
-    "border-blue-400 bg-blue-100 text-blue-800 dark:border-blue-700 dark:bg-blue-950/50 dark:text-blue-200",
+    "border-blue-500/40 bg-blue-500/15 text-blue-800 dark:border-blue-400/40 dark:bg-blue-500/15 dark:text-blue-200",
   verified:
-    "border-emerald-400 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200",
+    "border-emerald-600/40 bg-emerald-600 text-white dark:border-emerald-400/40 dark:bg-emerald-500/20 dark:text-emerald-200",
 };
+
+export function getSkydoStatusBadgeClasses(
+  status: SkydoStatus,
+  isDark: boolean
+): string {
+  const classes: Record<SkydoStatus, { light: string; dark: string }> = {
+    email_pending: {
+      light: "border-amber-400 bg-amber-100 text-amber-900",
+      dark: "border-amber-400/40 bg-amber-500/15 text-amber-200",
+    },
+    email_sent: {
+      light: "border-blue-400 bg-blue-100 text-blue-900",
+      dark: "border-blue-400/40 bg-blue-500/15 text-blue-200",
+    },
+    verified: {
+      // Solid fill + white text stays readable even if theme class lags.
+      light: "border-emerald-700 bg-emerald-700 text-white",
+      dark: "border-emerald-400/50 bg-emerald-500/20 text-emerald-200",
+    },
+  };
+  return isDark ? classes[status].dark : classes[status].light;
+}
 
 export function isSkydoStatus(value: unknown): value is SkydoStatus {
   return (

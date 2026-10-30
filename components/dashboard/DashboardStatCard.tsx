@@ -12,7 +12,9 @@ type DashboardStatCardProps = {
   icon: LucideIcon;
   label: string;
   value: string;
-  description: string;
+  /** Second figure shown beside the main value, e.g. Paid next to Spend */
+  secondary?: { label: string; value: string };
+  description?: string;
   badge?: string;
   footerAction?: { label: string; href: string };
   footerMeta?: string;
@@ -112,6 +114,7 @@ export function DashboardStatCard({
   icon: Icon,
   label,
   value,
+  secondary,
   description,
   badge = "All time",
   footerAction,
@@ -162,25 +165,60 @@ export function DashboardStatCard({
         </div>
 
         <div className="mt-4 space-y-1">
-          <p
+          <div
             className={cn(
-              "text-sm font-medium",
-              isDark ? "text-white/70" : "text-[#6d6d75]",
+              secondary && "grid grid-cols-2 gap-4",
             )}
           >
-            {label}
-          </p>
-          <p
-            className={cn(
-              "text-[28px] font-bold leading-none tracking-tight tabular-nums",
-              isDark ? "text-white" : "text-[#1a1a1a]",
-            )}
-          >
-            {value}
-          </p>
-          <p className={cn("text-sm", isDark ? "text-white/55" : "text-[#8d8d95]")}>
-            {description}
-          </p>
+            <div className="min-w-0 space-y-1">
+              <p
+                className={cn(
+                  "text-sm font-medium",
+                  isDark ? "text-white/70" : "text-[#6d6d75]",
+                )}
+              >
+                {label}
+              </p>
+              <p
+                className={cn(
+                  "truncate text-[28px] font-bold leading-none tracking-tight tabular-nums",
+                  isDark ? "text-white" : "text-[#1a1a1a]",
+                )}
+              >
+                {value}
+              </p>
+            </div>
+            {secondary ? (
+              <div
+                className={cn(
+                  "min-w-0 space-y-1 border-l pl-4",
+                  isDark ? "border-white/10" : "border-[#ececef]",
+                )}
+              >
+                <p
+                  className={cn(
+                    "text-sm font-medium",
+                    isDark ? "text-white/70" : "text-[#6d6d75]",
+                  )}
+                >
+                  {secondary.label}
+                </p>
+                <p
+                  className={cn(
+                    "truncate text-[28px] font-bold leading-none tracking-tight tabular-nums",
+                    isDark ? "text-white/80" : "text-[#55555E]",
+                  )}
+                >
+                  {secondary.value}
+                </p>
+              </div>
+            ) : null}
+          </div>
+          {description ? (
+            <p className={cn("text-sm", isDark ? "text-white/55" : "text-[#8d8d95]")}>
+              {description}
+            </p>
+          ) : null}
         </div>
 
         <div className="mt-auto pt-4">

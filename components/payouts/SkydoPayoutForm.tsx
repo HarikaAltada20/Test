@@ -83,7 +83,7 @@ export function SkydoPayoutForm({
             ? "Wrong email? You can remove it and add a different one until Skydo emails you."
             : "Skydo has already emailed you, so this email can no longer be changed or removed."}
         </p>
-        <SkydoStatusBadge status={status} showDescription />
+        <SkydoStatusBadge status={status} showDescription isDark={isDark} />
         {removable && onRemoveExisting && (
           <Button
             type="button"

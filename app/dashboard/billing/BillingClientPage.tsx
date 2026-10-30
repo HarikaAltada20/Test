@@ -1122,14 +1122,14 @@ export default function BillingClientPage({
               isDark={isDark}
               icon={<TrendingDown className="h-4 w-4" />}
               title="Spent"
-              label="Lifetime contest spending"
+              label="Live budgets + paid on ended campaigns"
               value={formatCurrencyFromCents(profile.total_money_spent)}
             />
             <BillingStatCard
               isDark={isDark}
               icon={<BarChart3 className="h-4 w-4" />}
               title="Campaigns"
-              label="Total campaigns created"
+              label="Campaigns published"
               value={profile.total_contests_run}
             />
             <BillingStatCard

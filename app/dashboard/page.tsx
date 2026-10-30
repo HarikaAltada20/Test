@@ -20,13 +20,20 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { createClient } from "@/utils/supabase/client";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
-import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
+import { sumAdvertiserCampaignViews } from "@/lib/brand-dashboard-pc-views";
+import { fetchEndedContestPaidCentsById } from "@/lib/brand-recognized-spend";
+import {
+  computeBrandDashboardContestStats,
+  type BrandDashboardContest,
+} from "@/lib/brand-dashboard-stats";
+import { getAllTimeRange } from "@/lib/admin-date-range";
 import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import GettingStartedModal from "@/components/GettingStartedModal";
 import { ReferralEarnModal } from "@/components/ReferralEarnModal";
 import { DashboardStatCard } from "@/components/dashboard/DashboardStatCard";
+import { AdminDateRangePicker } from "@/components/admin/AdminDateRangePicker";
 
 function DashboardPage() {
   const router = useRouter();
@@ -47,6 +54,16 @@ function DashboardPage() {
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
+  const [brandContests, setBrandContests] = useState<BrandDashboardContest[]>(
+    [],
+  );
+  const [dateRange, setDateRange] = useState(() => getAllTimeRange());
+  const [datePresetLabel, setDatePresetLabel] = useState("All Time");
+  const [brandEndedPaidById, setBrandEndedPaidById] = useState<
+    Map<string, number>
+  >(() => new Map());
+  const [brandViews, setBrandViews] = useState(0);
+  const [brandStatsLoading, setBrandStatsLoading] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -57,6 +74,10 @@ function DashboardPage() {
     Record<string, boolean>
   >({});
   const [mode, setMode] = useState<"light" | "dark">("light");
+
+  const isAllTimePreset = datePresetLabel === "All Time";
+  const statsBadge = isAllTimePreset ? "All time" : datePresetLabel;
+  const dateFilter = isAllTimePreset ? null : dateRange;
 
   // Read mode from data attribute
   useEffect(() => {
@@ -205,10 +226,12 @@ function DashboardPage() {
             );
           }
 
-          // Fetch contests data for accurate calculations
+          // Contests with computed live/upcoming/ended status for dashboard stats
           const { data: contests, error: contestsError } = await supabase
-            .from("contests")
-            .select("*")
+            .from("contests_with_status")
+            .select(
+              "id, title, platform, thumbnail_url, created_at, published_at, moderation_status, status, post_contest_status, contest_type, contest_based_details, post_campaign_last_synced_at",
+            )
             .eq("advertiser_id", user.id);
 
           if (!isMounted) return;
@@ -216,76 +239,39 @@ function DashboardPage() {
             console.error("Error fetching contests:", contestsError);
           }
 
-          // Fetch submissions for views calculation
-          const { data: submissions, error: submissionsError } = await supabase
-            .from("submissions")
-            .select("*, contests!inner(*)")
-            .eq("contests.advertiser_id", user.id);
+          const contestRows = (contests ?? []) as BrandDashboardContest[];
 
+          // Same exact ended-campaign payouts the billing page uses, so Spend matches
+          const endedPaidById = await fetchEndedContestPaidCentsById(
+            supabase,
+            contestRows.filter(
+              (c) =>
+                c.moderation_status === "published" && c.status === "ended",
+            ),
+          );
           if (!isMounted) return;
-          if (submissionsError) {
-            console.error("Error fetching submissions:", submissionsError);
-          }
+          setBrandContests(contestRows);
+          setBrandEndedPaidById(endedPaidById);
 
-          // Calculate actual statistics
-          const totalContests = contests?.length || 0;
-          const totalViews =
-            submissions?.reduce((sum, sub) => sum + (sub.views || 0), 0) || 0;
-          const totalSpent =
-            contests?.reduce((sum, contest) => {
-              if (
-                contest.contest_type === "leaderboard" &&
-                contest.contest_based_details?.leaderboard_contest?.total_prize
-              ) {
-                return (
-                  sum +
-                  contest.contest_based_details.leaderboard_contest.total_prize
-                );
-              } else if (
-                contest.contest_type === "cpm" &&
-                contest.contest_based_details?.cpm_contest?.total_budget
-              ) {
-                return (
-                  sum + contest.contest_based_details.cpm_contest.total_budget
-                );
-              } else if (contest.contest_type === "milestone") {
-                return (
-                  sum +
-                  getPoolBudgetCentsFromDetails(
-                    "milestone",
-                    contest.contest_based_details,
-                  )
-                );
-              } else if (contest.contest_type === "dual_rewards") {
-                return (
-                  sum +
-                  getPoolBudgetCentsFromDetails(
-                    "dual_rewards",
-                    contest.contest_based_details,
-                  )
-                );
-              }
-              return sum;
-            }, 0) || 0;
-
-          // Update profile with calculated values
-          const updatedProfile = {
+          const stats = computeBrandDashboardContestStats(
+            contestRows,
+            null,
+            endedPaidById,
+          );
+          setProfile({
             ...advertiserProfile,
-            total_contests_run: totalContests,
-            total_money_spent: totalSpent,
-            total_views: totalViews,
-          };
+            // All campaigns incl. drafts: drives the getting-started prompt
+            total_contests_run: contestRows.length,
+            total_money_spent: stats.budgetSpendCents,
+          });
 
-          setProfile(updatedProfile);
-
-          const recent =
-            contests
-              ?.slice(0, 3)
-              ?.sort(
-                (a, b) =>
-                  new Date(b.created_at).getTime() -
-                  new Date(a.created_at).getTime(),
-              ) || [];
+          const recent = [...contestRows]
+            .sort(
+              (a, b) =>
+                new Date(b.created_at || 0).getTime() -
+                new Date(a.created_at || 0).getTime(),
+            )
+            .slice(0, 3);
           setRecentContests(recent);
         } else if (userType === "creator") {
           const { data: creatorProfile, error: profileError } = await supabase
@@ -344,6 +330,34 @@ function DashboardPage() {
     };
   }, [user, isAuthLoading, isAuthenticated, supabase, router]);
 
+  useEffect(() => {
+    if (!isAuthenticated || isAuthLoading || isFetchingData) return;
+    if (!profile || !("company_name" in profile)) return;
+
+    let cancelled = false;
+    setBrandStatsLoading(true);
+    void sumAdvertiserCampaignViews(supabase, brandContests, dateFilter).then(
+      ({ totalViews, error }) => {
+        if (cancelled) return;
+        if (error) console.error("Error fetching campaign views:", error);
+        setBrandViews(totalViews);
+        setBrandStatsLoading(false);
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isAuthenticated,
+    isAuthLoading,
+    isFetchingData,
+    profile,
+    supabase,
+    brandContests,
+    dateFilter,
+  ]);
+
   // Guidelines check moved to opportunities page for creators
 
   if (isAuthLoading || isFetchingData) {
@@ -373,6 +387,21 @@ function DashboardPage() {
 
   const isAdvertiser = profile && "company_name" in profile;
   const isDark = mode === "dark";
+  const brandContestStats = computeBrandDashboardContestStats(
+    brandContests,
+    dateFilter,
+    brandEndedPaidById,
+  );
+  const paidSharePercent =
+    brandContestStats.budgetSpendCents > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (brandContestStats.paidCents / brandContestStats.budgetSpendCents) *
+              100,
+          ),
+        )
+      : 0;
 
   return (
     <div className="space-y-8 bg-background text-foreground transition-colors duration-300">
@@ -386,12 +415,19 @@ function DashboardPage() {
           Dashboard
         </h2>
         <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
-          {/* Referral CTA — survey button disabled per REFERRAL_PROGRAM.md */}
-          {/* {!isAdvertiser && !isSurveyCompleted && (
-            <button onClick={() => setIsSurveyModalOpen(true)} ...>
-              Fill survey and earn upto $5
-            </button>
-          )} */}
+          {isAdvertiser && (
+            <AdminDateRangePicker
+              isDark={isDark}
+              value={dateRange}
+              presetLabel={datePresetLabel}
+              onChange={(next, label) => {
+                setDateRange(next);
+                setDatePresetLabel(label);
+              }}
+              align="end"
+              triggerClassName="h-10 w-full rounded-full sm:w-auto"
+            />
+          )}
           <button
             onClick={() => setIsReferralModalOpen(true)}
             className={cn(
@@ -426,16 +462,20 @@ function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div
+        className={cn(
+          "grid gap-4 md:grid-cols-2",
+          isAdvertiser ? "lg:grid-cols-3" : "xl:grid-cols-4",
+        )}
+      >
         {isAdvertiser ? (
           <>
             <DashboardStatCard
               tone="sky"
               icon={Eye}
               label="Views"
-              value={(profile?.total_views || 0).toLocaleString()}
-              description="Views on campaign content"
-              badge="All time"
+              value={brandStatsLoading ? "…" : brandViews.toLocaleString()}
+              badge={statsBadge}
               visual="sparkline"
               isDark={isDark}
             />
@@ -443,34 +483,37 @@ function DashboardPage() {
               tone="emerald"
               icon={Wallet}
               label="Spend"
-              value={formatCurrencyFromCents(profile?.total_money_spent || 0)}
-              description="Money spent on campaigns"
-              badge="All time"
+              value={formatCurrencyFromCents(brandContestStats.budgetSpendCents)}
+              secondary={{
+                label: "Paid to creators",
+                value: formatCurrencyFromCents(brandContestStats.paidCents),
+              }}
+              description={`${paidSharePercent}% of spend paid out on ended campaigns`}
+              badge={statsBadge}
               visual="progress"
-              progress={Math.min(
-                100,
-                Math.round(((profile?.total_money_spent || 0) / 500000) * 100) || 8,
-              )}
+              progress={paidSharePercent}
               isDark={isDark}
             />
             <DashboardStatCard
               tone="violet"
               icon={Megaphone}
               label="Live campaigns"
-              value={String(profile?.total_contests_run || 0)}
-              description="Campaigns created"
-              badge="All time"
-              visual="line"
-              isDark={isDark}
-            />
-            <DashboardStatCard
-              tone="amber"
-              icon={Coins}
-              label="Available coins"
-              value={String(userCoins)}
-              description="Coins to redeem or use"
-              badge="All time"
-              visual="none"
+              value={String(brandContestStats.liveCampaigns)}
+              secondary={{
+                label: "Published",
+                value: String(brandContestStats.campaignsPublished),
+              }}
+              badge={statsBadge}
+              visual="progress"
+              progress={
+                brandContestStats.campaignsPublished > 0
+                  ? Math.round(
+                      (brandContestStats.liveCampaigns /
+                        brandContestStats.campaignsPublished) *
+                        100,
+                    )
+                  : 0
+              }
               isDark={isDark}
             />
           </>

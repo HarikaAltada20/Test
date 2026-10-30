@@ -5,6 +5,11 @@ import BillingClientPage from "./BillingClientPage";
 import { RouteGuard } from "@/components/guards/RouteGuard";
 import { CashTransaction, CoinTransaction, AdvertiserProfileData, PayoutMethod, UserData, WithdrawalRequest } from "@/types/earnings";
 import { subscriptionPlans, PRODUCT_IDS } from '@/constants/subscriptionPlans';
+import { fetchEndedContestPaidCentsById } from "@/lib/brand-recognized-spend";
+import {
+  computeBrandDashboardContestStats,
+  type BrandDashboardContest,
+} from "@/lib/brand-dashboard-stats";
 
 // Helper function to retry database operations (for post-payment scenarios)
 async function retryOperation<T>(operation: () => Promise<T>, maxRetries = 3, delay = 1000): Promise<T> {
@@ -119,9 +124,41 @@ export default async function AdvertiserBillingServerPage({
         profileData = null;
     }
 
+    // Spent: live/upcoming = campaign budget; ended = actual creator payouts only.
+    // Same calculation as the dashboard Spend card (All time).
+    let recognizedSpendCents = profileData?.total_money_spent || 0;
+    let campaignsPublished = profileData?.total_contests_run || 0;
+    try {
+        const { data: contests } = await supabase
+            .from("contests_with_status")
+            .select(
+                "id, created_at, published_at, status, moderation_status, post_contest_status, contest_type, platform, contest_based_details",
+            )
+            .eq("advertiser_id", authUser.id);
+
+        const contestRows = (contests ?? []) as BrandDashboardContest[];
+
+        const endedPaidById = await fetchEndedContestPaidCentsById(
+            supabase,
+            contestRows.filter(
+                (c) =>
+                    c.moderation_status === "published" && c.status === "ended",
+            ),
+        );
+        const stats = computeBrandDashboardContestStats(
+            contestRows,
+            null,
+            endedPaidById,
+        );
+        recognizedSpendCents = stats.budgetSpendCents;
+        campaignsPublished = stats.campaignsPublished;
+    } catch (spendError) {
+        console.error("Error computing recognized spend:", spendError);
+    }
+
     const initialProfile: AdvertiserProfileData | null = profileData ? {
-        total_money_spent: profileData.total_money_spent || 0,
-        total_contests_run: profileData.total_contests_run || 0,
+        total_money_spent: recognizedSpendCents,
+        total_contests_run: campaignsPublished,
         available_deposit_balance: profileData.available_deposit_balance || 0,
         withdrawable_balance: profileData.withdrawable_balance || 0,
     } : null;
@@ -196,4 +233,4 @@ export default async function AdvertiserBillingServerPage({
             />
         // </RouteGuard>
     );
-} 
+} 
