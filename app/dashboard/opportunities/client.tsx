@@ -131,6 +131,7 @@ import Link from "next/link";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { ContestRequirementBadges } from "@/components/ContestRequirementBadges";
 import { ContestListFlatFeeBonusBadge } from "@/components/ContestListCardMetrics";
+import { HighestPlatformBadge } from "@/components/contest/HighestPlatformPayoutNote";
 import { type CreatorRequirementsSnapshot } from "@/lib/creator-requirements";
 
 import {
@@ -2047,6 +2048,11 @@ export default function OpportunitiesPage({
                   isDark={isDark}
                   size="default"
                 />
+                <HighestPlatformBadge
+                  contest={contest}
+                  isDark={isDark}
+                  size="default"
+                />
                 {contest.bonus_details?.description_html && (
                   <Badge
                     variant="outline"
@@ -2873,6 +2879,11 @@ export default function OpportunitiesPage({
                                 return null;
                               })()}
                               <ContestListFlatFeeBonusBadge
+                                contest={contest}
+                                isDark={isDark}
+                                size="compact"
+                              />
+                              <HighestPlatformBadge
                                 contest={contest}
                                 isDark={isDark}
                                 size="compact"

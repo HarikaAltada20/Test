@@ -32,6 +32,7 @@ import {
   getFlatFeeBonusCentsFromContest,
   toFlatFeeBonusSubmissionInput,
 } from "@/lib/twitter-cpm-bonus-expected";
+import { isHighestPlatformPayoutOnly } from "@/lib/highest-platform-payout";
 
 type ContestWithDetails = {
   id: string;
@@ -461,7 +462,10 @@ export async function enrichContestWithCalculatedBudgets(
               bonus_amount
             `,
         {
-          statusIn: ["verified", "paid"],
+          // Highest-platform-only: the winner needs every live row (pending included).
+          statusIn: isHighestPlatformPayoutOnly(contest)
+            ? ["pending", "verified", "paid"]
+            : ["verified", "paid"],
           order: { column: "created_at", ascending: true },
         },
       );

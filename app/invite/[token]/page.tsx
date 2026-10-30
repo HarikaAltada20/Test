@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { getSessionUser } from "@/utils/supabase/auth-server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { resolveCampaignPrizeCents } from "@/lib/campaign-prize";
+import { isHighestPlatformPayoutOnly } from "@/lib/highest-platform-payout";
 import InviteLandingClient, { type InvitePreview } from "./client";
 
 /** "youtube,instagram" → ["youtube", "instagram"]. */
@@ -19,22 +20,27 @@ function parsePlatformList(value: unknown): string[] {
 }
 
 /**
- * Prize pool for the invite card. The preview function only returns a
- * contest id for live links (or members), and budget details stay on the
- * server: only the final number is passed to the page.
+ * Prize pool and payout rule for the invite card. The preview function only
+ * returns a contest id for live links (or members), and budget details stay
+ * on the server: only the derived values are passed to the page.
  */
-async function loadPrizeCents(contestId: string): Promise<number> {
+async function loadInviteFacts(
+  contestId: string,
+): Promise<{ prizeCents: number; bestPlatformOnly: boolean }> {
   const { data, error } = await createAdminClient()
     .from("contests")
-    .select("contest_type, contest_based_details, platform")
+    .select("contest_type, contest_format, contest_based_details, platform")
     .eq("id", contestId)
     .maybeSingle();
-  if (error || !data) return 0;
-  return resolveCampaignPrizeCents(
-    data.contest_type,
-    data.contest_based_details as Record<string, unknown> | null,
-    data.platform,
-  );
+  if (error || !data) return { prizeCents: 0, bestPlatformOnly: false };
+  return {
+    prizeCents: resolveCampaignPrizeCents(
+      data.contest_type,
+      data.contest_based_details as Record<string, unknown> | null,
+      data.platform,
+    ),
+    bestPlatformOnly: isHighestPlatformPayoutOnly(data),
+  };
 }
 
 export const dynamic = "force-dynamic";
@@ -58,7 +64,9 @@ export default async function InvitePage({
   ]);
 
   const row = Array.isArray(previewRows) ? previewRows[0] : previewRows;
-  const prizeCents = row?.contest_id ? await loadPrizeCents(row.contest_id) : 0;
+  const { prizeCents, bestPlatformOnly } = row?.contest_id
+    ? await loadInviteFacts(row.contest_id)
+    : { prizeCents: 0, bestPlatformOnly: false };
   const preview: InvitePreview = {
     contestId: row?.contest_id ?? null,
     title: row?.title ?? null,
@@ -69,6 +77,7 @@ export default async function InvitePage({
     alreadyMember: row?.already_member === true,
     prizeCents: prizeCents > 0 ? prizeCents : null,
     platforms: parsePlatformList(row?.platform),
+    bestPlatformOnly,
     startDate: row?.start_date ?? null,
     endDate: row?.end_date ?? null,
   };

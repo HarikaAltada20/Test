@@ -163,7 +163,21 @@ import {
   ContestDetailSharedAcrossPlatformsHint,
 } from "@/components/contest/ContestDetailPlatformScopeCard";
 import { ContestDetailVideoPayoutSections } from "@/components/contest/ContestDetailVideoPayoutSections";
+import { HighestPlatformPayoutNote } from "@/components/contest/HighestPlatformPayoutNote";
+import { HighestPlatformSubmissionTag } from "@/components/contest/HighestPlatformSubmissionTag";
+import { isHighestPlatformPayoutOnly } from "@/lib/highest-platform-payout";
+import {
+  creatorSubmissionPayoutTag,
+  fetchCreatorHighestPlatformSummaries,
+  isCreatorSubmissionExcluded,
+  type CreatorHighestPlatformSummary,
+} from "@/lib/highest-platform-payout-creator";
 import { getPlatformIcon } from "@/lib/platform-icons";
+import {
+  CampaignDraftPanel,
+  hasLinkableDraft,
+} from "@/components/content-drafts/CampaignDraftPanel";
+import type { CampaignDraftStatus } from "@/lib/content-drafts";
 import {
   CopyContentButton,
   copyPayloadFromElement,
@@ -697,10 +711,31 @@ export function ContestClientPage({
     }
   }, [contest?.platform]);
 
+  // "Best platform paid" campaigns: the viewer's paid/leading platform and
+  // not-counted submissions, decided on the server from every creator's rows.
+  const highestPlatformPayoutOnly = isHighestPlatformPayoutOnly(contest);
+  const [myHighestPlatform, setMyHighestPlatform] =
+    useState<CreatorHighestPlatformSummary | null>(null);
+
   useEffect(() => {
     setMySubmissionsListFromApi([]);
     setMyCreatorWiseStats(null);
+    setMyHighestPlatform(null);
   }, [contestId]);
+
+  useEffect(() => {
+    if (!highestPlatformPayoutOnly || !user?.id || !contestId) return;
+    if (mySubmissionsListFromApi.length === 0) return;
+    let cancelled = false;
+    fetchCreatorHighestPlatformSummaries([contestId])
+      .then((byContest) => {
+        if (!cancelled) setMyHighestPlatform(byContest[contestId] ?? null);
+      })
+      .catch((err) => console.error("Error loading best-platform payout:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [highestPlatformPayoutOnly, user?.id, contestId, mySubmissionsListFromApi]);
 
   // Refresh metrics state for opportunities
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
@@ -1002,6 +1037,19 @@ export function ContestClientPage({
     () => parseVideoContestPlatforms(contest?.platform),
     [contest?.platform],
   );
+  // Review before posting: creators upload a draft first, then submit the
+  // link of the approved video.
+  const [draftStatus, setDraftStatus] = useState<CampaignDraftStatus | null>(
+    null,
+  );
+  const [draftUploadRequest, setDraftUploadRequest] = useState(0);
+  const draftReviewOn = !!draftStatus?.review_before_posting;
+  const needsDraftFirst =
+    draftReviewOn &&
+    !hasLinkableDraft(draftStatus, detailVideoPlatforms.length > 1);
+  const submitEntryLabel = needsDraftFirst
+    ? "Upload Your Draft"
+    : "Submit Your Entry";
   const [detailPlatformTab, setDetailPlatformTab] =
     useState<PlatformTabValue>(ALL_PLATFORM_TAB);
   const [leaderboardPlatformTab, setLeaderboardPlatformTab] =
@@ -3505,6 +3553,11 @@ export function ContestClientPage({
   const handleSubmitContent = async (button: SubmitEntryButton) => {
     if (isRequirementsBlocked) return;
     await trackSubmitEntryClick(contestId, button);
+    // Review before posting: with no approved draft yet, start with the upload.
+    if (needsDraftFirst) {
+      setDraftUploadRequest((n) => n + 1);
+      return;
+    }
     router.push(`/dashboard/opportunities/${contestId}/submit`);
   };
 
@@ -3957,7 +4010,9 @@ export function ContestClientPage({
                         submissionCount > 0 &&
                         contest?.multiple_submissions_enabled &&
                         submissionCount < maxSubmissions
-                      ? `Submit More (${maxSubmissions - submissionCount} left)`
+                      ? needsDraftFirst
+                        ? "Upload Your Next Draft"
+                        : `Submit More (${maxSubmissions - submissionCount} left)`
                       : hasSubmitted
                         ? "Submitted"
                         : isTwitterTextImageContest
@@ -3968,11 +4023,23 @@ export function ContestClientPage({
                               : user && twitterConnectStatus === "loading"
                                 ? "Checking…"
                                 : "Join Twitter Campaign"
-                          : "Submit Your Entry"}
+                          : submitEntryLabel}
               </span>
             </Button>
           }
         />
+
+        {user && !isTwitterTextImageContest && (
+          <CampaignDraftPanel
+            className="mb-6"
+            contestId={contestId}
+            campaignTitle={contest.title}
+            isDark={isDark}
+            multiPlatform={detailVideoPlatforms.length > 1}
+            onStatusChange={setDraftStatus}
+            uploadRequest={draftUploadRequest}
+          />
+        )}
 
         <div className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-x-6">
           <div
@@ -4107,9 +4174,11 @@ export function ContestClientPage({
                         >
                           <span>
                             {contest.status?.toLowerCase() === "active"
-                              ? `Submit More Videos (${
-                                  maxSubmissions - submissionCount
-                                } remaining)`
+                              ? needsDraftFirst
+                                ? "Upload Your Next Draft"
+                                : `Submit More Videos (${
+                                    maxSubmissions - submissionCount
+                                  } remaining)`
                               : "Contest Not Active"}
                           </span>
                         </Button>
@@ -4251,7 +4320,7 @@ export function ContestClientPage({
                                               twitterConnectStatus === "loading"
                                             ? "Checking…"
                                             : "Join Twitter Campaign"
-                                      : "Submit Your Entry!"}
+                                      : submitEntryLabel}
                                   </span>
                                 </div>
                               </>
@@ -4833,6 +4902,13 @@ export function ContestClientPage({
                               </span>
                             </div>
                           </div>
+
+                          <HighestPlatformPayoutNote
+                            contest={contest}
+                            audience="creator"
+                            isDark={isDark}
+                            className="mb-6"
+                          />
 
                           {detailVideoPlatforms.length >= 2 && (
                             <div className="mb-6 space-y-4">
@@ -5899,9 +5975,10 @@ export function ContestClientPage({
                                               : "bg-slate-900 text-white",
                                           )}
                                         >
-                                          Every submission that gets verified
-                                          will receive this guaranteed bonus
-                                          amount. Your submission will only get
+                                          {highestPlatformPayoutOnly
+                                            ? "Every submission that gets verified on your highest-earning platform will receive this guaranteed bonus amount."
+                                            : "Every submission that gets verified will receive this guaranteed bonus amount."}{" "}
+                                          Your submission will only get
                                           verified if you follow the brief and
                                           rules & guidelines.
                                         </div>
@@ -6126,6 +6203,19 @@ export function ContestClientPage({
                                         ? caps
                                         : caps.slice(0, 1);
                                     if (displayCaps.length === 0) return null;
+                                    const capNote = highestPlatformPayoutOnly ? (
+                                      <p
+                                        className={cn(
+                                          "w-full text-xs",
+                                          isDark
+                                            ? "text-slate-300"
+                                            : "text-[#737373]",
+                                        )}
+                                      >
+                                        Max earnings applies to the one platform
+                                        you&apos;re paid for
+                                      </p>
+                                    ) : null;
 
                                     if (showDetailMaxEarningsByPlatform) {
                                       return (
@@ -6150,11 +6240,14 @@ export function ContestClientPage({
                                                 </div>
                                               ) : null,
                                           )}
+                                          {capNote}
                                         </div>
                                       );
                                     }
 
-                                    return displayCaps.map(({ cents }, idx) => (
+                                    return (
+                                      <div className="flex flex-wrap gap-2">
+                                        {displayCaps.map(({ cents }, idx) => (
                                       <div
                                         key={`cap-shared-${idx}`}
                                         className={cn(
@@ -6174,7 +6267,10 @@ export function ContestClientPage({
                                         />
                                         Cap: {formatMoney(cents!)}
                                       </div>
-                                    ));
+                                    ))}
+                                        {capNote}
+                                      </div>
+                                    );
                                   })()}
                                 </div>
                                 <div
@@ -6937,7 +7033,9 @@ export function ContestClientPage({
                                                   : "text-slate-900",
                                               )}
                                             >
-                                              Every verified submission receives{" "}
+                                              {highestPlatformPayoutOnly
+                                                ? "Every verified submission on your highest-earning platform receives"
+                                                : "Every verified submission receives"}{" "}
                                               <span className="font-bold">
                                                 {formatMoney(lb.flat_fee_bonus)}
                                               </span>{" "}
@@ -9779,15 +9877,25 @@ export function ContestClientPage({
                               null)
                             : null;
 
-                          const combinedEarningsForCard = isCreatorWiseMyCard
-                            ? (myCreatorWiseStats?.total_earnings ??
-                              (
-                                myCreatorGroupOnPage as {
-                                  total_earnings?: number;
-                                }
-                              )?.total_earnings ??
-                              clientEligibleEarningsSum)
-                            : null;
+                          const combinedEarningsForCard = !isCreatorWiseMyCard
+                            ? null
+                            : myHighestPlatform
+                              ? eligibleSubs
+                                  .filter(
+                                    (s) =>
+                                      !isCreatorSubmissionExcluded(
+                                        myHighestPlatform,
+                                        s.id,
+                                      ),
+                                  )
+                                  .reduce((a, s) => a + (s.earnings || 0), 0)
+                              : (myCreatorWiseStats?.total_earnings ??
+                                (
+                                  myCreatorGroupOnPage as {
+                                    total_earnings?: number;
+                                  }
+                                )?.total_earnings ??
+                                clientEligibleEarningsSum);
 
                           const cardPlatform =
                             contest?.platform?.toLowerCase() ?? "";
@@ -10288,9 +10396,17 @@ export function ContestClientPage({
                                       }
 
                                       let prizeDisplay = null;
+                                      const displayEntryTag = isCreatorWiseMyCard
+                                        ? null
+                                        : creatorSubmissionPayoutTag(
+                                            myHighestPlatform,
+                                            displayEntry,
+                                          );
                                       const earningsBase = isCreatorWiseMyCard
                                         ? (combinedEarningsForCard ?? 0)
-                                        : displayEntry.earnings;
+                                        : displayEntryTag?.counted === false
+                                          ? 0
+                                          : displayEntry.earnings;
                                       if (earningsBase > 0) {
                                         // Twitter: show Paid when payouts_processed or paid; others use verified/paid only
                                         const isTwitter =
@@ -10503,6 +10619,17 @@ export function ContestClientPage({
                                           }
                                         }
                                       }
+                                      if (displayEntryTag) {
+                                        prizeDisplay = (
+                                          <div className="flex flex-col items-end gap-1">
+                                            {prizeDisplay}
+                                            <HighestPlatformSubmissionTag
+                                              tag={displayEntryTag}
+                                              isDark={isDark}
+                                            />
+                                          </div>
+                                        );
+                                      }
                                       return prizeDisplay ? (
                                         <div className="text-xs sm:text-sm">
                                           {prizeDisplay}
@@ -10670,10 +10797,18 @@ export function ContestClientPage({
                                                                 submission.id,
                                                               ) ?? null);
 
+                                                      const submissionTag =
+                                                        creatorSubmissionPayoutTag(
+                                                          myHighestPlatform,
+                                                          submission,
+                                                        );
+
                                                       // Earnings display based on modal view mode
                                                       let prizeDisplay = null;
                                                       if (
-                                                        submission.earnings > 0
+                                                        submission.earnings > 0 &&
+                                                        submissionTag?.counted !==
+                                                          false
                                                       ) {
                                                         const isTwitter =
                                                           contest?.platform ===
@@ -10957,6 +11092,10 @@ export function ContestClientPage({
                                                                   views
                                                                 </div>
                                                                 {prizeDisplay}
+                                                                <HighestPlatformSubmissionTag
+                                                                  tag={submissionTag}
+                                                                  isDark={isDark}
+                                                                />
                                                               </div>
                                                             </div>
                                                           </CardContent>

@@ -8,10 +8,20 @@ import { getDualRewardsSubmissionPaidComponents } from "@/lib/dual-rewards-pool-
 import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
 import { buildDualRewardCreatorCapSplitMapsByPlatform } from "@/lib/dual-rewards-creator-cap";
 import {
+  buildMilestoneMostVerifiedBonusByCreatorMapFromDetails,
   buildMilestoneSubmissionPayoutCentsMapFromDetails,
   computeMilestoneContestExpectedSpendCentsFromDetails,
   computeMilestoneCreatorBonusExpectedCentsFromDetails,
+  type MilestoneBudgetSubmission,
 } from "@/lib/milestone-contest-expected-spend";
+import {
+  computeHighestPlatformDecisions,
+  isCreatorPlatformCounted,
+  isSubmissionCountedForPayout,
+  maskExcludedCents,
+  type HighestPlatformDecisions,
+  type HighestPlatformSubmissionRow,
+} from "@/lib/highest-platform-payout";
 import {
   calculateTwitterCpmBudgetSpent,
   type Submission,
@@ -91,6 +101,69 @@ function relevantSubmissions(submissions: BudgetTileSubmission[]): BudgetTileSub
       (status === "verified" || status === "paid") && !twitterExcludedFromBudget(s)
     );
   });
+}
+
+/**
+ * Highest-platform-only campaigns: each creator's paid platform, decided from
+ * the full submission list passed in (pending included). Inactive when off.
+ */
+export function computeHighestPlatformDecisionsForBudget(
+  contest: ContestBudgetTileInput,
+  submissions: BudgetTileSubmission[],
+): HighestPlatformDecisions {
+  return computeHighestPlatformDecisions(
+    contest,
+    submissions.map((s) => ({
+      ...s,
+      id: String(s.id || ""),
+    })) as HighestPlatformSubmissionRow[],
+  );
+}
+
+/** Earnings the best-platform rule leaves out: each creator's non-winning platform totals. */
+export function sumHighestPlatformExcludedCents(
+  decisions: HighestPlatformDecisions,
+): number {
+  let total = 0;
+  decisions.byCreator.forEach((decision) => {
+    // Pending-only creators are not in the filled numbers yet.
+    if (!decision.winner || decision.provisional) return;
+    for (const [platform, cents] of Object.entries(decision.totalsCents)) {
+      if (platform === decision.winner) continue;
+      total += Math.max(0, Number(cents) || 0);
+    }
+  });
+  return total;
+}
+
+/** Most-verified creator bonus expected; bonuses won on a losing platform count $0. */
+function computeCreatorBonusFilledCents(
+  rows: MilestoneBudgetSubmission[],
+  details: Record<string, unknown> | null,
+  contestPlatformCsv: string | null | undefined,
+  decisions: HighestPlatformDecisions,
+): number {
+  if (!decisions.enabled) {
+    return computeMilestoneCreatorBonusExpectedCentsFromDetails(
+      rows,
+      details,
+      contestPlatformCsv,
+    );
+  }
+  const map = buildMilestoneMostVerifiedBonusByCreatorMapFromDetails(
+    rows,
+    details,
+    contestPlatformCsv,
+    undefined,
+    undefined,
+    (creatorId, platform) =>
+      isCreatorPlatformCounted(decisions, creatorId, platform),
+  );
+  let total = 0;
+  map.forEach((row) => {
+    total += row.viewsExpectedCents + row.expectedCents;
+  });
+  return total;
 }
 
 export function getBudgetTileMode(
@@ -198,6 +271,7 @@ function sumPaidEarningsAndBonuses(submissions: BudgetTileSubmission[]): number 
 function computeMilestoneFilledCents(
   contest: ContestBudgetTileInput,
   submissions: BudgetTileSubmission[],
+  decisions: HighestPlatformDecisions,
 ): number {
   const details =
     (contest.contest_based_details as Record<string, unknown> | null) ?? null;
@@ -220,10 +294,42 @@ function computeMilestoneFilledCents(
     milestone_bonus_paid: s.milestone_bonus_paid,
   }));
 
-  return computeMilestoneContestExpectedSpendCentsFromDetails(
-    rows,
-    details,
-    contest.platform,
+  if (!decisions.enabled) {
+    return computeMilestoneContestExpectedSpendCentsFromDetails(
+      rows,
+      details,
+      contest.platform,
+    );
+  }
+
+  // Same paid-first ladder + creator bonus, with losing platforms at $0
+  // (first-come slots are assigned over every row first, as today).
+  const ladderMap = maskExcludedCents(
+    buildMilestoneSubmissionPayoutCentsMapFromDetails(
+      rows,
+      details,
+      contest.platform,
+    ),
+    decisions,
+  );
+  let ladder = 0;
+  for (const row of rows) {
+    if (row.deleted_at != null && row.deleted_at !== "") continue;
+    const st = normalizeBudgetStatus(row.status);
+    if (st !== "verified" && st !== "paid") continue;
+    const paidEarningsCents = Number(row.earnings || 0);
+    if (
+      (st === "paid" || row.paid === true || Boolean(row.paid_at)) &&
+      paidEarningsCents > 0
+    ) {
+      ladder += paidEarningsCents;
+    } else {
+      ladder += ladderMap.get(row.id) ?? 0;
+    }
+  }
+  return (
+    ladder +
+    computeCreatorBonusFilledCents(rows, details, contest.platform, decisions)
   );
 }
 
@@ -231,6 +337,7 @@ function computeCpmFilledCents(
   contest: ContestBudgetTileInput,
   submissions: BudgetTileSubmission[],
   includeFlatFeeBonus: boolean,
+  decisions: HighestPlatformDecisions,
 ): number {
   const details =
     (contest.contest_based_details as Record<string, unknown> | null) ?? null;
@@ -250,19 +357,29 @@ function computeCpmFilledCents(
     contest.platform,
   );
   const rate = fallback?.cpm_rate_usd || cpm?.cpm_rate_usd || 0;
+  // Highest-platform-only: losing-platform rows earn no CPM and use none of
+  // the creator's cap; the flat-fee bonus is added per submission below.
+  const perSubmissionBonus = decisions.enabled && includeFlatFeeBonus;
 
   const dollars = calculateTwitterCpmBudgetSpent(
-    submissions,
+    decisions.enabled
+      ? submissions
+          .filter((s) =>
+            isSubmissionCountedForPayout(decisions, String(s.id || "")),
+          )
+          // Paid bonuses are counted once, in the per-submission loop below.
+          .map((s) => (perSubmissionBonus ? { ...s, bonus_paid: false } : s))
+      : submissions,
     rate,
     resolveMaxEarningsCentsForSubmission(contest, contest.platform) ??
       cpm?.max_earnings_per_creator ??
       null,
     fallback?.min_views ?? cpm?.min_views,
     fallback?.max_views ?? cpm?.max_views,
-    includeFlatFeeBonus
+    includeFlatFeeBonus && !perSubmissionBonus
       ? fallback?.flat_fee_bonus || cpm?.flat_fee_bonus || 0
       : 0,
-    includeFlatFeeBonus
+    includeFlatFeeBonus && !perSubmissionBonus
       ? fallback?.flat_fee_bonus_cap ?? cpm?.flat_fee_bonus_cap ?? null
       : null,
     undefined,
@@ -283,7 +400,26 @@ function computeCpmFilledCents(
       ? (sub) => resolveMaxEarningsCentsForSubmission(contest, sub.platform)
       : undefined,
   );
-  return Math.round(dollars * 100);
+  let bonusCents = 0;
+  if (perSubmissionBonus) {
+    // First-come bonus slots over every row as today, then losing platforms → $0.
+    const relevant = relevantSubmissions(submissions);
+    const bonusMap = maskExcludedCents(
+      buildFlatFeeBonusExpectedCentsBySubmissionId(
+        contest,
+        relevant.map((s) => toFlatFeeBonusSubmissionInput(s)),
+      ),
+      decisions,
+    );
+    for (const s of relevant) {
+      // Paid-first, like the shared-ladder path: a paid bonus counts its stored amount.
+      bonusCents +=
+        s.bonus_paid && s.bonus_amount != null
+          ? Math.max(0, Number(s.bonus_amount) || 0)
+          : bonusMap.get(String(s.id || "")) || 0;
+    }
+  }
+  return Math.round(dollars * 100) + bonusCents;
 }
 
 function normalizeBudgetStatus(raw: unknown): string {
@@ -299,6 +435,11 @@ function normalizeBudgetStatus(raw: unknown): string {
 export function computeDualRewardsCpmMilestoneFilledByPlatform(
   contest: ContestBudgetTileInput,
   submissions: BudgetTileSubmission[],
+  /** Highest-platform-only decisions from the full submission list; computed from `submissions` when omitted. */
+  decisions: HighestPlatformDecisions = computeHighestPlatformDecisionsForBudget(
+    contest,
+    submissions,
+  ),
 ): Map<string, number> {
   const details =
     (contest.contest_based_details as Record<string, unknown> | null) ?? null;
@@ -338,7 +479,11 @@ export function computeDualRewardsCpmMilestoneFilledByPlatform(
   }
 
   const byPlatform = new Map<string, number>();
-  for (const list of grouped.values()) {
+  for (const creatorRows of grouped.values()) {
+    // Highest-platform-only: losing-platform rows count $0 and use none of the cap.
+    const list = creatorRows.filter((sub) =>
+      isSubmissionCountedForPayout(decisions, sub.id),
+    );
     const dualRows = list.map((sub) => ({
       id: sub.id,
       created_at: sub.created_at,
@@ -370,11 +515,13 @@ export function computeDualRewardsCpmMilestoneFilledByPlatform(
 export function computeDualRewardsCpmMilestoneFilledCents(
   contest: ContestBudgetTileInput,
   submissions: BudgetTileSubmission[],
+  decisions?: HighestPlatformDecisions,
 ): number {
   let total = 0;
   for (const cents of computeDualRewardsCpmMilestoneFilledByPlatform(
     contest,
     submissions,
+    decisions,
   ).values()) {
     total += cents;
   }
@@ -384,12 +531,14 @@ export function computeDualRewardsCpmMilestoneFilledCents(
 function computeDualRewardsFilledCents(
   contest: ContestBudgetTileInput,
   submissions: BudgetTileSubmission[],
+  decisions: HighestPlatformDecisions,
 ): number {
   const cpmMilestoneCents = computeDualRewardsCpmMilestoneFilledCents(
     contest,
     submissions,
+    decisions,
   );
-  const bonusCents = computeMilestoneCreatorBonusExpectedCentsFromDetails(
+  const bonusCents = computeCreatorBonusFilledCents(
     submissions.map((s) => ({
       id: String(s.id || ""),
       creator_id: s.creator_id,
@@ -409,6 +558,7 @@ function computeDualRewardsFilledCents(
     })),
     (contest.contest_based_details as Record<string, unknown> | null) ?? null,
     contest.platform,
+    decisions,
   );
   return cpmMilestoneCents + bonusCents;
 }
@@ -437,16 +587,22 @@ export function computeBudgetFilledCents(
     return bonusCents + prizeCents;
   }
 
+  // Highest-platform-only campaigns: each creator's losing platforms count $0.
+  const decisions = computeHighestPlatformDecisionsForBudget(
+    contest,
+    submissions,
+  );
+
   if (type === "milestone") {
-    return computeMilestoneFilledCents(contest, submissions);
+    return computeMilestoneFilledCents(contest, submissions, decisions);
   }
 
   if (isDualRewardsContestType(type)) {
-    return computeDualRewardsFilledCents(contest, submissions);
+    return computeDualRewardsFilledCents(contest, submissions, decisions);
   }
 
   if (isCpmContestType(type)) {
-    return computeCpmFilledCents(contest, submissions, true);
+    return computeCpmFilledCents(contest, submissions, true, decisions);
   }
 
   return 0;

@@ -99,6 +99,15 @@ import {
 } from "@/lib/creator-contest-payout-lease";
 import { clawbackMostVerifiedBonusForCreator } from "@/lib/milestone-most-verified-bonus-clawback";
 import { isMilestoneContestType } from "@/lib/contest-type";
+import {
+  HIGHEST_PLATFORM_NOT_COUNTED_CODE,
+  highestPlatformNotPayableMessage,
+  highestPlatformPayoutLedgerNote,
+  isHighestPlatformPayoutOnly,
+  isSubmissionCountedForPayout,
+  type HighestPlatformLedgerNote,
+} from "@/lib/highest-platform-payout";
+import { loadHighestPlatformDecisions } from "@/lib/highest-platform-payout-server";
 
 export interface VerifySubmissionPayload {
   submissionId: string;
@@ -334,7 +343,7 @@ export async function processVerifySubmission(
     const { data: contest, error: contestError } = await supabase
       .from("contests")
       .select(
-        "title, contest_type, contest_format, platform, contest_based_details, post_contest_status, max_earnings_per_creator, payout_adjustment_percentage, payout_adjustment_mode",
+        "title, contest_type, contest_format, platform, contest_based_details, post_contest_status, max_earnings_per_creator, bonus_details, payout_adjustment_percentage, payout_adjustment_mode",
       )
       .eq("id", submission.contest_id)
       .single();
@@ -471,6 +480,47 @@ export async function processVerifySubmission(
         );
       }
       payoutLease = leaseResult.lease;
+    }
+
+    // Highest-platform-only campaigns: a creator is paid for one platform only.
+    // Paying a submission on any other platform is refused before any credit.
+    let highestPlatformLedgerNote: HighestPlatformLedgerNote | null = null;
+    if (isPaymentAction && isHighestPlatformPayoutOnly(contest)) {
+      const highestPlatform = await loadHighestPlatformDecisions(
+        createAdminClient(),
+        String(submissionFull.contest_id),
+        contest,
+      );
+      if (highestPlatform.error) {
+        return NextResponse.json(
+          {
+            error: `Could not work out the creator's highest-earning platform: ${highestPlatform.error}`,
+          },
+          { status: 500 },
+        );
+      }
+      if (
+        !isSubmissionCountedForPayout(
+          highestPlatform.decisions,
+          String(submissionFull.id),
+        )
+      ) {
+        return NextResponse.json(
+          {
+            error: highestPlatformNotPayableMessage(
+              highestPlatform.decisions.byCreator.get(
+                String(submissionFull.creator_id),
+              ),
+            ),
+            code: HIGHEST_PLATFORM_NOT_COUNTED_CODE,
+          },
+          { status: 409 },
+        );
+      }
+      highestPlatformLedgerNote = highestPlatformPayoutLedgerNote(
+        highestPlatform.decisions,
+        String(submissionFull.creator_id),
+      );
     }
 
     const shouldMarkPaid =
@@ -901,6 +951,7 @@ export async function processVerifySubmission(
               remarks:
                 paymentDetails?.customRemarks ||
                 "Milestone reward credited to creator wallet",
+              highestPlatformNote: highestPlatformLedgerNote,
             });
 
             if (!creditResult.success) {
@@ -1179,7 +1230,7 @@ export async function processVerifySubmission(
               adjustedBonusAllocation,
               `Flat fee bonus for submission in contest ${
                 contest.title || "Contest"
-              }`,
+              }${highestPlatformLedgerNote?.descriptionSuffix ?? ""}`,
               {
                 idempotencyKey: flatFeeBonusIdempotencyKey,
                 remarks:
@@ -1194,6 +1245,7 @@ export async function processVerifySubmission(
                   original_bonus_amount:
                     expectedBonusForSubmission || ladder.amountCents,
                   adjusted_bonus_amount: adjustedBonusAllocation,
+                  ...highestPlatformLedgerNote?.metadata,
                 },
               },
             );
@@ -1514,9 +1566,11 @@ export async function processVerifySubmission(
                   );
 
                   if (creatorSubs) {
-                    const keyedCap = isKeyedMaxEarningsMap(
-                      (contest as any).max_earnings_per_creator,
-                    );
+                    // Highest-platform-only: each platform has its own cap.
+                    const keyedCap =
+                      isKeyedMaxEarningsMap(
+                        (contest as any).max_earnings_per_creator,
+                      ) || isHighestPlatformPayoutOnly(contest);
                     let runningTotal = 0;
                     for (const sub of creatorSubs) {
                       if (
@@ -1575,9 +1629,11 @@ export async function processVerifySubmission(
             cpmPayCap > 0
           ) {
             const maxEarningsForCpmPay = cpmPayCap;
-            const keyedCpmCap = isKeyedMaxEarningsMap(
-              (contest as any).max_earnings_per_creator,
-            );
+            // Highest-platform-only: each platform has its own cap.
+            const keyedCpmCap =
+              isKeyedMaxEarningsMap(
+                (contest as any).max_earnings_per_creator,
+              ) || isHighestPlatformPayoutOnly(contest);
             const { data: creatorSubmissions } = await fetchContestSubmissionsAllPages(
               supabaseAdmin,
               submissionFull.contest_id,
@@ -1945,6 +2001,7 @@ export async function processVerifySubmission(
                           ? "Custom payout credited to creator wallet"
                           : "Dual rewards payout credited to creator wallet"),
                       payoutType: customAmount ? "custom" : "standard",
+                      highestPlatformNote: highestPlatformLedgerNote,
                     })
                   : creditCreatorWithdrawableBalance(
                       submissionFull.creator_id,
@@ -1955,7 +2012,7 @@ export async function processVerifySubmission(
                           }`
                         : `Contest reward credited - ${
                             (contest as any)?.title || "Contest"
-                          }`,
+                          }${highestPlatformLedgerNote?.descriptionSuffix ?? ""}`,
                       {
                         idempotencyKey,
                         remarks:
@@ -1968,6 +2025,7 @@ export async function processVerifySubmission(
                           submission_id: submissionId,
                           payout_type: customAmount ? "custom" : "standard",
                           payout_cycle: resolvedNextCycle,
+                          ...highestPlatformLedgerNote?.metadata,
                         },
                       },
                     ),

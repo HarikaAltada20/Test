@@ -1,0 +1,4 @@
+# Holds your database passwords: never commit it
+clone-db.config.json
+# Each run's working files (may contain your users' data)
+runs/

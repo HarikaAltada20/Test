@@ -2,6 +2,10 @@
 import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { FaChevronDown } from "react-icons/fa";
+import {
+  HIGHEST_PLATFORM_BADGE_TEXT,
+  highestPlatformNoteText,
+} from "@/components/contest/HighestPlatformPayoutNote";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
 import { useThemeMode } from "@/hooks/use-theme-mode";
 import { cn } from "@/lib/utils";
@@ -169,6 +173,11 @@ const creatorFaqs = [
     question: "How are views counted for CPM campaigns?",
     answer:
       "In CPM-based campaigns, views are tracked directly from your organic YouTube or Instagram posts. You earn money based on how many views your content receives and based on min max views criteria, regardless of ranking.",
+  },
+  {
+    id: "faq-best-platform",
+    question: "Some campaigns pay only your best platform",
+    answer: `Campaigns marked <strong>${HIGHEST_PLATFORM_BADGE_TEXT}</strong>: ${highestPlatformNoteText([], "creator").body} Ties go to the platform listed first on the campaign. Submissions on your other platforms show as "Not counted".`,
   },
   {
     id: "faq-15",

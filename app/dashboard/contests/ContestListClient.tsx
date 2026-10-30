@@ -57,7 +57,6 @@ import {
   normalizeCampaignPlatformFilter,
   type CampaignFilterPlatform,
 } from "@/lib/campaign-platform-filter";
-
 // Define the type for a campaign
 type Contest = {
   id: string;

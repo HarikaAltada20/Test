@@ -104,6 +104,13 @@ import {
 import { VideoPlatformMultiSelect } from "@/components/contest/VideoPlatformMultiSelect";
 import { CampaignRewardPicker } from "@/components/dashboard/campaign-reward-picker";
 import { PlatformCampaignTabs } from "@/components/contest/PlatformCampaignTabs";
+import { HighestPlatformPayoutSwitch } from "@/components/contest/HighestPlatformPayoutSwitch";
+import {
+  HIGHEST_PLATFORM_PAYOUT_KEY,
+  canUseHighestPlatformPayout,
+  readHighestPlatformPayoutFlag,
+} from "@/lib/highest-platform-payout";
+import { withHighestPlatformPayoutFlag } from "@/lib/highest-platform-payout-config";
 import { toast } from "@/hooks/use-toast"; // Added import
 import { AccessModeSelector } from "@/components/campaign-access/AccessModeSelector";
 import {
@@ -116,6 +123,12 @@ import {
 } from "@/components/campaign-access/AllowlistPicker";
 import { PreviewEditor } from "@/components/campaign-access/PreviewEditor";
 import { AccessStep } from "@/components/campaign-access/AccessStep";
+import { ReviewBeforePostingSettings } from "@/components/content-drafts/ReviewBeforePostingSettings";
+import {
+  DEFAULT_DRAFT_REVIEW_SETTINGS,
+  normalizeDraftReviewSettings,
+  type DraftReviewSettings,
+} from "@/lib/content-drafts";
 import {
   ApplicantVisibilityEditor,
   DEFAULT_APPLICANT_VISIBILITY,
@@ -537,9 +550,17 @@ export default function CreateContestPage({
     useState(false);
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
     useState<number>(1);
+  // contest_based_details.highest_platform_payout_only (multi-platform video).
+  const [highestPlatformPayoutOnly, setHighestPlatformPayoutOnly] =
+    useState(false);
   const [accessMode, setAccessMode] = useState<AccessMode>("public");
   const [accessListSkipsRequirements, setAccessListSkipsRequirements] =
     useState(false);
+  const [draftReview, setDraftReview] = useState<DraftReviewSettings>(
+    DEFAULT_DRAFT_REVIEW_SETTINGS,
+  );
+  // True once the saved row may have review on, so turning it off is saved too.
+  const draftReviewSavedOn = useRef(false);
   const [allowlistSelection, setAllowlistSelection] =
     useState<AllowlistSelection>(EMPTY_ALLOWLIST_SELECTION);
   const [previewDescription, setPreviewDescription] = useState("");
@@ -4194,14 +4215,20 @@ export default function CreateContestPage({
             flushedCampaigns[primary] ??
             createDefaultPlatformCampaignSnapshot();
           const twitterCampaign = contestBasedDetails.twitter_campaign;
-          contestBasedDetails = attachPlatformCampaignsToDetails(
-            {
-              ...(twitterCampaign
-                ? { twitter_campaign: twitterCampaign }
-                : {}),
-            },
-            platformsForSave,
-            flushedCampaigns,
+          contestBasedDetails = withHighestPlatformPayoutFlag(
+            attachPlatformCampaignsToDetails(
+              {
+                ...(twitterCampaign
+                  ? { twitter_campaign: twitterCampaign }
+                  : {}),
+              },
+              platformsForSave,
+              flushedCampaigns,
+            ),
+            highestPlatformPayoutOnly,
+            primarySnap.contestType,
+            platformsForSave.length,
+            contestFormat,
           );
           const contentColumns = buildPlatformContentColumns(
             platformsForSave,
@@ -4331,6 +4358,15 @@ export default function CreateContestPage({
           : {}),
         ...(accessMode === "public" && listOnlyToEligible
           ? { list_only_to_eligible: true }
+          : {}),
+        // Review before posting (video campaigns). Same rule: only sent when used.
+        ...(draftReview.review_before_posting || draftReviewSavedOn.current
+          ? {
+              ...draftReview,
+              review_before_posting:
+                isVideoContestFormat(contestFormat) &&
+                draftReview.review_before_posting,
+            }
           : {}),
         trust_score:
           isVideoContestFormat(contestFormat) &&
@@ -4485,6 +4521,8 @@ export default function CreateContestPage({
       }
 
       if (responseError) throw responseError;
+      draftReviewSavedOn.current =
+        isVideoContestFormat(contestFormat) && draftReview.review_before_posting;
 
       // Brand writes bypass mutation APIs — bump list gens so dashboards see the change.
       if (!isAdmin) {
@@ -5404,6 +5442,13 @@ export default function CreateContestPage({
           basicsData.resources = contentColumns.resources;
           basicsData.inspiration_links = contentColumns.inspiration_links;
         }
+        basicsData.contest_based_details = withHighestPlatformPayoutFlag(
+          basicsData.contest_based_details,
+          highestPlatformPayoutOnly,
+          basicsData.contest_type,
+          selectedPlatforms.length,
+          contestFormat,
+        );
       } else if (contestFormat === "video") {
         basicsData.contest_based_details = clearPlatformCampaignKeys({
           ...(basicsData.contest_based_details || {}),
@@ -5498,6 +5543,10 @@ export default function CreateContestPage({
             if (!Object.prototype.hasOwnProperty.call(incoming, p)) {
               delete mergedDetails[p];
             }
+          }
+          // The payout switch is written on every save; never keep a stale one.
+          if (incoming[HIGHEST_PLATFORM_PAYOUT_KEY] !== true) {
+            delete mergedDetails[HIGHEST_PLATFORM_PAYOUT_KEY];
           }
           basicsData.contest_based_details = mergedDetails;
         }
@@ -6354,6 +6403,9 @@ export default function CreateContestPage({
       setSelectedPlatforms(["youtube"]);
       setActivePlatform("youtube");
     }
+    setHighestPlatformPayoutOnly(
+      readHighestPlatformPayoutFlag(draft.contest_based_details),
+    );
 
     setCategory(draft.category || "technology");
 
@@ -6380,9 +6432,42 @@ export default function CreateContestPage({
       setAccessMode(draft.access_mode);
     }
     setAccessListSkipsRequirements(!!draft.access_list_skips_requirements);
+    setDraftReview(normalizeDraftReviewSettings(draft));
+    draftReviewSavedOn.current = draft.review_before_posting === true;
     setPreviewDescription(draft.preview_description ?? "");
     setApplicationsOpen(draft.applications_open !== false);
     setListOnlyToEligible(!!draft.list_only_to_eligible);
+
+    // Per-creator limits and creator requirements (same as the edit page).
+    setMultipleSubmissionsEnabled(draft.multiple_submissions_enabled === true);
+    setMaxSubmissionsPerCreator(
+      draft.multiple_submissions_enabled === true &&
+        Number(draft.max_submissions_per_creator) > 0
+        ? Number(draft.max_submissions_per_creator)
+        : 1,
+    );
+    const storedNumber = (value: unknown): number | null => {
+      if (value === null || value === undefined || value === "") return null;
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    };
+    const requirements: Array<
+      [unknown, (on: boolean) => void, (v: number | "") => void, number?]
+    > = [
+      [draft.trust_score, setTrustScoreEnabled, setContestTrustScore],
+      [draft.trust_number, setTrustNumberEnabled, setContestTrustNumber],
+      [draft.min_best_quality_score, setBestQualityEnabled, setContestMinBestQuality],
+      [draft.min_avg_quality_score, setAvgQualityEnabled, setContestMinAvgQuality],
+      [draft.min_quality_score, setMinQualityEnabled, setContestMinQuality],
+      // Stored in cents, shown in dollars.
+      [draft.min_platform_earnings, setMinEarningsEnabled, setContestMinEarnings, 100],
+      [draft.min_platform_views, setMinViewsEnabled, setContestMinViews],
+    ];
+    for (const [value, setEnabled, setValue, divisor] of requirements) {
+      const n = storedNumber(value);
+      setEnabled(n !== null);
+      setValue(n === null ? "" : divisor ? n / divisor : n);
+    }
     if (draft.access_mode === "restricted" && draft.id) {
       questionsApi
         .get(draft.id)
@@ -7084,6 +7169,7 @@ export default function CreateContestPage({
         applyPlatformContentColumnsToSnapshots(
           draftVideoPlatforms,
           {
+            content_type: draft.content_type,
             brief_html: draft.brief_html,
             brief_json: draft.brief_json,
             rules_html: draft.rules_html,
@@ -7856,6 +7942,19 @@ export default function CreateContestPage({
 
             {contestFormat === "video" && (
               <div className="border-t-2 border-dashed pt-6">
+                {canUseHighestPlatformPayout(
+                  contestType,
+                  selectedPlatforms.length,
+                ) && (
+                  <HighestPlatformPayoutSwitch
+                    checked={highestPlatformPayoutOnly}
+                    onCheckedChange={setHighestPlatformPayoutOnly}
+                    platforms={selectedPlatforms}
+                    multipleSubmissionsEnabled={multipleSubmissionsEnabled}
+                    isDark={isDark}
+                    className="mb-4"
+                  />
+                )}
                 <PlatformCampaignTabs {...videoSectionTabProps("prize")} />
               </div>
             )}
@@ -11299,6 +11398,14 @@ export default function CreateContestPage({
                   </div>
                 )}
               </div>
+
+              {isVideoContestFormat(contestFormat) && (
+                <ReviewBeforePostingSettings
+                  value={draftReview}
+                  onChange={setDraftReview}
+                  isDark={isDark}
+                />
+              )}
 
               {isVideoContestFormat(contestFormat) && (
                 <div

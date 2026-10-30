@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Clapperboard,
   Clock,
   ExternalLink,
   Square,
@@ -14,11 +15,13 @@ import {
   PenLine,
   RotateCcw,
   ShieldAlert,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { PREDEFINED_REASONS } from "@/components/RejectionReasonModal";
+import { NotCountedChip } from "@/components/contest/HighestPlatformPayoutNote";
 import { cn } from "@/lib/utils";
 import {
   botScoreTone,
@@ -36,6 +39,7 @@ import {
   type ReviewPlatform,
 } from "./review-metrics";
 import { getPlatformIcon } from "@/lib/platform-icons";
+import { draftFacts } from "@/components/content-drafts/SubmissionDraftCompare";
 import type {
   ReviewMetricsSource,
   ReviewRewardSummary,
@@ -163,6 +167,7 @@ function ToolbarButton({
       disabled={disabled}
       title={`${label} (${hint})`}
       aria-label={label}
+      aria-pressed={active}
       className={cn(
         "flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap rounded-xl border px-1.5 sm:px-2 py-2 text-xs font-semibold transition-all shadow-2xs disabled:pointer-events-none disabled:opacity-35",
         active
@@ -237,6 +242,10 @@ type ReviewSidePanelProps = {
   onPickReason: (reason: string) => void;
   onCustomReason: () => void;
   onCancelReject: () => void;
+  /** Approved draft shown next to the clip. */
+  compareDraftOn?: boolean;
+  onToggleCompareDraft?: () => void;
+  onOpenDraft?: (draftId: string) => void;
 };
 
 export function ReviewSidePanel({
@@ -263,7 +272,11 @@ export function ReviewSidePanel({
   onPickReason,
   onCustomReason,
   onCancelReject,
+  compareDraftOn = false,
+  onToggleCompareDraft,
+  onOpenDraft,
 }: ReviewSidePanelProps) {
+  const draft = submission.draft ?? null;
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const [metricsOpen, toggleMetrics] = usePersistedToggle(METRICS_OPEN_STORAGE_KEY);
   const [creatorOpen, toggleCreator] = usePersistedToggle(CREATOR_OPEN_STORAGE_KEY);
@@ -524,6 +537,16 @@ export function ReviewSidePanel({
             {selected ? <SquareCheck className="h-4 w-4" /> : <Square className="h-4 w-4" />}
           </ToolbarButton>
         )}
+        {draft && onToggleCompareDraft && (
+          <ToolbarButton
+            label="Draft"
+            hint={compareDraftOn ? "D · hide the approved draft" : "D · show the approved draft"}
+            onClick={onToggleCompareDraft}
+            active={compareDraftOn}
+          >
+            <Clapperboard className="h-4 w-4" />
+          </ToolbarButton>
+        )}
         {openUrl && (
           <ToolbarButton
             label="Open"
@@ -542,6 +565,54 @@ export function ReviewSidePanel({
           mobileExpanded ? "block max-h-[35vh] lg:max-h-none" : "hidden",
         )}
       >
+        {draft && (
+          <section>
+            <h3 className={sectionTitle}>Approved draft</h3>
+            <div className="space-y-2 rounded-xl bg-violet-500/10 p-3 ring-1 ring-violet-500/30">
+              <p className="flex items-start gap-2 text-sm font-semibold text-violet-100">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" aria-hidden="true" />
+                <span className="min-w-0">
+                  {draft.title ?? "Untitled draft"}
+                  {draft.versionNo ? (
+                    <span className="ml-1.5 text-xs font-normal text-violet-300">v{draft.versionNo}</span>
+                  ) : null}
+                </span>
+              </p>
+              {draftFacts(draft).length > 0 && (
+                <p className="text-xs text-slate-300">{draftFacts(draft).join(" · ")}</p>
+              )}
+              {draft.caption && (
+                <p className="line-clamp-3 whitespace-pre-wrap text-xs text-slate-300">
+                  <span className="text-slate-400">Caption: </span>
+                  {draft.caption}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2 pt-1">
+                {onToggleCompareDraft && (
+                  <button
+                    type="button"
+                    onClick={onToggleCompareDraft}
+                    aria-pressed={compareDraftOn}
+                    className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                  >
+                    {compareDraftOn ? "Hide draft" : "Show side by side"}
+                    <Kbd>D</Kbd>
+                  </button>
+                )}
+                {onOpenDraft && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenDraft(draft.draftId)}
+                    className="rounded-lg bg-slate-800/80 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                  >
+                    Draft history
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
         <section>
           <h3 className={sectionTitle}>Payout</h3>
           <div className="grid grid-cols-2 gap-2">
@@ -564,6 +635,14 @@ export function ReviewSidePanel({
               </p>
             </div>
           </div>
+          {reward?.notCounted && (
+            <NotCountedChip
+              label={reward.notCounted.label}
+              detail={reward.notCounted.detail}
+              isDark
+              className="mt-2"
+            />
+          )}
           <div className={cn(tile(), "mt-2")}>
             <div className="flex items-center justify-between">
               <p className={tileLabel}>You watched</p>

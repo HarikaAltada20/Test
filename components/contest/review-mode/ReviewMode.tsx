@@ -48,6 +48,7 @@ import type {
 const HINT_STORAGE_KEY = "goviral_review_mode_hint_dismissed_v2";
 const AUTO_ADVANCE_STORAGE_KEY = "goviral_review_mode_auto_advance";
 const SPEED_STORAGE_KEY = "goviral_review_mode_speed";
+const COMPARE_DRAFT_STORAGE_KEY = "goviral_review_mode_compare_draft";
 const PLAYBACK_RATES = [1, 1.25, 1.5, 2] as const;
 /** Give up waiting for a status change (e.g. quality dialog cancelled). */
 const AWAIT_TIMEOUT_MS = 5 * 60 * 1000;
@@ -85,6 +86,8 @@ export type ReviewModeProps = {
   /** Review Mode is always dark; kept so callers don't need to special-case it. */
   isDark: boolean;
   onExit: () => void;
+  /** Leaves Review Mode and opens a draft's history in the Drafts tab. */
+  onOpenDraft?: (draftId: string) => void;
 };
 
 type SessionStats = { approved: number; rejected: number };
@@ -100,6 +103,8 @@ export function ReviewMode(props: ReviewModeProps) {
   const [muted, setMuted] = useState(false);
   const [autoAdvance, setAutoAdvance] = useState(true);
   const [playbackRate, setPlaybackRate] = useState<number>(1);
+  // Show the approved draft next to clips that were posted from one.
+  const [compareDraft, setCompareDraft] = useState(true);
   const [stats, setStats] = useState<SessionStats>({ approved: 0, rejected: 0 });
   const baseQueueRef = useRef(queueIds);
 
@@ -113,6 +118,7 @@ export function ReviewMode(props: ReviewModeProps) {
     if (activation && !activation.hasBeenActive) setMuted(true);
     try {
       setAutoAdvance(localStorage.getItem(AUTO_ADVANCE_STORAGE_KEY) !== "false");
+      setCompareDraft(localStorage.getItem(COMPARE_DRAFT_STORAGE_KEY) !== "false");
       const savedRate = Number(localStorage.getItem(SPEED_STORAGE_KEY));
       if ((PLAYBACK_RATES as readonly number[]).includes(savedRate)) {
         setPlaybackRate(savedRate);
@@ -169,6 +175,13 @@ export function ReviewMode(props: ReviewModeProps) {
     } catch (_) {}
   };
 
+  const setCompareDraftPersisted = (value: boolean) => {
+    setCompareDraft(value);
+    try {
+      localStorage.setItem(COMPARE_DRAFT_STORAGE_KEY, String(value));
+    } catch (_) {}
+  };
+
   if (!mounted) return null;
 
   return createPortal(
@@ -181,6 +194,8 @@ export function ReviewMode(props: ReviewModeProps) {
       onMutedChange={setMuted}
       playbackRate={playbackRate}
       onPlaybackRateChange={setPlaybackRatePersisted}
+      compareDraft={compareDraft}
+      onCompareDraftChange={setCompareDraftPersisted}
       autoAdvance={autoAdvance}
       onAutoAdvanceChange={setAutoAdvancePersisted}
       unreviewedOnly={unreviewedOnly}
@@ -210,6 +225,8 @@ type ReviewSessionProps = ReviewModeProps & {
   onMutedChange: (muted: boolean) => void;
   playbackRate: number;
   onPlaybackRateChange: (rate: number) => void;
+  compareDraft: boolean;
+  onCompareDraftChange: (value: boolean) => void;
   autoAdvance: boolean;
   onAutoAdvanceChange: (value: boolean) => void;
   unreviewedOnly: boolean;
@@ -309,6 +326,9 @@ function ReviewSession({
   onMutedChange,
   playbackRate,
   onPlaybackRateChange,
+  compareDraft,
+  onCompareDraftChange,
+  onOpenDraft,
   autoAdvance,
   onAutoAdvanceChange,
   unreviewedOnly,
@@ -527,6 +547,9 @@ function ReviewSession({
       ? getReviewOpenUrl(activePlatform, activeSubmission.contentLink, activeIsVertical)
       : null;
 
+  const activeDraft = activeSubmission?.draft ?? null;
+  const toggleCompareDraft = () => onCompareDraftChange(!compareDraft);
+
   useReviewKeyboard({
     next,
     prev,
@@ -552,6 +575,7 @@ function ReviewSession({
     openOriginal: () => {
       if (activeOpenUrl) window.open(activeOpenUrl, "_blank", "noopener,noreferrer");
     },
+    toggleCompare: activeDraft ? toggleCompareDraft : undefined,
     exit: () => {
       if (rejectPickerOpen) setRejectPickerOpen(false);
       else onExit();
@@ -862,6 +886,9 @@ function ReviewSession({
                   onWheelForward={forwardWheel}
                   onWatchedChange={distance === 0 ? setWatchedPercent : undefined}
                   onDurationChange={distance === 0 ? setPlayerDuration : undefined}
+                  compareDraft={
+                    distance === 0 && compareDraft ? (submission?.draft ?? null) : null
+                  }
                 />
               );
             })}
@@ -911,7 +938,7 @@ function ReviewSession({
             </div>
           )}
 
-          {!isSummary && queue.length > 0 && activeIsVertical && (
+          {!isSummary && queue.length > 0 && activeIsVertical && !(compareDraft && activeDraft) && (
             <div className="pointer-events-none absolute inset-y-0 left-6 z-40 hidden flex-col justify-center gap-6 xl:flex">
               <div className="pointer-events-auto">
                 <NeighbourCard label="Previous" submission={prevSubmission} onClick={prev} isDark={isDark} />
@@ -937,6 +964,7 @@ function ReviewSession({
                 <span>Space play</span>
                 <span>M mute</span>
                 <span>S select</span>
+                <span>D draft</span>
                 {canBulkModerate && <span>A approve · R reject · P pending</span>}
                 <span>Esc exit</span>
                 <button
@@ -982,6 +1010,9 @@ function ReviewSession({
             onPickReason={rejectWithReason}
             onCustomReason={() => moderateActive("reject")}
             onCancelReject={() => setRejectPickerOpen(false)}
+            compareDraftOn={compareDraft}
+            onToggleCompareDraft={toggleCompareDraft}
+            onOpenDraft={onOpenDraft}
           />
         )}
       </div>

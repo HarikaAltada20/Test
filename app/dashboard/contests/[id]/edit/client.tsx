@@ -86,6 +86,12 @@ import { AccessStep } from "@/components/campaign-access/AccessStep";
 import { ApplicantVisibilityEditor } from "@/components/campaign-access/ApplicantVisibilityEditor";
 import { RestrictedPreviewDialog } from "@/components/campaign-access/RestrictedPreviewDialog";
 import { SkipRequirementsSwitch } from "@/components/campaign-access/SkipRequirementsSwitch";
+import { ReviewBeforePostingSettings } from "@/components/content-drafts/ReviewBeforePostingSettings";
+import {
+  DEFAULT_DRAFT_REVIEW_SETTINGS,
+  normalizeDraftReviewSettings,
+  type DraftReviewSettings,
+} from "@/lib/content-drafts";
 import { useUnsavedChangesWarning } from "@/hooks/use-unsaved-changes-warning";
 import { invalidateBrandCampaignListCachesAfterMutation } from "@/lib/invalidate-brand-campaign-list-cache";
 import { PreviewEditor } from "@/components/campaign-access/PreviewEditor";
@@ -199,6 +205,15 @@ import {
 import { VideoPlatformMultiSelect } from "@/components/contest/VideoPlatformMultiSelect";
 import { PlatformCampaignTabs } from "@/components/contest/PlatformCampaignTabs";
 import { CampaignRewardPicker } from "@/components/dashboard/campaign-reward-picker";
+import { HighestPlatformPayoutSwitch } from "@/components/contest/HighestPlatformPayoutSwitch";
+import {
+  canUseHighestPlatformPayout,
+  readHighestPlatformPayoutFlag,
+} from "@/lib/highest-platform-payout";
+import {
+  highestPlatformPayoutLockReason,
+  withHighestPlatformPayoutFlag,
+} from "@/lib/highest-platform-payout-config";
 import { isVideoContestFormat } from "@/lib/trust-score";
 import { sanitizeContestCreatorRequirementPayload } from "@/lib/contest-creator-requirements-validation";
 
@@ -553,6 +568,11 @@ type ContestData = {
     | Record<string, string[]>
     | null;
   interests?: string[] | null;
+  // Review before posting
+  review_before_posting?: boolean;
+  draft_max_open?: number | null;
+  draft_max_revisions?: number | null;
+  draft_max_rejections?: number | null;
 };
 
 export default function EditContestPage({
@@ -863,6 +883,9 @@ export default function EditContestPage({
     useState(false);
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
     useState<number>(1);
+  // contest_based_details.highest_platform_payout_only (multi-platform video).
+  const [highestPlatformPayoutOnly, setHighestPlatformPayoutOnly] =
+    useState(false);
   const [contentType, setContentType] = useState<
     "ugc" | "clipping" | "other" | "" | "raid" | "awareness"
   >("other");
@@ -889,6 +912,20 @@ export default function EditContestPage({
   const [accessListSkipsRequirements, setAccessListSkipsRequirements] =
     useState(false);
   const [savedSkipRequirements, setSavedSkipRequirements] = useState(false);
+  const [draftReview, setDraftReview] = useState<DraftReviewSettings>(
+    DEFAULT_DRAFT_REVIEW_SETTINGS,
+  );
+  const [savedDraftReview, setSavedDraftReview] = useState<DraftReviewSettings>(
+    DEFAULT_DRAFT_REVIEW_SETTINGS,
+  );
+  const draftReviewInUse =
+    draftReview.review_before_posting || savedDraftReview.review_before_posting;
+  const draftReviewToSave: DraftReviewSettings = {
+    ...draftReview,
+    review_before_posting:
+      isVideoContestFormat(contest?.contest_format) &&
+      draftReview.review_before_posting,
+  };
   const [previewDescription, setPreviewDescription] = useState("");
   const [applicationsOpen, setApplicationsOpen] = useState(true);
   const [applicationQuestions, setApplicationQuestions] = useState<
@@ -918,6 +955,8 @@ export default function EditContestPage({
     ...(effectiveListOnlyToEligible || savedListOnlyToEligible
       ? { list_only_to_eligible: effectiveListOnlyToEligible }
       : {}),
+    // Review before posting: sent while on or being turned off.
+    ...(draftReviewInUse ? draftReviewToSave : {}),
   };
   /** Validation error for unsaved application questions, checked before anything is saved. */
   const getApplicationQuestionsError = (): string | null => {
@@ -962,6 +1001,7 @@ export default function EditContestPage({
   /** Call after a successful save that wrote accessFields. */
   const commitSavedAccessFields = (savedViaAdminApi: boolean) => {
     setPreviewDirty(false);
+    if (draftReviewInUse) setSavedDraftReview(draftReviewToSave);
     const changed =
       accessFields.access_mode !== savedAccessMode ||
       accessFields.access_list_skips_requirements !== savedSkipRequirements ||
@@ -982,7 +1022,9 @@ export default function EditContestPage({
     (accessMode !== "public" &&
       accessListSkipsRequirements !== savedSkipRequirements) ||
     effectiveListOnlyToEligible !== savedListOnlyToEligible ||
-    (accessMode === "restricted" && (previewDirty || questionsDirty));
+    (accessMode === "restricted" && (previewDirty || questionsDirty)) ||
+    (draftReviewInUse &&
+      JSON.stringify(draftReviewToSave) !== JSON.stringify(savedDraftReview));
   useUnsavedChangesWarning(accessDirty);
   const [category, setCategory] = useState<string>("technology");
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
@@ -1443,7 +1485,13 @@ export default function EditContestPage({
         : null;
     if (!isVideoEditContest || selectedPlatforms.length < 2) {
       return {
-        details,
+        details: withHighestPlatformPayoutFlag(
+          details,
+          highestPlatformPayoutOnly,
+          contestType,
+          isVideoEditContest ? selectedPlatforms.length : 0,
+          contest?.contest_format,
+        ),
         platform:
           isVideoEditContest && selectedPlatforms.length > 0
             ? serializeVideoContestPlatforms(selectedPlatforms)
@@ -1521,12 +1569,18 @@ export default function EditContestPage({
       flushed,
     );
     return {
-      details: attachPlatformCampaignsToDetails(
-        {
-          ...(twitterCampaign ? { twitter_campaign: twitterCampaign } : {}),
-        },
-        selectedPlatforms,
-        flushed,
+      details: withHighestPlatformPayoutFlag(
+        attachPlatformCampaignsToDetails(
+          {
+            ...(twitterCampaign ? { twitter_campaign: twitterCampaign } : {}),
+          },
+          selectedPlatforms,
+          flushed,
+        ),
+        highestPlatformPayoutOnly,
+        primarySnap.contestType,
+        selectedPlatforms.length,
+        contest?.contest_format,
       ),
       platform: serializeVideoContestPlatforms(selectedPlatforms),
       contestType: primarySnap.contestType,
@@ -2437,6 +2491,9 @@ export default function EditContestPage({
               data.multiple_submissions_enabled || false,
             );
             setMaxSubmissionsPerCreator(data.max_submissions_per_creator || 1);
+            setHighestPlatformPayoutOnly(
+              readHighestPlatformPayoutFlag(data.contest_based_details),
+            );
             const trustScore = parseStoredOptionalNumber(data.trust_score);
             if (trustScore !== null) {
               setTrustScoreEnabled(true);
@@ -2532,6 +2589,9 @@ export default function EditContestPage({
               loadedAccessMode !== "public" &&
                 !!data.access_list_skips_requirements,
             );
+            const loadedDraftReview = normalizeDraftReviewSettings(data);
+            setDraftReview(loadedDraftReview);
+            setSavedDraftReview(loadedDraftReview);
 
             // Load flat fee bonus from contest_based_details
             if (data.contest_type === "leaderboard") {
@@ -3004,6 +3064,7 @@ export default function EditContestPage({
                   applyPlatformContentColumnsToSnapshots(
                     parsedVideoPlatforms,
                     {
+                      content_type: data.content_type,
                       brief_html: data.brief_html,
                       brief_json: data.brief_json,
                       rules_html: data.rules_html,
@@ -5679,6 +5740,13 @@ export default function EditContestPage({
       } else {
         contestBasedDetails = {};
       }
+      contestBasedDetails = withHighestPlatformPayoutFlag(
+        contestBasedDetails,
+        highestPlatformPayoutOnly,
+        contestType,
+        isVideoEditContest ? selectedPlatforms.length : 0,
+        contest?.contest_format,
+      );
 
       const { error: updateError } = await supabase
         .from("contests")
@@ -6730,7 +6798,13 @@ export default function EditContestPage({
           resources,
           contest_type: contestType,
           contest_based_details: preserveExistingBudgetSpentFields(
-            contestBasedDetails,
+            withHighestPlatformPayoutFlag(
+              contestBasedDetails,
+              highestPlatformPayoutOnly,
+              contestType,
+              isVideoEditContest ? selectedPlatforms.length : 0,
+              contest?.contest_format,
+            ),
             contest?.contest_based_details,
           ),
           // Categories, subcategories, and interests
@@ -7389,7 +7463,13 @@ export default function EditContestPage({
           resources,
           contest_type: contestType,
           contest_based_details: preserveExistingBudgetSpentFields(
-            contestBasedDetails2,
+            withHighestPlatformPayoutFlag(
+              contestBasedDetails2,
+              highestPlatformPayoutOnly,
+              contestType,
+              isVideoEditContest ? selectedPlatforms.length : 0,
+              contest?.contest_format,
+            ),
             contest?.contest_based_details,
           ),
           // Categories, subcategories, and interests
@@ -11057,6 +11137,15 @@ export default function EditContestPage({
               </div>
 
               {isVideoContestFormat(contest?.contest_format) && (
+                <ReviewBeforePostingSettings
+                  value={draftReview}
+                  onChange={setDraftReview}
+                  isDark={isDark}
+                  confirmChanges={contest?.moderation_status === "published"}
+                />
+              )}
+
+              {isVideoContestFormat(contest?.contest_format) && (
                 <div
                   className={cn(
                     "space-y-3 rounded-2xl border p-5",
@@ -14513,6 +14602,25 @@ export default function EditContestPage({
           </div>
 
           <Separator />
+
+          {!datesOnly &&
+            isVideoEditContest &&
+            canUseHighestPlatformPayout(
+              contestType,
+              selectedPlatforms.length,
+            ) && (
+              <HighestPlatformPayoutSwitch
+                checked={highestPlatformPayoutOnly}
+                onCheckedChange={setHighestPlatformPayoutOnly}
+                platforms={selectedPlatforms}
+                multipleSubmissionsEnabled={multipleSubmissionsEnabled}
+                lockedReason={highestPlatformPayoutLockReason(
+                  contest,
+                  isAdmin,
+                )}
+                isDark={isDark}
+              />
+            )}
 
           {!datesOnly && isVideoEditContest && (
             <PlatformCampaignTabs

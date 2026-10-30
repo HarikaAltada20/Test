@@ -99,6 +99,12 @@ export const SUBMISSION_EXPORT_OTHER_REWARD_COLUMN_IDS = [
   "rejection_reason",
 ] as const;
 
+/** Only on campaigns that pay each creator for their highest-earning platform. */
+export const SUBMISSION_EXPORT_HIGHEST_PLATFORM_COLUMN_IDS = [
+  "counts_toward_payout",
+  "paid_platform",
+] as const;
+
 export type SubmissionExportBaseColumnId =
   (typeof SUBMISSION_EXPORT_BASE_COLUMN_IDS)[number];
 export type SubmissionExportYoutubeColumnId =
@@ -113,7 +119,8 @@ export type SubmissionExportColumnId =
   | (typeof SUBMISSION_EXPORT_TIKTOK_COLUMN_IDS)[number]
   | (typeof SUBMISSION_EXPORT_SIMPLE_REWARD_COLUMN_IDS)[number]
   | (typeof SUBMISSION_EXPORT_DUAL_REWARD_COLUMN_IDS)[number]
-  | (typeof SUBMISSION_EXPORT_OTHER_REWARD_COLUMN_IDS)[number];
+  | (typeof SUBMISSION_EXPORT_OTHER_REWARD_COLUMN_IDS)[number]
+  | (typeof SUBMISSION_EXPORT_HIGHEST_PLATFORM_COLUMN_IDS)[number];
 
 export const SUBMISSION_EXPORT_COLUMN_LABELS: Record<
   SubmissionExportColumnId,
@@ -178,6 +185,8 @@ export const SUBMISSION_EXPORT_COLUMN_LABELS: Record<
   status: "Status",
   submitted: "Submitted",
   rejection_reason: "Rejection Reason",
+  counts_toward_payout: "Counts Toward Payout",
+  paid_platform: "Paid Platform",
 };
 
 const YT_CORE_IDS = new Set([
@@ -216,6 +225,8 @@ export type GetSubmissionExportColumnsOptions = {
   isDualRewards: boolean;
   isMilestoneContest: boolean;
   ytVisibleColumnIds?: string[];
+  /** Campaign pays each creator for their highest-earning platform only. */
+  highestPlatformPayoutOnly?: boolean;
 };
 
 function pushSubmissionExportColumn(
@@ -403,6 +414,11 @@ export function getSubmissionExportColumns(
       if (id === "submitted" && platform.includes("youtube") && !ytCol("submitted"))
         continue;
       cols.push({ id, label: SUBMISSION_EXPORT_COLUMN_LABELS[id] });
+    }
+    if (opts.highestPlatformPayoutOnly) {
+      for (const id of SUBMISSION_EXPORT_HIGHEST_PLATFORM_COLUMN_IDS) {
+        cols.push({ id, label: SUBMISSION_EXPORT_COLUMN_LABELS[id] });
+      }
     }
   }
 

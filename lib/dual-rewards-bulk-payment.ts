@@ -43,6 +43,7 @@ import {
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
 import type { MilestonePayoutRule } from "@/lib/contest-utils-client";
+import type { HighestPlatformLedgerNote } from "@/lib/highest-platform-payout";
 
 export type DualRewardsBulkBreakdownRow = {
   submission_id: string;
@@ -99,6 +100,8 @@ export async function executeDualRewardsBulkPayment(params: {
   paymentType: "standard" | "bonus" | "both";
   /** Optional lease held by the caller; renewed during long row-update loops. */
   payoutLease?: CreatorContestPayoutLease | null;
+  /** Highest-platform-only campaigns: recorded on the wallet credit. */
+  highestPlatformLedgerNote?: HighestPlatformLedgerNote | null;
 }): Promise<
   | {
       ok: true;
@@ -125,6 +128,7 @@ export async function executeDualRewardsBulkPayment(params: {
     submissionIds,
     paymentType,
     payoutLease,
+    highestPlatformLedgerNote,
   } = params;
 
   const component = paymentTypeToComponent(paymentType);
@@ -477,6 +481,7 @@ export async function executeDualRewardsBulkPayment(params: {
               paymentType,
               idempotencyKey,
               breakdown,
+              highestPlatformNote: highestPlatformLedgerNote,
             }),
         })
       : {

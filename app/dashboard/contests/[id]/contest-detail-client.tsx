@@ -139,6 +139,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
+import { DraftReviewPanel } from "@/components/content-drafts/DraftReviewPanel";
+import { listCampaignDrafts } from "@/components/content-drafts/api";
+import {
+  DraftCompareDialog,
+  useSubmissionDrafts,
+} from "@/components/content-drafts/SubmissionDraftCompare";
 import { useTabState } from "@/components/ui/tab-utils";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -267,6 +273,25 @@ import {
   winnerCountsByTargetForPlatform,
 } from "@/lib/milestone-contest-expected-spend";
 import type { MilestoneMostVerifiedBonusPaidByCreator } from "@/lib/milestone-contest-expected-spend";
+import {
+  HIGHEST_PLATFORM_PAYOUT_KEY,
+  canUseHighestPlatformPayout,
+  computeHighestPlatformDecisions,
+  isCreatorPlatformCounted,
+  isSubmissionCountedForPayout,
+  maskExcludedCents,
+  readHighestPlatformPayoutFlag,
+} from "@/lib/highest-platform-payout";
+import {
+  countNotCountedSubmissions,
+  highestPlatformCreatorInfo,
+  highestPlatformExportRuleNote,
+  highestPlatformNotCountedInfo,
+} from "@/lib/highest-platform-payout-display";
+import {
+  HighestPlatformPayoutNote,
+  NotCountedChip,
+} from "@/components/contest/HighestPlatformPayoutNote";
 
 /** Normalize id so submission `creator_id` matches SSR ledger keys (`money_transactions.user_id`). */
 function milestoneMvCreatorIdKey(id: unknown): string {
@@ -481,6 +506,7 @@ import {
   Columns2,
   PlaySquare,
   RotateCcw,
+  Clapperboard,
 } from "lucide-react";
 import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
 import {
@@ -851,6 +877,7 @@ interface Contest {
   min_platform_views?: number | null;
   access_mode?: AccessMode | null;
   advertiser_id?: string | null;
+  review_before_posting?: boolean | null;
 }
 
 interface Submission {
@@ -1066,6 +1093,7 @@ function TwitterContestSubmissionStatusTabs({
   isLoading = false,
   className,
   fit = false,
+  verifiedNotCounted = 0,
 }: {
   activeStatusTab: string;
   onValueChange: (value: string) => void;
@@ -1076,6 +1104,8 @@ function TwitterContestSubmissionStatusTabs({
   className?: string;
   /** Content-sized pills (Figma segmented control), not equal-width columns. */
   fit?: boolean;
+  /** Verified rows on a creator's non-paid platform. */
+  verifiedNotCounted?: number;
 }) {
   const sx = getBrandSubmissionsStyles(isDark);
   const loaded = loadedCounts ?? counts;
@@ -1147,6 +1177,17 @@ function TwitterContestSubmissionStatusTabs({
               <span className={cn(sx.pillCount, "tabular-nums")}>
                 ({isLoading ? `${tab.loaded} / ${tab.total}` : tab.total})
               </span>
+              {tab.value === "verified" && verifiedNotCounted > 0 ? (
+                <span
+                  className={cn(
+                    "text-[11px] font-normal",
+                    isDark ? "text-slate-300" : "text-[#737373]",
+                  )}
+                  title="Verified on a platform that is not this creator's highest-earning platform, so it is not paid."
+                >
+                  {verifiedNotCounted} not counted
+                </span>
+              ) : null}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -1690,12 +1731,64 @@ export default function ContestDetailClient({
     return emailLocal || "Creator";
   };
 
+  // Review before posting: drafts waiting for review (tab label), and whether
+  // the campaign has any drafts, so the tab stays after the setting is turned off.
+  const [draftCounts, setDraftCounts] = useState<{
+    toReview: number;
+    any: boolean;
+    reviewOn: boolean;
+    posted: number;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    listCampaignDrafts({
+      contestId,
+      status: "pending_review",
+      sort: "oldest",
+      offset: 0,
+      limit: 1,
+    })
+      .then((page) => {
+        if (cancelled) return;
+        const total = Object.values(page.counts).reduce(
+          (sum: number, n) => sum + (n ?? 0),
+          0,
+        );
+        setDraftCounts({
+          toReview: page.counts.pending_review ?? 0,
+          any: total > 0,
+          reviewOn: page.review_before_posting === true,
+          posted: page.counts.posted ?? 0,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [contestId]);
+  // The page's contest view doesn't carry the new column; the drafts list does.
+  const draftReviewOn =
+    !!contest?.review_before_posting || !!draftCounts?.reviewOn;
+  const showDraftsTab = draftReviewOn || !!draftCounts?.any;
+  const requestedDraftId = useSearchParams().get("draft");
+  // Submissions posted from an approved draft, so reviewers can compare the two.
+  const submissionDrafts = useSubmissionDrafts(
+    contestId,
+    (draftCounts?.posted ?? 0) > 0,
+  );
+  const [compareDraftSubmissionId, setCompareDraftSubmissionId] = useState<
+    string | null
+  >(null);
+  // A draft to open when the Drafts tab mounts (from a submission's draft link).
+  const [draftToOpen, setDraftToOpen] = useState<string | null>(null);
+
   const tabs = [
     { id: "overview", label: "Overview" },
     {
       id: "submissions",
       label: `Submissions (${submissionTotalCount})`,
     },
+    ...(showDraftsTab ? [{ id: "drafts", label: "Drafts" }] : []),
     ...(contest?.platform?.toLowerCase() === "twitter"
       ? [{ id: "twitter-feed", label: "Twitter Feed" }]
       : []),
@@ -1711,6 +1804,10 @@ export default function ContestDetailClient({
   const { activeTab, setActiveTab } = useTabState(tabs, {
     defaultTab: "overview",
   });
+  // Open a draft once; going back to the Drafts tab later shows the list.
+  useEffect(() => {
+    if (activeTab !== "drafts") setDraftToOpen(null);
+  }, [activeTab]);
   // Notifications can link straight to a tab, e.g. ?tab=applications. Applied
   // whenever the requested tab changes, including when a notification for
   // this same campaign is clicked while the page is already open.
@@ -4079,6 +4176,16 @@ export default function ContestDetailClient({
         label: "Submissions",
         count: submissionTotalCount,
       },
+      ...(showDraftsTab
+        ? [
+            {
+              id: "drafts",
+              label: draftCounts?.toReview
+                ? `Drafts (${draftCounts.toReview} to review)`
+                : "Drafts",
+            },
+          ]
+        : []),
       ...(contest?.platform?.toLowerCase() === "twitter"
         ? [{ id: "twitter-feed", label: "Twitter Feed" }]
         : []),
@@ -4101,6 +4208,8 @@ export default function ContestDetailClient({
       contest?.platform,
       contest?.access_mode,
       pendingApplications,
+      showDraftsTab,
+      draftCounts?.toReview,
     ],
   );
 
@@ -4794,6 +4903,33 @@ export default function ContestDetailClient({
     isMilestoneContestType(currentContest?.contest_type) ||
     currentContest?.contest_type === "leaderboard";
 
+  // Highest-platform-only campaigns: each creator's paid platform, decided once from the
+  // FULL locked submission list (same rows payouts and the budget tracker use) — never a
+  // status/platform tab, page or quality filter. Inactive (nothing excluded) when off.
+  const highestPlatformDecisions = useMemo(
+    () => computeHighestPlatformDecisions(currentContest, currentSubmissions),
+    [currentContest, currentSubmissions],
+  );
+  const highestPlatformOnly = highestPlatformDecisions.enabled;
+  /** True for a submission on a creator's non-paid platform (counts $0). */
+  const isHighestPlatformExcluded = useCallback(
+    (submissionId: string | null | undefined) =>
+      !isSubmissionCountedForPayout(highestPlatformDecisions, submissionId),
+    [highestPlatformDecisions],
+  );
+  /** Verified status tab sub-count: verified rows on a non-paid platform. */
+  const highestPlatformVerifiedNotCounted = useMemo(
+    () =>
+      countNotCountedSubmissions(
+        highestPlatformDecisions,
+        submissionsForStatusCounts.filter(
+          (submission) =>
+            getSubmissionModerationBucket(submission as any) === "verified",
+        ),
+      ),
+    [highestPlatformDecisions, submissionsForStatusCounts],
+  );
+
   // Pre-adjustment CPM expectations with creator cap applied in submission order — matches
   // CreatorSubmissionsModal / payout display. Declared before creator-wise grouping so
   // aggregation + getDualGrantedBreakdown can use capped per-submission CPM/milestone.
@@ -4858,9 +4994,11 @@ export default function ContestDetailClient({
             calculateSubmissionExpectedEarnings(sub, false),
           ),
         }));
+        // Highest-platform-only: cap each platform on its own (a non-paid
+        // platform must not use up the paid platform's cap).
         const { milestoneCappedBySubmissionId, cpmCappedBySubmissionId } =
           buildDualRewardCreatorCapSplitMapsByPlatform(rows, getMaxForSub, {
-            keyedCaps: maxKeyed,
+            keyedCaps: maxKeyed || highestPlatformOnly,
           });
         for (const r of rows) {
           preAdjustmentUncappedMap.set(r.id, r.cRawCents);
@@ -4899,9 +5037,10 @@ export default function ContestDetailClient({
           continue;
         }
 
-        const runKey = maxKeyed
-          ? String(sub.platform || "").toLowerCase() || "_"
-          : "_";
+        const runKey =
+          maxKeyed || highestPlatformOnly
+            ? String(sub.platform || "").toLowerCase() || "_"
+            : "_";
         const runningTotal = runningByPlatform.get(runKey) || 0;
         const remainingCap = subMax - runningTotal;
         let cappedExpectedReward = baseExpectedReward;
@@ -4927,6 +5066,7 @@ export default function ContestDetailClient({
     currentContest,
     leaderboardSubmissions,
     milestoneSubmissionExpectedPayoutCents,
+    highestPlatformOnly,
   ]);
 
   // Non-Twitter leaderboard: prize per eligible submission (verified/approved/paid by views).
@@ -5720,7 +5860,10 @@ export default function ContestDetailClient({
               submission.id,
             ) ?? calculateSubmissionExpectedEarnings(submission, false))
           : 0;
-        const submissionEarnings = milestoneCents + cpmCents;
+        // Highest-platform-only: a creator's non-paid platform counts $0.
+        const submissionEarnings = isHighestPlatformExcluded(submission.id)
+          ? 0
+          : milestoneCents + cpmCents;
         group.earnings.expected += submissionEarnings;
         if (isSubmissionPaidForGrantedReward(submission)) {
           if (isDualRewardsContestType(currentContest?.contest_type)) {
@@ -5800,7 +5943,7 @@ export default function ContestDetailClient({
           const tw =
             sub.is_twitter_tweet ||
             String(sub.platform || "").toLowerCase() === "twitter";
-          if (tw) continue;
+          if (tw || isHighestPlatformExcluded(sub.id)) continue;
           const rawC = calculateSubmissionExpectedEarnings(sub, false);
           const rawM =
             Number(milestoneSubmissionExpectedPayoutCents.get(sub.id)) || 0;
@@ -5831,7 +5974,7 @@ export default function ContestDetailClient({
           const tw =
             sub.is_twitter_tweet ||
             String(sub.platform || "").toLowerCase() === "twitter";
-          if (tw) continue;
+          if (tw || isHighestPlatformExcluded(sub.id)) continue;
           const rawC = calculateSubmissionExpectedEarnings(sub, false);
           rawTotal += rawC;
           cappedTotal +=
@@ -6113,7 +6256,9 @@ export default function ContestDetailClient({
               const raw = String(getStatus(sub) || "").toLowerCase();
               const st = raw === "approved" ? "verified" : raw;
               // Align with per-submission loop above: FCFS map includes pending; rejected excluded.
-              if (st === "rejected") return sum;
+              if (st === "rejected" || isHighestPlatformExcluded(sub.id)) {
+                return sum;
+              }
               return sum + (payoutMap.get(sub.id) ?? 0);
             },
             0,
@@ -6182,7 +6327,7 @@ export default function ContestDetailClient({
         for (const sub of subs) {
           const raw = String(getStatus(sub) || "").toLowerCase();
           const st = raw === "approved" ? "verified" : raw;
-          if (st === "rejected") continue;
+          if (st === "rejected" || isHighestPlatformExcluded(sub.id)) continue;
           const base = Number(
             milestoneSubmissionExpectedPayoutCents.get(sub.id) ?? 0,
           );
@@ -6221,7 +6366,10 @@ export default function ContestDetailClient({
         const subs = group.submissions || [];
         group.bonus.expected = subs.reduce(
           (sum: number, sub: any) =>
-            sum + (expectedBonusBySubmissionId.get(sub.id) || 0),
+            sum +
+            (isHighestPlatformExcluded(sub.id)
+              ? 0
+              : expectedBonusBySubmissionId.get(sub.id) || 0),
           0,
         );
       });
@@ -6241,6 +6389,7 @@ export default function ContestDetailClient({
     getStatus,
     cappedExpectedRewardBySubmissionId,
     leaderboardPrizeCentsBySubmissionId,
+    isHighestPlatformExcluded,
   ]);
 
   /** Stable creator for CreatorSubmissionsModal when parent status filter excludes rejected rows from groups. */
@@ -6394,6 +6543,7 @@ export default function ContestDetailClient({
       isDualRewards: isDualRewardsContestType(currentContest.contest_type),
       isMilestoneContest: isMilestoneContestType(currentContest.contest_type),
       ytVisibleColumnIds: ytVisibleColumns,
+      highestPlatformPayoutOnly: highestPlatformOnly,
     }),
     [
       submissionsTablePlatform,
@@ -6412,6 +6562,7 @@ export default function ContestDetailClient({
       showNormalViewFlatFeeBonusColumns,
       showExportRewardColumns,
       ytVisibleColumns,
+      highestPlatformOnly,
     ],
   );
 
@@ -6458,6 +6609,7 @@ export default function ContestDetailClient({
       ytCanSeeCore: canSeeCore,
       ytCanSeeTraffic: canSeeTraffic,
       ytCanSeeDemographics: canSeeDemo,
+      highestPlatform: highestPlatformDecisions,
       getDualGrantedForSubmission: (submission, _rank) => {
         const subId = String(submission.id ?? "");
         const cpmCap =
@@ -6502,6 +6654,7 @@ export default function ContestDetailClient({
       canSeeCore,
       canSeeTraffic,
       canSeeDemo,
+      highestPlatformDecisions,
     ],
   );
 
@@ -6715,6 +6868,9 @@ export default function ContestDetailClient({
           payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
         percentage: payoutAdjustmentForUi.percentage,
       },
+      // Highest-platform-only: drop a bonus won on a creator's non-paid platform.
+      (creatorId, platform) =>
+        isCreatorPlatformCounted(highestPlatformDecisions, creatorId, platform),
     );
   }, [
     currentContest,
@@ -6725,6 +6881,7 @@ export default function ContestDetailClient({
     payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
     showMostVerifiedReelsCreatorColumn,
     showMostVerifiedViewsBonusColumns,
+    highestPlatformDecisions,
   ]);
 
   /** Sum of expected milestone cents for verified/paid submissions only (pending excluded — matches budget liability) */
@@ -6736,6 +6893,7 @@ export default function ContestDetailClient({
       const raw = String(getStatus(sub) || "").toLowerCase();
       const st = raw === "approved" ? "verified" : raw;
       if (st !== "verified" && st !== "paid") continue;
+      if (isHighestPlatformExcluded(sub.id)) continue;
       sum += payoutMap.get(sub.id) ?? 0;
     }
     return sum;
@@ -6744,6 +6902,7 @@ export default function ContestDetailClient({
     milestoneSubmissionExpectedPayoutCents,
     leaderboardSubmissions,
     getStatus,
+    isHighestPlatformExcluded,
   ]);
 
   /** Creator bonus (views + reels tracks) expected / paid — same numbers as creator-wise bonus columns */
@@ -6778,7 +6937,7 @@ export default function ContestDetailClient({
       isDualRewardsContestType(currentContest?.contest_type);
     if (!isMilestoneLike) return empty;
 
-    return buildMilestoneSubmissionPayoutAssignmentsFromDetails(
+    const payoutMap = buildMilestoneSubmissionPayoutAssignmentsFromDetails(
       (currentSubmissions || []).map((submission) => {
         const rawStatus = (submission.status || "pending").toLowerCase();
         const normalizedStatus =
@@ -6798,11 +6957,14 @@ export default function ContestDetailClient({
         null,
       currentContest?.platform,
     ).payoutMap;
+    // Highest-platform-only: a creator's non-paid platform counts $0 in the tracker.
+    return maskExcludedCents(payoutMap, highestPlatformDecisions);
   }, [
     currentContest?.contest_type,
     currentContest?.contest_based_details,
     currentContest?.platform,
     currentSubmissions,
+    highestPlatformDecisions,
   ]);
 
   const budgetTrackerMilestoneExpectedPayoutCents = useMemo(() => {
@@ -6865,6 +7027,9 @@ export default function ContestDetailClient({
           payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
         percentage: payoutAdjustmentForUi.percentage,
       },
+      // Highest-platform-only: drop a bonus won on a creator's non-paid platform.
+      (creatorId, platform) =>
+        isCreatorPlatformCounted(highestPlatformDecisions, creatorId, platform),
     );
   }, [
     currentContest?.contest_type,
@@ -6874,6 +7039,7 @@ export default function ContestDetailClient({
     milestoneLedgerNormalized,
     payoutAdjustmentForUi.percentage,
     payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
+    highestPlatformDecisions,
   ]);
 
   const budgetTrackerMilestoneCreatorBonusExpectedCents = useMemo(() => {
@@ -7138,6 +7304,7 @@ export default function ContestDetailClient({
       milestoneMostVerifiedBonusByCreator: milestoneReelsBonusByCreator,
       shouldAdjustMostVerifiedMilestoneBonus:
         payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
+      highestPlatform: highestPlatformDecisions,
     }),
     [
       currentContest.contest_type,
@@ -7150,6 +7317,7 @@ export default function ContestDetailClient({
       milestoneSubmissionExpectedPayoutCents,
       milestoneSubmissionAssignedLabelBySubmissionId,
       milestoneReelsBonusByCreator,
+      highestPlatformDecisions,
     ],
   );
 
@@ -8516,6 +8684,15 @@ export default function ContestDetailClient({
     component: "cpm" | "milestone" | "both",
     options?: { skipReload?: boolean },
   ) => {
+    if (isHighestPlatformExcluded(submissionId)) {
+      toast({
+        title: "Not counted",
+        description:
+          "This creator is paid only for their highest-earning platform, so this submission is not paid.",
+        variant: "default",
+      });
+      return;
+    }
     const cpmCappedBase =
       cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
         submissionId,
@@ -9530,10 +9707,14 @@ export default function ContestDetailClient({
   };
 
   const filterCreatorWisePayableSubmissions = (
-    submissions: any[],
+    allSubmissions: any[],
     paymentType: "standard" | "bonus" | "both",
     isTwitterCpmContest: boolean,
   ) => {
+    // Highest-platform-only: a creator's non-paid platform is never paid.
+    const submissions = allSubmissions.filter(
+      (submission) => !isHighestPlatformExcluded(submission?.id),
+    );
     if (paymentType === "bonus" && isTwitterCpmContest) {
       return submissions.filter((submission) => {
         if (submission?.is_twitter_tweet !== true) return false;
@@ -13071,6 +13252,20 @@ export default function ContestDetailClient({
 
   /** Expected reward for a submission row (table + Review Mode). */
   const getSubmissionExpectedReward = (submission: Submission) => {
+    // Highest-platform-only: this creator is paid for another platform, so
+    // this submission counts $0 (shown as "Not counted", never "Capped").
+    if (isHighestPlatformExcluded(submission.id)) {
+      const isDual = isDualRewardsContestType(currentContest.contest_type);
+      return {
+        amount: 0,
+        label: "Not counted",
+        className: "text-slate-500",
+        preAdjustmentAmountDollars: 0,
+        postAdjustmentAmountDollars: 0,
+        cpmCents: isDual ? 0 : undefined,
+        milestoneCents: isDual ? 0 : undefined,
+      };
+    }
     const isTwitterTweet = (submission as any).is_twitter_tweet === true;
     const payoutAdjustmentPercentage = Number(
       (currentContest as any)?.payout_adjustment_percentage ?? 0,
@@ -13433,6 +13628,16 @@ export default function ContestDetailClient({
         className: "text-red-600 font-semibold",
       };
     }
+    // Highest-platform-only: never paid (paid rows are never excluded).
+    if (isHighestPlatformExcluded(submission.id)) {
+      return {
+        amount: 0,
+        label: "—",
+        className: "text-slate-500",
+        cpmCents: 0,
+        milestoneCents: 0,
+      };
+    }
 
     if (isDualRewardsContestType(currentContest.contest_type)) {
       const cpmConfig = currentContest.contest_based_details?.cpm_contest;
@@ -13742,6 +13947,11 @@ export default function ContestDetailClient({
   const creatorHasReviewableSubmission = (creatorId: string) =>
     canOpenCreatorReviewMode && reviewableCreatorIds.has(creatorId);
 
+  const openDraftHistory = (draftId: string) => {
+    setDraftToOpen(draftId);
+    setActiveTab("drafts");
+  };
+
   const closeReviewMode = () => {
     preserveSelectionAfterModerationRef.current = false;
     setReviewModeSession(null);
@@ -13788,6 +13998,7 @@ export default function ContestDetailClient({
           ? (reviewSubmissionLookup.campaignByCreator.get(s.creator_id) ?? null)
           : null,
       creatorStats: isAdminView ? getReviewCreatorStats(s) : null,
+      draft: submissionDrafts.get(s.id) ?? null,
     };
   };
 
@@ -13819,6 +14030,7 @@ export default function ContestDetailClient({
       return {
         expected: { amount: expected.amount, label: expected.label },
         granted: { amount: granted.amount, label: granted.label },
+        notCounted: highestPlatformNotCountedInfo(highestPlatformDecisions, s),
       };
     } catch {
       return null;
@@ -13963,6 +14175,8 @@ export default function ContestDetailClient({
   }
 
   function getSubmissionAnalyticsExpectedCents(submission: Submission): number {
+    // Highest-platform-only: a creator's non-paid platform counts $0.
+    if (isHighestPlatformExcluded(submission.id)) return 0;
     if (isDualRewardsContestType(currentContest?.contest_type)) {
       const milestoneCents =
         cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId.get(
@@ -14103,6 +14317,7 @@ export default function ContestDetailClient({
       creatorModerationData,
       cappedExpectedRewardBySubmissionId,
       milestoneSubmissionExpectedPayoutCents,
+      isHighestPlatformExcluded,
     ]);
 
   const reportExportContest = useMemo(
@@ -14117,6 +14332,9 @@ export default function ContestDetailClient({
       contestStart: currentContest?.start_date,
       contestEnd: currentContest?.end_date,
       platform: currentContest?.platform,
+      payoutRuleNote: highestPlatformOnly
+        ? highestPlatformExportRuleNote(highestPlatformDecisions.platforms)
+        : null,
     }),
     [
       currentContest?.id,
@@ -14129,6 +14347,8 @@ export default function ContestDetailClient({
       currentContest?.end_date,
       currentContest?.platform,
       durationDays,
+      highestPlatformOnly,
+      highestPlatformDecisions.platforms,
     ],
   );
 
@@ -15840,6 +16060,33 @@ export default function ContestDetailClient({
                         {pendingApplications === 1 ? "" : "s"}
                       </button>
                     )}
+                  {draftReviewOn && (
+                    <span
+                      className={cn(
+                        "rounded-full px-3 py-1 text-xs font-semibold sm:text-sm",
+                        isDark
+                          ? "bg-[#7F39EC]/20 text-purple-200"
+                          : "bg-purple-50 text-[#4A00BE]",
+                      )}
+                    >
+                      Review before posting
+                    </span>
+                  )}
+                  {showDraftsTab && (draftCounts?.toReview ?? 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("drafts")}
+                      className={cn(
+                        "rounded-full px-3 py-1 text-xs font-semibold underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] sm:text-sm",
+                        isDark
+                          ? "bg-amber-500/15 text-amber-200"
+                          : "bg-amber-50 text-amber-800",
+                      )}
+                    >
+                      {draftCounts?.toReview} draft
+                      {draftCounts?.toReview === 1 ? "" : "s"} to review
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -16351,6 +16598,7 @@ export default function ContestDetailClient({
                     bonus_details: (currentContest as any).bonus_details,
                   }}
                   submissions={currentSubmissions as any}
+                  highestPlatformDecisions={highestPlatformDecisions}
                   showDetailed={true}
                   creatorManualPointsAdjustments={
                     creatorManualPointsAdjustments
@@ -16455,6 +16703,7 @@ export default function ContestDetailClient({
                       : currentContest.platform,
                   }}
                   submissions={currentSubmissions as any}
+                  highestPlatformDecisions={highestPlatformDecisions}
                   showDetailed={true}
                   postContestStatus={currentContest.post_contest_status}
                 />
@@ -16545,6 +16794,7 @@ export default function ContestDetailClient({
                     platform: currentContest.platform,
                   }}
                   submissions={currentSubmissions as any}
+                  highestPlatformDecisions={highestPlatformDecisions}
                   showDetailed={true}
                   milestoneExpectedPayoutCents={
                     budgetTrackerMilestoneExpectedPayoutCents
@@ -16828,6 +17078,12 @@ export default function ContestDetailClient({
                     })}
                   </BrandOverviewSectionCard>
                 )}
+
+                <HighestPlatformPayoutNote
+                  contest={currentContest}
+                  audience="brand"
+                  isDark={isDark}
+                />
 
                 {overviewPayoutGroups.map((group) => {
                   const payoutContest =
@@ -22098,11 +22354,42 @@ export default function ContestDetailClient({
                             return;
                           setAdminControlsSaving(true);
                           try {
-                            const existing =
-                              (currentContest.contest_based_details as Record<
+                            const existing = {
+                              ...((currentContest.contest_based_details as Record<
                                 string,
                                 unknown
-                              >) || {};
+                              >) || {}),
+                            };
+                            // Keep the saved best-platform switch: it may have
+                            // changed since this page loaded (this modal never edits it).
+                            if (
+                              canUseHighestPlatformPayout(
+                                currentContest.contest_type,
+                                overviewVideoPlatforms.length,
+                                currentContest.contest_format,
+                              )
+                            ) {
+                              const { data: fresh, error: freshError } =
+                                await supabase
+                                  .from("contests")
+                                  .select("contest_based_details")
+                                  .eq("id", currentContest.id)
+                                  .maybeSingle();
+                              if (freshError || !fresh) {
+                                throw new Error(
+                                  "Could not load the latest campaign settings. Please try again.",
+                                );
+                              }
+                              if (
+                                readHighestPlatformPayoutFlag(
+                                  fresh.contest_based_details,
+                                )
+                              ) {
+                                existing[HIGHEST_PLATFORM_PAYOUT_KEY] = true;
+                              } else {
+                                delete existing[HIGHEST_PLATFORM_PAYOUT_KEY];
+                              }
+                            }
                             const res = await fetch(
                               `/api/admin/contests/${currentContest.id}/update`,
                               {
@@ -22330,6 +22617,7 @@ export default function ContestDetailClient({
                       counts={liveSubmissionStatusCounts}
                       loadedCounts={loadedSubmissionStatusCounts}
                       isLoading={isHydratingSubmissions}
+                      verifiedNotCounted={highestPlatformVerifiedNotCounted}
                     />
                   </>
                 )}
@@ -22347,6 +22635,7 @@ export default function ContestDetailClient({
                       counts={liveSubmissionStatusCounts}
                       loadedCounts={loadedSubmissionStatusCounts}
                       isLoading={isHydratingSubmissions}
+                      verifiedNotCounted={highestPlatformVerifiedNotCounted}
                     />
                   )}
 
@@ -23655,6 +23944,11 @@ export default function ContestDetailClient({
 
                                   const expectedInfo = getExpectedReward();
                                   const storedGrantedInfo = getGrantedReward();
+                                  const notCountedInfo =
+                                    highestPlatformNotCountedInfo(
+                                      highestPlatformDecisions,
+                                      submission,
+                                    );
                                   const isTwitterCpmSubmission =
                                     isTwitterTweet &&
                                     currentContest.contest_type === "cpm" &&
@@ -23919,6 +24213,28 @@ export default function ContestDetailClient({
                                                         Download
                                                       </>
                                                     )}
+                                                  </button>
+                                                )}
+                                                {submissionDrafts.has(
+                                                  submission.id,
+                                                ) && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      setCompareDraftSubmissionId(
+                                                        submission.id,
+                                                      )
+                                                    }
+                                                    className={cn(
+                                                      "text-xs hover:underline flex items-center gap-1 transition-colors whitespace-nowrap font-medium",
+                                                      isDark
+                                                        ? "text-violet-300 hover:text-violet-200"
+                                                        : "text-violet-700 hover:text-violet-900",
+                                                    )}
+                                                    title="Compare the posted clip with the draft the brand approved"
+                                                  >
+                                                    <Clapperboard className="h-3 w-3" />
+                                                    Approved draft
                                                   </button>
                                                 )}
                                               </div>
@@ -25326,16 +25642,28 @@ export default function ContestDetailClient({
                                                           </Tooltip>
                                                         )}
                                                       </div>
-                                                      <span
-                                                        className={cn(
-                                                          "text-xs uppercase tracking-wide",
-                                                          isDark
-                                                            ? "text-white"
-                                                            : "text-slate-800",
-                                                        )}
-                                                      >
-                                                        {expectedInfo.label}
-                                                      </span>
+                                                      {notCountedInfo ? (
+                                                        <NotCountedChip
+                                                          label={
+                                                            notCountedInfo.label
+                                                          }
+                                                          detail={
+                                                            notCountedInfo.detail
+                                                          }
+                                                          isDark={isDark}
+                                                        />
+                                                      ) : (
+                                                        <span
+                                                          className={cn(
+                                                            "text-xs uppercase tracking-wide",
+                                                            isDark
+                                                              ? "text-white"
+                                                              : "text-slate-800",
+                                                          )}
+                                                        >
+                                                          {expectedInfo.label}
+                                                        </span>
+                                                      )}
                                                     </div>
                                                   </TableCell>
                                                   <TableCell className="text-center font-semibold">
@@ -25770,16 +26098,28 @@ export default function ContestDetailClient({
                                                           </Tooltip>
                                                         )}
                                                       </div>
-                                                      <span
-                                                        className={cn(
-                                                          "text-xs uppercase tracking-wide",
-                                                          isDark
-                                                            ? "text-white"
-                                                            : "text-slate-800",
-                                                        )}
-                                                      >
-                                                        {expectedInfo.label}
-                                                      </span>
+                                                      {notCountedInfo ? (
+                                                        <NotCountedChip
+                                                          label={
+                                                            notCountedInfo.label
+                                                          }
+                                                          detail={
+                                                            notCountedInfo.detail
+                                                          }
+                                                          isDark={isDark}
+                                                        />
+                                                      ) : (
+                                                        <span
+                                                          className={cn(
+                                                            "text-xs uppercase tracking-wide",
+                                                            isDark
+                                                              ? "text-white"
+                                                              : "text-slate-800",
+                                                          )}
+                                                        >
+                                                          {expectedInfo.label}
+                                                        </span>
+                                                      )}
                                                     </div>
                                                   </div>
                                                 </TableCell>
@@ -26034,9 +26374,13 @@ export default function ContestDetailClient({
                                                 <TableCell className="text-center font-medium">
                                                   {(() => {
                                                     const cents =
-                                                      normalViewFlatFeeBonusExpectedCentsBySubmissionId.get(
+                                                      isHighestPlatformExcluded(
                                                         submission.id,
-                                                      ) || 0;
+                                                      )
+                                                        ? 0
+                                                        : normalViewFlatFeeBonusExpectedCentsBySubmissionId.get(
+                                                            submission.id,
+                                                          ) || 0;
                                                     return cents > 0
                                                       ? formatMoney(cents)
                                                       : "—";
@@ -26408,12 +26752,14 @@ export default function ContestDetailClient({
                                             {/* Show payment options only when contest status is verification_complete */}
                                             {/* Note: For Twitter, payments are handled at creator level in creator-wise view, not here */}
                                             {/* Post-campaign table is metrics-only — no paid/status mutations */}
+                                            {/* Highest-platform-only: a creator's non-paid platform is never paid */}
                                             {!isPostCampaignLeaderboard &&
                                               !isTwitterTweet &&
                                               isAdminView &&
                                               currentContest.post_contest_status ===
                                                 "verification_complete" &&
-                                              submission.status !== "paid" && (
+                                              submission.status !== "paid" &&
+                                              !notCountedInfo && (
                                                 <>
                                                   {isDualRewardsContestType(
                                                     currentContest.contest_type,
@@ -26498,6 +26844,20 @@ export default function ContestDetailClient({
                                                 View Content
                                               </a>
                                             </DropdownMenuItem>
+                                            {submissionDrafts.has(
+                                              submission.id,
+                                            ) && (
+                                              <DropdownMenuItem
+                                                onClick={() =>
+                                                  setCompareDraftSubmissionId(
+                                                    submission.id,
+                                                  )
+                                                }
+                                              >
+                                                <Clapperboard className="h-3 w-3 mr-2" />
+                                                Compare with approved draft
+                                              </DropdownMenuItem>
+                                            )}
                                             {/* YouTube per-submission analytics refresh (admin only; single + multi-platform) */}
                                             {isAdminView &&
                                               !isTwitterTweet &&
@@ -27450,6 +27810,12 @@ export default function ContestDetailClient({
                                           hasVerifiedOrPaidSubmissions
                                             ? group.bonus.expected
                                             : 0;
+                                        // Highest-platform-only: "Leading: Instagram" for multi-platform creators.
+                                        const highestPlatformCreatorNote =
+                                          highestPlatformCreatorInfo(
+                                            highestPlatformDecisions,
+                                            group.creator.id,
+                                          );
                                         const reelsBonusInfo =
                                           milestoneReelsBonusByCreator.get(
                                             milestoneMvCreatorIdKey(
@@ -27730,6 +28096,23 @@ export default function ContestDetailClient({
                                                     >
                                                       {creatorUsername ||
                                                         platformUsername}
+                                                    </span>
+                                                  )}
+                                                  {highestPlatformCreatorNote && (
+                                                    <span
+                                                      className={cn(
+                                                        "text-[11px] font-medium cursor-help",
+                                                        isDark
+                                                          ? "text-amber-200"
+                                                          : "text-amber-700",
+                                                      )}
+                                                      title={
+                                                        highestPlatformCreatorNote.detail
+                                                      }
+                                                    >
+                                                      {
+                                                        highestPlatformCreatorNote.label
+                                                      }
                                                     </span>
                                                   )}
                                                 </div>
@@ -28624,7 +29007,13 @@ export default function ContestDetailClient({
                                                                   "",
                                                               ).toLowerCase() ===
                                                                 "twitter";
-                                                            if (tw) continue;
+                                                            if (
+                                                              tw ||
+                                                              isHighestPlatformExcluded(
+                                                                sub.id,
+                                                              )
+                                                            )
+                                                              continue;
                                                             cpmPre +=
                                                               cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
                                                                 sub.id,
@@ -33534,6 +33923,22 @@ export default function ContestDetailClient({
               </CardContent>
             </div>
           </TabPanel>
+          {showDraftsTab && (
+            <TabPanel value="drafts" activeTab={activeTab}>
+              <DraftReviewPanel
+                contestId={contestId}
+                initialDraftId={draftToOpen ?? requestedDraftId}
+                onPendingCountChange={(n) =>
+                  setDraftCounts((c) => ({
+                    toReview: n,
+                    any: (c?.any ?? false) || n > 0,
+                    reviewOn: c?.reviewOn ?? false,
+                    posted: c?.posted ?? 0,
+                  }))
+                }
+              />
+            </TabPanel>
+          )}
           {contest?.access_mode === "restricted" && (
             <TabPanel value="applications" activeTab={activeTab}>
               <ApplicationsPanel
@@ -34303,6 +34708,7 @@ export default function ContestDetailClient({
             >["submissions"]
           }
           contest={currentContest}
+          highestPlatformDecisions={highestPlatformDecisions}
           platformTab={submissionsPlatformTab}
           creatorRank={
             creatorRankingMap.get(selectedCreatorForModal) ?? undefined
@@ -34604,8 +35010,43 @@ export default function ContestDetailClient({
           onDownloadSelected={() => void handleNormalViewBulkDownload()}
           isDark={isDark}
           onExit={closeReviewMode}
+          onOpenDraft={(draftId) => {
+            closeReviewMode();
+            openDraftHistory(draftId);
+          }}
         />
       )}
+      {(() => {
+        const s = compareDraftSubmissionId
+          ? reviewSubmissionLookup.byId.get(compareDraftSubmissionId)
+          : undefined;
+        const link = compareDraftSubmissionId
+          ? (submissionDrafts.get(compareDraftSubmissionId) ?? null)
+          : null;
+        return (
+          <DraftCompareDialog
+            link={s ? link : null}
+            post={
+              s
+                ? {
+                    id: s.id,
+                    contentLink: s.content_link ?? null,
+                    platform: s.platform ?? currentContest?.platform ?? null,
+                    videoId: s.video_id ?? null,
+                    videoThumbnailUrl: s.video_thumbnail_url ?? null,
+                    videoTitle: s.video_title ?? null,
+                    creatorName:
+                      s.creator_display_name ||
+                      s.creator_username ||
+                      null,
+                  }
+                : null
+            }
+            onClose={() => setCompareDraftSubmissionId(null)}
+            onOpenDraft={openDraftHistory}
+          />
+        );
+      })()}
     </div>
   );
 }

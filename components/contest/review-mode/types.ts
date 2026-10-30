@@ -1,3 +1,5 @@
+import type { SubmissionDraftLink } from "@/lib/content-drafts";
+
 export type ReviewSubmission = {
   id: string;
   status: string;
@@ -24,6 +26,8 @@ export type ReviewSubmission = {
   creatorCampaign: ReviewCreatorCampaignCounts | null;
   /** Admin-only creator track record; null when hidden. */
   creatorStats: ReviewCreatorStats | null;
+  /** The approved draft this clip was posted from (Review before posting). */
+  draft?: SubmissionDraftLink | null;
 };
 
 export type ReviewCreatorCampaignCounts = {
@@ -77,6 +81,8 @@ export type ReviewRewardLine = {
 export type ReviewRewardSummary = {
   expected: ReviewRewardLine | null;
   granted: ReviewRewardLine | null;
+  /** Highest-platform-only campaigns: set when this clip counts $0. */
+  notCounted?: { label: string; detail: string } | null;
 };
 
 export type ReviewModerationAction = "verify" | "reject" | "pending";

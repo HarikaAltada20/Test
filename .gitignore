@@ -44,3 +44,6 @@ db/full_backup*.sql
 
 qa-results/
 reviews/
+
+scripts/db-clone/clone-db.config.json
+scripts/db-clone/runs/

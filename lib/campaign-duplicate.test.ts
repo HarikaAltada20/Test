@@ -327,6 +327,36 @@ describe("buildDuplicateRow", () => {
     assert.equal("applications_open" in row, false);
   });
 
+  it("copies Review before posting and its limits when ticked", () => {
+    const source = paidLiveSource({
+      review_before_posting: true,
+      draft_max_open: 8,
+      draft_max_revisions: 2,
+      draft_max_rejections: null,
+    });
+    const { row } = buildDuplicateRow({ source, sections: ALL, targetAdvertiserId: target, title: null, now });
+    assert.equal(row.review_before_posting, true);
+    assert.equal(row.draft_max_open, 8);
+    assert.equal(row.draft_max_revisions, 2);
+    assert.equal(row.draft_max_rejections, null);
+
+    // Unticked, or without the setup it depends on: the columns are left to their defaults.
+    for (const sections of [["setup"], ["review_before_posting"]] as const) {
+      const { row: plain } = buildDuplicateRow({ source, sections, targetAdvertiserId: target, title: null, now });
+      assert.equal("review_before_posting" in plain, false);
+      assert.equal("draft_max_open" in plain, false);
+    }
+
+    const { row: text } = buildDuplicateRow({
+      source: { ...source, contest_format: "text_image", platform: "twitter" },
+      sections: ALL,
+      targetAdvertiserId: target,
+      title: null,
+      now,
+    });
+    assert.equal("review_before_posting" in text, false);
+  });
+
   it("says when dates were moved", () => {
     const { warnings } = buildDuplicateRow({
       source: paidLiveSource(),
@@ -366,6 +396,58 @@ describe("sanitizeSetupDetails", () => {
         leaderboard_contest: { prizes: [{ position: 1, amount: 1000 }], total_prize: 1000, winner_count: 1 },
       },
     });
+  });
+
+  it("copies the highest-earning platform switch only with rewards and 2+ platforms", () => {
+    const details = {
+      highest_platform_payout_only: true,
+      youtube: { contest_type: "cpm", cpm_contest: { cpm_rate_usd: 1 } },
+      tiktok: { contest_type: "cpm", cpm_contest: { cpm_rate_usd: 2 } },
+    };
+    const opts = {
+      setup: true,
+      rewards: true,
+      contentType: false,
+      postRequirements: false,
+      platforms: ["youtube", "tiktok"],
+    };
+    assert.equal(sanitizeSetupDetails(details, opts)?.highest_platform_payout_only, true);
+    assert.equal(
+      sanitizeSetupDetails(details, { ...opts, rewards: false })?.highest_platform_payout_only,
+      undefined,
+    );
+    assert.equal(
+      sanitizeSetupDetails(details, { ...opts, platforms: ["youtube"] })?.highest_platform_payout_only,
+      undefined,
+    );
+    assert.equal(
+      sanitizeSetupDetails({ ...details, highest_platform_payout_only: "true" }, opts)
+        ?.highest_platform_payout_only,
+      undefined,
+    );
+  });
+
+  it("keeps the switch through buildDuplicateRow for a multi-platform copy", () => {
+    const { row } = buildDuplicateRow({
+      source: paidLiveSource({
+        platform: "youtube,instagram",
+        contest_format: "video",
+        contest_type: "cpm",
+        contest_based_details: {
+          highest_platform_payout_only: true,
+          youtube: { contest_type: "cpm", cpm_contest: { cpm_rate_usd: 1 } },
+          instagram: { contest_type: "cpm", cpm_contest: { cpm_rate_usd: 1 } },
+        },
+      }),
+      sections: ["setup", "rewards"],
+      targetAdvertiserId: "44444444-4444-4444-8444-444444444444",
+      title: null,
+      now: new Date("2026-10-16T15:00:00.000Z"),
+    });
+    assert.equal(
+      (row.contest_based_details as Record<string, unknown>).highest_platform_payout_only,
+      true,
+    );
   });
 
   it("keeps the platform's type without rewards", () => {
@@ -433,6 +515,21 @@ describe("availableSections", () => {
     assert.equal(available.includes("tracking_links"), false);
     assert.equal(available.includes("dates"), false);
     assert.equal(available.includes("post_requirements"), false);
+  });
+
+  it("offers Review before posting only when it is on for a video campaign", () => {
+    const counts = { questions: 0, invites: 0 };
+    assert.equal(availableSections(paidLiveSource(), counts).includes("review_before_posting"), false);
+    assert.ok(
+      availableSections(paidLiveSource({ review_before_posting: true }), counts).includes("review_before_posting"),
+    );
+    assert.equal(
+      availableSections(
+        paidLiveSource({ review_before_posting: true, contest_format: "text_image", platform: "twitter" }),
+        counts,
+      ).includes("review_before_posting"),
+      false,
+    );
   });
 
   it("never offers questions on a public campaign", () => {

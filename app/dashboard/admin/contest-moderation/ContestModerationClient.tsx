@@ -37,6 +37,7 @@ import {
 } from "@/lib/video-platform-campaigns";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { ContestListFlatFeeBonusBadge } from "@/components/ContestListCardMetrics";
+import { HighestPlatformBadge } from "@/components/contest/HighestPlatformPayoutNote";
 import {
   Shield,
   Clock,
@@ -572,6 +573,7 @@ export default function ContestModerationClient({
                 </Badge>
               )}
               <ContestListFlatFeeBonusBadge contest={contest} size="compact" />
+              <HighestPlatformBadge contest={contest} size="compact" />
               {contest.content_type && (
                 <Badge
                   variant="outline"

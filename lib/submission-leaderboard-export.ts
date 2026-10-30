@@ -33,6 +33,14 @@ import {
 } from "@/lib/youtube-url";
 import { formatReelsSkipRate, formatAvgWatchPercent } from "@/lib/instagram-clip-metrics";
 import type { ReportCoverMetrics } from "@/lib/report-export-metrics";
+import {
+  isSubmissionCountedForPayout,
+  type HighestPlatformDecisions,
+} from "@/lib/highest-platform-payout";
+import {
+  highestPlatformCountsTowardPayoutCell,
+  highestPlatformPaidPlatformCell,
+} from "@/lib/highest-platform-payout-display";
 import ExcelJS from "exceljs";
 import {
   buildDataSheet,
@@ -125,12 +133,27 @@ export type RewardExportContext = {
     string,
     InstagramProfileSnapshot | null
   > | null;
+  /** Highest-platform-only campaigns: rows on a creator's other platforms count $0. */
+  highestPlatform?: HighestPlatformDecisions | null;
 };
+
+function isNotCountedForPayout(
+  submission: Record<string, unknown>,
+  ctx: RewardExportContext,
+): boolean {
+  return !isSubmissionCountedForPayout(
+    ctx.highestPlatform,
+    String(submission.id ?? ""),
+  );
+}
 
 function computeDualExpectedForSubmission(
   submission: Record<string, unknown>,
   ctx: RewardExportContext,
 ): SubmissionDualCents {
+  if (isNotCountedForPayout(submission, ctx)) {
+    return { totalCents: 0, cpmCents: 0, milestoneCents: 0 };
+  }
   const id = String(submission.id);
   const cpm = ctx.cappedCpmExpectedMap.get(id) ?? 0;
   const milestone =
@@ -273,6 +296,7 @@ function computeExpectedRewardCents(
     isMilestoneContestType(contestType) ||
     isDualRewardsContestType(contestType)
   ) {
+    if (isNotCountedForPayout(submission, ctx)) return 0;
     const id = String(submission.id);
     const milestoneCents = isDualRewardsContestType(contestType)
       ? (ctx.dualMilestoneExpectedMap.get(id) ??
@@ -601,13 +625,27 @@ export function buildSubmissionExportCellValue(
         }
         return "Paid";
       }
+      if (isNotCountedForPayout(submission, ctx)) return EMPTY_CELL;
       const pending = Number(submission.earnings) || 0;
       return pending > 0 ? formatMoneyFromCents(pending) : EMPTY_CELL;
     }
     case "bonus_expected": {
+      if (isNotCountedForPayout(submission, ctx)) return EMPTY_CELL;
       const cents = ctx.flatFeeBonusExpectedMap.get(String(submission.id)) ?? 0;
       return cents > 0 ? formatMoneyFromCents(cents) : EMPTY_CELL;
     }
+    case "counts_toward_payout":
+      return highestPlatformCountsTowardPayoutCell(
+        ctx.highestPlatform,
+        submission,
+      );
+    case "paid_platform":
+      return (
+        highestPlatformPaidPlatformCell(
+          ctx.highestPlatform,
+          submission.creator_id,
+        ) || EMPTY_CELL
+      );
     case "bonus_granted": {
       const bonus = Number(submission.bonus_amount) || 0;
       if (submission.bonus_paid && bonus > 0) {

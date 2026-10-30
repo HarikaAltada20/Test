@@ -8,6 +8,7 @@ import {
   CircleCheck,
   ClipboardList,
   Clock,
+  Crown,
   Hourglass,
   Info,
   Loader2,
@@ -47,6 +48,7 @@ import { useDashboardDark } from "@/hooks/use-dashboard-dark";
 import { cn } from "@/lib/utils";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { resolveCampaignPrizeCents } from "@/lib/campaign-prize";
+import { isHighestPlatformPayoutOnly } from "@/lib/highest-platform-payout";
 import {
   ANSWER_MAX_LENGTH,
   APPLICATION_RESULT_MESSAGES,
@@ -586,6 +588,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode, acc
   if (prizeCents > 0) facts.push({ icon: Trophy, text: formatCurrencyFromCents(prizeCents), strong: true });
   if (start || end) facts.push({ icon: CalendarDays, text: `${start ?? "?"} – ${end ?? "?"}` });
   if (preview.platform) facts.push({ icon: Sparkles, text: <span className="capitalize">{preview.platform}</span> });
+  if (isHighestPlatformPayoutOnly(preview)) facts.push({ icon: Crown, text: "Paid for your best platform only" });
   if (daysLeft !== null)
     facts.push({ icon: Hourglass, text: `${daysLeft} day${daysLeft === 1 ? "" : "s"} left to apply` });
 

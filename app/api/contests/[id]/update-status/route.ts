@@ -6,6 +6,14 @@ import { POST_CONTEST_STATUS } from "@/lib/constants-status";
 import { postContestStatusLocksViews } from "@/lib/contest-metrics-refresh-eligibility";
 import { CONTEST_VIEWS_SYNC_FAILED_MESSAGE } from "@/lib/submission-credited-views";
 import { invalidateCampaignListCachesAfterMutation } from "@/lib/campaign-list-cache";
+import { isHighestPlatformPayoutOnly } from "@/lib/highest-platform-payout";
+import {
+  finalRefreshRequiredMessage,
+  platformsMissingRefreshAfterEnd,
+  requiresFinalRefreshBeforeReview,
+} from "@/lib/highest-platform-review-gate";
+import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
+import { parseVideoContestPlatforms } from "@/lib/video-platform-campaigns";
 
 export async function POST(
   request: NextRequest,
@@ -51,7 +59,9 @@ export async function POST(
 
     let contestQuery = supabase
       .from("contests_with_status")
-      .select("id, title, advertiser_id, moderation_status, status, post_contest_status")
+      .select(
+        "id, title, advertiser_id, moderation_status, status, post_contest_status, contest_type, contest_format, platform, contest_based_details, end_date, views_locked_at",
+      )
       .eq("id", contestId);
 
     if (!isAdmin) {
@@ -125,6 +135,39 @@ export async function POST(
       status === POST_CONTEST_STATUS.payouts_processed;
 
     const admin = createAdminClient();
+    const highestPlatformOnly = isHighestPlatformPayoutOnly(contest);
+
+    // Best platform is decided on final views: every platform must be
+    // refreshed after the end date before review freezes views.
+    if (requiresFinalRefreshBeforeReview(contest, currentStatus, status)) {
+      const platforms = parseVideoContestPlatforms(contest.platform);
+      const { missing, error: refreshCheckError } =
+        await platformsMissingRefreshAfterEnd(
+          admin,
+          contestId,
+          platforms,
+          contest.end_date,
+        );
+      if (refreshCheckError) {
+        console.error(
+          "[update-status] refresh check failed:",
+          refreshCheckError,
+        );
+        return NextResponse.json(
+          { error: "Failed to check platform refreshes" },
+          { status: 500 },
+        );
+      }
+      if (missing.length > 0) {
+        return NextResponse.json(
+          {
+            error: finalRefreshRequiredMessage(platforms),
+            missing_platforms: missing,
+          },
+          { status: 409 },
+        );
+      }
+    }
 
     if (requiresViewSync) {
       try {
@@ -170,6 +213,11 @@ export async function POST(
             { error: "Failed to update contest status" },
             { status: 500 },
           );
+        }
+
+        // Saved spend follows the status (filled → paid) and each creator's best platform.
+        if (highestPlatformOnly) {
+          await persistContestBudgetSpent(contestId, admin);
         }
 
         await invalidateCampaignListCachesAfterMutation({
@@ -219,6 +267,10 @@ export async function POST(
         { error: "Failed to update contest status" },
         { status: 500 },
       );
+    }
+
+    if (highestPlatformOnly) {
+      await persistContestBudgetSpent(contestId, admin);
     }
 
     await invalidateCampaignListCachesAfterMutation({

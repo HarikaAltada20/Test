@@ -52,6 +52,13 @@ import {
   renewCreatorContestPayoutLease,
   type CreatorContestPayoutLease,
 } from "@/lib/creator-contest-payout-lease";
+import {
+  HIGHEST_PLATFORM_NOT_COUNTED_CODE,
+  highestPlatformNotPayableMessage,
+  highestPlatformPayoutLedgerNote,
+  isSubmissionCountedForPayout,
+} from "@/lib/highest-platform-payout";
+import { loadHighestPlatformDecisions } from "@/lib/highest-platform-payout-server";
 
 function isQueueWorkerRequest(request: NextRequest): boolean {
   return (
@@ -226,6 +233,47 @@ export async function POST(request: NextRequest) {
     }
     payoutLease = leaseResult.lease;
 
+    // Highest-platform-only campaigns: the creator is paid for one platform.
+    // Submissions on their other platforms are skipped and never written to.
+    const highestPlatform = await loadHighestPlatformDecisions(
+      supabaseAdmin,
+      contest_id,
+      contest,
+    );
+    if (highestPlatform.error) {
+      return NextResponse.json(
+        {
+          error: `Could not work out the creator's highest-earning platform: ${highestPlatform.error}`,
+        },
+        { status: 500 },
+      );
+    }
+    const highestPlatformDecisions = highestPlatform.decisions;
+    const countedSubmissions = submissions.filter((s) =>
+      isSubmissionCountedForPayout(highestPlatformDecisions, String(s.id)),
+    );
+    const notCountedCount = submissions.length - countedSubmissions.length;
+    const highestPlatformLedgerNote = highestPlatformPayoutLedgerNote(
+      highestPlatformDecisions,
+      creator_id,
+    );
+    if (countedSubmissions.length === 0) {
+      // Soft skip: the queue worker counts these rows as skipped, not failed.
+      return NextResponse.json({
+        success: true,
+        code: HIGHEST_PLATFORM_NOT_COUNTED_CODE,
+        message: highestPlatformNotPayableMessage(
+          highestPlatformDecisions.byCreator.get(creator_id),
+        ),
+        data: {
+          total_amount: 0,
+          paid_count: 0,
+          skipped_count: submissions.length,
+          not_counted_count: notCountedCount,
+        },
+      });
+    }
+
     if (contest.contest_type === "dual_rewards") {
       const dualResult = await executeDualRewardsBulkPayment({
         supabaseAdmin,
@@ -233,9 +281,13 @@ export async function POST(request: NextRequest) {
         contest,
         contestId: contest_id,
         creatorId: creator_id,
-        submissionIds: submission_ids,
+        submissionIds:
+          notCountedCount > 0
+            ? countedSubmissions.map((s) => String(s.id))
+            : submission_ids,
         paymentType: payment_type,
         payoutLease,
+        highestPlatformLedgerNote,
       });
 
       if (!dualResult.ok) {
@@ -261,8 +313,9 @@ export async function POST(request: NextRequest) {
           total_milestone: dualResult.totalMilestone,
           paid_count: dualResult.appliedCount,
           applied_count: dualResult.appliedCount,
-          requested_count: dualResult.requestedCount,
-          skipped_count: dualResult.skippedCount,
+          requested_count: dualResult.requestedCount + notCountedCount,
+          skipped_count: dualResult.skippedCount + notCountedCount,
+          not_counted_count: notCountedCount,
           breakdown: dualResult.breakdown,
           transaction_id: dualResult.transactionId,
           payout_idempotent_retry: dualResult.alreadyApplied,
@@ -275,7 +328,7 @@ export async function POST(request: NextRequest) {
     // For bonus-only payouts, also accept rows whose standard reward was already paid
     // (status="paid" or paid=true) but whose flat-fee bonus is still unpaid. This mirrors
     // the Twitter CPM bulk payout, which already supports paying bonus after standard.
-    const verifiedSubmissions = submissions.filter((s) => {
+    const verifiedSubmissions = countedSubmissions.filter((s) => {
       const st = String(s.status || "").toLowerCase();
       if (st === "verified" || st === "approved") return true;
       if (payment_type === "bonus") {
@@ -991,7 +1044,7 @@ export async function POST(request: NextRequest) {
             payableTotalAmount,
             `Bulk payment for ${paidCount} submissions in contest: ${
               contest.title || "Contest"
-            }`,
+            }${highestPlatformLedgerNote?.descriptionSuffix ?? ""}`,
             {
               idempotencyKey,
               remarks: `Bulk payment: ${payment_type}`,
@@ -1011,6 +1064,7 @@ export async function POST(request: NextRequest) {
                     }),
                 cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
                 bonus_reason_counts: bonusReasonCounts,
+                ...highestPlatformLedgerNote?.metadata,
               },
             },
           ),
@@ -1278,7 +1332,8 @@ export async function POST(request: NextRequest) {
           : { total_cpm: payableTotalMainPaid }),
         total_bonus: totalBonusPaid,
         paid_count: paidCount,
-        skipped_count: skippedCount,
+        skipped_count: skippedCount + notCountedCount,
+        not_counted_count: notCountedCount,
         breakdown: breakdown,
         transaction_id: creditResult.transactionId,
         payout_idempotent_retry: Boolean(creditResult.alreadyApplied),

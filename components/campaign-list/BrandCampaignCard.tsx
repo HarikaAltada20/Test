@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { CampaignAccessInfo } from "@/components/campaign-access/CampaignAccessInfo";
 import { ContestRequirementBadges } from "@/components/ContestRequirementBadges";
+import { HighestPlatformBadge } from "@/components/contest/HighestPlatformPayoutNote";
 import { DeleteContestButton } from "@/components/delete-contest-button";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { getEndedOpportunityPhaseLabel } from "@/lib/contest-ended-phase-display";
@@ -493,6 +494,7 @@ export function BrandCampaignCard({
               </span>
             ) : null}
             <ContestRequirementBadges contest={contest} isDark={isDark} size="compact" />
+            <HighestPlatformBadge contest={contest} isDark={isDark} size="compact" />
             {!twitterTextImage && contest.multiple_submissions_enabled ? (
               <span
                 className={cn(
@@ -530,6 +532,7 @@ export function BrandCampaignCard({
               {contestTypeLabel(contest.contest_type)}
             </span>
             <ContestRequirementBadges contest={contest} isDark={isDark} size="compact" />
+            <HighestPlatformBadge contest={contest} isDark={isDark} size="compact" />
           </div>
         )}
 

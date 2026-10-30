@@ -114,6 +114,7 @@ export type ExportReportBranding = {
   contestId?: string | null;
   contestLifecycleStatus?: string | null;
   postContestStatus?: string | null;
+  payoutRuleNote?: string | null;
 };
 
 export type BrandProfile = {
@@ -165,6 +166,7 @@ export function buildExportReportBranding(opts: {
   contestId?: string | null;
   contestLifecycleStatus?: string | null;
   postContestStatus?: string | null;
+  payoutRuleNote?: string | null;
 }): ExportReportBranding {
   return {
     brandCompanyName:
@@ -186,6 +188,7 @@ export function buildExportReportBranding(opts: {
     contestId: opts.contestId ?? null,
     contestLifecycleStatus: opts.contestLifecycleStatus ?? null,
     postContestStatus: opts.postContestStatus ?? null,
+    payoutRuleNote: opts.payoutRuleNote ?? null,
   };
 }
 

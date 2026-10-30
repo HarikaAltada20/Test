@@ -62,12 +62,16 @@ import {
 import { useCreatorContestEligibility } from "@/hooks/useCreatorContestEligibility";
 import { getPlatformIcon } from "@/lib/platform-icons";
 import { ConnectStage } from "@/components/dashboard/settings/ConnectStage";
+import { HighestPlatformPayoutNote } from "@/components/contest/HighestPlatformPayoutNote";
 import {
   parseVideoContestPlatforms,
   resolveMaxEarningsCentsForSubmission,
   VIDEO_PLATFORM_LABELS,
   type VideoContestPlatform,
 } from "@/lib/video-platform-campaigns";
+import { draftSubmissionErrorMessage } from "@/lib/content-drafts";
+import { ApprovedDraftPicker } from "@/components/content-drafts/ApprovedDraftPicker";
+import { getCampaignDraftStatus } from "@/components/content-drafts/api";
 
 function platformDisplayLabel(platform: string | null | undefined): string {
   if (!platform) return "content";
@@ -102,6 +106,8 @@ function formatSubmissionInsertError(error: {
   if (isCampaignAccessDeniedError(msg)) {
     return "This campaign is private and you're not on its access list.";
   }
+  const draftMessage = draftSubmissionErrorMessage(msg);
+  if (draftMessage) return draftMessage;
   if (msg.includes("trust_score_too_low")) {
     return `Trust % too low to submit to this campaign.${refreshHint}`;
   }
@@ -208,8 +214,8 @@ async function bustLeaderboardCache(contestId: string) {
 //   - 48 hours: SUBMISSION_WINDOW_VALUE = 48, SUBMISSION_WINDOW_UNIT = 'hour'
 //   - 1 week: SUBMISSION_WINDOW_VALUE = 1, SUBMISSION_WINDOW_UNIT = 'week'
 // Adjust the submission window value
-const SUBMISSION_WINDOW_VALUE: number = 10;
-const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "day";
+const SUBMISSION_WINDOW_VALUE: number = 2;
+const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "year";
 
 // Auto-generate display text and handle singular/plural forms
 const IS_SUBMISSION_WINDOW_SINGULAR: boolean = SUBMISSION_WINDOW_VALUE === 1;
@@ -535,6 +541,12 @@ export default function SubmitContentPage({
   const [isFetchingInstagramMedia, setIsFetchingInstagramMedia] =
     useState(false);
   const [contest, setContest] = useState<any>(null); // Store full contest data including contest_type
+  // Review before posting: each post must be linked to an approved draft.
+  const [draftReviewOn, setDraftReviewOn] = useState(false);
+  const [selectedDraftId, setSelectedDraftId] = useState<string | null>(
+    () => searchParams?.get("draft") ?? null,
+  );
+  const [draftPickerReload, setDraftPickerReload] = useState(0);
 
   const {
     items: requirementItems,
@@ -1368,8 +1380,24 @@ export default function SubmitContentPage({
         return;
       }
 
+      // Review before posting: each post links one approved draft, so the page
+      // takes one video at a time. If this check fails, the database still
+      // refuses posts without an approved draft.
+      let reviewOn = false;
+      try {
+        reviewOn = !!(await getCampaignDraftStatus(contestId))
+          .review_before_posting;
+      } catch {
+        reviewOn = false;
+      }
+      setDraftReviewOn(reviewOn);
+
       // Store full contest data
-      setContest(contestData);
+      setContest(
+        reviewOn
+          ? { ...contestData, multiple_submissions_enabled: false }
+          : contestData,
+      );
 
       // Fetch existing submissions for progress tracking
       const { data: existingSubmissions, error: existingSubsErr } =
@@ -2321,6 +2349,27 @@ export default function SubmitContentPage({
   // SUBMISSION HANDLERS - Clean separation of concerns
   // ============================================================================
 
+  /** Links the post to the chosen approved draft when the campaign reviews videos first. */
+  const draftLinkFields = (
+    publishedAt?: string | number | null,
+  ): { draft_id?: string; platform_published_at?: string | null } => {
+    if (!draftReviewOn) return {};
+    if (!selectedDraftId) {
+      throw new Error("Choose the approved draft this post is for.");
+    }
+    let published: string | null = null;
+    if (typeof publishedAt === "number" || /^\d+$/.test(publishedAt ?? "")) {
+      // TikTok create_time is in seconds.
+      const seconds = Number(publishedAt);
+      if (Number.isFinite(seconds) && seconds > 0) {
+        published = new Date(seconds * 1000).toISOString();
+      }
+    } else if (publishedAt && !Number.isNaN(Date.parse(publishedAt))) {
+      published = new Date(publishedAt).toISOString();
+    }
+    return { draft_id: selectedDraftId, platform_published_at: published };
+  };
+
   /**
    * Handle single YouTube video submission
    */
@@ -2366,6 +2415,7 @@ export default function SubmitContentPage({
       video_title: videoToSubmit.snippet.title,
       video_thumbnail_url: youtubeThumbnailUrl,
       other_stats: { youtube: youtubeStats },
+      ...draftLinkFields(videoToSubmit.snippet?.publishedAt),
     };
 
     const { error: submissionError } = await supabase
@@ -2452,6 +2502,7 @@ export default function SubmitContentPage({
       video_title: selectedReel.caption || "Instagram Content",
       video_thumbnail_url: selectedReel.thumbnail_url,
       other_stats: { instagram: finalInstagramStats },
+      ...draftLinkFields(selectedReel.timestamp),
     };
 
     const { error: submissionError } = await supabase
@@ -2648,6 +2699,7 @@ export default function SubmitContentPage({
       video_title: videoToSubmit.title || "TikTok Video",
       video_thumbnail_url: videoToSubmit.cover_image_url || null,
       other_stats: { tiktok: tiktokStats },
+      ...draftLinkFields(videoToSubmit.create_time),
     };
 
     const { error: submissionError } = await supabase
@@ -2829,6 +2881,17 @@ export default function SubmitContentPage({
       }
     }
 
+    if (draftReviewOn && !selectedDraftId) {
+      const draftMessage = "Choose the approved draft this post is for.";
+      setError(draftMessage);
+      toast({
+        title: "Choose your approved draft",
+        description: draftMessage,
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (isSubmittingRef.current) {
       return;
     }
@@ -2940,6 +3003,8 @@ export default function SubmitContentPage({
         duration: 5000,
       });
       setError(err.message || "Failed to submit content. Please try again.");
+      // The draft may have changed (posted elsewhere, approval revoked).
+      if (draftReviewOn) setDraftPickerReload((n) => n + 1);
     } finally {
       isSubmittingRef.current = false;
       setIsLoading(false);
@@ -3544,7 +3609,25 @@ export default function SubmitContentPage({
                   .join(", ")}
                 . Select one platform to continue.
               </p>
+              <HighestPlatformPayoutNote
+                contest={contest}
+                audience="creator"
+                isDark={isDark}
+                compact
+              />
             </div>
+          )}
+
+          {draftReviewOn && (
+            <ApprovedDraftPicker
+              contestId={contestId}
+              platform={contestPlatform}
+              platformLabel={platformDisplayLabel(contestPlatform)}
+              selectedId={selectedDraftId}
+              onSelect={setSelectedDraftId}
+              reloadKey={draftPickerReload}
+              isDark={isDark}
+            />
           )}
 
           {/* YOUTUBE UI BLOCK */}
