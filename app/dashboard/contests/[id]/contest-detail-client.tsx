@@ -16055,18 +16055,18 @@ export default function ContestDetailClient({
 
           {/* Next Row: Thumbnail, Badge and Title whole section + Download Report button opposite on right */}
           <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 items-start lg:items-center justify-between min-w-0 w-full">
-            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 items-start min-w-0 flex-1">
+            <div className="flex w-full flex-col gap-4 sm:gap-6 items-start min-w-0 flex-1 lg:flex-row">
               {currentContest.thumbnail_url ? (
                 <div
                   className={cn(
-                    "shrink-0 overflow-hidden rounded-[14px] border",
+                    "w-full shrink-0 overflow-hidden rounded-[14px] border lg:w-[min(100%,560px)]",
                     isDark ? "border-white/10" : "border-[#e5e5e5]",
                   )}
                 >
                   <img
                     src={currentContest.thumbnail_url}
                     alt={`${currentContest.title} thumbnail`}
-                    className="h-28 w-48 sm:h-36 sm:w-64 md:h-40 md:w-72 object-cover"
+                    className="block h-auto w-full object-contain"
                   />
                 </div>
               ) : null}
@@ -16935,8 +16935,8 @@ export default function ContestDetailClient({
       <div className="mt-8">
         <TabContent activeTab={activeTab}>
           <TabPanel value="overview" activeTab={activeTab}>
-            <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-6 lg:items-start">
-              <div className="min-w-0 space-y-6">
+            <div className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-6 lg:items-start">
+              <div className="order-2 min-w-0 space-y-6 lg:order-1">
                 <BrandOverviewSectionCard
                   isDark={isDark}
                   title="Brief"
@@ -19969,7 +19969,7 @@ export default function ContestDetailClient({
                 })()}
               </div>
 
-              <aside className="mt-6 space-y-6 lg:mt-0 lg:sticky lg:top-24 lg:self-start">
+              <aside className="order-1 mb-6 space-y-6 lg:order-2 lg:sticky lg:top-24 lg:mb-0 lg:mt-0 lg:self-start">
                 {overviewVideoPlatforms.length >= 2 && (
                   <ContestDetailPlatformTabs
                     platforms={overviewVideoPlatforms}

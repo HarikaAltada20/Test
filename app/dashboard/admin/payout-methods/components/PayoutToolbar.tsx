@@ -256,12 +256,12 @@ export function PayoutToolbar({
           <Button variant="outline" className={cn("h-10 gap-2", p.button)}>
             <SlidersHorizontal className="h-4 w-4" />
             More filters
-            {moreCount > 0 && <span className="rounded-full bg-[#7F39EC] px-1.5 text-xs text-white">{moreCount}</span>}
+            {moreCount > 0 && <span className="rounded-full bg-[#1a1a1a] px-1.5 text-xs text-white">{moreCount}</span>}
           </Button>
         </PopoverTrigger>
         <PopoverContent
           align="end"
-          className={cn("w-72 space-y-4", isDark && "border-gray-700 bg-[#0B0629] text-white")}
+          className={cn("w-72 space-y-4", isDark && "border-gray-700 bg-[#161616] text-white")}
         >
           <div className="space-y-1.5">
             <Label className="text-xs">Default method</Label>

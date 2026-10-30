@@ -323,7 +323,7 @@ export function SenderEmailManagementDialog({
 
               <div className="flex gap-2 pt-1">
                 <Button
-                  className="bg-[#662EBD] hover:bg-[#5524a8] text-white"
+                  className="bg-[#1a1a1a] hover:bg-black text-white"
                   onClick={handleSubmit}
                   disabled={submitting}
                 >
@@ -335,7 +335,7 @@ export function SenderEmailManagementDialog({
                 {(editingId || form.emailLocal || form.emailFull) && (
                   <Button
                     variant="outline"
-                    className="border-[#662EBD] text-[#662EBD] hover:bg-purple-50"
+                    className="border-[#1a1a1a] text-[#1a1a1a] hover:bg-[#f6f6f7]"
                     onClick={resetForm}
                     disabled={submitting}
                   >
@@ -374,11 +374,11 @@ export function SenderEmailManagementDialog({
                         key={sender.id}
                         className={cn(
                           "flex items-start gap-4 rounded-xl border border-gray-200 p-4 bg-white",
-                          editingId === sender.id && "ring-2 ring-[#662EBD]/30",
+                          editingId === sender.id && "ring-2 ring-[#1a1a1a]/30",
                         )}
                       >
                         <div className="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
-                          <User className="h-5 w-5 text-[#662EBD]" />
+                          <User className="h-5 w-5 text-[#1a1a1a]" />
                         </div>
 
                         <div className="flex-1 min-w-0 space-y-1">
@@ -424,7 +424,7 @@ export function SenderEmailManagementDialog({
                             type="button"
                             variant="outline"
                             size="icon"
-                            className="h-9 w-9 border-purple-200 text-[#662EBD] hover:bg-purple-50"
+                            className="h-9 w-9 border-[#e6e6e8] text-[#1a1a1a] hover:bg-[#f6f6f7]"
                             onClick={() => startEdit(sender)}
                           >
                             <Pencil className="h-4 w-4" />

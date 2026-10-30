@@ -433,7 +433,7 @@ export default function RatingsPage() {
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Total Reviews Card */}
-        <div className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 ${isDark ? "bg-[#170337]" : "bg-white"}`}>
+        <div className={`rounded-2xl border shadow-[0_8px_28px_-18px_rgba(26,26,26,0.28)] p-2 ${isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white"}`}>
           <CardContent className="p-4">
             <div className="flex justify-between">
               <div className={`flex-1 space-y-2 ${isDark ? "text-white" : "text-black"}`}>
@@ -443,7 +443,7 @@ export default function RatingsPage() {
                 </p>
                 <p className="text-sm mt-0.5">All submitted reviews</p>
               </div>
-              <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-[#FFFFFF36] text-[#D8C3FF]" : "bg-[#D8C3FF] text-[#4A00BE]"}`}>
+              <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#1a1a1a]"}`}>
                 <MessageSquare className="w-5 h-5" />
               </div>
             </div>
@@ -451,7 +451,7 @@ export default function RatingsPage() {
         </div>
 
         {/* Approved Reviews Card - Green */}
-        <div className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 ${isDark ? "bg-[#170337]" : "bg-white"}`}>
+        <div className={`rounded-2xl border shadow-[0_8px_28px_-18px_rgba(26,26,26,0.28)] p-2 ${isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white"}`}>
           <CardContent className="p-4">
             <div className="flex justify-between">
               <div className={`flex-1 space-y-2 ${isDark ? "text-white" : "text-black"}`}>
@@ -461,7 +461,7 @@ export default function RatingsPage() {
                 </p>
                 <p className="text-sm mt-0.5">Approved reviews</p>
               </div>
-              <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-[#FFFFFF36] text-[#D8C3FF]" : "bg-[#D8C3FF] text-[#4A00BE]"}`}>
+              <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#1a1a1a]"}`}>
                 <CheckCircle className="w-5 h-5" />
               </div>
             </div>
@@ -469,7 +469,7 @@ export default function RatingsPage() {
         </div>
 
         {/* Rejected Reviews Card - Red */}
-        <div className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 ${isDark ? "bg-[#170337]" : "bg-white"}`}>
+        <div className={`rounded-2xl border shadow-[0_8px_28px_-18px_rgba(26,26,26,0.28)] p-2 ${isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white"}`}>
           <CardContent className="p-4">
             <div className="flex justify-between">
               <div className={`flex-1 space-y-2 ${isDark ? "text-white" : "text-black"}`}>
@@ -479,7 +479,7 @@ export default function RatingsPage() {
                 </p>
                 <p className="text-sm mt-0.5">Rejected reviews</p>
               </div>
-              <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-[#FFFFFF36] text-[#D8C3FF]" : "bg-[#D8C3FF] text-[#4A00BE]"}`}>
+              <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#1a1a1a]"}`}>
                 <XCircle className="w-5 h-5" />
               </div>
             </div>
@@ -487,7 +487,7 @@ export default function RatingsPage() {
         </div>
 
         {/* Pending Reviews Card - Yellow */}
-        <div className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 ${isDark ? "bg-[#170337]" : "bg-white"}`}>
+        <div className={`rounded-2xl border shadow-[0_8px_28px_-18px_rgba(26,26,26,0.28)] p-2 ${isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white"}`}>
           <CardContent className="p-4">
             <div className="flex justify-between">
               <div className={`flex-1 space-y-2 ${isDark ? "text-white" : "text-black"}`}>
@@ -497,7 +497,7 @@ export default function RatingsPage() {
                 </p>
                 <p className="text-sm mt-0.5">Pending reviews</p>
               </div>
-              <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-[#FFFFFF36] text-[#D8C3FF]" : "bg-[#D8C3FF] text-[#4A00BE]"}`}>
+              <div className={`w-10 h-10 flex items-center justify-center rounded-full mb-4 ${isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#1a1a1a]"}`}>
                 <Clock className="w-5 h-5" />
               </div>
             </div>
@@ -507,7 +507,7 @@ export default function RatingsPage() {
 
 
       {/* Rating Overview Component */}
-      <div className={`${isDark ? "bg-[#170337]" : "bg-white"} rounded-lg shadow-lg p-4 sm:p-6`}>
+      <div className={`${isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white"} rounded-lg shadow-lg p-4 sm:p-6`}>
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-6">
@@ -673,7 +673,7 @@ export default function RatingsPage() {
       </div>
 
       {/* Reviews List */}
-      <div className={`${isDark ? "bg-[#170337]" : "bg-white"} rounded-lg shadow`}>
+      <div className={`${isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white"} rounded-lg shadow`}>
         <div className="py-6 px-4">
           {loading ? (
             <div className="text-center py-12">
@@ -731,7 +731,7 @@ export default function RatingsPage() {
                     </TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody className={`${isDark ? "bg-[#170337] divide-gray-700" : "bg-white divide-gray-200"} divide-y`}>
+                <TableBody className={`${isDark ? "bg-[#161616] divide-gray-700" : "bg-white divide-gray-200"} divide-y`}>
                   {filteredReviews.map((review) => (
                     <TableRow key={review.id}>
                       <TableCell className="px-6 py-4 whitespace-nowrap">
@@ -772,7 +772,7 @@ export default function RatingsPage() {
                             : 'bg-blue-100 text-blue-800 border-blue-200'
                           : isDark
                             ? 'bg-purple-900 text-purple-200 border-purple-700'
-                            : 'bg-purple-100 text-purple-800 border-purple-200'
+                            : 'bg-purple-100 text-purple-800 border-[#e6e6e8]'
                           }`}>
                           {review.user_type}
                         </span>

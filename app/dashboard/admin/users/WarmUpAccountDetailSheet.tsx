@@ -293,7 +293,7 @@ export function WarmUpAccountDetailSheet({
         side="right"
         className={cn(
           "w-full sm:max-w-xl overflow-y-auto",
-          isDark ? "bg-[#170337] text-white border-purple-900/40" : "bg-white",
+          isDark ? "bg-[#161616] text-white border-purple-900/40" : "bg-white",
         )}
       >
         {details ? (

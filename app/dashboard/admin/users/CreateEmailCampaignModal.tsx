@@ -81,7 +81,7 @@ export function CreateEmailCampaignModal({
         className="max-w-lg w-[calc(100%-2rem)] gap-0 overflow-hidden rounded-xl border-gray-200 bg-white p-0 sm:max-w-md sm:p-0"
         hideCloseButton
       >
-        <div className="bg-[#662EBD] px-6 py-5 text-white relative">
+        <div className="bg-[#1a1a1a] px-6 py-5 text-white relative">
           <button
             type="button"
             onClick={() => onOpenChange(false)}
@@ -128,7 +128,7 @@ export function CreateEmailCampaignModal({
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <Button
-            className="w-full h-11 bg-[#662EBD] hover:bg-[#5524a8] text-white font-medium mt-1"
+            className="w-full h-11 bg-[#1a1a1a] hover:bg-black text-white font-medium mt-1"
             disabled={submitting || !campaignName.trim() || !projectId}
             onClick={handleContinue}
           >

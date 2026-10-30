@@ -591,7 +591,7 @@ export default function AdminUsersPage() {
     <TableHead
       className={cn(
         "whitespace-nowrap border-r",
-        isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+        isDark ? "bg-[#1f1f1f]" : "bg-[#F9FAFB]",
         className,
       )}
     >
@@ -2717,7 +2717,7 @@ export default function AdminUsersPage() {
   const selectionCheckboxClass = cn(
     "relative z-10 shrink-0",
     isDark
-      ? "border-gray-500 bg-[#170337] data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+      ? "border-gray-500 bg-[#161616] data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
       : "border-gray-300 bg-white data-[state=checked]:bg-purple-600",
   );
 
@@ -3012,7 +3012,7 @@ export default function AdminUsersPage() {
                   "shrink-0 text-xs font-normal gap-1",
                   isDark
                     ? "border-purple-700/50 text-purple-200"
-                    : "border-purple-200 text-purple-700",
+                    : "border-[#e6e6e8] text-purple-700",
                 )}
               >
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -3126,7 +3126,7 @@ export default function AdminUsersPage() {
                 className={cn(
                   "h-8 gap-1.5 rounded-md px-2 sm:px-3",
                   viewMode === "table"
-                    ? "bg-[#662EBD] text-white hover:bg-[#662EBD] hover:text-white"
+                    ? "bg-[#1a1a1a] text-white hover:bg-[#1a1a1a] hover:text-white"
                     : isDark
                       ? "text-slate-300 hover:bg-white/10 hover:text-white"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
@@ -3142,7 +3142,7 @@ export default function AdminUsersPage() {
                 className={cn(
                   "h-8 gap-1.5 rounded-md px-2 sm:px-3",
                   viewMode === "map"
-                    ? "bg-[#662EBD] text-white hover:bg-[#662EBD] hover:text-white"
+                    ? "bg-[#1a1a1a] text-white hover:bg-[#1a1a1a] hover:text-white"
                     : isDark
                       ? "text-slate-300 hover:bg-white/10 hover:text-white"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
@@ -3158,7 +3158,7 @@ export default function AdminUsersPage() {
                 className={cn(
                   "h-8 gap-1.5 rounded-md px-2 sm:px-3",
                   viewMode === "notifications"
-                    ? "bg-[#662EBD] text-white hover:bg-[#662EBD] hover:text-white"
+                    ? "bg-[#1a1a1a] text-white hover:bg-[#1a1a1a] hover:text-white"
                     : isDark
                       ? "text-slate-300 hover:bg-white/10 hover:text-white"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
@@ -3174,7 +3174,7 @@ export default function AdminUsersPage() {
                 className={cn(
                   "h-8 gap-1.5 rounded-md px-2 sm:px-3",
                   viewMode === "email"
-                    ? "bg-[#662EBD] text-white hover:bg-[#662EBD] hover:text-white"
+                    ? "bg-[#1a1a1a] text-white hover:bg-[#1a1a1a] hover:text-white"
                     : isDark
                       ? "text-slate-300 hover:bg-white/10 hover:text-white"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
@@ -3439,9 +3439,9 @@ export default function AdminUsersPage() {
 
       {/* Email lead selection mode banner */}
       {viewMode === "table" && emailLeadSelectMode && (
-        <div className="rounded-xl border-2 border-[#662EBD] bg-purple-50 px-5 py-4 flex items-center justify-between gap-4 shadow-sm">
+        <div className="rounded-xl border-2 border-[#1a1a1a] bg-[#f6f6f7] px-5 py-4 flex items-center justify-between gap-4 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#662EBD] text-white shrink-0">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1a1a1a] text-white shrink-0">
               <Mail className="h-4 w-4" />
             </div>
             <div>
@@ -3489,7 +3489,7 @@ export default function AdminUsersPage() {
             <Button
               size="sm"
               disabled={selectedCount === 0}
-              className="bg-[#662EBD] hover:bg-[#5524a8] text-white"
+              className="bg-[#1a1a1a] hover:bg-black text-white"
               onClick={() => setEmailSendModalOpen(true)}
             >
               <Mail className="h-3.5 w-3.5 mr-1.5" />
@@ -3502,8 +3502,8 @@ export default function AdminUsersPage() {
       {viewMode === "table" && (
         <Card
           className={cn(
-            "rounded-xl shadow",
-            isDark ? "bg-[#170337]" : "bg-white",
+            "rounded-2xl border shadow-[0_8px_28px_-18px_rgba(26,26,26,0.28)]",
+            isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white",
           )}
         >
           <CardContent className="px-6">
@@ -3518,27 +3518,27 @@ export default function AdminUsersPage() {
                 <TableHeader
                   className={cn(
                     stickyHeader ? "sticky top-0 z-20" : "",
-                    isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+                    isDark ? "bg-[#1f1f1f]" : "bg-[#F9FAFB]",
                   )}
                 >
                   <TableRow
                     className={cn(
                       "text-left border-b",
                       isDark
-                        ? "bg-[#391A6A] text-white"
+                        ? "bg-[#1f1f1f] text-white"
                         : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500",
                     )}
                   >
                     <TableHead
                       className={cn(
                         "w-10 border-r px-2",
-                        isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+                        isDark ? "bg-[#1f1f1f]" : "bg-[#F9FAFB]",
                       )}
                     >
                       <div
                         className={cn(
                           "flex min-h-12 items-center justify-center",
-                          isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+                          isDark ? "bg-[#1f1f1f]" : "bg-[#F9FAFB]",
                         )}
                       >
                         <Checkbox
@@ -3553,7 +3553,7 @@ export default function AdminUsersPage() {
                           onCheckedChange={(c) => toggleSelectAllFiltered(!!c)}
                           className={cn(
                             selectionCheckboxClass,
-                            isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+                            isDark ? "bg-[#1f1f1f]" : "bg-[#F9FAFB]",
                           )}
                         />
                       </div>
@@ -3568,7 +3568,7 @@ export default function AdminUsersPage() {
                       <TableHead
                         className={cn(
                           "whitespace-nowrap border-r",
-                          isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+                          isDark ? "bg-[#1f1f1f]" : "bg-[#F9FAFB]",
                         )}
                       >
                         Profile
@@ -3581,7 +3581,7 @@ export default function AdminUsersPage() {
                       <TableHead
                         className={cn(
                           "whitespace-nowrap border-r",
-                          isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+                          isDark ? "bg-[#1f1f1f]" : "bg-[#F9FAFB]",
                         )}
                       >
                         Support Chat
@@ -4777,13 +4777,13 @@ export default function AdminUsersPage() {
                           <TableCell
                             className={cn(
                               "w-10 border-r px-2",
-                              isDark ? "bg-[#170337]" : "bg-white",
+                              isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white",
                             )}
                           >
                             <div
                               className={cn(
                                 "h-4 w-4 rounded animate-pulse",
-                                isDark ? "bg-[#391A6A]/50" : "bg-gray-200",
+                                isDark ? "bg-[#1f1f1f]/50" : "bg-gray-200",
                               )}
                             />
                           </TableCell>
@@ -4797,7 +4797,7 @@ export default function AdminUsersPage() {
                               <div
                                 className={cn(
                                   "h-4 rounded animate-pulse",
-                                  isDark ? "bg-[#391A6A]/50" : "bg-gray-200",
+                                  isDark ? "bg-[#1f1f1f]/50" : "bg-gray-200",
                                 )}
                                 style={{
                                   width: `${Math.random() * 40 + 60}%`,
@@ -4851,13 +4851,13 @@ export default function AdminUsersPage() {
                           <TableCell
                             className={cn(
                               "w-10 border-r p-0",
-                              isDark ? "bg-[#170337]" : "bg-white",
+                              isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white",
                             )}
                           >
                             <div
                               className={cn(
                                 "flex min-h-12 items-center justify-center px-2",
-                                isDark ? "bg-[#170337]" : "bg-white",
+                                isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white",
                               )}
                             >
                               <Checkbox
@@ -6035,8 +6035,8 @@ export default function AdminUsersPage() {
                         "p-3 border rounded-lg cursor-pointer transition-all",
                         isVisible
                           ? isDark
-                            ? "bg-[#391A6A] border-purple-500 text-white"
-                            : "bg-purple-50 border-purple-200 text-gray-900"
+                            ? "bg-[#1f1f1f] border-purple-500 text-white"
+                            : "bg-[#f6f6f7] border-[#e6e6e8] text-gray-900"
                           : isDark
                             ? "border-gray-600 hover:bg-[#2A1249] text-gray-300"
                             : "border-gray-300 hover:bg-gray-100 text-gray-700",
@@ -7592,7 +7592,7 @@ export default function AdminUsersPage() {
                                   className={cn(
                                     "text-sm py-1.5 px-3 font-normal",
                                     isDark
-                                      ? "bg-[#391A6A] text-gray-200 border-purple-500"
+                                      ? "bg-[#1f1f1f] text-gray-200 border-purple-500"
                                       : "",
                                   )}
                                 >
@@ -7625,7 +7625,7 @@ export default function AdminUsersPage() {
                             className={cn(
                               "text-sm py-1.5 px-3 font-normal",
                               isDark
-                                ? "bg-[#391A6A] text-gray-200 border-purple-500"
+                                ? "bg-[#1f1f1f] text-gray-200 border-purple-500"
                                 : "",
                             )}
                           >
@@ -7729,7 +7729,7 @@ export default function AdminUsersPage() {
                         className={cn(
                           "text-sm py-1.5 px-3 font-normal",
                           isDark
-                            ? "bg-[#391A6A] text-gray-200 border-purple-500"
+                            ? "bg-[#1f1f1f] text-gray-200 border-purple-500"
                             : "",
                         )}
                       >

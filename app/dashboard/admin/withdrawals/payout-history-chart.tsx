@@ -75,7 +75,7 @@ function PayoutChartTooltip({
       )}
     >
       <p className="font-medium mb-1.5">{row.label}</p>
-      <p className="text-[#7F39EC] mb-0.5">
+      <p className="text-[#1a1a1a] mb-0.5">
         {mode === "cumulative" ? "Cumulative paid" : "Paid"} :{" "}
         {formatCurrencyFromCents(row.value)}
       </p>
@@ -123,7 +123,7 @@ export function PayoutHistoryChart({
     cn(
       "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
       active
-        ? "bg-[#7F39EC] text-white"
+        ? "bg-[#1a1a1a] text-white"
         : isDark
           ? "text-white/60 hover:text-white"
           : "text-black/55 hover:text-black",
@@ -215,8 +215,8 @@ export function PayoutHistoryChart({
                   x2="0"
                   y2="1"
                 >
-                  <stop offset="0%" stopColor="#7F39EC" stopOpacity={0.45} />
-                  <stop offset="95%" stopColor="#7F39EC" stopOpacity={0.02} />
+                  <stop offset="0%" stopColor={isDark ? "#ffffff" : "#1a1a1a"} stopOpacity={0.28} />
+                  <stop offset="95%" stopColor={isDark ? "#ffffff" : "#1a1a1a"} stopOpacity={0.02} />
                 </linearGradient>
               </defs>
               <CartesianGrid
@@ -270,11 +270,11 @@ export function PayoutHistoryChart({
               <Area
                 type="monotone"
                 dataKey="value"
-                stroke="#7F39EC"
+                stroke={isDark ? "#ffffff" : "#1a1a1a"}
                 strokeWidth={2.5}
                 fill="url(#withdrawalPayoutFill)"
                 dot={false}
-                activeDot={{ r: 4, fill: "#7F39EC" }}
+                activeDot={{ r: 4, fill: isDark ? "#ffffff" : "#1a1a1a" }}
               />
             </AreaChart>
           </ResponsiveContainer>

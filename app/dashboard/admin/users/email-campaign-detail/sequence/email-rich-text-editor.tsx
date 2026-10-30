@@ -509,7 +509,7 @@ export function EmailRichTextEditor({
             Preview
           </div>
           <div
-            className="flex-1 overflow-y-auto p-4 text-sm text-gray-800 prose prose-sm max-w-none [&_a]:text-[#662EBD] [&_a]:underline"
+            className="flex-1 overflow-y-auto p-4 text-sm text-gray-800 prose prose-sm max-w-none [&_a]:text-[#1a1a1a] [&_a]:underline"
             style={{ minHeight }}
             dangerouslySetInnerHTML={{ __html: previewHtml }}
             onClick={(e) => {
@@ -560,7 +560,7 @@ export function EmailRichTextEditor({
               display: list-item;
             }
             .email-rich-editor a {
-              color: #662EBD;
+              color: #1a1a1a;
               text-decoration: underline;
               cursor: pointer;
             }

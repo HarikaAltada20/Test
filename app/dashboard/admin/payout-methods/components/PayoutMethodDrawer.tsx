@@ -380,7 +380,7 @@ export function PayoutMethodDrawer({
         side="right"
         className={cn(
           "flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[480px]",
-          isDark && "border-gray-800 bg-[#06021D] text-white"
+          isDark && "border-gray-800 bg-[#161616] text-white"
         )}
       >
         {!row ? (
@@ -430,7 +430,7 @@ export function PayoutMethodDrawer({
                       {METHOD_LABELS[row.method_type] ?? row.method_type}
                     </span>
                     {row.is_default && (
-                      <span className="rounded-full bg-[#7F39EC]/15 px-2 py-0.5 text-xs font-medium text-[#7F39EC]">
+                      <span className="rounded-full bg-[#1a1a1a]/15 px-2 py-0.5 text-xs font-medium text-[#1a1a1a]">
                         Default
                       </span>
                     )}
@@ -495,7 +495,7 @@ export function PayoutMethodDrawer({
                   {status === "email_pending" && !row.known_verified && (
                     <Button
                       size="sm"
-                      className="gap-1.5 bg-[#7F39EC] text-white hover:bg-[#6a2fd0]"
+                      className="gap-1.5 bg-[#1a1a1a] text-white hover:bg-[#6a2fd0]"
                       onClick={() => onSetStatus(row, "email_sent")}
                     >
                       <Send className="h-3.5 w-3.5" /> Mark email sent
@@ -632,7 +632,7 @@ export function PayoutMethodDrawer({
                           <span className="font-medium">{METHOD_LABELS[m.method_type] ?? m.method_type}</span>
                           <span className={cn("min-w-0 flex-1 truncate font-mono text-xs", p.muted)}>{ident}</span>
                           {m.is_default && (
-                            <span className="text-[10px] font-semibold uppercase text-[#7F39EC]">Default</span>
+                            <span className="text-[10px] font-semibold uppercase text-[#1a1a1a]">Default</span>
                           )}
                           {m.method_type === "skydo" && <SkydoStatusBadge status={getSkydoStatus(m)} size="sm" />}
                         </button>

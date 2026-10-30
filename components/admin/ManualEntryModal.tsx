@@ -310,8 +310,8 @@ export function ManualEntryModal({
                     className={cn(
                       "text-white",
                       isDark
-                        ? "bg-[#5F2BB1] hover:bg-[#4A00BE]"
-                        : "bg-[#4A00BE] hover:bg-[#5F2BB1]"
+                        ? "bg-[#1a1a1a] hover:bg-black"
+                        : "bg-[#1a1a1a] hover:bg-black"
                     )}
                   >
                     <Eye className="mr-1.5 h-4 w-4" />
@@ -475,8 +475,8 @@ export function ManualEntryModal({
             className={cn(
               "w-full",
               isDark
-                ? "bg-[#5F2BB1] hover:bg-[#4A00BE] text-white"
-                : "bg-[#4A00BE] hover:bg-[#5F2BB1] text-white"
+                ? "bg-[#1a1a1a] hover:bg-black text-white"
+                : "bg-[#1a1a1a] hover:bg-black text-white"
             )}
           >
             {isSubmitting ? (

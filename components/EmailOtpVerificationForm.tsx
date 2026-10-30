@@ -314,7 +314,6 @@ export function EmailOtpVerificationForm({
             type="submit"
             disabled={isSubmitting}
             className="h-10 rounded-full px-5 goc-btn-primary"
-            )}
           >
             {isSubmitting ? (
               <>

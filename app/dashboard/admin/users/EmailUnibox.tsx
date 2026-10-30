@@ -595,7 +595,7 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
       <div
         className={cn(
           "grid grid-cols-1 lg:grid-cols-[minmax(320px,380px)_1fr] gap-0 rounded-2xl border border-gray-200 bg-white shadow-md overflow-hidden flex-1 min-h-0",
-          isDark && "border-purple-900/40 bg-[#170337]",
+          isDark && "border-purple-900/40 bg-[#161616]",
         )}
       >
         <div

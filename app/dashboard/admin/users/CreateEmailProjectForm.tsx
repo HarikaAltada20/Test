@@ -63,7 +63,7 @@ export function CreateEmailProjectForm({
     <Card
       className={cn(
         "rounded-xl shadow border",
-        isDark ? "bg-[#170337] border-purple-900/40" : "bg-white",
+        isDark ? "bg-[#161616] border-purple-900/40" : "bg-white",
       )}
     >
       <CardHeader className="pb-4">
@@ -148,7 +148,7 @@ export function CreateEmailProjectForm({
               variant="outline"
               onClick={onCancel}
               disabled={submitting}
-              className="border-purple-300 text-purple-700 hover:bg-purple-50"
+              className="border-purple-300 text-purple-700 hover:bg-[#f6f6f7]"
             >
               Cancel
             </Button>

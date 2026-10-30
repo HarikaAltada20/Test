@@ -270,7 +270,7 @@ function AnalyticsChartTooltip({
       )}
     >
       <p className="font-medium mb-1.5">{String(label)}</p>
-      <p className="text-[#7F39EC] mb-1">
+      <p className={cn("mb-1", isDark ? "text-white" : "text-[#1a1a1a]")}>
         {metricLabel} : {metricValue.toLocaleString()}
       </p>
       {chartMetric === "views" && statusSeries.length > 0 && (
@@ -1155,7 +1155,9 @@ export default function AdminAnalyticsClient() {
               className={cn(
                 "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
                 dataSource === tab.id
-                  ? "border border-black/80 bg-[#7F39EC] text-white"
+                  ? isDark
+                    ? "bg-white text-[#1a1a1a]"
+                    : "bg-[#1a1a1a] text-white"
                   : isDark
                     ? "text-white/60 hover:text-white"
                     : "text-black/55 hover:text-black",
@@ -1180,8 +1182,8 @@ export default function AdminAnalyticsClient() {
                   "flex h-10 w-10 items-center justify-center rounded-xl border transition-all",
                   active
                     ? isDark
-                      ? "border-[#7F39EC] bg-[#7F39EC]/25 text-white"
-                      : "border-[#7F39EC] bg-[#7F39EC]/15 text-[#4A00BE]"
+                      ? "border-white bg-white text-[#1a1a1a]"
+                      : "border-[#1a1a1a] bg-[#1a1a1a] text-white"
                     : isDark
                       ? "border-white/10 bg-[#1a1a1a] text-white/70 hover:bg-white/10"
                       : "border-black/10 bg-white text-black/60 hover:bg-black/5",
@@ -1214,13 +1216,13 @@ export default function AdminAnalyticsClient() {
                 <span
                   className={cn(
                     "flex h-8 w-8 items-center justify-center rounded-lg",
-                    isDark ? "bg-white/10" : "bg-[#D8C3FF]",
+                    isDark ? "bg-white/10" : "bg-[#f3f3f5]",
                   )}
                 >
                   <Eye
                     className={cn(
                       "h-4 w-4",
-                      isDark ? "text-white" : "text-[#4A00BE]",
+                      isDark ? "text-white" : "text-[#1a1a1a]",
                     )}
                   />
                 </span>
@@ -1245,13 +1247,13 @@ export default function AdminAnalyticsClient() {
                 <span
                   className={cn(
                     "flex h-8 w-8 items-center justify-center rounded-lg",
-                    isDark ? "bg-white/10" : "bg-[#D8C3FF]",
+                    isDark ? "bg-white/10" : "bg-[#f3f3f5]",
                   )}
                 >
                   <Wallet
                     className={cn(
                       "h-4 w-4",
-                      isDark ? "text-white" : "text-[#4A00BE]",
+                      isDark ? "text-white" : "text-[#1a1a1a]",
                     )}
                   />
                 </span>
@@ -1278,13 +1280,13 @@ export default function AdminAnalyticsClient() {
                 <span
                   className={cn(
                     "flex h-8 w-8 items-center justify-center rounded-lg",
-                    isDark ? "bg-white/10" : "bg-[#D8C3FF]",
+                    isDark ? "bg-white/10" : "bg-[#f3f3f5]",
                   )}
                 >
                   <Target
                     className={cn(
                       "h-4 w-4",
-                      isDark ? "text-white" : "text-[#4A00BE]",
+                      isDark ? "text-white" : "text-[#1a1a1a]",
                     )}
                   />
                 </span>
@@ -1310,13 +1312,13 @@ export default function AdminAnalyticsClient() {
                   <span
                     className={cn(
                       "flex h-8 w-8 items-center justify-center rounded-lg",
-                      isDark ? "bg-white/10" : "bg-[#D8C3FF]",
+                      isDark ? "bg-white/10" : "bg-[#f3f3f5]",
                     )}
                   >
                     <MessageSquare
                       className={cn(
                         "h-4 w-4",
-                        isDark ? "text-white" : "text-[#4A00BE]",
+                        isDark ? "text-white" : "text-[#1a1a1a]",
                       )}
                     />
                   </span>
@@ -1393,13 +1395,13 @@ export default function AdminAnalyticsClient() {
                   <span
                     className={cn(
                       "flex h-7 w-7 items-center justify-center rounded-lg",
-                      isDark ? "bg-white/10" : "bg-[#D8C3FF]",
+                      isDark ? "bg-white/10" : "bg-[#f3f3f5]",
                     )}
                   >
                     <Icon
                       className={cn(
                         "h-3.5 w-3.5",
-                        isDark ? "text-white" : "text-[#4A00BE]",
+                        isDark ? "text-white" : "text-[#1a1a1a]",
                       )}
                     />
                   </span>
@@ -1461,7 +1463,9 @@ export default function AdminAnalyticsClient() {
                 className={cn(
                   "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
                   chartMetric === tab.id
-                    ? "bg-[#7F39EC] text-white"
+                    ? isDark
+                      ? "bg-white text-[#1a1a1a]"
+                      : "bg-[#1a1a1a] text-white"
                     : isDark
                       ? "text-white/60 hover:text-white"
                       : "text-black/55 hover:text-black",
@@ -1502,8 +1506,8 @@ export default function AdminAnalyticsClient() {
                     x2="0"
                     y2="1"
                   >
-                    <stop offset="0%" stopColor="#7F39EC" stopOpacity={0.45} />
-                    <stop offset="95%" stopColor="#7F39EC" stopOpacity={0.02} />
+                    <stop offset="0%" stopColor={isDark ? "#ffffff" : "#1a1a1a"} stopOpacity={0.28} />
+                    <stop offset="95%" stopColor={isDark ? "#ffffff" : "#1a1a1a"} stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
@@ -1549,11 +1553,11 @@ export default function AdminAnalyticsClient() {
                 <Area
                   type="monotone"
                   dataKey={chartMetric}
-                  stroke="#7F39EC"
+                  stroke={isDark ? "#ffffff" : "#1a1a1a"}
                   strokeWidth={2.5}
                   fill="url(#adminAnalyticsFill)"
                   dot={false}
-                  activeDot={{ r: 4, fill: "#7F39EC" }}
+                  activeDot={{ r: 4, fill: isDark ? "#ffffff" : "#1a1a1a" }}
                 />
                 {chartMetric === "views" &&
                   visibleStatusSeries.map((s) => (

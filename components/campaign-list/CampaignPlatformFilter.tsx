@@ -63,8 +63,8 @@ export function CampaignPlatformFilter({
           className={cn(
             "w-full min-w-0 h-12 justify-between rounded-xl font-medium",
             isDark
-              ? "border-gray-600 bg-[#07031D] text-white hover:bg-gray-700"
-              : "border-gray-400 bg-white text-gray-900 hover:bg-gray-50",
+              ? "border-white/10 bg-[#161616] text-white hover:bg-white/10"
+              : "border-[#e6e6e8] bg-white text-[#1a1a1a] hover:bg-[#e6e6e8]",
             triggerClassName,
           )}
         >
@@ -81,8 +81,8 @@ export function CampaignPlatformFilter({
         className={cn(
           "w-[var(--radix-popover-trigger-width)] min-w-[16rem] p-2 rounded-xl",
           isDark
-            ? "bg-[#0f172a] border-slate-800 text-slate-100"
-            : "bg-white border-slate-200",
+            ? "border-white/10 bg-[#161616] text-white"
+            : "border-[#ececef] bg-white",
           className,
         )}
       >
@@ -90,7 +90,7 @@ export function CampaignPlatformFilter({
           <div
             className={cn(
               "grid grid-cols-2 gap-1 rounded-lg p-1 mb-1",
-              isDark ? "bg-slate-900" : "bg-slate-100",
+              isDark ? "bg-white/5" : "bg-[#f3f3f5]",
             )}
             role="group"
             aria-label="Campaign platform mode"
@@ -201,10 +201,12 @@ function MatchModeButton({
       className={cn(
         "rounded-md px-2 py-1.5 text-[12px] font-semibold transition-colors",
         active
-          ? "bg-[#4211a1] text-white"
+          ? isDark
+            ? "bg-white/10 text-white"
+            : "bg-[#e6e6e8] text-[#1a1a1a]"
           : isDark
-            ? "text-slate-300 hover:bg-slate-800"
-            : "text-slate-600 hover:bg-white",
+            ? "text-white/75 hover:bg-white/10 hover:text-white"
+            : "text-[#3a3a40] hover:bg-[#e6e6e8] hover:text-[#1a1a1a]",
       )}
     >
       {label}
@@ -234,27 +236,29 @@ function PlatformFilterRow({
       onClick={onToggle}
       className={cn(
         "flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors disabled:cursor-not-allowed disabled:opacity-55",
-        isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
+        isDark ? "hover:bg-white/10" : "hover:bg-[#e6e6e8]",
       )}
     >
       <span
         className={cn(
           "w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all",
           checked
-            ? "bg-[#4211a1] border-[#4211a1]"
+            ? isDark
+              ? "border-white bg-white"
+              : "border-[#1a1a1a] bg-[#1a1a1a]"
             : isDark
-              ? "border-slate-700 bg-slate-900"
-              : "border-slate-300 bg-white",
+              ? "border-white/20 bg-transparent"
+              : "border-[#d9d9de] bg-white",
         )}
       >
         {checked ? (
-          <Check className="w-3 h-3 text-white" strokeWidth={4} />
+          <Check className={cn("h-3 w-3", isDark ? "text-[#1a1a1a]" : "text-white")} strokeWidth={4} />
         ) : null}
       </span>
       <span
         className={cn(
           "text-[13px] font-medium",
-          isDark ? "text-slate-300" : "text-slate-600",
+          isDark ? "text-white/80" : "text-[#3a3a40]",
         )}
       >
         {label}

@@ -1845,18 +1845,31 @@ export default function ProfilePage({
 
   const isDark = mode === "dark";
 
+  const isCreatorProfile = userData.user_type === "creator";
+  const isAdminProfile = userData.user_type === "admin";
+  const useProfileShell = isCreatorProfile || isAdminProfile;
+  const detailRowClass = "grid grid-cols-1 items-center gap-3 py-3 sm:grid-cols-[13rem_1fr_auto]";
+  const detailActionClass = cn(
+    "h-9 w-fit rounded-full px-4",
+    isDark
+      ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+      : "border-neutral-300 bg-white text-[#171717]",
+  );
+
   return (
-    <div className={cn("space-y-6 bg-background text-foreground transition-colors duration-300", userData.user_type === "creator" && "w-full max-w-[820px]")}>
+    <div className={cn("space-y-6 bg-background text-foreground transition-colors duration-300", useProfileShell && "w-full max-w-[820px]")}>
       <div className="space-y-1">
         <h1 className={cn("text-3xl font-semibold tracking-tight", isDark ? "text-white" : "text-[#171717]")}>
           Profile
         </h1>
         <p className={cn("text-lg", isDark ? "text-slate-300" : "text-[#44403c]")}>
-          How brands see you, and what helps us match you to campaigns.
+          {isAdminProfile
+            ? "Your admin account details."
+            : "How brands see you, and what helps us match you to campaigns."}
         </p>
       </div>
       <div>
-        {userData.user_type !== "creator" && (
+        {!useProfileShell && (
         <div
           className={cn(
             "rounded-t-2xl border-b px-6 py-4 shadow-lg",
@@ -1872,18 +1885,22 @@ export default function ProfilePage({
         )}
         <div
           className={cn(
-            userData.user_type === "creator"
+            useProfileShell
               ? cn(
                   "rounded-2xl border px-5 py-4 shadow-none",
-                  isDark
-                    ? "border-[#c4a574]/35 bg-[linear-gradient(180deg,rgba(196,161,90,0.16)_0%,rgba(14,14,14,0.55)_48%,#161616_100%)]"
-                    : "border-[#f3e6d4] bg-white",
+                  isAdminProfile
+                    ? isDark
+                      ? "border-white/10 bg-[#161616]"
+                      : "border-[#ececef] bg-white"
+                    : isDark
+                      ? "border-[#c4a574]/35 bg-[linear-gradient(180deg,rgba(196,161,90,0.16)_0%,rgba(14,14,14,0.55)_48%,#161616_100%)]"
+                      : "border-[#f3e6d4] bg-white",
                 )
               : "rounded-b-2xl shadow-lg px-2 pb-4",
-            userData.user_type !== "creator" && (isDark ? "bg-[#161616]" : "bg-white "),
+            !useProfileShell && (isDark ? "bg-[#161616]" : "bg-white "),
           )}
         >
-          {userData.user_type === "creator" && (
+          {useProfileShell && (
             <div className="flex items-center gap-4">
               <div className="relative shrink-0">
                 <Avatar className={cn("h-[4.5rem] w-[4.5rem] rounded-2xl border", isDark ? "border-white/15" : "border-neutral-200")}>
@@ -1919,7 +1936,9 @@ export default function ProfilePage({
                         "h-11 w-full max-w-[280px] rounded-xl border bg-white px-3 text-base text-[#171717] focus:outline-none focus:ring-1",
                         fullNameError
                           ? "border-red-500 focus:ring-red-500"
-                          : "border-[#ff7a1a] focus:ring-[#ff7a1a]",
+                          : isAdminProfile
+                            ? "border-[#1a1a1a] focus:ring-[#1a1a1a]"
+                            : "border-[#ff7a1a] focus:ring-[#ff7a1a]",
                       )}
                     />
                     <Button
@@ -1968,7 +1987,7 @@ export default function ProfilePage({
               </div>
             </div>
           )}
-          {userData.user_type === "creator" && selectedAvatarFile && (
+          {useProfileShell && selectedAvatarFile && (
             <div className="flex gap-2 px-6 pt-3">
               <Button size="sm" className="h-9 rounded-full bg-[#171717] px-4 text-white hover:bg-[#171717]/90" onClick={handleAvatarUpload} disabled={isUploadingAvatar}>
                 {isUploadingAvatar ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
@@ -1989,7 +2008,7 @@ export default function ProfilePage({
               </Button>
             </div>
           )}
-          {userData.user_type !== "creator" && (
+          {!useProfileShell && (
           <div className="px-6 pt-4">
             <div className="flex items-center gap-2">
               <CardTitle className="text-xl font-semibold">
@@ -2002,7 +2021,7 @@ export default function ProfilePage({
             </CardDescription>
           </div>
           )}
-          <CardHeader className={cn(userData.user_type === "creator" && "sr-only")}>
+          <CardHeader className={cn(useProfileShell && "sr-only")}>
             <div className="flex items-center gap-6 mb-6">
               <div className="relative group">
                 <Avatar className="h-20 w-20 border-2 border-border transition-all duration-200 group-hover:border-primary">
@@ -2076,7 +2095,7 @@ export default function ProfilePage({
               </div>
             </div>
           </CardHeader>
-          <CardContent className={cn("space-y-6", userData.user_type === "creator" && "hidden")}>
+          <CardContent className={cn("space-y-6", useProfileShell && "hidden")}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-12">
               <div className={cn("space-y-3", userData.user_type === "creator" && !isEditingFullName && "hidden")}>
                 {isEditingFullName ? (
@@ -2387,6 +2406,57 @@ export default function ProfilePage({
           </div> */}
         </div>
       </div>
+
+      {isAdminProfile && (
+        <>
+          <div className={cn("rounded-2xl border px-5 py-4 shadow-none", isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white")}>
+            <h3 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Your details</h3>
+            <div className={cn("mt-2 divide-y", isDark ? "divide-white/10" : "divide-neutral-200")}>
+              <div className={detailRowClass}>
+                <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Email</p>
+                <p className={cn("truncate text-base", isDark ? "text-white" : "text-[#171717]")}>{userData.email}</p>
+                <Button type="button" variant="outline" className={detailActionClass} onClick={handleEditEmail}>
+                  Change
+                </Button>
+              </div>
+              <div className={detailRowClass}>
+                <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Username</p>
+                <p className={cn("truncate text-base", isDark ? "text-white" : "text-[#171717]")}>@{userData.username}</p>
+                <Button type="button" variant="outline" className={detailActionClass} onClick={handleCopyUsername}>
+                  <Copy className="h-4 w-4" />
+                  Copy
+                </Button>
+              </div>
+              <div className={detailRowClass}>
+                <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Account type</p>
+                <p className={cn("text-base capitalize", isDark ? "text-white" : "text-[#171717]")}>{userData.user_type}</p>
+                <span />
+              </div>
+            </div>
+          </div>
+          <div className={cn("rounded-2xl border px-5 py-4 shadow-none", isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white")}>
+            <h3 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Referrals</h3>
+            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Referred by</p>
+                <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{referrer || "No one"}</p>
+              </div>
+              <div>
+                <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Available coins</p>
+                <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{(userData.coins ?? 0).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Creators referred</p>
+                <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{userData.creators_referred ?? 0}</p>
+              </div>
+              <div>
+                <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Brands referred</p>
+                <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{userData.advertisers_referred ?? 0}</p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Creator Profile Details - Only for Creators */}
       {userData.user_type === "creator" && creatorProfile && (
@@ -3651,7 +3721,7 @@ export default function ProfilePage({
         className={cn(
           "rounded-2xl shadow-lg px-2 pb-5",
           isDark ? "bg-[#161616]" : "bg-white ",
-          userData.user_type === "creator" && "hidden",
+          useProfileShell && "hidden",
         )}
       >
         <CardHeader className="pb-8">
@@ -4429,7 +4499,6 @@ export default function ProfilePage({
                 onClick={handleConfirmCompleteProfile}
                 disabled={isSubmitting}
                 className="h-10 rounded-full px-5 goc-btn-primary"
-                )}
               >
                 {isSubmitting ? (
                   <>

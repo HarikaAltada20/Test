@@ -239,7 +239,7 @@ export function EmailTemplatePickerModal({ open, onClose, onInsert }: Props) {
                 className={cn(
                   "px-4 py-2 text-sm font-medium rounded-md transition-colors",
                   mode === "browse"
-                    ? "bg-white text-[#662EBD] border border-purple-200 shadow-sm"
+                    ? "bg-white text-[#1a1a1a] border border-[#e6e6e8] shadow-sm"
                     : "text-gray-600 hover:text-gray-900",
                 )}
               >
@@ -251,7 +251,7 @@ export function EmailTemplatePickerModal({ open, onClose, onInsert }: Props) {
                 className={cn(
                   "px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5",
                   mode === "create"
-                    ? "bg-white text-[#662EBD] border border-purple-200 shadow-sm"
+                    ? "bg-white text-[#1a1a1a] border border-[#e6e6e8] shadow-sm"
                     : "text-gray-600 hover:text-gray-900",
                 )}
               >
@@ -286,7 +286,7 @@ export function EmailTemplatePickerModal({ open, onClose, onInsert }: Props) {
                         className={cn(
                           "flex items-start gap-1 rounded-md border",
                           selectedId === t.id
-                            ? "border-purple-300 bg-purple-50"
+                            ? "border-purple-300 bg-[#f6f6f7]"
                             : "border-gray-200",
                         )}
                       >
@@ -332,7 +332,7 @@ export function EmailTemplatePickerModal({ open, onClose, onInsert }: Props) {
                       />
                       <div className="flex justify-end">
                         <Button
-                          className="bg-[#662EBD] hover:bg-[#5524a8]"
+                          className="bg-[#1a1a1a] hover:bg-black"
                           onClick={() => {
                             onInsert(selected.subject, selected.body);
                             onClose();
@@ -447,7 +447,7 @@ export function EmailTemplatePickerModal({ open, onClose, onInsert }: Props) {
                     </div>
                   </div>
                   <Button
-                    className="w-full bg-[#662EBD] hover:bg-[#5524a8]"
+                    className="w-full bg-[#1a1a1a] hover:bg-black"
                     onClick={handleGenerate}
                     disabled={genLoading}
                   >
@@ -491,7 +491,7 @@ export function EmailTemplatePickerModal({ open, onClose, onInsert }: Props) {
                           {savingGenerated ? "Saving..." : "Save Template"}
                         </Button>
                         <Button
-                          className="bg-[#662EBD] hover:bg-[#5524a8]"
+                          className="bg-[#1a1a1a] hover:bg-black"
                           onClick={() => {
                             onInsert(genSubject, genBody);
                             onClose();

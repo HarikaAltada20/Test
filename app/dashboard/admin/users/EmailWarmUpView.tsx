@@ -335,7 +335,7 @@ export function EmailWarmUpView({
 
   const cardClass = cn(
     "rounded-xl border shadow-sm",
-    isDark ? "bg-[#170337] border-purple-900/40" : "bg-white border-gray-200",
+    isDark ? "bg-[#161616] border-purple-900/40" : "bg-white border-gray-200",
   );
 
   if (projects.length === 0) {
@@ -481,7 +481,7 @@ export function EmailWarmUpView({
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-medium border transition-colors",
                 statusTab === tab.id
-                  ? "bg-purple-100 text-purple-700 border-purple-200"
+                  ? "bg-purple-100 text-purple-700 border-[#e6e6e8]"
                   : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50",
               )}
             >

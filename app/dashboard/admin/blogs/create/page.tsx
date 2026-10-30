@@ -258,7 +258,7 @@ export default function AdminBlogsCreatePage() {
       <Card
         className={cn(
           "shadow-[0px_5px_20px_0px_#0000000D] rounded-xl border",
-          isDark ? "bg-[#170337] border-gray-700 text-white" : "bg-white"
+          isDark ? "bg-[#161616] border-gray-700 text-white" : "bg-white"
         )}
       >
         <CardHeader
@@ -291,7 +291,7 @@ export default function AdminBlogsCreatePage() {
                   onChange={(e) => setTitle(e.target.value)}
                   className={cn(
                     isDark
-                      ? "bg-[#170337] border-gray-600 text-white placeholder:text-gray-400"
+                      ? "bg-[#161616] border-gray-600 text-white placeholder:text-gray-400"
                       : ""
                   )}
                 />
@@ -306,7 +306,7 @@ export default function AdminBlogsCreatePage() {
                   onChange={(e) => setCategory(e.target.value)}
                   className={cn(
                     isDark
-                      ? "bg-[#170337] border-gray-600 text-white placeholder:text-gray-400"
+                      ? "bg-[#161616] border-gray-600 text-white placeholder:text-gray-400"
                       : ""
                   )}
                 />
@@ -323,7 +323,7 @@ export default function AdminBlogsCreatePage() {
                   onChange={(e) => setReadTime(e.target.value)}
                   className={cn(
                     isDark
-                      ? "bg-[#170337] border-gray-600 text-white placeholder:text-gray-400"
+                      ? "bg-[#161616] border-gray-600 text-white placeholder:text-gray-400"
                       : ""
                   )}
                 />
@@ -336,7 +336,7 @@ export default function AdminBlogsCreatePage() {
                 className={cn(
                   "border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer",
                   isDark
-                    ? "border-slate-600 bg-[#170337]"
+                    ? "border-slate-600 bg-[#161616]"
                     : "border-gray-300 bg-white"
                 )}
                 onClick={() => fileInputRef.current?.click()}
@@ -367,7 +367,7 @@ export default function AdminBlogsCreatePage() {
                           e.stopPropagation();
                           removeThumbnail();
                         }}
-                        className="text-purple-500"
+                        className="text-[#1a1a1a] hover:bg-[#f6f6f7]"
                       >
                         <Trash className="h-4 w-4 mr-1" /> Remove
                       </Button>
@@ -378,18 +378,13 @@ export default function AdminBlogsCreatePage() {
                     <Upload className="mx-auto text-gray-500 text-3xl mb-2" />
                     <p className="text-md font-medium mb-1">
                       Drag, drop or browse{" "}
-                      <span className="text-purple-500">thumbnail</span>
+                      <span className="text-[#1a1a1a]">thumbnail</span>
                     </p>
                     <p className="text-sm text-gray-500 mb-2">
                       Max file size: 5MB
                     </p>
                     <Button
-                      className={cn(
-                        "px-4 py-3 rounded-lg text-sm hover:text-white",
-                        isDark
-                          ? "bg-[#7F39EC] text-white"
-                          : "bg-[#4A00BE] text-white"
-                      )}
+                      className="h-9 rounded-full bg-[#1a1a1a] px-4 text-sm text-white hover:bg-black"
                       variant="outline"
                       size="sm"
                       type="button"
@@ -423,7 +418,7 @@ export default function AdminBlogsCreatePage() {
                 rows={3}
                 className={cn(
                   isDark
-                    ? "bg-[#170337] border-gray-600 text-white placeholder:text-gray-400"
+                    ? "bg-[#161616] border-gray-600 text-white placeholder:text-gray-400"
                     : ""
                 )}
               />
@@ -435,7 +430,7 @@ export default function AdminBlogsCreatePage() {
                 className={cn(
                   "rounded-xl overflow-hidden border",
                   isDark
-                    ? "border-gray-700 bg-[#170337]"
+                    ? "border-gray-700 bg-[#161616]"
                     : "border-gray-200 bg-white"
                 )}
               >
@@ -454,7 +449,7 @@ export default function AdminBlogsCreatePage() {
                 variant="outline"
                 onClick={() => router.back()}
                 disabled={submitting}
-                className="min-w-[80px]"
+                className="h-10 min-w-[80px] rounded-full border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]"
               >
                 Cancel
               </Button>
@@ -463,7 +458,7 @@ export default function AdminBlogsCreatePage() {
                 variant="outline"
                 disabled={submitting}
                 onClick={() => setSubmitAction("draft")}
-                className="min-w-[100px]"
+                className="h-10 min-w-[100px] rounded-full border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]"
               >
                 {submitting && submitAction === "draft"
                   ? "Saving..."
@@ -473,12 +468,7 @@ export default function AdminBlogsCreatePage() {
                 type="submit"
                 disabled={submitting}
                 onClick={() => setSubmitAction("published")}
-                className={cn(
-                  "min-w-[100px]",
-                  isDark
-                    ? "bg-[#7F39EC] text-white hover:bg-[#6B2FC7]"
-                    : "bg-[#4A00BE] text-white hover:bg-[#3A0099]"
-                )}
+                className="h-10 min-w-[100px] rounded-full bg-[#1a1a1a] text-white hover:bg-black"
               >
                 {submitting && submitAction === "published"
                   ? "Publishing..."

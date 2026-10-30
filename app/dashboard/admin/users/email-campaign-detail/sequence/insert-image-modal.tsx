@@ -76,13 +76,13 @@ export function InsertImageModal({ isOpen, onClose, onInsert }: Props) {
         <DialogFooter className="pb-3 pt-2">
           <Button
             variant="outline"
-            className="border-[#662EBD] text-[#662EBD] hover:bg-purple-50 hover:text-[#662EBD]"
+            className="border-[#1a1a1a] text-[#1a1a1a] hover:bg-[#f6f6f7] hover:text-[#1a1a1a]"
             onClick={onClose}
           >
             Cancel
           </Button>
           <Button
-            className="bg-[#662EBD] hover:bg-[#5524a8] text-white"
+            className="bg-[#1a1a1a] hover:bg-black text-white"
             onClick={handleInsert}
             disabled={!canInsert}
           >

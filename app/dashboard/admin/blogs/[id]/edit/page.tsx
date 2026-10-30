@@ -326,7 +326,7 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
       <Card
         className={cn(
           "shadow-[0px_5px_20px_0px_#0000000D] rounded-xl border",
-          isDark ? "bg-[#170337] border-gray-700 text-white" : "bg-white"
+          isDark ? "bg-[#161616] border-gray-700 text-white" : "bg-white"
         )}
       >
         <CardHeader
@@ -359,7 +359,7 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
                   onChange={(e) => setTitle(e.target.value)}
                   className={cn(
                     isDark
-                      ? "bg-[#170337] border-gray-600 text-white placeholder:text-gray-400"
+                      ? "bg-[#161616] border-gray-600 text-white placeholder:text-gray-400"
                       : ""
                   )}
                 />
@@ -374,7 +374,7 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
                   onChange={(e) => setCategory(e.target.value)}
                   className={cn(
                     isDark
-                      ? "bg-[#170337] border-gray-600 text-white placeholder:text-gray-400"
+                      ? "bg-[#161616] border-gray-600 text-white placeholder:text-gray-400"
                       : ""
                   )}
                 />
@@ -391,7 +391,7 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
                   onChange={(e) => setReadTime(e.target.value)}
                   className={cn(
                     isDark
-                      ? "bg-[#170337] border-gray-600 text-white placeholder:text-gray-400"
+                      ? "bg-[#161616] border-gray-600 text-white placeholder:text-gray-400"
                       : ""
                   )}
                 />
@@ -404,7 +404,7 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
                 className={cn(
                   "border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer",
                   isDark
-                    ? "border-slate-600 bg-[#170337]"
+                    ? "border-slate-600 bg-[#161616]"
                     : "border-gray-300 bg-white"
                 )}
                 onClick={() => fileInputRef.current?.click()}
@@ -435,7 +435,7 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
                           e.stopPropagation();
                           removeThumbnail();
                         }}
-                        className="text-purple-500"
+                        className="text-[#1a1a1a] hover:bg-[#f6f6f7]"
                       >
                         <Trash className="h-4 w-4 mr-1" /> Remove
                       </Button>
@@ -446,18 +446,13 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
                     <Upload className="mx-auto text-gray-500 text-3xl mb-2" />
                     <p className="text-md font-medium mb-1">
                       Drag, drop or browse{" "}
-                      <span className="text-purple-500">thumbnail</span>
+                      <span className="text-[#1a1a1a]">thumbnail</span>
                     </p>
                     <p className="text-sm text-gray-500 mb-2">
                       Max file size: 5MB
                     </p>
                     <Button
-                      className={cn(
-                        "px-4 py-3 rounded-lg text-sm hover:text-white",
-                        isDark
-                          ? "bg-[#7F39EC] text-white"
-                          : "bg-[#4A00BE] text-white"
-                      )}
+                      className="h-9 rounded-full bg-[#1a1a1a] px-4 text-sm text-white hover:bg-black"
                       variant="outline"
                       size="sm"
                       type="button"
@@ -491,7 +486,7 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
                 rows={3}
                 className={cn(
                   isDark
-                    ? "bg-[#170337] border-gray-600 text-white placeholder:text-gray-400"
+                    ? "bg-[#161616] border-gray-600 text-white placeholder:text-gray-400"
                     : ""
                 )}
               />
@@ -503,7 +498,7 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
                 className={cn(
                   "rounded-xl overflow-hidden border",
                   isDark
-                    ? "border-gray-700 bg-[#170337]"
+                    ? "border-gray-700 bg-[#161616]"
                     : "border-gray-200 bg-white"
                 )}
               >
@@ -522,6 +517,7 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
                 variant="outline"
                 onClick={() => router.back()}
                 disabled={saving}
+                className="h-10 rounded-full border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]"
               >
                 Cancel
               </Button>
@@ -531,6 +527,7 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
                   variant="outline"
                   disabled={saving}
                   onClick={() => setSubmitAction("draft")}
+                  className="h-10 rounded-full border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]"
                 >
                   {saving && submitAction === "draft"
                     ? "Saving..."
@@ -541,6 +538,7 @@ export default function EditBlogPage({ params }: EditBlogPageProps) {
                 type="submit"
                 disabled={saving}
                 onClick={() => setSubmitAction("published")}
+                className="h-10 rounded-full bg-[#1a1a1a] px-5 text-white hover:bg-black"
               >
                 {saving && submitAction === "published"
                   ? "Publishing..."

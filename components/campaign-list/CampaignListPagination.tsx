@@ -28,17 +28,17 @@ export function CampaignListPagination({
         ? [1, "start-gap", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages]
         : [1, "start-gap", page - 1, page, page + 1, "end-gap", totalPages];
   const controlClass = cn(
-    "h-11 rounded-xl border transition-colors motion-reduce:transition-none focus-visible:ring-violet-500 disabled:opacity-40",
+    "h-11 rounded-xl border shadow-none transition-colors motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-40",
     isDark
-      ? "border-white/10 bg-transparent text-slate-300 hover:border-violet-400/40 hover:bg-violet-400/10 hover:text-white"
-      : "border-slate-200 bg-white text-slate-600 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700",
+      ? "border-white/10 bg-transparent text-white/75 hover:bg-white/10 hover:text-white focus-visible:ring-white/30 focus-visible:ring-offset-[#0e0e0e]"
+      : "border-[#ececef] bg-white text-[#3a3a40] hover:bg-[#e6e6e8] hover:text-[#1a1a1a] focus-visible:ring-[#1a1a1a] focus-visible:ring-offset-white",
   );
 
   return (
     <div
       className={cn(
         "mt-6 flex flex-col gap-4 rounded-2xl border px-4 py-4 sm:px-5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between",
-        isDark ? "border-white/10 bg-[#120D27]" : "border-slate-200/80 bg-white shadow-sm",
+        isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white",
       )}
     >
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 sm:justify-start">
@@ -67,7 +67,7 @@ export function CampaignListPagination({
               className={cn(
                 controlClass,
                 "w-20 cursor-pointer appearance-none pl-3.5 pr-8 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
-                isDark ? "bg-[#120D27] focus-visible:ring-offset-[#120D27]" : "focus-visible:ring-offset-white",
+                isDark ? "bg-[#161616] focus-visible:ring-offset-[#161616]" : "focus-visible:ring-offset-white",
               )}
             >
               {[9, 15, 21, 30].map((size) => <option key={size} value={size}>{size}</option>)}
@@ -112,8 +112,8 @@ export function CampaignListPagination({
                   controlClass,
                   "min-w-11 border-transparent px-3 tabular-nums",
                   item === page && (isDark
-                    ? "bg-violet-500 font-semibold text-white shadow-sm hover:bg-violet-600 hover:text-white"
-                    : "bg-[#4A00BE] font-semibold text-white shadow-sm hover:bg-[#3D00A0] hover:text-white"),
+                    ? "border-white bg-white font-semibold text-[#1a1a1a] shadow-none hover:bg-white hover:text-[#1a1a1a]"
+                    : "border-[#1a1a1a] bg-[#1a1a1a] font-semibold text-white shadow-none hover:bg-black hover:text-white"),
                 )}
               >
                 {item}

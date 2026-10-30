@@ -2861,7 +2861,7 @@ export default function SubmissionsClient({
                   disabled={currentPage === 1}
                   className={cn(
                     "h-9 w-9 rounded-md border shadow-none transition-colors",
-                    isDark ? "bg-[#1a1a1a] border-white/15 hover:bg-white/10 text-slate-400" : "bg-white border-slate-200 hover:bg-slate-100 text-slate-600"
+                    isDark ? "border-white/10 bg-transparent text-white/75 hover:bg-white/10 hover:text-white" : "border-[#ececef] bg-white text-[#3a3a40] hover:bg-[#e6e6e8] hover:text-[#1a1a1a]"
                   )}
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -2881,15 +2881,17 @@ export default function SubmissionsClient({
                       return (
                         <Button
                           key={pageNum}
-                          variant={isActive ? "default" : "outline"}
+                          variant="outline"
                           onClick={() => setCurrentPage(pageNum)}
                           className={cn(
                             "h-9 w-9 rounded-md border text-[13px] font-bold shadow-none transition-all",
                             isActive
-                              ? "bg-[#171717] text-white border-[#171717] hover:bg-[#2a2a2a]"
+                              ? isDark
+                                ? "border-white bg-white text-[#1a1a1a] hover:bg-white hover:text-[#1a1a1a]"
+                                : "border-[#1a1a1a] bg-[#1a1a1a] text-white hover:bg-black hover:text-white"
                               : isDark
-                                ? "bg-[#1a1a1a] border-white/15 hover:bg-white/10 text-slate-300"
-                                : "bg-white border-slate-200 hover:bg-slate-100 text-slate-600"
+                                ? "border-white/10 bg-transparent text-white/75 hover:bg-white/10 hover:text-white"
+                                : "border-[#ececef] bg-white text-[#3a3a40] hover:bg-[#e6e6e8] hover:text-[#1a1a1a]"
                           )}
                         >
                           {pageNum}
@@ -2909,7 +2911,7 @@ export default function SubmissionsClient({
                   disabled={currentPage === Math.ceil((viewMode === "contest" ? groupedContests.length : filteredSubmissions.length) / itemsPerPage)}
                   className={cn(
                     "h-9 w-9 rounded-md border shadow-none transition-colors",
-                    isDark ? "bg-[#1a1a1a] border-white/15 hover:bg-white/10 text-slate-400" : "bg-white border-slate-200 hover:bg-slate-100 text-slate-600"
+                    isDark ? "border-white/10 bg-transparent text-white/75 hover:bg-white/10 hover:text-white" : "border-[#ececef] bg-white text-[#3a3a40] hover:bg-[#e6e6e8] hover:text-[#1a1a1a]"
                   )}
                 >
                   <ChevronRight className="h-4 w-4" />

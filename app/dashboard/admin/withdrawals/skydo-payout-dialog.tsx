@@ -338,12 +338,17 @@ export function SkydoPayoutDialog({
             "shrink-0 space-y-0 border-b px-5 pb-4 pr-12 pt-5 text-left sm:px-6",
             divider,
             isDark
-              ? "bg-gradient-to-br from-[#2A1060] via-[#140B3A] to-[#06021D]"
-              : "bg-gradient-to-br from-violet-50 via-white to-white",
+              ? "bg-[#161616]"
+              : "bg-white",
           )}
         >
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#9B5CFF] to-[#6A2FD0] text-white shadow-lg shadow-violet-500/25">
+            <div
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#1a1a1a]",
+              )}
+            >
               <Wand2 className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
@@ -397,7 +402,7 @@ export function SkydoPayoutDialog({
                     "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all",
                     tab === id
                       ? isDark
-                        ? "bg-[#7F39EC] text-white shadow"
+                        ? "bg-[#1a1a1a] text-white shadow"
                         : "bg-white text-slate-900 shadow-sm"
                       : isDark
                         ? "text-white/60 hover:text-white"
@@ -860,7 +865,7 @@ export function SkydoPayoutDialog({
           className={cn(
             "flex shrink-0 flex-col-reverse gap-2 border-t px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-6",
             divider,
-            isDark ? "bg-[#06021D]" : "bg-white",
+            isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white",
           )}
         >
           {step === "input" && tab === "paste" && (
@@ -872,7 +877,7 @@ export function SkydoPayoutDialog({
                 type="button"
                 disabled={loading || !quick || quick.payouts.length === 0}
                 onClick={() => void runPreview()}
-                className="bg-[#7F39EC] text-white hover:bg-[#6a2fd0] sm:min-w-[180px]"
+                className="bg-[#1a1a1a] text-white hover:bg-[#6a2fd0] sm:min-w-[180px]"
               >
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Preview matches
@@ -899,7 +904,7 @@ export function SkydoPayoutDialog({
                   type="button"
                   disabled={loading || (!manual.payout_id.trim() && !manual.utr.trim())}
                   onClick={() => void runManual(true)}
-                  className="bg-[#7F39EC] text-white hover:bg-[#6a2fd0]"
+                  className="bg-[#1a1a1a] text-white hover:bg-[#6a2fd0]"
                 >
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Save & mark paid
@@ -944,7 +949,7 @@ export function SkydoPayoutDialog({
               <Button
                 type="button"
                 onClick={() => onOpenChange(false)}
-                className="bg-[#7F39EC] text-white hover:bg-[#6a2fd0] sm:min-w-[140px]"
+                className="bg-[#1a1a1a] text-white hover:bg-[#6a2fd0] sm:min-w-[140px]"
               >
                 Done
               </Button>

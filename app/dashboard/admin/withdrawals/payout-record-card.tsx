@@ -235,7 +235,7 @@ export function PayoutRecordCard({
 
   const shell = cn(
     "overflow-hidden rounded-xl border",
-    isDark ? "border-white/10 bg-[#0B0629]" : "border-slate-200 bg-white",
+    isDark ? "border-white/10 bg-[#161616]" : "border-slate-200 bg-white",
   );
 
   const save = async () => {
@@ -370,7 +370,7 @@ export function PayoutRecordCard({
               size="sm"
               disabled={saving || (!draft.payout_id.trim() && !draft.utr.trim())}
               onClick={() => void save()}
-              className="bg-[#7F39EC] text-white hover:bg-[#6a2fd0]"
+              className="bg-[#1a1a1a] text-white hover:bg-[#6a2fd0]"
             >
               {saving ? (
                 <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />

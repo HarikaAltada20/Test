@@ -255,7 +255,7 @@ function NextAction({
     return (
       <Button
         size="sm"
-        className="h-8 gap-1.5 bg-[#7F39EC] text-white hover:bg-[#6a2fd0]"
+        className="h-8 gap-1.5 bg-[#1a1a1a] text-white hover:bg-[#6a2fd0]"
         onClick={(e) => {
           e.stopPropagation();
           onSetStatus("email_sent");
@@ -320,9 +320,9 @@ function SortHeader({
       type="button"
       onClick={() => onSort(sortKey)}
       className={cn(
-        "inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide hover:text-[#7F39EC]",
+        "inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide hover:text-[#1a1a1a]",
         align === "right" && "justify-end",
-        active && "text-[#7F39EC]"
+        active && "text-[#1a1a1a]"
       )}
       aria-label={`Sort by ${label}`}
     >
@@ -362,7 +362,7 @@ export function PayoutMethodsTable(props: PayoutMethodsTableProps) {
   const sortProps = { sort, order, onSort };
   const thClass = cn(
     "whitespace-nowrap px-3 py-2.5 text-left align-middle text-xs font-medium uppercase tracking-wide",
-    isDark ? "bg-[#120A35] text-gray-400" : "bg-gray-50 text-gray-500"
+    isDark ? "bg-[#1a1a1a] text-gray-400" : "bg-gray-50 text-gray-500"
   );
   const columnCount = isSkydoView ? 8 : 9;
 
@@ -434,7 +434,7 @@ export function PayoutMethodsTable(props: PayoutMethodsTableProps) {
     >
       {refreshing && !loading && (
         <div className="absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden">
-          <div className="h-full w-1/3 animate-[pulse_1s_ease-in-out_infinite] bg-[#7F39EC]" />
+          <div className="h-full w-1/3 animate-[pulse_1s_ease-in-out_infinite] bg-[#1a1a1a]" />
         </div>
       )}
 
@@ -561,7 +561,7 @@ export function PayoutMethodsTable(props: PayoutMethodsTableProps) {
                             <MethodIcon type={row.method_type} className={p.muted} />
                             <span>{METHOD_LABELS[row.method_type] ?? row.method_type}</span>
                             {row.is_default && (
-                              <span className="rounded-full bg-[#7F39EC]/15 px-1.5 text-[10px] font-semibold uppercase text-[#7F39EC]">
+                              <span className="rounded-full bg-[#1a1a1a]/15 px-1.5 text-[10px] font-semibold uppercase text-[#1a1a1a]">
                                 Default
                               </span>
                             )}

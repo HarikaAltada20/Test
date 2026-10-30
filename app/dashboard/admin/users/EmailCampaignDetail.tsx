@@ -202,7 +202,7 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
               title={startReadiness.disabledReason ?? undefined}
             >
               <Button
-                className="bg-[#662EBD] hover:bg-[#5524a8] disabled:opacity-50"
+                className="bg-[#1a1a1a] hover:bg-black disabled:opacity-50"
                 onClick={startCampaign}
                 disabled={starting || !startReadiness.canStart}
               >
@@ -217,7 +217,7 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
           )}
           {canPause && (
             <Button
-              className="bg-[#662EBD] hover:bg-[#5524a8]"
+              className="bg-[#1a1a1a] hover:bg-black"
               onClick={pauseCampaign}
             >
               <Pause className="mr-2 h-4 w-4" />

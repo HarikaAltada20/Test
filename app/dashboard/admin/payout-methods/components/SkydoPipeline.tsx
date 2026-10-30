@@ -75,11 +75,11 @@ export function SkydoPipeline({
                   onClick={() => onSelectStage(step.status)}
                   aria-pressed={active}
                   className={cn(
-                    "flex-1 rounded-xl border p-4 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]",
+                    "flex-1 rounded-xl border p-4 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a1a1a]",
                     p.surface,
                     p.hover,
                     needsAction && (isDark ? "border-amber-700/70 bg-amber-950/30" : "border-amber-300 bg-amber-50"),
-                    active && "ring-2 ring-[#7F39EC] border-[#7F39EC]"
+                    active && "ring-2 ring-[#1a1a1a] border-[#1a1a1a]"
                   )}
                 >
                   <div className="flex items-center justify-between">
@@ -160,7 +160,7 @@ export function SkydoPipeline({
           className={cn(
             "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
             isDark ? "border-gray-700 hover:bg-white/5" : "border-gray-200 hover:bg-gray-50",
-            !filtered && stage === "any" && "ring-2 ring-[#7F39EC] border-[#7F39EC]"
+            !filtered && stage === "any" && "ring-2 ring-[#1a1a1a] border-[#1a1a1a]"
           )}
         >
           All Skydo ({totalSkydo})

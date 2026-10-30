@@ -1624,8 +1624,8 @@ export default function WithdrawalsClient({
     return (
     <div
       className={cn(
-        "rounded-xl shadow",
-        isDark ? "bg-[#170337]" : "bg-white  border border-gray-200"
+        "rounded-2xl border shadow-[0_8px_28px_-18px_rgba(26,26,26,0.28)]",
+        isDark ? "bg-[#161616]" : "bg-white  border border-gray-200"
       )}
     >
       <Table className="min-w-[980px]">
@@ -1634,7 +1634,7 @@ export default function WithdrawalsClient({
             className={cn(
               "text-left border-b",
               isDark
-                ? "bg-[#391A6A] text-white"
+                ? "bg-[#1f1f1f] text-white"
                 : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
             )}
           >
@@ -1941,7 +1941,7 @@ export default function WithdrawalsClient({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                       align="end"
-                      className={cn(isDark && "bg-[#170337] border-gray-600")}
+                      className={cn(isDark && "bg-[#161616] border-gray-600")}
                     >
                       <DropdownMenuItem onSelect={() => openDetails(r)}>
                         <Eye className="h-4 w-4 mr-2" />
@@ -2085,8 +2085,8 @@ export default function WithdrawalsClient({
     return (
     <div
       className={cn(
-        "rounded-xl shadow",
-        isDark ? "bg-[#170337]" : "bg-white  border border-gray-200",
+        "rounded-2xl border shadow-[0_8px_28px_-18px_rgba(26,26,26,0.28)]",
+        isDark ? "bg-[#161616]" : "bg-white  border border-gray-200",
       )}
     >
       <Table className="min-w-[900px]">
@@ -2095,7 +2095,7 @@ export default function WithdrawalsClient({
             className={cn(
               "text-left border-b",
               isDark
-                ? "bg-[#391A6A] text-white"
+                ? "bg-[#1f1f1f] text-white"
                 : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500",
             )}
           >
@@ -2545,7 +2545,7 @@ export default function WithdrawalsClient({
                 className={cn(
                   "relative overflow-hidden rounded-xl border p-3.5 sm:p-4 pl-4 sm:pl-5 transition-opacity",
                   isDark
-                    ? "border-white/10 bg-[#170337]"
+                    ? "border-white/10 bg-[#161616]"
                     : "border-slate-200 bg-white",
                   muted && "opacity-55",
                 )}
@@ -2744,7 +2744,7 @@ export default function WithdrawalsClient({
                     size="sm"
                     onClick={openSkydoImport}
                     disabled={loading}
-                    className="rounded-xl gap-1.5 bg-gradient-to-r from-[#8B47F5] to-[#6A2FD0] text-white shadow-md shadow-violet-500/20 hover:from-[#7F39EC] hover:to-[#5d27bd]"
+                    className="h-9 gap-1.5 rounded-full bg-[#1a1a1a] px-3 text-white hover:bg-black"
                   >
                     <ClipboardPaste className="h-4 w-4" />
                     Import Skydo payouts
@@ -2957,7 +2957,7 @@ export default function WithdrawalsClient({
                 className={cn(
                   "rounded-lg border p-3 text-sm space-y-3",
                   isDark
-                    ? "border-gray-600 bg-[#06021D]/80"
+                    ? "border-gray-600 bg-[#161616]/80"
                     : "border-slate-200 bg-slate-50/80",
                 )}
               >
@@ -3021,7 +3021,7 @@ export default function WithdrawalsClient({
                 className={cn(
                   "rounded-lg border p-3 text-sm",
                   isDark
-                    ? "border-gray-600 bg-[#06021D]/80"
+                    ? "border-gray-600 bg-[#161616]/80"
                     : "border-slate-200 bg-slate-50/80",
                 )}
               >
@@ -3117,7 +3117,7 @@ export default function WithdrawalsClient({
             <div
               role="toolbar"
               aria-label="Selected approved requests"
-              className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-[#140B3A] px-3 py-2 text-white shadow-2xl animate-in slide-in-from-bottom-4"
+              className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-[#1a1a1a] px-3 py-2 text-white shadow-2xl animate-in slide-in-from-bottom-4"
             >
               <div className="flex items-baseline gap-2 px-1 text-sm">
                 <span className="font-semibold tabular-nums">
@@ -3134,7 +3134,7 @@ export default function WithdrawalsClient({
               <Button
                 size="sm"
                 onClick={openFillDetails}
-                className="h-8 gap-1.5 bg-[#7F39EC] text-white hover:bg-[#6a2fd0]"
+                className="h-8 gap-1.5 bg-[#1a1a1a] text-white hover:bg-[#6a2fd0]"
               >
                 <Wand2 className="h-3.5 w-3.5" />
                 Fill details & mark paid
@@ -3178,13 +3178,18 @@ export default function WithdrawalsClient({
               className={cn(
                 "shrink-0 space-y-0 border-b px-5 sm:px-6 pt-5 pb-4 pr-12 text-left",
                 isDark
-                  ? "border-white/10 bg-gradient-to-br from-[#2A1060] via-[#140B3A] to-[#06021D]"
-                  : "border-slate-200 bg-gradient-to-br from-violet-50 via-white to-white",
+                  ? "border-white/10 bg-[#161616]"
+                  : "border-[#ececef] bg-white",
               )}
             >
               {active ? (
                 <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#9B5CFF] to-[#6A2FD0] text-sm font-semibold text-white shadow-lg shadow-violet-500/25">
+                  <div
+                    className={cn(
+                      "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sm font-semibold",
+                      isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#1a1a1a]",
+                    )}
+                  >
                     {initialsOf(active.users?.full_name || active.users?.username || "?")}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -3639,7 +3644,7 @@ export default function WithdrawalsClient({
             <DialogFooter
               className={cn(
                 "shrink-0 border-t px-5 sm:px-6 py-3 sm:py-3.5",
-                isDark ? "bg-[#06021D] border-white/10" : "bg-white border-slate-200",
+                isDark ? "bg-[#161616] border-white/10" : "bg-white border-slate-200",
               )}
             >
               {active && !isFinalStatus(active.status) ? (
@@ -3773,7 +3778,7 @@ export default function WithdrawalsClient({
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
-                          className="w-full sm:w-auto sm:min-w-[150px] justify-center bg-[#7F39EC] text-white hover:bg-[#6a2fd0]"
+                          className="w-full sm:w-auto sm:min-w-[150px] justify-center bg-[#1a1a1a] text-white hover:bg-[#6a2fd0]"
                           onClick={() =>
                             void applyStatusFromDetails("approved", {
                               admin_notes: adminNotes,
@@ -3861,7 +3866,7 @@ export default function WithdrawalsClient({
                 className={cn(
                   "resize-none",
                   isDark
-                    ? "bg-[#06021D] border border-gray-600 text-white placeholder:text-gray-400"
+                    ? "bg-[#161616] border border-gray-600 text-white placeholder:text-gray-400"
                     : "bg-white text-black"
                 )}
               />
@@ -3919,7 +3924,7 @@ export default function WithdrawalsClient({
                 rows={3}
                 className={cn(
                   "resize-none",
-                  isDark ? "bg-[#06021D] border border-gray-600 text-white placeholder:text-gray-400" : "bg-white text-black"
+                  isDark ? "bg-[#161616] border border-gray-600 text-white placeholder:text-gray-400" : "bg-white text-black"
                 )}
               />
             </div>
@@ -3967,7 +3972,7 @@ export default function WithdrawalsClient({
             <div className="space-y-3 py-3">
               <Label className={cn(isDark ? "text-white" : "text-gray-800")}>Reason (required)</Label>
               <Select value={forfeitReason} onValueChange={setForfeitReason}>
-                <SelectTrigger className={cn(isDark ? "bg-[#06021D] border-gray-600 text-white" : "bg-white text-black")}>
+                <SelectTrigger className={cn(isDark ? "bg-[#161616] border-gray-600 text-white" : "bg-white text-black")}>
                   <SelectValue placeholder="Select reason" />
                 </SelectTrigger>
                 <SelectContent>
@@ -3986,7 +3991,7 @@ export default function WithdrawalsClient({
                 rows={3}
                 className={cn(
                   "resize-none",
-                  isDark ? "bg-[#06021D] border border-gray-600 text-white placeholder:text-gray-400" : "bg-white text-black"
+                  isDark ? "bg-[#161616] border border-gray-600 text-white placeholder:text-gray-400" : "bg-white text-black"
                 )}
               />
             </div>
@@ -4044,7 +4049,7 @@ export default function WithdrawalsClient({
                 rows={3}
                 className={cn(
                   "resize-none",
-                  isDark ? "bg-[#06021D] border border-gray-600 text-white placeholder:text-gray-400" : "bg-white text-black"
+                  isDark ? "bg-[#161616] border border-gray-600 text-white placeholder:text-gray-400" : "bg-white text-black"
                 )}
               />
             </div>

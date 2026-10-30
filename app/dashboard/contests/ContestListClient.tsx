@@ -1173,7 +1173,7 @@ export function ContestListClient({
           className={cn(
             "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
             isDark
-              ? "bg-[#06021D] border-slate-700"
+              ? "bg-[#161616] border-white/10"
               : "bg-white border-slate-200",
           )}
         >
@@ -1681,7 +1681,7 @@ export function ContestListClient({
         className={cn(
           "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
           isDark
-            ? "bg-[#06021D] border-slate-700"
+            ? "bg-[#161616] border-white/10"
             : "bg-white border-slate-200",
         )}
       >
@@ -1930,7 +1930,7 @@ export function ContestListClient({
           className={cn(
             "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer",
             isDark
-              ? "bg-[#06021D] border-slate-700"
+              ? "bg-[#161616] border-white/10"
               : "bg-white border-slate-200",
           )}
         >
@@ -2487,7 +2487,7 @@ export function ContestListClient({
         className={cn(
           "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer",
           isDark
-            ? "bg-[#06021D] border-slate-700"
+            ? "bg-[#161616] border-white/10"
             : "bg-white border-slate-200",
         )}
       >
@@ -4023,7 +4023,15 @@ export function ContestListClient({
                   setSortOption(value as SortOptionType)
                 }
               >
-                <SelectTrigger className="w-full min-w-0 border border-gray-400 rounded-xl">
+                <SelectTrigger
+                  isDark={isDark}
+                  className={cn(
+                    "w-full min-w-0 rounded-xl",
+                    isDark
+                      ? "border-white/10 bg-[#161616] text-white hover:bg-white/10"
+                      : "border-[#e6e6e8] bg-white text-[#1a1a1a] hover:bg-[#e6e6e8]",
+                  )}
+                >
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
@@ -4103,7 +4111,15 @@ export function ContestListClient({
                 value={contestTypeFilter}
                 onValueChange={setContestTypeFilter}
               >
-                <SelectTrigger className="w-full min-w-0 border border-gray-400 rounded-xl">
+                <SelectTrigger
+                  isDark={isDark}
+                  className={cn(
+                    "w-full min-w-0 rounded-xl",
+                    isDark
+                      ? "border-white/10 bg-[#161616] text-white hover:bg-white/10"
+                      : "border-[#e6e6e8] bg-white text-[#1a1a1a] hover:bg-[#e6e6e8]",
+                  )}
+                >
                   <SelectValue placeholder="Campaign Type" />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>

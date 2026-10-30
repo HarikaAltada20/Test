@@ -779,7 +779,7 @@ export function AddLeadsToCampaignModal({
               )}
 
               {hasSelection && (
-                <div className="rounded-xl border border-purple-200 bg-purple-50/60 px-4 py-3 space-y-2">
+                <div className="rounded-xl border border-[#e6e6e8] bg-[#f6f6f7]/60 px-4 py-3 space-y-2">
                   <p className="text-sm font-medium text-purple-900">
                     Adding {typeCounts.total.toLocaleString()} selected user
                     {typeCounts.total !== 1 ? "s" : ""} to bundle
@@ -1185,7 +1185,7 @@ export function AddLeadsToCampaignModal({
         <DialogFooter className="px-2 py-4 border-t bg-gray-50/50 gap-2 sm:justify-end">
           <Button
             variant="outline"
-            className="border-purple-300 text-purple-700 hover:bg-purple-50"
+            className="border-purple-300 text-purple-700 hover:bg-[#f6f6f7]"
             onClick={() => onOpenChange(false)}
           >
             Cancel

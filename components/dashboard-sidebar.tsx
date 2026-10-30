@@ -517,17 +517,54 @@ export function DashboardSidebar({
     },
   ];
 
+  const adminSections = [
+    {
+      label: "Overview",
+      items: adminLinks.filter((link) =>
+        ["/dashboard/admin", "/dashboard/admin/analytics"].includes(link.href),
+      ),
+    },
+    {
+      label: "Campaigns",
+      items: adminLinks.filter((link) =>
+        [
+          "/dashboard/admin/contests",
+          "/dashboard/admin/contest-moderation",
+        ].includes(link.href),
+      ),
+    },
+    {
+      label: "People",
+      items: adminLinks.filter((link) => link.href === "/dashboard/admin/users"),
+    },
+    {
+      label: "Rewards",
+      items: adminLinks.filter((link) =>
+        [
+          "/dashboard/admin/leaderboard",
+          "/dashboard/daily-challenge",
+          "/dashboard/admin/withdrawals",
+          "/dashboard/admin/payout-methods",
+          "/dashboard/admin/affiliate",
+        ].includes(link.href),
+      ),
+    },
+    {
+      label: "",
+      items: adminLinks.filter((link) =>
+        ["/dashboard/admin/blogs", "/dashboard/admin/support"].includes(
+          link.href,
+        ),
+      ),
+    },
+  ];
+
   const sections =
     userRole === "advertiser"
       ? advertiserSections
       : userRole === "creator"
         ? creatorSections
-        : [
-            {
-              label: "",
-              items: adminLinks,
-            },
-          ];
+        : adminSections;
 
   const links = sections.flatMap((section) => section.items);
 
@@ -600,12 +637,6 @@ export function DashboardSidebar({
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase() ?? "")
       .join("") || "U";
-  const roleLabel =
-    userRole === "advertiser"
-      ? "Brand"
-      : userRole === "creator"
-        ? "Creator"
-        : "Admin";
 
   const billingHref =
     userRole === "creator"
@@ -660,8 +691,8 @@ export function DashboardSidebar({
                       ? "bg-white/10 text-white"
                       : "bg-[#e6e6e8] text-[#1a1a1a]"
                     : isDark
-                      ? "text-white/75 hover:bg-white/[0.06] hover:text-white"
-                      : "text-[#3a3a40] hover:bg-white hover:text-[#1a1a1a]",
+                      ? "text-white/75 hover:bg-white/10 hover:text-white"
+                      : "text-[#3a3a40] hover:bg-[#e6e6e8] hover:text-[#1a1a1a]",
                 );
 
               return (
@@ -689,8 +720,9 @@ export function DashboardSidebar({
                       <div className={cn(collapsed ? "space-y-1" : "space-y-1.5")}>
                         {section.items.map((link) => {
                           const isActive =
-                            link.href === "/dashboard"
-                              ? pathname === "/dashboard"
+                            link.href === "/dashboard" ||
+                            link.href === "/dashboard/admin"
+                              ? pathname === link.href
                               : pathname === link.href ||
                                 pathname.startsWith(`${link.href}/`);
                           return (
@@ -727,7 +759,7 @@ export function DashboardSidebar({
 
                   {/* Others with Dropdown for Admin */}
                   {userRole === "admin" && (
-                    <div className="space-y-0.5">
+                    <div className={cn("space-y-0.5", !collapsed && "mt-6")}>
                       {(() => {
                         const isOthersActive =
                           isOthersDropdownOpen ||
@@ -1052,16 +1084,6 @@ export function DashboardSidebar({
           >
             <div className="px-3 py-2.5">
               <div className="truncate text-sm font-semibold">{userName}</div>
-              {userEmail && (
-                <div
-                  className={cn(
-                    "truncate text-xs",
-                    isDark ? "text-white/55" : "text-[#8b8b93]",
-                  )}
-                >
-                  {userEmail}
-                </div>
-              )}
             </div>
             <div
               className={cn(
@@ -1069,64 +1091,69 @@ export function DashboardSidebar({
                 isDark ? "bg-white/10" : "bg-[#eeeef0]",
               )}
             />
-            <Link
-              href="/dashboard/profile"
-              onClick={() => setAccountMenuOpen(false)}
-              className={cn(
-                "flex items-center gap-2.5 px-3 py-2 text-sm",
-                isDark ? "hover:bg-white/5" : "hover:bg-[#f6f6f7]",
-              )}
-            >
-              <User className="h-4 w-4" strokeWidth={1.75} />
-              Account
-            </Link>
-            <Link
-              href="/dashboard/settings"
-              onClick={() => setAccountMenuOpen(false)}
-              className={cn(
-                "flex items-center gap-2.5 px-3 py-2 text-sm",
-                isDark ? "hover:bg-white/5" : "hover:bg-[#f6f6f7]",
-              )}
-            >
-              <Settings className="h-4 w-4" strokeWidth={1.75} />
-              Settings
-            </Link>
-            {userRole === "creator" ? (
+            {userRole === "admin" ? (
               <Link
                 href="/dashboard/profile"
                 onClick={() => setAccountMenuOpen(false)}
                 className={cn(
                   "flex items-center gap-2.5 px-3 py-2 text-sm",
-                  isDark ? "hover:bg-white/5" : "hover:bg-[#f6f6f7]",
+                  isDark ? "hover:bg-white/10" : "hover:bg-[#e6e6e8]",
                 )}
               >
                 <UserCircle className="h-4 w-4" strokeWidth={1.75} />
                 Profile
               </Link>
-            ) : userRole !== "admin" ? (
-              <Link
-                href={billingHref}
-                onClick={() => setAccountMenuOpen(false)}
-                className={cn(
-                  "flex items-center gap-2.5 px-3 py-2 text-sm",
-                  isDark ? "hover:bg-white/5" : "hover:bg-[#f6f6f7]",
+            ) : (
+              <>
+                <Link
+                  href="/dashboard/settings"
+                  onClick={() => setAccountMenuOpen(false)}
+                  className={cn(
+                    "flex items-center gap-2.5 px-3 py-2 text-sm",
+                    isDark ? "hover:bg-white/10" : "hover:bg-[#e6e6e8]",
+                  )}
+                >
+                  <Settings className="h-4 w-4" strokeWidth={1.75} />
+                  Settings
+                </Link>
+                {userRole === "creator" ? (
+                  <Link
+                    href="/dashboard/profile"
+                    onClick={() => setAccountMenuOpen(false)}
+                    className={cn(
+                      "flex items-center gap-2.5 px-3 py-2 text-sm",
+                      isDark ? "hover:bg-white/10" : "hover:bg-[#e6e6e8]",
+                    )}
+                  >
+                    <UserCircle className="h-4 w-4" strokeWidth={1.75} />
+                    Profile
+                  </Link>
+                ) : (
+                  <Link
+                    href={billingHref}
+                    onClick={() => setAccountMenuOpen(false)}
+                    className={cn(
+                      "flex items-center gap-2.5 px-3 py-2 text-sm",
+                      isDark ? "hover:bg-white/10" : "hover:bg-[#e6e6e8]",
+                    )}
+                  >
+                    <CreditCard className="h-4 w-4" strokeWidth={1.75} />
+                    Plan and billing
+                  </Link>
                 )}
-              >
-                <CreditCard className="h-4 w-4" strokeWidth={1.75} />
-                Plan and billing
-              </Link>
-            ) : null}
-            <Link
-              href={helpHref}
-              onClick={() => setAccountMenuOpen(false)}
-              className={cn(
-                "flex items-center gap-2.5 px-3 py-2 text-sm",
-                isDark ? "hover:bg-white/5" : "hover:bg-[#f6f6f7]",
-              )}
-            >
-              <HelpCircle className="h-4 w-4" strokeWidth={1.75} />
-              Help
-            </Link>
+                <Link
+                  href={helpHref}
+                  onClick={() => setAccountMenuOpen(false)}
+                  className={cn(
+                    "flex items-center gap-2.5 px-3 py-2 text-sm",
+                    isDark ? "hover:bg-white/10" : "hover:bg-[#e6e6e8]",
+                  )}
+                >
+                  <HelpCircle className="h-4 w-4" strokeWidth={1.75} />
+                  Help
+                </Link>
+              </>
+            )}
             <div
               className={cn(
                 "mx-2 my-1 h-px",
@@ -1142,7 +1169,7 @@ export function DashboardSidebar({
               disabled={isSigningOut}
               className={cn(
                 "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm disabled:opacity-60",
-                isDark ? "hover:bg-white/5" : "hover:bg-[#f6f6f7]",
+                isDark ? "hover:bg-white/10" : "hover:bg-[#e6e6e8]",
               )}
             >
               <LogOut className="h-4 w-4" strokeWidth={1.75} />
@@ -1160,7 +1187,7 @@ export function DashboardSidebar({
             collapsed ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-3",
             isDark
               ? "border-white/10 bg-white/5 hover:bg-white/10"
-              : "border-[#e6e6e8] bg-white shadow-sm hover:bg-[#fafafa]",
+              : "border-[#e6e6e8] bg-white shadow-sm hover:bg-[#e6e6e8]",
           )}
           aria-expanded={accountMenuOpen}
           aria-label="Account menu"
@@ -1203,16 +1230,6 @@ export function DashboardSidebar({
                 >
                   {userName}
                 </span>
-                {/* <span
-                  className={cn(
-                    "mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide",
-                    isDark
-                      ? "bg-violet-500/20 text-violet-200"
-                      : "bg-violet-100 text-violet-800",
-                  )}
-                >
-                  {roleLabel}
-                </span> */}
                 {userEmail && (
                   <span
                     className={cn(

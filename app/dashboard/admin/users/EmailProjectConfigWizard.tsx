@@ -279,7 +279,7 @@ export function EmailProjectConfigWizard({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                  className="border-purple-300 text-purple-700 hover:bg-[#f6f6f7]"
                   onClick={exportDnsJson}
                 >
                   Export DNS JSON

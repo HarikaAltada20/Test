@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import Image from "next/image";
 import { motion } from "framer-motion";
 import {
   Calendar,
@@ -105,21 +104,17 @@ export function ContestDetailsCover({
       className={cn(
         "mb-6 overflow-hidden rounded-[20px] border shadow-[0px_2px_12px_0px_rgba(10,10,10,0.04)]",
         isDark
-          ? "border-slate-700 bg-[#180438]"
-          : "border-[#e5e5e5] bg-white",
+          ? "border-white/10 bg-[#161616]"
+          : "border-[#ececef] bg-white",
       )}
     >
       {thumbnailUrl ? (
-        <div className="relative aspect-[16/7] w-full min-h-[280px] overflow-hidden sm:min-h-[360px] lg:min-h-[420px]">
-          <Image
+        <div className="relative w-full">
+          <img
             src={thumbnailUrl}
             alt={`${title} thumbnail`}
-            fill
-            priority
-            className="object-cover object-center"
-            sizes="100vw"
+            className="block h-auto w-full object-contain"
           />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[140px] bg-gradient-to-b from-transparent to-black/35" />
           <div className="absolute left-4 top-4 flex flex-wrap gap-2 sm:left-5 sm:top-5">
             <div className="flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-[6px]">
               {primaryPlatform ? (
@@ -195,8 +190,8 @@ export function ContestDetailsCover({
             className={cn(
               "rounded-2xl border px-5 py-4",
               isDark
-                ? "border-slate-700 bg-[#12032c]"
-                : "border-[#e5e5e5] bg-[#fafafa]",
+                ? "border-slate-700 bg-[#161616]"
+                : "border-[#ececef] bg-[#f6f6f7]",
             )}
           >
             <p
@@ -232,8 +227,8 @@ export function ContestDetailsCover({
 
       <div
         className={cn(
-          "grid grid-cols-1 border-t sm:grid-cols-2 lg:grid-cols-4",
-          isDark ? "border-slate-700" : "border-[#e5e5e5]",
+          "grid grid-cols-1 gap-px border-t sm:grid-cols-2 lg:grid-cols-4",
+          isDark ? "border-white/10 bg-white/10" : "border-[#ececef] bg-[#ececef]",
         )}
       >
         {[
@@ -243,9 +238,9 @@ export function ContestDetailsCover({
             value: platformLabel,
             sub: platformSubLabel,
             icon: primaryPlatform ? (
-              <PlatformIcon platform={primaryPlatform} className="h-5 w-5" />
+              <PlatformIcon platform={primaryPlatform} className="h-6 w-6" />
             ) : (
-              <Share2 className="h-5 w-5" />
+              <Share2 className="h-6 w-6" />
             ),
           },
           {
@@ -253,7 +248,7 @@ export function ContestDetailsCover({
             label: "Duration",
             value: durationLabel,
             sub: durationSubLabel,
-            icon: <Calendar className="h-5 w-5" />,
+            icon: <Calendar className="h-6 w-6" />,
           },
           {
             key: "budget",
@@ -269,34 +264,35 @@ export function ContestDetailsCover({
                     : contestType === "leaderboard"
                       ? "Total prize"
                       : budgetSubLabel || "Total prize",
-            icon: <Trophy className="h-5 w-5" />,
+            icon: <Trophy className="h-6 w-6" />,
           },
           {
             key: "submissions",
             label: submissionsLabel,
             value: String(submissionsValue),
             sub: submissionsSubLabel,
-            icon: <Users className="h-5 w-5" />,
+            icon: <Users className="h-6 w-6" />,
           },
-        ].map((kpi, index) => (
+        ].map((kpi) => (
           <div
             key={kpi.key}
             className={cn(
-              "flex items-center gap-3.5 px-5 py-5 sm:px-7",
-              index > 0 &&
-                (isDark
-                  ? "border-t border-slate-700 sm:border-t-0 sm:border-l"
-                  : "border-t border-[#e5e5e5] sm:border-t-0 sm:border-l"),
-              index === 2 && "lg:border-l",
+              "flex items-center gap-5 bg-white px-6 py-7 sm:px-8 sm:py-8",
+              isDark && "bg-[#161616]",
             )}
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ffedd5] text-[#f97316]">
+            <div
+              className={cn(
+                "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl",
+                isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#171717]",
+              )}
+            >
               {kpi.icon}
             </div>
             <div className="min-w-0">
               <p
                 className={cn(
-                  "text-xs font-medium",
+                  "text-sm font-medium",
                   isDark ? "text-slate-300" : "text-[#737373]",
                 )}
               >
@@ -304,7 +300,7 @@ export function ContestDetailsCover({
               </p>
               <p
                 className={cn(
-                  "truncate text-xl font-semibold tracking-[-0.3px]",
+                  "mt-1 truncate text-2xl font-semibold tracking-[-0.3px]",
                   isDark ? "text-white" : "text-[#0a0a0a]",
                 )}
               >
@@ -313,7 +309,7 @@ export function ContestDetailsCover({
               {kpi.sub ? (
                 <p
                   className={cn(
-                    "truncate text-xs",
+                    "mt-1 truncate text-sm",
                     isDark ? "text-slate-400" : "text-[#737373]",
                   )}
                 >

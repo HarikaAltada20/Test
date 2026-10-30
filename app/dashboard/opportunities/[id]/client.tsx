@@ -3967,12 +3967,12 @@ export function ContestClientPage({
           }
         />
 
-        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-x-6">
+        <div className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-x-6">
           <div
             className={cn(
               "space-y-6 empty:hidden",
               activeTab === "details"
-                ? "mb-6 lg:sticky lg:top-24 lg:col-start-2 lg:row-start-1 lg:mb-0 lg:self-start"
+                ? "order-2 mb-6 lg:sticky lg:top-24 lg:order-none lg:col-start-2 lg:row-start-1 lg:mb-0 lg:self-start"
                 : "mb-6 lg:col-span-2 lg:col-start-1 lg:row-start-1",
             )}
           >
@@ -4512,7 +4512,7 @@ export function ContestClientPage({
             className={cn(
               "min-w-0",
               activeTab === "details"
-                ? "lg:col-start-1 lg:row-start-1"
+                ? "order-1 lg:order-none lg:col-start-1 lg:row-start-1"
                 : "lg:col-span-2 lg:row-start-2",
             )}
           >
@@ -14183,14 +14183,14 @@ export function ContestClientPage({
                   return (
                     <div
                       className={cn(
-                        "rounded-xl shadow-md p-2",
-                        isDark ? "bg-[#180438]" : "bg-white",
+                        "rounded-2xl border p-4 shadow-none",
+                        isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white",
                       )}
                     >
                       <CardHeader>
                         <CardTitle>Contest Analytics</CardTitle>
                         {/* Analytics Filter Tabs */}
-                        <div className="mt-4">
+                        <div className="pt-4">
                           <Tabs
                             value={activeAnalyticsTab}
                             onValueChange={(value) =>
@@ -14198,14 +14198,14 @@ export function ContestClientPage({
                             }
                             className="w-full"
                           >
-                            <TabsList className="grid w-full grid-cols-7">
+                            <TabsList className="flex h-auto w-full flex-wrap justify-start gap-2 border-0 bg-transparent p-0 shadow-none">
                               <TabsTrigger
                                 value="all"
                                 className={cn(
-                                  "text-sm",
+                                  "h-10 rounded-full border px-3 text-sm font-medium shadow-none hover:scale-100 data-[state=active]:scale-100 data-[state=active]:font-semibold data-[state=active]:shadow-none data-[state=active]:ring-0",
                                   isDark
-                                    ? "text-white border border-gray-500"
-                                    : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
+                                    ? "border-white/10 bg-white/5 text-white/80 hover:bg-white/10 data-[state=active]:border-white data-[state=active]:bg-white data-[state=active]:text-[#1a1a1a]"
+                                    : "border-[#ececef] bg-[#f3f3f5] text-[#3a3a40] hover:bg-[#e6e6e8] data-[state=active]:border-[#1a1a1a] data-[state=active]:bg-[#1a1a1a] data-[state=active]:text-white",
                                 )}
                               >
                                 All ({allSubmissionsForAnalytics?.length || 0})
@@ -14213,10 +14213,10 @@ export function ContestClientPage({
                               <TabsTrigger
                                 value="not_rejected"
                                 className={cn(
-                                  "text-sm",
+                                  "h-10 rounded-full border px-3 text-sm font-medium shadow-none hover:scale-100 data-[state=active]:scale-100 data-[state=active]:font-semibold data-[state=active]:shadow-none data-[state=active]:ring-0",
                                   isDark
-                                    ? "text-white border border-gray-500"
-                                    : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
+                                    ? "border-white/10 bg-white/5 text-white/80 hover:bg-white/10 data-[state=active]:border-white data-[state=active]:bg-white data-[state=active]:text-[#1a1a1a]"
+                                    : "border-[#ececef] bg-[#f3f3f5] text-[#3a3a40] hover:bg-[#e6e6e8] data-[state=active]:border-[#1a1a1a] data-[state=active]:bg-[#1a1a1a] data-[state=active]:text-white",
                                 )}
                               >
                                 Not Rejected (
@@ -14229,10 +14229,10 @@ export function ContestClientPage({
                               <TabsTrigger
                                 value="verified"
                                 className={cn(
-                                  "text-sm",
+                                  "h-10 rounded-full border px-3 text-sm font-medium shadow-none hover:scale-100 data-[state=active]:scale-100 data-[state=active]:font-semibold data-[state=active]:shadow-none data-[state=active]:ring-0",
                                   isDark
-                                    ? "text-white border border-gray-500"
-                                    : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
+                                    ? "border-white/10 bg-white/5 text-white/80 hover:bg-white/10 data-[state=active]:border-white data-[state=active]:bg-white data-[state=active]:text-[#1a1a1a]"
+                                    : "border-[#ececef] bg-[#f3f3f5] text-[#3a3a40] hover:bg-[#e6e6e8] data-[state=active]:border-[#1a1a1a] data-[state=active]:bg-[#1a1a1a] data-[state=active]:text-white",
                                 )}
                               >
                                 Verified (
@@ -14245,10 +14245,10 @@ export function ContestClientPage({
                               <TabsTrigger
                                 value="paid"
                                 className={cn(
-                                  "text-sm",
+                                  "h-10 rounded-full border px-3 text-sm font-medium shadow-none hover:scale-100 data-[state=active]:scale-100 data-[state=active]:font-semibold data-[state=active]:shadow-none data-[state=active]:ring-0",
                                   isDark
-                                    ? "text-white border border-gray-500"
-                                    : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
+                                    ? "border-white/10 bg-white/5 text-white/80 hover:bg-white/10 data-[state=active]:border-white data-[state=active]:bg-white data-[state=active]:text-[#1a1a1a]"
+                                    : "border-[#ececef] bg-[#f3f3f5] text-[#3a3a40] hover:bg-[#e6e6e8] data-[state=active]:border-[#1a1a1a] data-[state=active]:bg-[#1a1a1a] data-[state=active]:text-white",
                                 )}
                               >
                                 Paid (
@@ -14260,10 +14260,10 @@ export function ContestClientPage({
                               <TabsTrigger
                                 value="pending"
                                 className={cn(
-                                  "text-sm",
+                                  "h-10 rounded-full border px-3 text-sm font-medium shadow-none hover:scale-100 data-[state=active]:scale-100 data-[state=active]:font-semibold data-[state=active]:shadow-none data-[state=active]:ring-0",
                                   isDark
-                                    ? "text-white border border-gray-500"
-                                    : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
+                                    ? "border-white/10 bg-white/5 text-white/80 hover:bg-white/10 data-[state=active]:border-white data-[state=active]:bg-white data-[state=active]:text-[#1a1a1a]"
+                                    : "border-[#ececef] bg-[#f3f3f5] text-[#3a3a40] hover:bg-[#e6e6e8] data-[state=active]:border-[#1a1a1a] data-[state=active]:bg-[#1a1a1a] data-[state=active]:text-white",
                                 )}
                               >
                                 Pending (
@@ -14276,10 +14276,10 @@ export function ContestClientPage({
                               <TabsTrigger
                                 value="rejected"
                                 className={cn(
-                                  "text-sm",
+                                  "h-10 rounded-full border px-3 text-sm font-medium shadow-none hover:scale-100 data-[state=active]:scale-100 data-[state=active]:font-semibold data-[state=active]:shadow-none data-[state=active]:ring-0",
                                   isDark
-                                    ? "text-white border border-gray-500"
-                                    : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
+                                    ? "border-white/10 bg-white/5 text-white/80 hover:bg-white/10 data-[state=active]:border-white data-[state=active]:bg-white data-[state=active]:text-[#1a1a1a]"
+                                    : "border-[#ececef] bg-[#f3f3f5] text-[#3a3a40] hover:bg-[#e6e6e8] data-[state=active]:border-[#1a1a1a] data-[state=active]:bg-[#1a1a1a] data-[state=active]:text-white",
                                 )}
                               >
                                 Rejected (
@@ -14292,10 +14292,10 @@ export function ContestClientPage({
                               <TabsTrigger
                                 value="verified_or_paid"
                                 className={cn(
-                                  "text-sm",
+                                  "h-10 rounded-full border px-3 text-sm font-medium shadow-none hover:scale-100 data-[state=active]:scale-100 data-[state=active]:font-semibold data-[state=active]:shadow-none data-[state=active]:ring-0",
                                   isDark
-                                    ? "text-white border border-gray-500"
-                                    : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
+                                    ? "border-white/10 bg-white/5 text-white/80 hover:bg-white/10 data-[state=active]:border-white data-[state=active]:bg-white data-[state=active]:text-[#1a1a1a]"
+                                    : "border-[#ececef] bg-[#f3f3f5] text-[#3a3a40] hover:bg-[#e6e6e8] data-[state=active]:border-[#1a1a1a] data-[state=active]:bg-[#1a1a1a] data-[state=active]:text-white",
                                 )}
                               >
                                 Verified/Paid (
@@ -14400,15 +14400,15 @@ export function ContestClientPage({
                                               : "text-slate-900",
                                           )}
                                         >
-                                          <Share2 className="h-5 w-5 text-sky-500" />
+                                          <Share2 className={cn("h-5 w-5", isDark ? "text-white/70" : "text-[#737373]")} />
                                           Target Tweet
                                         </h3>
                                         <div
                                           className={cn(
                                             "rounded-xl p-6 border",
                                             isDark
-                                              ? "bg-slate-900/40 border-slate-700"
-                                              : "bg-slate-50 border-slate-200",
+                                              ? "border-white/10 bg-white/5"
+                                              : "border-[#ececef] bg-[#f6f6f7]",
                                           )}
                                         >
                                           <a
@@ -14418,8 +14418,8 @@ export function ContestClientPage({
                                             className={cn(
                                               "inline-flex items-center gap-2 text-sm font-medium break-all hover:underline",
                                               isDark
-                                                ? "text-sky-300 hover:text-sky-200"
-                                                : "text-sky-600 hover:text-sky-700",
+                                                ? "text-white hover:text-white/80"
+                                                : "text-[#1a1a1a] hover:text-black",
                                             )}
                                           >
                                             {targetTweetUrl}
@@ -14460,8 +14460,8 @@ export function ContestClientPage({
                                                   className={cn(
                                                     "overflow-hidden rounded-2xl border shadow-none",
                                                     isDark
-                                                      ? "border-slate-700 bg-[#180438]"
-                                                      : "border-neutral-200 bg-white",
+                                                      ? "border-white/10 bg-[#161616]"
+                                                      : "border-[#ececef] bg-white",
                                                   )}
                                                 >
                                                   <CardContent className="p-6 flex justify-between items-center">
@@ -14494,7 +14494,7 @@ export function ContestClientPage({
                                                         {targetLikes.toLocaleString()}
                                                       </p>
                                                     </div>
-                                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]">
+                                                    <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#171717]")}>
                                                       <ThumbsUp className="h-7 w-7" />
                                                     </div>
                                                   </CardContent>
@@ -14506,8 +14506,8 @@ export function ContestClientPage({
                                                   className={cn(
                                                     "overflow-hidden rounded-2xl border shadow-none",
                                                     isDark
-                                                      ? "border-slate-700 bg-[#180438]"
-                                                      : "border-neutral-200 bg-white",
+                                                      ? "border-white/10 bg-[#161616]"
+                                                      : "border-[#ececef] bg-white",
                                                   )}
                                                 >
                                                   <CardContent className="p-6 flex justify-between items-center">
@@ -14540,7 +14540,7 @@ export function ContestClientPage({
                                                         {targetComments.toLocaleString()}
                                                       </p>
                                                     </div>
-                                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]">
+                                                    <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#171717]")}>
                                                       <MessageCircle className="h-7 w-7" />
                                                     </div>
                                                   </CardContent>
@@ -14552,8 +14552,8 @@ export function ContestClientPage({
                                                   className={cn(
                                                     "overflow-hidden rounded-2xl border shadow-none",
                                                     isDark
-                                                      ? "border-slate-700 bg-[#180438]"
-                                                      : "border-neutral-200 bg-white",
+                                                      ? "border-white/10 bg-[#161616]"
+                                                      : "border-[#ececef] bg-white",
                                                   )}
                                                 >
                                                   <CardContent className="p-6 flex justify-between items-center">
@@ -14586,7 +14586,7 @@ export function ContestClientPage({
                                                         {targetRetweets.toLocaleString()}
                                                       </p>
                                                     </div>
-                                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]">
+                                                    <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#171717]")}>
                                                       <Share2 className="h-7 w-7" />
                                                     </div>
                                                   </CardContent>
@@ -14598,8 +14598,8 @@ export function ContestClientPage({
                                                   className={cn(
                                                     "overflow-hidden rounded-2xl border shadow-none",
                                                     isDark
-                                                      ? "border-slate-700 bg-[#180438]"
-                                                      : "border-neutral-200 bg-white",
+                                                      ? "border-white/10 bg-[#161616]"
+                                                      : "border-[#ececef] bg-white",
                                                   )}
                                                 >
                                                   <CardContent className="p-6 flex justify-between items-center">
@@ -14632,7 +14632,7 @@ export function ContestClientPage({
                                                         {targetQuoteReposts.toLocaleString()}
                                                       </p>
                                                     </div>
-                                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]">
+                                                    <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#171717]")}>
                                                       <RefreshCw className="h-7 w-7" />
                                                     </div>
                                                   </CardContent>
@@ -14697,8 +14697,8 @@ export function ContestClientPage({
                                                     className={cn(
                                                       "overflow-hidden rounded-2xl border shadow-none",
                                                       isDark
-                                                        ? "border-slate-700 bg-[#180438]"
-                                                        : "border-neutral-200 bg-white",
+                                                        ? "border-white/10 bg-[#161616]"
+                                                        : "border-[#ececef] bg-white",
                                                     )}
                                                   >
                                                     <CardContent className="p-6">
@@ -14750,8 +14750,10 @@ export function ContestClientPage({
                                                           className={cn(
                                                             "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                             isReached
-                                                              ? "bg-green-500"
-                                                              : "bg-pink-500",
+                                                              ? "bg-emerald-600 text-white"
+                                                              : isDark
+                                                                ? "bg-white text-[#1a1a1a]"
+                                                                : "bg-[#1a1a1a] text-white",
                                                           )}
                                                         >
                                                           {isReached ? (
@@ -14777,7 +14779,9 @@ export function ContestClientPage({
                                                                   "h-full transition-all duration-500",
                                                                   isReached
                                                                     ? "bg-green-500"
-                                                                    : "bg-pink-500",
+                                                                    : isDark
+                                                                      ? "bg-white"
+                                                                      : "bg-[#1a1a1a]",
                                                                 )}
                                                                 style={{
                                                                   width: `${progress}%`,
@@ -14827,8 +14831,8 @@ export function ContestClientPage({
                                                     className={cn(
                                                       "overflow-hidden rounded-2xl border shadow-none",
                                                       isDark
-                                                        ? "border-slate-700 bg-[#180438]"
-                                                        : "border-neutral-200 bg-white",
+                                                        ? "border-white/10 bg-[#161616]"
+                                                        : "border-[#ececef] bg-white",
                                                     )}
                                                   >
                                                     <CardContent className="p-6">
@@ -14880,8 +14884,10 @@ export function ContestClientPage({
                                                           className={cn(
                                                             "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                             isReached
-                                                              ? "bg-green-500"
-                                                              : "bg-orange-500",
+                                                              ? "bg-emerald-600 text-white"
+                                                              : isDark
+                                                                ? "bg-white text-[#1a1a1a]"
+                                                                : "bg-[#1a1a1a] text-white",
                                                           )}
                                                         >
                                                           {isReached ? (
@@ -14907,7 +14913,9 @@ export function ContestClientPage({
                                                                   "h-full transition-all duration-500",
                                                                   isReached
                                                                     ? "bg-green-500"
-                                                                    : "bg-orange-500",
+                                                                    : isDark
+                                                                      ? "bg-white"
+                                                                      : "bg-[#1a1a1a]",
                                                                 )}
                                                                 style={{
                                                                   width: `${progress}%`,
@@ -14957,8 +14965,8 @@ export function ContestClientPage({
                                                     className={cn(
                                                       "overflow-hidden rounded-2xl border shadow-none",
                                                       isDark
-                                                        ? "border-slate-700 bg-[#180438]"
-                                                        : "border-neutral-200 bg-white",
+                                                        ? "border-white/10 bg-[#161616]"
+                                                        : "border-[#ececef] bg-white",
                                                     )}
                                                   >
                                                     <CardContent className="p-6">
@@ -15010,8 +15018,10 @@ export function ContestClientPage({
                                                           className={cn(
                                                             "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                             isReached
-                                                              ? "bg-green-500"
-                                                              : "bg-cyan-500",
+                                                              ? "bg-emerald-600 text-white"
+                                                              : isDark
+                                                                ? "bg-white text-[#1a1a1a]"
+                                                                : "bg-[#1a1a1a] text-white",
                                                           )}
                                                         >
                                                           {isReached ? (
@@ -15037,7 +15047,9 @@ export function ContestClientPage({
                                                                   "h-full transition-all duration-500",
                                                                   isReached
                                                                     ? "bg-green-500"
-                                                                    : "bg-cyan-500",
+                                                                    : isDark
+                                                                      ? "bg-white"
+                                                                      : "bg-[#1a1a1a]",
                                                                 )}
                                                                 style={{
                                                                   width: `${progress}%`,
@@ -15088,8 +15100,8 @@ export function ContestClientPage({
                                                     className={cn(
                                                       "overflow-hidden rounded-2xl border shadow-none",
                                                       isDark
-                                                        ? "border-slate-700 bg-[#180438]"
-                                                        : "border-neutral-200 bg-white",
+                                                        ? "border-white/10 bg-[#161616]"
+                                                        : "border-[#ececef] bg-white",
                                                     )}
                                                   >
                                                     <CardContent className="p-6">
@@ -15142,8 +15154,10 @@ export function ContestClientPage({
                                                           className={cn(
                                                             "w-14 h-14 flex items-center justify-center rounded-2xl text-white shadow-lg group-hover:shadow-xl transition-all duration-300",
                                                             isReached
-                                                              ? "bg-green-500"
-                                                              : "bg-indigo-500",
+                                                              ? "bg-emerald-600 text-white"
+                                                              : isDark
+                                                                ? "bg-white text-[#1a1a1a]"
+                                                                : "bg-[#1a1a1a] text-white",
                                                           )}
                                                         >
                                                           {isReached ? (
@@ -15169,7 +15183,9 @@ export function ContestClientPage({
                                                                   "h-full transition-all duration-500",
                                                                   isReached
                                                                     ? "bg-green-500"
-                                                                    : "bg-indigo-500",
+                                                                    : isDark
+                                                                      ? "bg-white"
+                                                                      : "bg-[#1a1a1a]",
                                                                 )}
                                                                 style={{
                                                                   width: `${progress}%`,
@@ -15201,8 +15217,8 @@ export function ContestClientPage({
                                                 className={cn(
                                                   "overflow-hidden rounded-2xl border shadow-none",
                                                   isDark
-                                                    ? "border-slate-700 bg-[#180438]"
-                                                    : "border-neutral-200 bg-white",
+                                                    ? "border-white/10 bg-[#161616]"
+                                                    : "border-[#ececef] bg-white",
                                                 )}
                                               >
                                                 <CardContent className="p-6 flex justify-between items-center">
@@ -15238,7 +15254,7 @@ export function ContestClientPage({
                                                       ).toLocaleString()}
                                                     </p>
                                                   </div>
-                                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff7a1a]/10 text-[#ff7a1a]">
+                                                  <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#171717]")}>
                                                     <Eye className="h-7 w-7" />
                                                   </div>
                                                 </CardContent>
@@ -15339,25 +15355,27 @@ export function ContestClientPage({
                                       icon: React.ReactNode,
                                       label: string,
                                       value: string | number,
-                                      iconBgClass: string,
-                                      barGradientClass: string,
+                                      _iconBgClass: string,
+                                      _barGradientClass: string,
                                       hint?: string,
                                     ) => (
                                       <div
                                         className={cn(
-                                          "group rounded-xl shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden relative min-w-0",
+                                          "group relative min-w-0 overflow-hidden rounded-2xl border shadow-none",
                                           isDark
-                                            ? "bg-[#180438] border border-white/20 backdrop-blur-2xl"
-                                            : "bg-white border border-blue-100",
+                                            ? "border-white/10 bg-[#161616]"
+                                            : "border-[#ececef] bg-white",
                                         )}
                                         title={hint}
                                       >
-                                        <div className="p-3 sm:p-4 relative z-10">
-                                          <div className="flex items-start gap-3 mb-2">
+                                        <div className="relative z-10 p-4 sm:p-5">
+                                          <div className="mb-3 flex items-start gap-3">
                                             <div
                                               className={cn(
-                                                "w-10 h-10 shrink-0 flex items-center justify-center rounded-lg shadow-md backdrop-blur-sm",
-                                                iconBgClass,
+                                                "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl [&_svg]:!text-current",
+                                                isDark
+                                                  ? "bg-white/10 text-white"
+                                                  : "bg-[#f3f3f5] text-[#171717]",
                                               )}
                                             >
                                               {icon}
@@ -15365,20 +15383,16 @@ export function ContestClientPage({
                                             <div className="min-w-0">
                                               <p
                                                 className={cn(
-                                                  "text-[11px] sm:text-xs font-medium uppercase tracking-wide leading-tight line-clamp-2",
-                                                  isDark
-                                                    ? "text-white/90 drop-shadow-sm"
-                                                    : "text-gray-500",
+                                                  "text-sm font-medium leading-tight",
+                                                  isDark ? "text-white/70" : "text-[#737373]",
                                                 )}
                                               >
                                                 {label}
                                               </p>
                                               <p
                                                 className={cn(
-                                                  "text-lg sm:text-xl font-bold mt-0.5 tabular-nums",
-                                                  isDark
-                                                    ? "text-white drop-shadow-lg bg-white bg-clip-text text-transparent"
-                                                    : "text-gray-900",
+                                                  "mt-1 text-2xl font-semibold tabular-nums",
+                                                  isDark ? "text-white" : "text-[#171717]",
                                                 )}
                                               >
                                                 {typeof value === "number"
@@ -15390,9 +15404,9 @@ export function ContestClientPage({
                                           <div
                                             className={cn(
                                               "h-1 w-full rounded-full",
-                                              barGradientClass,
+                                              isDark ? "bg-white/15" : "bg-[#e6e6e8]",
                                             )}
-                                          ></div>
+                                          />
                                         </div>
                                       </div>
                                     );
@@ -15515,10 +15529,10 @@ export function ContestClientPage({
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                           <div
                             className={cn(
-                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                              "rounded-2xl border p-2 shadow-none",
                               isDark
-                                ? "bg-[#180438] border border-[#D1B7F9]"
-                                : "bg-white",
+                                ? "border-white/10 bg-[#161616]"
+                                : "border-[#ececef] bg-white",
                             )}
                           >
                             <CardContent className="p-4 flex justify-between">
@@ -15539,8 +15553,8 @@ export function ContestClientPage({
                                 className={cn(
                                   "w-10 h-10 flex items-center justify-center rounded-full",
                                   isDark
-                                    ? "bg-[#FFFFFF42] text-white"
-                                    : "bg-purple-100 text-[#4A00BE]",
+                                    ? "bg-white/10 text-white"
+                                    : "bg-[#f3f3f5] text-[#171717]",
                                 )}
                               >
                                 <Users className="h-5 w-5" />
@@ -15550,10 +15564,10 @@ export function ContestClientPage({
 
                           <div
                             className={cn(
-                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                              "rounded-2xl border p-2 shadow-none",
                               isDark
-                                ? "bg-[#180438] border border-[#D1B7F9]"
-                                : "bg-white",
+                                ? "border-white/10 bg-[#161616]"
+                                : "border-[#ececef] bg-white",
                             )}
                           >
                             <CardContent className="p-4 flex justify-between">
@@ -15588,8 +15602,8 @@ export function ContestClientPage({
                                 className={cn(
                                   "w-10 h-10 flex items-center justify-center rounded-full",
                                   isDark
-                                    ? "bg-[#FFFFFF42] text-white"
-                                    : "bg-purple-100 text-[#4A00BE]",
+                                    ? "bg-white/10 text-white"
+                                    : "bg-[#f3f3f5] text-[#171717]",
                                 )}
                               >
                                 <Trophy className="h-4 w-4" />
@@ -15599,10 +15613,10 @@ export function ContestClientPage({
 
                           <div
                             className={cn(
-                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                              "rounded-2xl border p-2 shadow-none",
                               isDark
-                                ? "bg-[#180438] border border-[#D1B7F9]"
-                                : "bg-white",
+                                ? "border-white/10 bg-[#161616]"
+                                : "border-[#ececef] bg-white",
                             )}
                           >
                             <CardContent className="p-4 flex justify-between">
@@ -15637,8 +15651,8 @@ export function ContestClientPage({
                                 className={cn(
                                   "w-10 h-10 flex items-center justify-center rounded-full",
                                   isDark
-                                    ? "bg-[#FFFFFF42] text-white"
-                                    : "bg-purple-100 text-[#4A00BE]",
+                                    ? "bg-white/10 text-white"
+                                    : "bg-[#f3f3f5] text-[#171717]",
                                 )}
                               >
                                 <Calendar className="h-4 w-4" />
@@ -15662,10 +15676,10 @@ export function ContestClientPage({
                               {/* Total Views */}
                               <div
                                 className={cn(
-                                  "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                                  "rounded-2xl border p-4 shadow-none",
                                   isDark
-                                    ? "bg-[#180438] border border-[#D1B7F9]"
-                                    : "bg-white",
+                                    ? "border-white/10 bg-[#161616]"
+                                    : "border-[#ececef] bg-white",
                                 )}
                               >
                                 <div className="flex items-center justify-between">
@@ -15697,8 +15711,8 @@ export function ContestClientPage({
                                     className={cn(
                                       "w-10 h-10 flex items-center justify-center rounded-full",
                                       isDark
-                                        ? "bg-blue-900/50 text-blue-300"
-                                        : "bg-blue-100 text-blue-600",
+                                        ? "bg-white/10 text-white"
+                                        : "bg-[#f3f3f5] text-[#171717]",
                                     )}
                                   >
                                     <Eye className="h-5 w-5" />
@@ -15709,10 +15723,10 @@ export function ContestClientPage({
                               {/* Average Views */}
                               <div
                                 className={cn(
-                                  "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                                  "rounded-2xl border p-4 shadow-none",
                                   isDark
-                                    ? "bg-[#180438] border border-[#D1B7F9]"
-                                    : "bg-white",
+                                    ? "border-white/10 bg-[#161616]"
+                                    : "border-[#ececef] bg-white",
                                 )}
                               >
                                 <div className="flex items-center justify-between">
@@ -15747,8 +15761,8 @@ export function ContestClientPage({
                                     className={cn(
                                       "w-10 h-10 flex items-center justify-center rounded-full",
                                       isDark
-                                        ? "bg-green-900/50 text-green-400"
-                                        : "bg-green-100 text-green-600",
+                                        ? "bg-white/10 text-white"
+                                        : "bg-[#f3f3f5] text-[#171717]",
                                     )}
                                   >
                                     <BarChart3 className="h-5 w-5" />
@@ -15759,10 +15773,10 @@ export function ContestClientPage({
                               {/* Highest Views */}
                               <div
                                 className={cn(
-                                  "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                                  "rounded-2xl border p-4 shadow-none",
                                   isDark
-                                    ? "bg-[#180438] border border-[#D1B7F9]"
-                                    : "bg-white",
+                                    ? "border-white/10 bg-[#161616]"
+                                    : "border-[#ececef] bg-white",
                                 )}
                               >
                                 <div className="flex items-center justify-between">
@@ -15794,8 +15808,8 @@ export function ContestClientPage({
                                     className={cn(
                                       "w-10 h-10 flex items-center justify-center rounded-full",
                                       isDark
-                                        ? "bg-yellow-900/50 text-yellow-400"
-                                        : "bg-yellow-100 text-yellow-600",
+                                        ? "bg-white/10 text-white"
+                                        : "bg-[#f3f3f5] text-[#171717]",
                                     )}
                                   >
                                     <TrendingUp className="h-5 w-5" />
@@ -15806,10 +15820,10 @@ export function ContestClientPage({
                               {/* Filtered Views */}
                               <div
                                 className={cn(
-                                  "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                                  "rounded-2xl border p-4 shadow-none",
                                   isDark
-                                    ? "bg-[#180438] border border-[#D1B7F9]"
-                                    : "bg-white",
+                                    ? "border-white/10 bg-[#161616]"
+                                    : "border-[#ececef] bg-white",
                                 )}
                               >
                                 <div className="flex items-center justify-between">
@@ -15841,8 +15855,8 @@ export function ContestClientPage({
                                     className={cn(
                                       "w-10 h-10 flex items-center justify-center rounded-full",
                                       isDark
-                                        ? "bg-purple-900/50 text-purple-300"
-                                        : "bg-purple-100 text-purple-600",
+                                        ? "bg-white/10 text-white"
+                                        : "bg-[#f3f3f5] text-[#171717]",
                                     )}
                                   >
                                     <CheckCircle2 className="h-5 w-5" />

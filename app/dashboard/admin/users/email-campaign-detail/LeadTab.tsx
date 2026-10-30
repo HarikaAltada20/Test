@@ -449,7 +449,7 @@ export function LeadTab({
         </Button>
 
         <Button
-          className="h-11 bg-[#662EBD] hover:bg-[#5524a8]"
+          className="h-11 bg-[#1a1a1a] hover:bg-black"
           onClick={handleAddLeadsFromUsers}
         >
           <Plus className="h-4 w-4 mr-1" />

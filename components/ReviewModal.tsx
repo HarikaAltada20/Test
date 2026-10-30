@@ -335,7 +335,7 @@ const isDark = mode === "dark";
               value={experience}
               onChange={(e) => setExperience(e.target.value)}
               placeholder="Share your thoughts about the platform, contests, support, or any other aspect of your experience..."
-              className={cn("w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none",
+              className={cn("w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1a1a1a]/20 focus:border-[#1a1a1a] resize-none",
                 isDark 
                   ? "border-gray-600 bg-gray-800 text-gray-200 placeholder-gray-400" 
                   : "border-gray-300 bg-white text-gray-900 placeholder-gray-500"
@@ -360,8 +360,8 @@ const isDark = mode === "dark";
             {/* Upload Button */}
             <div className="mb-4">
               <label className="cursor-pointer">
-                <div className={cn("border-2 border-dashed rounded-lg p-4 hover:border-purple-500 transition-colors",
-                  isDark ? "border-gray-600" : "border-gray-300"
+                <div className={cn("border-2 border-dashed rounded-lg p-4 transition-colors",
+                  isDark ? "border-white/15 hover:border-white/30" : "border-[#e6e6e8] hover:border-[#1a1a1a]"
                 )}>
                   <div className="flex flex-col items-center">
                     <Upload className="h-8 w-8 text-gray-400 mb-2" />
@@ -486,7 +486,7 @@ const isDark = mode === "dark";
                         borderColor: link && !isValidUrl(link) ? '#fca5a5' : (isDark ? '#4b5563' : '#d1d5db'),
                         color: isDark ? '#ffffff' : '#111827'
                       }}
-                      className={cn("w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent",
+                      className={cn("w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a1a1a]/20 focus:border-[#1a1a1a]",
                         link && !isValidUrl(link) ? "border-red-300 focus:ring-red-500" : ""
                       )}
           
@@ -510,7 +510,7 @@ const isDark = mode === "dark";
                 <button
                   onClick={addVideoLink}
                   className={cn("flex items-center gap-2 text-sm font-medium transition-colors",
-                    isDark ? "text-purple-400 hover:text-purple-300" : "text-purple-600 hover:text-purple-700"
+                    isDark ? "text-white hover:text-white/80" : "text-[#1a1a1a] hover:text-black"
                   )}
                 >
                   <Plus className="h-4 w-4" />
@@ -526,10 +526,10 @@ const isDark = mode === "dark";
           <button
             onClick={onClose}
             disabled={isSubmitting}
-            className={cn("flex-1 px-4 py-2 border rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+            className={cn("flex-1 rounded-full border px-4 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
               isDark 
-                ? "border-gray-600 text-gray-200 hover:bg-gray-800" 
-                : "border-gray-300 text-gray-700 hover:bg-gray-100"
+                ? "border-white/15 text-white hover:bg-white/10" 
+                : "border-[#ececef] text-[#1a1a1a] hover:bg-[#e6e6e8]"
             )}
           >
             Cancel
@@ -537,7 +537,12 @@ const isDark = mode === "dark";
           <button
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className={cn(
+              "flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+              isDark
+                ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+                : "bg-[#1a1a1a] text-white hover:bg-black",
+            )}
           >
             {isSubmitting ? (
               <>

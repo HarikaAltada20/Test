@@ -86,9 +86,10 @@ export default function ContestTypeFilter({
           size="sm"
           className={cn(
             "flex items-center gap-2 min-w-[160px] w-44 justify-between",
+            "h-9 rounded-full",
             isDark
-              ? "bg-[#170337] text-white border-gray-600"
-              : "bg-white hover:bg-gray-50 text-gray-700 border-gray-400",
+              ? "border-white/10 bg-[#161616] text-white hover:bg-white/10"
+              : "border-[#e6e6e8] bg-white text-[#1a1a1a] hover:bg-[#e6e6e8]",
           )}
         >
           <span className="truncate">{LABELS[value] ?? "Campaign Type"}</span>
@@ -99,84 +100,38 @@ export default function ContestTypeFilter({
         align="end"
         className={cn(
           "min-w-[220px]",
-          isDark ? "bg-[#06021D] border-gray-800" : "bg-white",
+          isDark ? "border-white/10 bg-[#161616] text-white" : "border-[#ececef] bg-white text-[#1a1a1a]",
         )}
       >
-        <DropdownMenuItem
-          className={cn(
-            "flex items-center gap-2 cursor-pointer font-medium",
-            isDark ? "text-white focus:bg-white/10" : "text-gray-900",
-          )}
-          onClick={() => onChange("all")}
-        >
-          {value === "all" && (
-            <span className="w-4 h-4 flex items-center justify-center text-xs">
-              ✓
+        {(
+          [
+            "all",
+            "leaderboard",
+            "cpm",
+            "milestone",
+            "dual_rewards",
+          ] as const
+        ).map((key) => (
+          <DropdownMenuItem
+            key={key}
+            className={cn(
+              "flex items-center gap-2 cursor-pointer font-medium",
+              value === key
+                ? isDark
+                  ? "bg-white/10 text-white focus:bg-white/10 focus:text-white"
+                  : "bg-[#e6e6e8] text-[#1a1a1a] focus:bg-[#e6e6e8] focus:text-[#1a1a1a]"
+                : isDark
+                  ? "text-white focus:bg-white/10 focus:text-white"
+                  : "text-[#1a1a1a] focus:bg-[#e6e6e8] focus:text-[#1a1a1a]",
+            )}
+            onClick={() => onChange(key)}
+          >
+            <span className="flex h-4 w-4 items-center justify-center text-xs">
+              {value === key ? "✓" : ""}
             </span>
-          )}
-          {value !== "all" && <span className="w-4" />}
-          All Campaign Types
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className={cn(
-            "flex items-center gap-2 cursor-pointer font-medium",
-            isDark ? "text-white focus:bg-white/10" : "text-gray-900",
-          )}
-          onClick={() => onChange("leaderboard")}
-        >
-          {value === "leaderboard" && (
-            <span className="w-4 h-4 flex items-center justify-center text-xs">
-              ✓
-            </span>
-          )}
-          {value !== "leaderboard" && <span className="w-4" />}
-          Leaderboard
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className={cn(
-            "flex items-center gap-2 cursor-pointer font-medium",
-            isDark ? "text-white focus:bg-white/10" : "text-gray-900",
-          )}
-          onClick={() => onChange("cpm")}
-        >
-          {value === "cpm" && (
-            <span className="w-4 h-4 flex items-center justify-center text-xs">
-              ✓
-            </span>
-          )}
-          {value !== "cpm" && <span className="w-4" />}
-          CPM
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className={cn(
-            "flex items-center gap-2 cursor-pointer font-medium",
-            isDark ? "text-white focus:bg-white/10" : "text-gray-900",
-          )}
-          onClick={() => onChange("milestone")}
-        >
-          {value === "milestone" && (
-            <span className="w-4 h-4 flex items-center justify-center text-xs">
-              ✓
-            </span>
-          )}
-          {value !== "milestone" && <span className="w-4" />}
-          Milestone
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className={cn(
-            "flex items-center gap-2 cursor-pointer font-medium",
-            isDark ? "text-white focus:bg-white/10" : "text-gray-900",
-          )}
-          onClick={() => onChange("dual_rewards")}
-        >
-          {value === "dual_rewards" && (
-            <span className="w-4 h-4 flex items-center justify-center text-xs">
-              ✓
-            </span>
-          )}
-          {value !== "dual_rewards" && <span className="w-4" />}
-          Dual Rewards
-        </DropdownMenuItem>
+            {LABELS[key]}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

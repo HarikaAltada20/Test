@@ -309,7 +309,7 @@ export default function AdminBlogsPage() {
         </div>
         <div className="flex-shrink-0">
           <Button
-            className="w-full text-md sm:w-auto"
+            className="h-10 w-full rounded-full bg-[#1a1a1a] px-5 text-white hover:bg-black sm:w-auto"
             onClick={() => {
               setCreatingLoading(true);
               router.push("/dashboard/admin/blogs/create");
@@ -373,7 +373,7 @@ export default function AdminBlogsPage() {
             type="button"
             className={cn(
               "underline font-medium",
-              isDark ? "text-purple-300" : "text-purple-700"
+              isDark ? "text-white" : "text-[#1a1a1a]"
             )}
             onClick={() => router.push("/dashboard/admin/blogs/create")}
           >
@@ -405,7 +405,7 @@ export default function AdminBlogsPage() {
                     className={cn(
                       "h-full border rounded-xl shadow-lg flex flex-col overflow-hidden cursor-pointer",
                       isDark
-                        ? "bg-[#06021D] border-gray-700 text-white"
+                        ? "bg-[#161616] border-gray-700 text-white"
                         : "bg-white border-gray-200"
                     )}
                     onClick={() => {
@@ -434,7 +434,7 @@ export default function AdminBlogsPage() {
                       })()}
                       {/* Status badge overlay - top right */}
                       <div className="absolute top-3 right-3 flex flex-wrap gap-1">
-                        <Badge className="bg-[#7F39EC] text-white px-3 py-1 text-[12px] border-0">
+                        <Badge className="bg-[#1a1a1a] text-white px-3 py-1 text-[12px] border-0">
                           {isDraft ? "Draft" : "Published"}
                         </Badge>
                       </div>
@@ -493,8 +493,8 @@ export default function AdminBlogsPage() {
                                 className={cn(
                                   "px-1.5 py-0.5 rounded-full text-[10px] sm:text-[11px]",
                                   isDark
-                                    ? "bg-[#2B0A5A] text-purple-100"
-                                    : "bg-purple-50 text-purple-700"
+                                    ? "bg-white/10 text-white"
+                                    : "bg-[#f3f3f5] text-[#1a1a1a]"
                                 )}
                               >
                                 {tag}
@@ -510,8 +510,8 @@ export default function AdminBlogsPage() {
                               className={cn(
                                 "flex flex-[1.8] items-center justify-center gap-2 px-3 py-3 rounded-full text-[13px]",
                                 isDark
-                                  ? "bg-[#7F39EC] text-white"
-                                  : "bg-[#D9C0FF61] text-[#7F39EC]"
+                                  ? "bg-white text-[#1a1a1a]"
+                                  : "bg-[#1a1a1a] text-white hover:bg-black"
                               )}
                               disabled={
                                 updatingId === post.id || deletingId === post.id
@@ -529,8 +529,8 @@ export default function AdminBlogsPage() {
                               className={cn(
                                 "flex flex-[0.6] items-center border justify-center gap-2 px-3 py-3 rounded-full text-[13px]",
                                 isDark
-                                  ? "border-purple-400 text-purple-400"
-                                  : "border-purple-500 text-purple-500"
+                                  ? "border-white/20 text-white"
+                                  : "border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]"
                               )}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -546,10 +546,10 @@ export default function AdminBlogsPage() {
                               variant="outline"
                               size="md"
                               className={cn(
-                                "border text-[14px] flex-[0.6]",
+                                "h-auto rounded-full border text-[14px] flex-[0.6]",
                                 isDark
-                                  ? "text-purple-400 border-gray-600"
-                                  : "text-purple-500"
+                                  ? "border-white/20 text-white"
+                                  : "border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]"
                               )}
                               disabled={
                                 deletingId === post.id || updatingId === post.id
@@ -573,8 +573,8 @@ export default function AdminBlogsPage() {
                               className={cn(
                                 "flex flex-[1.8] items-center justify-center gap-2 px-3 py-3 rounded-full text-[13px]",
                                 isDark
-                                  ? "bg-[#7F39EC] text-white"
-                                  : "bg-[#D9C0FF61] text-[#7F39EC]"
+                                  ? "bg-white text-[#1a1a1a]"
+                                  : "bg-[#1a1a1a] text-white hover:bg-black"
                               )}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -588,8 +588,8 @@ export default function AdminBlogsPage() {
                               className={cn(
                                 "flex flex-[0.6] items-center border justify-center gap-2 px-3 py-3 rounded-full text-[13px]",
                                 isDark
-                                  ? "border-purple-400 text-purple-400"
-                                  : "border-purple-500 text-purple-500"
+                                  ? "border-white/20 text-white"
+                                  : "border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]"
                               )}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -605,8 +605,10 @@ export default function AdminBlogsPage() {
                               variant="outline"
                               size="md"
                               className={cn(
-                                "border text-[14px] flex-[0.6]",
-                                isDark ? "text-purple-400 " : "text-purple-500"
+                                "h-auto rounded-full border text-[14px] flex-[0.6]",
+                                isDark
+                                  ? "border-white/20 text-white"
+                                  : "border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]"
                               )}
                               disabled={
                                 deletingId === post.id || updatingId === post.id
@@ -677,12 +679,7 @@ export default function AdminBlogsPage() {
               </DialogHeader>
               <DialogFooter>
                 <Button
-                  className={cn(
-                    "w-full text-md rounded-full",
-                    isDark
-                      ? "bg-[#7F39EC] py-3"
-                      : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
-                  )}
+                  className="h-10 w-full rounded-full bg-[#1a1a1a] text-white hover:bg-black"
                   onClick={async () => {
                     if (!confirmDeleteId) return;
                     await deletePost(confirmDeleteId);
@@ -694,10 +691,10 @@ export default function AdminBlogsPage() {
                 </Button>
                 <Button
                   className={cn(
-                    "w-full text-md rounded-full",
+                    "h-10 w-full rounded-full",
                     isDark
-                      ? "py-3 border border-[#FF5353] text-[#FF5353]"
-                      : "bg-[#FF323224] text-[#E50000] py-4"
+                      ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                      : "border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
                   )}
                   variant="outline"
                   onClick={() => setConfirmDeleteId(null)}

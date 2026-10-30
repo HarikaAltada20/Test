@@ -248,8 +248,8 @@ export default function ManualEntryPage() {
         {/* Total Coins */}
         <div
           className={cn(
-            "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3",
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+            "rounded-2xl border shadow-[0_8px_28px_-18px_rgba(26,26,26,0.28)] p-3",
+            isDark ? "bg-[#161616] text-white" : "bg-white text-black"
           )}
         >
           <div className="flex flex-row items-center justify-between space-y-0 px-3 sm:px-4 lg:px-5 pt-2">
@@ -267,8 +267,8 @@ export default function ManualEntryPage() {
               className={cn(
                 "w-8 h-8 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-full",
                 isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  ? "bg-white/10 text-white"
+                  : "bg-[#f3f3f5] text-[#1a1a1a]"
               )}
             >
               <Coins className="h-4 w-4 sm:h-[18px] sm:w-[18px] lg:h-5 lg:w-5" />
@@ -292,8 +292,8 @@ export default function ManualEntryPage() {
         {/* Total Money Spent */}
         <div
           className={cn(
-            "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3",
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+            "rounded-2xl border shadow-[0_8px_28px_-18px_rgba(26,26,26,0.28)] p-3",
+            isDark ? "bg-[#161616] text-white" : "bg-white text-black"
           )}
         >
           <div className="flex flex-row items-center justify-between space-y-0 px-3 sm:px-4 lg:px-5 pt-2">
@@ -311,8 +311,8 @@ export default function ManualEntryPage() {
               className={cn(
                 "w-8 h-8 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-full",
                 isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  ? "bg-white/10 text-white"
+                  : "bg-[#f3f3f5] text-[#1a1a1a]"
               )}
             >
               <DollarSign className="h-4 w-4 sm:h-[18px] sm:w-[18px] lg:h-5 lg:w-5" />
@@ -336,8 +336,8 @@ export default function ManualEntryPage() {
         {/* Total Transactions */}
         <div
           className={cn(
-            "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3",
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+            "rounded-2xl border shadow-[0_8px_28px_-18px_rgba(26,26,26,0.28)] p-3",
+            isDark ? "bg-[#161616] text-white" : "bg-white text-black"
           )}
         >
           <div className="flex flex-row items-center justify-between space-y-0 px-3 sm:px-4 lg:px-5 pt-2">
@@ -355,8 +355,8 @@ export default function ManualEntryPage() {
               className={cn(
                 "w-8 h-8 sm:w-9 sm:h-9 lg:w-10 lg:h-10 flex items-center justify-center rounded-full",
                 isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
+                  ? "bg-white/10 text-white"
+                  : "bg-[#f3f3f5] text-[#1a1a1a]"
               )}
             >
               <TrendingUp className="h-4 w-4 sm:h-[18px] sm:w-[18px] lg:h-5 lg:w-5" />
@@ -446,8 +446,8 @@ export default function ManualEntryPage() {
           className={cn(
             "w-full sm:w-auto text-sm sm:text-base",
             isDark
-              ? "bg-[#5F2BB1] hover:bg-[#4A00BE] text-white"
-              : "bg-[#4A00BE] hover:bg-[#5F2BB1] text-white"
+              ? "bg-[#1a1a1a] hover:bg-black text-white"
+              : "bg-[#1a1a1a] hover:bg-black text-white"
           )}
         >
           <PlusCircle className="mr-2 h-4 w-4" />
@@ -460,7 +460,7 @@ export default function ManualEntryPage() {
       <Card
         className={cn(
           "overflow-hidden",
-          isDark ? "bg-[#170337] border-[#170337]" : "bg-white border-gray-200"
+          isDark ? "bg-[#161616] border-white/10" : "bg-white border-gray-200"
         )}
       >
         {/* <CardHeader>

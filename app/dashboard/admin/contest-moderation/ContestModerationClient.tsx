@@ -122,7 +122,7 @@ const moderationStatusConfig = {
 };
 
 const contestStatusConfig = {
-  upcoming: { label: "Upcoming", color: "bg-purple-500", icon: Calendar },
+  upcoming: { label: "Upcoming", color: "bg-[#f6f6f7]0", icon: Calendar },
   active: { label: "Active", color: "bg-green-600", icon: PlayCircle },
   ended: { label: "Ended", color: "bg-gray-600", icon: StopCircle },
 };
@@ -507,7 +507,7 @@ export default function ContestModerationClient({
         key={contest.id}
         className={cn(
           "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full min-w-0",
-          isDark ? "bg-[#06021D] border-slate-700" : "bg-white border-slate-200"
+          isDark ? "bg-[#161616] border-slate-700" : "bg-white border-slate-200"
         )}
       >
         <div className="flex flex-col flex-grow">
@@ -560,7 +560,7 @@ export default function ContestModerationClient({
               {contest.multiple_submissions_enabled && (
                 <Badge
                   variant="outline"
-                  className="text-[10px] sm:text-xs bg-purple-50 text-purple-700 border-purple-200 py-0.5 px-1.5 sm:px-2"
+                  className="text-[10px] sm:text-xs bg-[#f6f6f7] text-purple-700 border-[#e6e6e8] py-0.5 px-1.5 sm:px-2"
                 >
                   <CheckCheck className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
                   <span className="hidden sm:inline">
@@ -714,8 +714,8 @@ export default function ContestModerationClient({
                     className={cn(
                       "col-span-2 flex min-h-[44px] min-w-0 items-center justify-center gap-2 rounded-full px-3 py-2.5 text-xs sm:text-sm lg:col-span-1 lg:text-base",
                       isDark
-                        ? "bg-[#7F39EC] text-white"
-                        : "bg-[#D9C0FF61] text-[#7F39EC]"
+                        ? "bg-[#1a1a1a] text-white"
+                        : "bg-[#f3f3f5] text-[#1a1a1a]"
                     )}
                     onClick={() =>
                       window.open(
@@ -757,8 +757,8 @@ export default function ContestModerationClient({
                   className={cn(
                     "flex min-h-[44px] w-full min-w-0 items-center justify-center gap-2 rounded-full px-3 py-2.5 text-sm sm:text-base",
                     isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#D9C0FF61] text-[#7F39EC]"
+                      ? "bg-[#1a1a1a] text-white"
+                      : "bg-[#f3f3f5] text-[#1a1a1a]"
                   )}
                   onClick={() =>
                     window.open(
@@ -982,7 +982,7 @@ export default function ContestModerationClient({
                     <SelectContent
                       isDark={isDark}
                       className={cn(
-                        isDark && "border-gray-600 bg-[#07031D] text-white"
+                        isDark && "border-white/10 bg-[#161616] text-white"
                       )}
                     >
                       {[9, 15, 21, 30].map((size) => (
@@ -992,7 +992,7 @@ export default function ContestModerationClient({
                           value={size.toString()}
                           className={cn(
                             isDark &&
-                            "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
+                            "bg-transparent text-white focus:bg-white/10 data-[highlighted]:bg-white/10 data-[state=checked]:bg-white/10 data-[state=checked]:text-white"
                           )}
                         >
                           {size}

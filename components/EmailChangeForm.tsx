@@ -591,7 +591,6 @@ export function EmailChangeForm({
                     }
                     size="sm"
                     className="h-10 rounded-full px-4 text-sm goc-btn-primary"
-                    )}
                   >
                     {isSubmitting ? (
                       <>
@@ -720,7 +719,6 @@ export function EmailChangeForm({
             (verificationMethod === "otp" && !currentEmailOtpVerified)
           }
           className="h-10 rounded-full px-5 goc-btn-primary"
-          )}
         >
           {isSendingNewEmailOtp ? (
             <>

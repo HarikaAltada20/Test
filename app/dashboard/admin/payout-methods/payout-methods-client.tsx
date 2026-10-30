@@ -518,7 +518,7 @@ export default function PayoutMethodsClient() {
               onClick={() => !active && q.setView(t.view)}
               className={cn(
                 "inline-flex items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
-                active ? "bg-[#7F39EC] text-white shadow-sm" : cn(p.muted, p.hover)
+                active ? "bg-[#1a1a1a] text-white shadow-sm" : cn(p.muted, p.hover)
               )}
             >
               {t.label}
@@ -645,7 +645,7 @@ export default function PayoutMethodsClient() {
                   <Button
                     size="sm"
                     onClick={markCopiedSent}
-                    className="gap-1.5 bg-[#7F39EC] text-white hover:bg-[#6a2fd0]"
+                    className="gap-1.5 bg-[#1a1a1a] text-white hover:bg-[#6a2fd0]"
                   >
                     <Send className="h-3.5 w-3.5" />
                     Mark {copiedPending.length} as Email sent

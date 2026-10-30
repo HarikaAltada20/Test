@@ -124,11 +124,14 @@ function FeeRevenueBody({
       .sort((a, b) => b.total.paidFeeCents - a.total.paidFeeCents);
   }, [rows]);
 
-  const card = cn("rounded-xl border p-4", isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50/60");
+  const card = cn(
+    "rounded-2xl border p-4",
+    isDark ? "border-white/10 bg-white/5" : "border-[#ececef] bg-[#fafafa]",
+  );
   const muted = isDark ? "text-gray-300" : "text-gray-600";
   const iconWrap = cn(
     "w-10 h-10 flex items-center justify-center rounded-full",
-    isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]"
+    isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#1a1a1a]"
   );
 
   const tiles = [

@@ -1753,7 +1753,7 @@ export default function OpportunitiesPage({
         className={cn(
           "relative flex w-full cursor-pointer overflow-hidden rounded-xl border shadow-lg transition-all duration-300 ease-in-out hover:shadow-2xl group",
           isList ? "flex-col sm:flex-row" : "flex-col",
-          isDark ? "bg-[#18181b] border-white/10" : "bg-white border-gray-200",
+          isDark ? "bg-[#161616] border-white/10" : "bg-white border-gray-200",
         )}
       >
         {renderOpportunityCardLink(contest)}
@@ -1894,7 +1894,7 @@ export default function OpportunitiesPage({
         className={cn(
           "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer",
           isDark
-            ? "bg-[#06021D] border-slate-700"
+            ? "bg-[#161616] border-white/10"
             : "bg-white border-slate-200",
         )}
       >
@@ -2999,8 +2999,10 @@ export default function OpportunitiesPage({
             platforms={platformOptions}
             isDark={isDark}
             triggerClassName={cn(
-              "border font-medium",
-              isDark ? "border-gray-600" : "border-gray-400",
+              "font-medium",
+              isDark
+                ? "border-white/10 bg-[#161616] hover:bg-white/10"
+                : "border-[#e6e6e8] bg-white hover:bg-[#e6e6e8]",
             )}
           />
 
@@ -3012,9 +3014,12 @@ export default function OpportunitiesPage({
             }
           >
             <SelectTrigger
+              isDark={isDark}
               className={cn(
-                "border font-medium",
-                isDark ? "border-gray-600" : "border-gray-400",
+                "rounded-xl font-medium",
+                isDark
+                  ? "border-white/10 bg-[#161616] text-white hover:bg-white/10"
+                  : "border-[#e6e6e8] bg-white text-[#1a1a1a] hover:bg-[#e6e6e8]",
               )}
             >
               <SelectValue placeholder="Filter by Type" />
@@ -3044,9 +3049,12 @@ export default function OpportunitiesPage({
             onValueChange={(value) => setSortOption(value as SortOptionType)}
           >
             <SelectTrigger
+              isDark={isDark}
               className={cn(
-                "border font-medium",
-                isDark ? "border-gray-600" : "border-gray-400",
+                "rounded-xl font-medium",
+                isDark
+                  ? "border-white/10 bg-[#161616] text-white hover:bg-white/10"
+                  : "border-[#e6e6e8] bg-white text-[#1a1a1a] hover:bg-[#e6e6e8]",
               )}
             >
               <SelectValue placeholder="Sort by" />
@@ -3159,7 +3167,7 @@ export default function OpportunitiesPage({
                       className={cn(
                         "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
                         isDark
-                          ? "bg-[#06021D] border-slate-700"
+                          ? "bg-[#161616] border-white/10"
                           : "bg-white border-slate-200",
                       )}
                     >
@@ -4102,7 +4110,7 @@ export default function OpportunitiesPage({
                     <SelectContent
                       isDark={isDark}
                       className={cn(
-                        isDark && "border-gray-600 bg-[#07031D] text-white",
+                        isDark && "border-white/10 bg-[#161616] text-white",
                       )}
                     >
                       {[9, 15, 21, 30].map((size) => (
@@ -4112,7 +4120,7 @@ export default function OpportunitiesPage({
                           value={size.toString()}
                           className={cn(
                             isDark &&
-                              "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700",
+                              "bg-transparent text-white focus:bg-white/10 data-[highlighted]:bg-white/10 data-[state=checked]:bg-white/10 data-[state=checked]:text-white",
                           )}
                         >
                           {size}
