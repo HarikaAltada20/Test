@@ -12574,7 +12574,7 @@ export default function CreateContestPage({
               </>
               )}
 
-              <CardFooter className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-6">
+              <CardFooter className="flex flex-col items-stretch gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
                 <button
                   type="button"
                   onClick={
@@ -12584,7 +12584,7 @@ export default function CreateContestPage({
                   }
                   disabled={isLoading}
                   className={cn(
-                    "border font-semibold px-4 py-2 rounded-lg text-md",
+                    "w-full border font-semibold px-4 py-2 rounded-lg text-md sm:w-auto",
                     isDark
                       ? "border-white/20 text-white hover:bg-white/10"
                       : "border-[#d5d5db] text-[#1a1a1a]",
@@ -12609,18 +12609,10 @@ export default function CreateContestPage({
                       </div>
                     </div>
                   )}
-                <div
-                  className={`flex gap-2 ${
-                    formFeedback &&
-                    formFeedbackType === "error" &&
-                    step !== "basics"
-                      ? "ml-auto"
-                      : "ml-auto"
-                  }`}
-                >
+                <div className="flex w-full gap-2 sm:w-auto">
                   <button
                     className={cn(
-                      "border font-semibold px-4 py-2 rounded-lg text-md",
+                      "min-w-0 flex-1 border font-semibold px-4 py-2 rounded-lg text-md sm:flex-none",
                       isDark
                         ? "border-white/20 text-white hover:bg-white/10"
                         : "border-[#d5d5db] text-[#1a1a1a]",
@@ -12644,7 +12636,7 @@ export default function CreateContestPage({
                   </button>
                   <button
                     className={cn(
-                      "px-8 py-2 rounded-lg text-md cursor-pointer",
+                      "min-w-0 flex-1 px-8 py-2 rounded-lg text-md cursor-pointer sm:flex-none",
                       isDark
                         ? "bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]"
                         : "bg-[#1a1a1a] text-white hover:bg-black",
@@ -13252,7 +13244,7 @@ export default function CreateContestPage({
                 )}
               </div>
 
-              <CardFooter className="flex justify-between items-center pt-6">
+              <CardFooter className="flex flex-col items-stretch gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
                 {/* Modern Error Display for Brief step */}
                 {formFeedback && formFeedbackType === "error" && (
                   <div className="mr-auto">
@@ -13273,7 +13265,7 @@ export default function CreateContestPage({
                   onClick={prevStep}
                   disabled={isLoading}
                   className={cn(
-                    "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
+                    "w-full border font-semibold px-4 py-2 rounded-lg text-md sm:mr-auto sm:w-auto",
                     !(formFeedback && formFeedbackType === "error") &&
                       (isDark
                         ? "border-white/20 text-white hover:bg-white/10"
@@ -13282,13 +13274,7 @@ export default function CreateContestPage({
                 >
                   Back
                 </button>
-                <div
-                  className={`flex gap-2 ${
-                    formFeedback && formFeedbackType === "error"
-                      ? "ml-4"
-                      : "ml-auto"
-                  }`}
-                >
+                <div className="flex w-full gap-2 sm:ml-auto sm:w-auto">
                   <button
                     className={cn(
                       "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
@@ -14527,10 +14513,10 @@ export default function CreateContestPage({
                     </div>
                   )}
                 </div>
-                <CardFooter className="py-6 px-6">
+                <CardFooter className="flex flex-col items-stretch gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
                   <button
                     className={cn(
-                      "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
+                      "w-full border font-semibold px-4 py-2 rounded-lg text-md sm:w-auto",
                     isDark
                       ? "border-white/20 text-white hover:bg-white/10"
                       : "border-[#d5d5db] text-[#1a1a1a]",
@@ -14541,8 +14527,8 @@ export default function CreateContestPage({
                   >
                     Back
                   </button>
-                  <div className="flex gap-2 ml-auto">
-                    <div className="flex gap-2 ml-auto">
+                  <div className="flex w-full gap-2 sm:w-auto">
+                    <div className="flex w-full gap-2 sm:w-auto">
                       <button
                         className={cn(
                           "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",

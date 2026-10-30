@@ -37,7 +37,7 @@ export function AccountRoleBadge({
   return (
     <span
       className={cn(
-        "inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[11px] font-semibold leading-none",
+        "inline-flex w-fit items-center rounded-full px-2.5 py-1 text-sm font-semibold leading-none",
         isDark
           ? "bg-[rgb(var(--accent-rgb)/0.22)] text-[rgb(var(--accent-2-rgb))]"
           : "bg-[rgb(var(--accent-rgb)/0.12)] text-[var(--violet-600)]",
@@ -80,6 +80,10 @@ export function AccountMenuPanel({
     "flex items-center gap-2.5 px-3 py-2 text-sm",
     isDark ? "hover:bg-white/10" : "hover:bg-[#e6e6e8]",
   );
+  const iconBoxClass = cn(
+    "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border",
+    isDark ? "border-white/15" : "border-[#e5e5e5]",
+  );
 
   return (
     <div
@@ -96,7 +100,7 @@ export function AccountMenuPanel({
         {userEmail ? (
           <div
             className={cn(
-              "mt-0.5 truncate text-xs",
+              "mt-0.5 truncate text-sm",
               isDark ? "text-white/55" : "text-[#8b8b93]",
             )}
           >
@@ -107,28 +111,38 @@ export function AccountMenuPanel({
       <div className={cn("mx-2 h-px", isDark ? "bg-white/10" : "bg-[#eeeef0]")} />
       {userRole === "admin" ? (
         <Link href="/dashboard/profile" onClick={onNavigate} className={itemClass}>
-          <UserCircle className="h-4 w-4" strokeWidth={1.75} />
+          <span className={iconBoxClass}>
+            <UserCircle className="h-4 w-4" strokeWidth={1.75} />
+          </span>
           Profile
         </Link>
       ) : (
         <>
           <Link href="/dashboard/settings" onClick={onNavigate} className={itemClass}>
-            <Settings className="h-4 w-4" strokeWidth={1.75} />
+            <span className={iconBoxClass}>
+              <Settings className="h-4 w-4" strokeWidth={1.75} />
+            </span>
             Settings
           </Link>
           {userRole === "creator" ? (
             <Link href="/dashboard/profile" onClick={onNavigate} className={itemClass}>
-              <UserCircle className="h-4 w-4" strokeWidth={1.75} />
+              <span className={iconBoxClass}>
+                <UserCircle className="h-4 w-4" strokeWidth={1.75} />
+              </span>
               Profile
             </Link>
           ) : userRole ? (
             <Link href={billingHref} onClick={onNavigate} className={itemClass}>
-              <CreditCard className="h-4 w-4" strokeWidth={1.75} />
+              <span className={iconBoxClass}>
+                <CreditCard className="h-4 w-4" strokeWidth={1.75} />
+              </span>
               Plan and billing
             </Link>
           ) : null}
           <Link href={helpHref} onClick={onNavigate} className={itemClass}>
-            <HelpCircle className="h-4 w-4" strokeWidth={1.75} />
+            <span className={iconBoxClass}>
+              <HelpCircle className="h-4 w-4" strokeWidth={1.75} />
+            </span>
             Help
           </Link>
         </>
@@ -148,7 +162,9 @@ export function AccountMenuPanel({
           isDark ? "hover:bg-white/10" : "hover:bg-[#e6e6e8]",
         )}
       >
-        <LogOut className="h-4 w-4" strokeWidth={1.75} />
+        <span className={iconBoxClass}>
+          <LogOut className="h-4 w-4" strokeWidth={1.75} />
+        </span>
         {isSigningOut ? "Signing out…" : "Sign out"}
       </button>
     </div>
@@ -212,7 +228,12 @@ export function HeaderAccountMenu({
       >
         <div className="flex items-center gap-2.5">
           {avatarUrl ? (
-            <Avatar className="h-9 w-9 shrink-0">
+            <Avatar
+              className={cn(
+                "h-9 w-9 shrink-0 border",
+                isDark ? "border-white/15" : "border-[#e5e5e5]",
+              )}
+            >
               <AvatarImage src={avatarUrl} alt={userName} />
               <AvatarFallback
                 className={cn(
@@ -226,7 +247,8 @@ export function HeaderAccountMenu({
           ) : (
             <div
               className={cn(
-                "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
+                isDark ? "border-white/15" : "border-[#e5e5e5]",
                 isDark ? "bg-white/15 text-white" : "bg-[#ececef] text-[#3a3a40]",
               )}
             >

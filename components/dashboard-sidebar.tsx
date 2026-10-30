@@ -84,7 +84,7 @@ function PlanUsageGauge({
           isDark ? "text-white" : "text-[#1a1a1a]",
         )}
       >
-        {used} / {limit} live
+        {used} live
       </div>
     </div>
   );
@@ -450,13 +450,13 @@ export function DashboardSidebar({
       label: "Create",
       items: [
         {
-          name: "Home",
+          name: "Dashboard",
           href: "/dashboard",
           icon: Home,
           description: "Your overview",
         },
         {
-          name: "Discover",
+          name: "Campaigns",
           href: "/dashboard/opportunities",
           icon: Compass,
           description: "Find campaigns",
@@ -519,7 +519,7 @@ export function DashboardSidebar({
 
   const adminSections = [
     {
-      label: "Overview",
+      label: "Dashboard",
       items: adminLinks.filter((link) =>
         ["/dashboard/admin", "/dashboard/admin/analytics"].includes(link.href),
       ),
@@ -644,6 +644,10 @@ export function DashboardSidebar({
       : "/dashboard/billing?tab=subscription";
   const helpHref =
     userRole === "admin" ? "/dashboard/admin/support" : "/dashboard/help";
+  const menuIconBoxClass = cn(
+    "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border",
+    isDark ? "border-white/15" : "border-[#e5e5e5]",
+  );
 
   return (
     <div
@@ -1084,6 +1088,16 @@ export function DashboardSidebar({
           >
             <div className="px-3 py-2.5">
               <div className="truncate text-sm font-semibold">{userName}</div>
+              {userEmail ? (
+                <div
+                  className={cn(
+                    "mt-0.5 break-words text-sm leading-snug",
+                    isDark ? "text-white/55" : "text-[#8b8b93]",
+                  )}
+                >
+                  {userEmail}
+                </div>
+              ) : null}
             </div>
             <div
               className={cn(
@@ -1100,7 +1114,9 @@ export function DashboardSidebar({
                   isDark ? "hover:bg-white/10" : "hover:bg-[#e6e6e8]",
                 )}
               >
-                <UserCircle className="h-4 w-4" strokeWidth={1.75} />
+                <span className={menuIconBoxClass}>
+                  <UserCircle className="h-4 w-4" strokeWidth={1.75} />
+                </span>
                 Profile
               </Link>
             ) : (
@@ -1113,7 +1129,9 @@ export function DashboardSidebar({
                     isDark ? "hover:bg-white/10" : "hover:bg-[#e6e6e8]",
                   )}
                 >
-                  <Settings className="h-4 w-4" strokeWidth={1.75} />
+                  <span className={menuIconBoxClass}>
+                    <Settings className="h-4 w-4" strokeWidth={1.75} />
+                  </span>
                   Settings
                 </Link>
                 {userRole === "creator" ? (
@@ -1125,7 +1143,9 @@ export function DashboardSidebar({
                       isDark ? "hover:bg-white/10" : "hover:bg-[#e6e6e8]",
                     )}
                   >
-                    <UserCircle className="h-4 w-4" strokeWidth={1.75} />
+                    <span className={menuIconBoxClass}>
+                      <UserCircle className="h-4 w-4" strokeWidth={1.75} />
+                    </span>
                     Profile
                   </Link>
                 ) : (
@@ -1137,7 +1157,9 @@ export function DashboardSidebar({
                       isDark ? "hover:bg-white/10" : "hover:bg-[#e6e6e8]",
                     )}
                   >
-                    <CreditCard className="h-4 w-4" strokeWidth={1.75} />
+                    <span className={menuIconBoxClass}>
+                      <CreditCard className="h-4 w-4" strokeWidth={1.75} />
+                    </span>
                     Plan and billing
                   </Link>
                 )}
@@ -1149,7 +1171,9 @@ export function DashboardSidebar({
                     isDark ? "hover:bg-white/10" : "hover:bg-[#e6e6e8]",
                   )}
                 >
-                  <HelpCircle className="h-4 w-4" strokeWidth={1.75} />
+                  <span className={menuIconBoxClass}>
+                    <HelpCircle className="h-4 w-4" strokeWidth={1.75} />
+                  </span>
                   Help
                 </Link>
               </>
@@ -1172,7 +1196,9 @@ export function DashboardSidebar({
                 isDark ? "hover:bg-white/10" : "hover:bg-[#e6e6e8]",
               )}
             >
-              <LogOut className="h-4 w-4" strokeWidth={1.75} />
+              <span className={menuIconBoxClass}>
+                <LogOut className="h-4 w-4" strokeWidth={1.75} />
+              </span>
               {isSigningOut ? "Signing out…" : "Sign out"}
             </button>
           </div>
@@ -1198,7 +1224,8 @@ export function DashboardSidebar({
               src={avatarUrl}
               alt=""
               className={cn(
-                "shrink-0 object-cover",
+                "shrink-0 border object-cover",
+                isDark ? "border-white/15" : "border-[#e5e5e5]",
                 userRole === "creator"
                   ? "h-9 w-9 rounded-lg"
                   : "h-11 w-11 rounded-full",
@@ -1207,7 +1234,8 @@ export function DashboardSidebar({
           ) : (
             <span
               className={cn(
-                "flex shrink-0 items-center justify-center text-sm font-semibold",
+                "flex shrink-0 items-center justify-center border text-sm font-semibold",
+                isDark ? "border-white/15" : "border-[#e5e5e5]",
                 userRole === "creator"
                   ? "h-9 w-9 rounded-lg text-[13px]"
                   : "h-11 w-11 rounded-full",
@@ -1234,7 +1262,7 @@ export function DashboardSidebar({
                   <span
                     className={cn(
                       "mt-0.5 block truncate",
-                      userRole === "creator" ? "text-xs" : "mt-1 text-sm",
+                      userRole === "creator" ? "text-sm" : "mt-1 text-base",
                       isDark ? "text-white/55" : "text-[#8b8b93]",
                     )}
                   >

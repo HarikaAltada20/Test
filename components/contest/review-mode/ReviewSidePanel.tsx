@@ -167,10 +167,10 @@ function ToolbarButton({
         "flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap rounded-xl border px-1.5 sm:px-2 py-2 text-xs font-semibold transition-all shadow-2xs disabled:pointer-events-none disabled:opacity-35",
         active
           ? isDark
-            ? "border-violet-500 bg-violet-600 text-white shadow-xs"
-            : "border-violet-600 bg-violet-600 text-white shadow-xs"
+            ? "border-white bg-white text-[#0a0a0a] shadow-xs"
+            : "border-[#0a0a0a] bg-[#0a0a0a] text-white shadow-xs"
           : isDark
-            ? "border-slate-800 bg-slate-900/80 text-slate-200 hover:bg-slate-800"
+            ? "border-white/10 bg-white/5 text-white hover:bg-white/10"
             : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900",
       )}
     >
@@ -180,9 +180,11 @@ function ToolbarButton({
         className={cn(
           "shrink-0 rounded px-1 text-[10px] font-medium opacity-70",
           active
-            ? "bg-white/20 text-white"
+            ? isDark
+              ? "bg-black/10 text-[#0a0a0a]"
+              : "bg-white/20 text-white"
             : isDark
-              ? "bg-white/10 text-slate-300"
+              ? "bg-white/10 text-neutral-300"
               : "bg-slate-100 text-slate-600 border border-slate-200/60",
         )}
       >
@@ -199,7 +201,7 @@ function Kbd({ children, isDark }: { children: ReactNode; isDark?: boolean }) {
         "ml-1 hidden rounded border px-1 text-[10px] font-medium md:inline [@media(pointer:coarse)]:hidden",
         isDark !== undefined
           ? isDark
-            ? "border-slate-700 bg-slate-800/80 text-slate-300"
+            ? "border-white/10 bg-white/10 text-neutral-300"
             : "border-slate-200 bg-slate-100 text-slate-600"
           : "border-current/30 opacity-70",
       )}
@@ -368,7 +370,7 @@ export function ReviewSidePanel({
     cn(
       "rounded-2xl border p-3.5 transition-colors",
       isDark
-        ? cn("bg-slate-900/60 border-white/10 ring-1", TONE_RING[tone])
+        ? cn("bg-[#161616] border-white/10 ring-1", TONE_RING[tone])
         : "bg-white border-slate-200/90 shadow-2xs",
     );
   const tileLabel = isDark ? "text-[11px] text-slate-400" : "text-[11px] font-semibold text-slate-500";
@@ -379,7 +381,7 @@ export function ReviewSidePanel({
       className={cn(
         "flex min-h-0 flex-col lg:h-full lg:w-[395px] xl:w-[415px] lg:shrink-0 lg:border-l lg:border-t-0 shadow-sm",
         isDark
-          ? "border-t border-slate-800 bg-slate-950 text-white"
+          ? "border-t border-white/10 bg-[#111113] text-white"
           : "border-t border-slate-200 bg-white text-slate-900",
       )}
     >
@@ -388,7 +390,7 @@ export function ReviewSidePanel({
           const avatar = (
             <Avatar className="h-9 w-9 shrink-0 lg:h-12 lg:w-12">
               <AvatarImage src={submission.creatorAvatarUrl || undefined} alt={name} />
-              <AvatarFallback className={cn("font-bold", isDark ? "bg-violet-500/20 text-violet-200" : "bg-violet-100 text-violet-700")}>
+              <AvatarFallback className={cn("font-bold", isDark ? "bg-white/10 text-white" : "bg-[#f5f5f5] text-[#404040]")}>
                 {name.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
@@ -399,7 +401,10 @@ export function ReviewSidePanel({
               target="_blank"
               rel="noopener noreferrer"
               title={profileTitle}
-              className="shrink-0 rounded-full ring-violet-400/60 transition hover:ring-2"
+              className={cn(
+                "shrink-0 rounded-full transition hover:ring-2",
+                isDark ? "ring-white/30" : "ring-[#e5e5e5]",
+              )}
             >
               {avatar}
             </a>
@@ -416,7 +421,7 @@ export function ReviewSidePanel({
               <span
                 className={cn(
                   "shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold",
-                  isDark ? "bg-violet-500/20 text-violet-200" : "bg-violet-100 text-violet-700",
+                  isDark ? "bg-white/10 text-white" : "bg-[#f5f5f5] text-[#404040]",
                 )}
                 title="Rank in the current sort"
               >
@@ -437,7 +442,7 @@ export function ReviewSidePanel({
                   title={profileTitle}
                   className={cn(
                     "group flex min-w-0 items-center gap-1 font-medium transition-colors",
-                    isDark ? "text-slate-200 hover:text-violet-200" : "text-slate-600 hover:text-violet-600",
+                    isDark ? "text-neutral-200 hover:text-white" : "text-slate-600 hover:text-[#0a0a0a]",
                   )}
                 >
                   <span className="truncate group-hover:underline">{platformHandle}</span>
@@ -460,7 +465,7 @@ export function ReviewSidePanel({
             >
               <span className={cn(
                 "flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[8px] font-black",
-                isDark ? "bg-violet-500/25 text-violet-200" : "bg-violet-100 text-violet-700",
+                isDark ? "bg-white/10 text-white" : "bg-[#f5f5f5] text-[#404040]",
               )}>
                 GC
               </span>
@@ -574,7 +579,9 @@ export function ReviewSidePanel({
                     ? "bg-emerald-500"
                     : watchedTone === "warn"
                       ? "bg-amber-500"
-                      : "bg-violet-500",
+                      : isDark
+                        ? "bg-white"
+                        : "bg-[#0a0a0a]",
                 )}
                 style={{ width: `${watchedPercent}%` }}
               />
@@ -594,7 +601,7 @@ export function ReviewSidePanel({
                 Creator
                 <span className={cn(
                   "rounded px-1.5 py-0.5 text-[9px] font-bold tracking-normal",
-                  isDark ? "bg-violet-500/20 text-violet-200" : "bg-violet-100 text-violet-700",
+                  isDark ? "bg-white/10 text-white" : "bg-[#f5f5f5] text-[#404040]",
                 )}>
                   Admin only
                 </span>
@@ -745,7 +752,7 @@ export function ReviewSidePanel({
       </div>
 
       {canModerate && (
-      <div className={cn("space-y-3 border-t px-3 py-2.5 lg:p-5", isDark ? "border-slate-800" : "border-slate-200")}>
+      <div className={cn("space-y-3 border-t px-3 py-2.5 lg:p-5", isDark ? "border-white/10" : "border-slate-200")}>
         {options.locked && (
           <div className="flex items-center gap-2 rounded-xl bg-blue-500/10 px-3 py-2.5 text-xs text-blue-200">
             <Lock className="h-4 w-4 shrink-0" />
@@ -775,14 +782,14 @@ export function ReviewSidePanel({
                   className={cn(
                     "flex items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs sm:text-sm font-medium transition-colors disabled:opacity-50",
                     isDark
-                      ? "bg-slate-800/80 text-slate-200 hover:bg-red-500/20"
+                      ? "bg-white/5 text-white hover:bg-red-500/15"
                       : "bg-[#f8f9fa] text-slate-700 hover:bg-slate-100 hover:text-slate-900 border border-slate-100/80 shadow-2xs",
                   )}
                 >
                   <span
                     className={cn(
                       "flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px] font-bold shadow-2xs",
-                      isDark ? "bg-slate-700 text-slate-300" : "bg-white text-slate-600 border border-slate-200/60",
+                      isDark ? "bg-white/10 text-neutral-200" : "bg-white text-slate-600 border border-slate-200/60",
                     )}
                   >
                     {index + 1}
@@ -797,14 +804,14 @@ export function ReviewSidePanel({
                 className={cn(
                   "flex items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs sm:text-sm font-medium transition-colors disabled:opacity-50",
                   isDark
-                    ? "border border-dashed border-slate-700 text-slate-300 hover:bg-slate-800"
+                    ? "border border-dashed border-white/15 text-neutral-200 hover:bg-white/5"
                     : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-2xs",
                 )}
               >
                 <span
                   className={cn(
                     "flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px] font-bold shadow-2xs",
-                    isDark ? "bg-slate-700 text-slate-300" : "bg-slate-100 text-slate-600 border border-slate-200/60",
+                    isDark ? "bg-white/10 text-neutral-200" : "bg-slate-100 text-slate-600 border border-slate-200/60",
                   )}
                 >
                   {QUICK_REJECT_REASONS.length + 1}
@@ -860,7 +867,12 @@ export function ReviewSidePanel({
                 disabled={busy}
                 onClick={onApprove}
                 title="Approve (A)"
-                className="h-11 rounded-full bg-[#1a1a1a] px-3 text-sm font-semibold text-white shadow-none hover:bg-black gap-1.5 dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-[#f3f3f5]"
+                className={cn(
+                  "h-11 rounded-full px-3 text-sm font-semibold shadow-none gap-1.5",
+                  isDark
+                    ? "bg-white text-[#0a0a0a] hover:bg-[#f3f3f5]"
+                    : "bg-[#1a1a1a] text-white hover:bg-black",
+                )}
               >
                 {busy ? (
                   <Loader2 className="h-4 w-4 shrink-0 animate-spin" />

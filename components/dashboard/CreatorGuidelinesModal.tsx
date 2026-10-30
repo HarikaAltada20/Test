@@ -30,18 +30,6 @@ const steps = [
     description:
       "To ensure a fair and successful experience on Game of Creators, please read through the creator guidelines.",
     readTime: "2 min read",
-    illustration: (
-      <div className="flex justify-center mb-6">
-        <div className="relative">
-          <div className="w-24 h-24 bg-[#7F39EC17] border border-[#7F39EC] text-[#7F39EC] rounded-full flex items-center justify-center">
-            <CheckCircle className="w-10 h-10" />
-          </div>
-          {/* <div className="absolute -top-1 -right-1 w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center">
-            <span className="text-xs font-bold text-black">!</span>
-          </div> */}
-        </div>
-      </div>
-    ),
   },
   // Step 1: Two hours rule + Purchasing fake views and engagement
   {
@@ -165,7 +153,9 @@ export default function CreatorGuidelinesModal({
                   {/* Circle 1 */}
                   <div
                     className={`w-12 h-12 text-md rounded-full flex items-center justify-center font-semibold transition-all duration-300 ${step >= 1
-                        ? "bg-[#7F39EC] text-white"
+                        ? isDark
+                          ? "bg-white text-[#0a0a0a]"
+                          : "bg-[#0a0a0a] text-white"
                         : "bg-muted text-muted-foreground"
                       }`}
                   >
@@ -175,7 +165,10 @@ export default function CreatorGuidelinesModal({
                   {/* Progress Line */}
                   <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden relative">
                     <div
-                      className="h-full bg-[#7F39EC] transition-all duration-500 ease-out"
+                      className={cn(
+                        "h-full transition-all duration-500 ease-out",
+                        isDark ? "bg-white" : "bg-[#0a0a0a]",
+                      )}
                       style={{ width: step >= 2 ? "100%" : "30%" }}
                     />
                   </div>
@@ -183,10 +176,14 @@ export default function CreatorGuidelinesModal({
                   {/* Circle 2 */}
                   <div
                     className={`w-12 h-12 rounded-full flex items-center justify-center font-semibold text-md transition-all duration-300 ${step >= 2
-                        ? "bg-[#7F39EC] text-white"
+                        ? isDark
+                          ? "bg-white text-[#0a0a0a]"
+                          : "bg-[#0a0a0a] text-white"
                         : cn(
-                          "bg-muted",
-                          isDark ? "text-gray-300" : "text-gray-800"
+                          "border",
+                          isDark
+                            ? "bg-white/5 border-white/10 text-neutral-400"
+                            : "bg-white border-[#e5e5e5] text-[#737373]"
                         )
                       }`}
                   >
@@ -228,7 +225,18 @@ export default function CreatorGuidelinesModal({
             >
               {isIntro ? (
                 <>
-                  {steps[0].illustration}
+                  <div className="flex justify-center mb-6">
+                    <div
+                      className={cn(
+                        "w-24 h-24 rounded-full border flex items-center justify-center",
+                        isDark
+                          ? "bg-white/10 border-white/15 text-white"
+                          : "bg-[#f5f5f5] border-[#e5e5e5] text-[#0a0a0a]",
+                      )}
+                    >
+                      <CheckCircle className="w-10 h-10" />
+                    </div>
+                  </div>
                   <h1
                     className={cn(
                       "text-3xl font-bold text-center mb-2",
@@ -263,10 +271,10 @@ export default function CreatorGuidelinesModal({
                   </div>
                   <button
                     className={cn(
-                      "w-full text-md rounded-full py-4 font-semibold",
+                      "w-full rounded-xl py-4 text-base font-semibold",
                       isDark
-                        ? "bg-[#7F39EC] text-white"
-                        : "bg-[#D9C0FF61] text-[#7F39EC]"
+                        ? "bg-white text-[#0a0a0a]"
+                        : "bg-[#0a0a0a] text-white"
                     )}
                     onClick={() => setStep(1)}
                   >
@@ -306,16 +314,25 @@ export default function CreatorGuidelinesModal({
                             <div
                               key={idx}
                               className={cn(
-                                "bg-white rounded-2xl p-5 shadow-lg flex-1",
-                                isDark ? "bg-[#170337]" : "bg-white"
+                                "rounded-2xl border p-5 flex-1 shadow-[0px_1px_3px_rgba(10,10,10,0.04)]",
+                                isDark
+                                  ? "bg-white/[0.03] border-white/10"
+                                  : "bg-white border-[#e5e5e5]"
                               )}
                             >
                               <div
                                 className={`flex flex-col items-center text-center ${isThreeCards ? "gap-3" : "gap-4"
                                   }`}
                               >
-                                <div className="w-12 h-12 bg-[#D8C3FF] rounded-full flex items-center justify-center mx-auto mb-3">
-                                  <span className="text-[#4A00BE] font-bold">
+                                <div
+                                  className={cn(
+                                    "w-12 h-12 rounded-full border flex items-center justify-center mx-auto mb-3",
+                                    isDark
+                                      ? "bg-white/10 border-white/15 text-white"
+                                      : "bg-[#f5f5f5] border-[#e5e5e5] text-[#0a0a0a]",
+                                  )}
+                                >
+                                  <span className="font-bold">
                                     {card.icon}
                                   </span>
                                 </div>
@@ -360,10 +377,10 @@ export default function CreatorGuidelinesModal({
               <div className="w-full px-4 pb-2 pt-4">
                 <button
                   className={cn(
-                    "w-full text-lg rounded-full py-3.5 font-semibold",
+                    "w-full rounded-xl py-3.5 text-base font-semibold",
                     isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#D9C0FF61] text-[#7F39EC]"
+                      ? "bg-white text-[#0a0a0a]"
+                      : "bg-[#0a0a0a] text-white"
                   )}
                   onClick={
                     isLastStep ? onComplete : () => setStep((s) => s + 1)

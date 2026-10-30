@@ -68,7 +68,7 @@ export function BrandOverviewSectionCard({
             {subtitle ? (
               <p
                 className={cn(
-                  "text-xs leading-tight",
+                  "text-sm leading-tight",
                   isDark ? "text-slate-400" : "text-[#737373]",
                 )}
               >

@@ -31,6 +31,7 @@ interface DeleteContestButtonProps {
   size?: "default" | "sm" | "lg" | "icon";
   className?: string;
   isdark?: boolean;
+  appearance?: "default" | "card";
 }
 
 export function DeleteContestButton({
@@ -40,6 +41,7 @@ export function DeleteContestButton({
   variant = "outline",
   isdark = false,
   className = "",
+  appearance = "default",
 }: DeleteContestButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -151,17 +153,38 @@ export function DeleteContestButton({
 
   return (
     <>
-      <Button
-        onClick={() => setIsOpen(true)}
-        variant={variant}
-        size="md"
-        className={`border ${
-          isDark ? "text-purple-400 border-gray-600" : "text-purple-500"
-        } text-[14px] ${className}`}
-      >
-        <Trash2 className="h-4 w-4 mb-[2px]" />
-        Delete
-      </Button>
+      {appearance === "card" ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            event.preventDefault();
+            setIsOpen(true);
+          }}
+          className={cn(
+            "inline-flex items-center justify-center gap-2 rounded-[10px] border px-3.5 py-2.5 text-[13px] font-semibold shadow-[0px_1px_1px_rgba(10,10,10,0.04)]",
+            isDark
+              ? "border-white/15 bg-transparent text-white"
+              : "border-[#e5e5e5] bg-white text-[#0a0a0a]",
+            className,
+          )}
+        >
+          <img src="/images/contest-list/trash.svg" alt="" />
+          Delete
+        </button>
+      ) : (
+        <Button
+          onClick={() => setIsOpen(true)}
+          variant={variant}
+          size="md"
+          className={`border ${
+            isDark ? "text-purple-400 border-gray-600" : "text-purple-500"
+          } text-[14px] ${className}`}
+        >
+          <Trash2 className="h-4 w-4 mb-[2px]" />
+          Delete
+        </Button>
+      )}
 
       <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
         <AlertDialogContent

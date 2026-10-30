@@ -92,14 +92,14 @@ export function ReviewSelectionTray({
     <div
       className={
         isDark
-          ? "flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-900/80 px-3 py-2 lg:px-5"
+          ? "flex flex-wrap items-center gap-2 border-b border-white/10 bg-[#111113] px-3 py-2 lg:px-5"
           : "flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white/95 text-slate-800 px-3 py-2 lg:px-5 shadow-2xs backdrop-blur-sm"
       }
     >
       <span
         className={
           isDark
-            ? "text-sm font-semibold tabular-nums text-violet-300"
+            ? "text-sm font-semibold tabular-nums text-white"
             : "text-sm font-bold tabular-nums text-violet-700"
         }
       >
@@ -162,7 +162,7 @@ export function ReviewSelectionTray({
             onClick={onReviewOnlySelected}
             className={
               isDark
-                ? "h-8 shrink-0 gap-1 whitespace-nowrap rounded-md border-slate-600 bg-transparent text-slate-200 hover:bg-white/10 hover:text-white"
+                ? "h-8 shrink-0 gap-1 whitespace-nowrap rounded-md border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white"
                 : "h-8 shrink-0 gap-1 whitespace-nowrap rounded-md border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs font-medium"
             }
           >
@@ -177,7 +177,7 @@ export function ReviewSelectionTray({
             disabled={downloading || busy}
             className={
               isDark
-                ? "h-8 shrink-0 gap-1 whitespace-nowrap rounded-md border border-purple-500 bg-purple-900/30 text-purple-300 hover:bg-purple-900/50"
+                ? "h-8 shrink-0 gap-1 whitespace-nowrap rounded-md border border-white bg-white text-[#0a0a0a] hover:bg-white/90"
                 : "h-8 shrink-0 gap-1 whitespace-nowrap rounded-md border border-violet-300 bg-violet-600 text-white hover:bg-violet-700 font-medium shadow-2xs"
             }
           >

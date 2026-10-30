@@ -167,7 +167,7 @@ export default function GettingStartedModal({
       <div
         className={cn(
           "fixed inset-0 bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50 ",
-          isDark ? "bg-[#100A33]" : "bg-black",
+          isDark ? "bg-black" : "bg-black",
         )}
       >
         {/* Welcome Card */}
@@ -175,7 +175,7 @@ export default function GettingStartedModal({
           <div
             className={cn(
               "rounded-2xl w-full max-w-2xl p-6 md:py-12 md:px-10 text-center relative",
-              isDark ? "bg-[#06021D] border border-gray-800" : "bg-white",
+              isDark ? "bg-[#161616] border border-white/10" : "bg-white",
             )}
           >
             <button
@@ -183,8 +183,8 @@ export default function GettingStartedModal({
               className={cn(
                 "absolute top-6 right-6 border z-10 px-6 py-2 rounded-full backdrop-blur-sm",
                 isDark
-                  ? "bg-[#06021D] border-white"
-                  : "text-[#4A00BE] border-[#4A00BE] bg-white/80",
+                  ? "bg-[#161616] border-white"
+                  : "text-[#404040] border-[#e5e5e5] bg-white",
               )}
             >
               Skip
@@ -197,9 +197,9 @@ export default function GettingStartedModal({
 
             <div
               ref={partyIconRef}
-              className="w-20 h-20 sm:w-24 sm:h-24 bg-[#7F39EC17] border border-[#7F39EC] rounded-full flex items-center justify-center mb-6 sm:mb-8 mx-auto"
+              className="w-20 h-20 sm:w-24 sm:h-24 bg-[#f5f5f5] border border-[#e5e5e5] rounded-full flex items-center justify-center mb-6 sm:mb-8 mx-auto"
             >
-              <PartyPopper className="w-10 h-10 sm:w-12 sm:h-12 text-purple-600" />
+              <PartyPopper className="w-10 h-10 sm:w-12 sm:h-12 text-[#0a0a0a]" />
             </div>
             <h1
               className={cn(
@@ -236,7 +236,7 @@ export default function GettingStartedModal({
           <div
             className={cn(
               "rounded-2xl w-full max-w-4xl lg:max-w-6xl flex flex-col md:flex-row overflow-hidden  max-h-[90vh] overflow-y-auto relative",
-              isDark ? "bg-[#06021D] border border-gray-800" : "bg-white",
+              isDark ? "bg-[#161616] border border-white/10" : "bg-white",
             )}
           >
             <button
@@ -244,8 +244,8 @@ export default function GettingStartedModal({
               className={cn(
                 "absolute top-10 sm:top-6 right-6 border z-10 px-6 py-2 rounded-full backdrop-blur-sm",
                 isDark
-                  ? "bg-[#06021D] border-white"
-                  : "text-[#4A00BE] border-[#4A00BE] bg-white/80",
+                  ? "bg-[#161616] border-white"
+                  : "text-[#404040] border-[#e5e5e5] bg-white",
               )}
             >
               Skip
@@ -255,7 +255,7 @@ export default function GettingStartedModal({
             <div
               className={cn(
                 "md:w-16 flex md:flex-col items-center justify-center gap-4 md:gap-6 p-4 bg-gray-50 flex-shrink-0",
-                isDark ? "bg-[#06021D]" : "bg-gray-50",
+                isDark ? "bg-[#161616]" : "bg-gray-50",
               )}
             >
               {steps.slice(1).map((_, index) => {
@@ -270,18 +270,18 @@ export default function GettingStartedModal({
                     <div
                       className={`w-3 h-3 rounded-full transition-all duration-300 ${
                         isActive
-                          ? "bg-purple-600 scale-125"
+                          ? "bg-[#0a0a0a] scale-125"
                           : isCompleted
-                            ? "bg-purple-400"
-                            : "bg-gray-300"
+                            ? "bg-[#404040]"
+                            : "bg-[#e5e5e5]"
                       }`}
                     />
                     {stepIndex < steps.length - 1 && (
                       <div
                         className={`${
                           currentStep > stepIndex
-                            ? "bg-purple-400"
-                            : "bg-gray-200"
+                            ? "bg-[#404040]"
+                            : "bg-[#e5e5e5]"
                         } transition-all duration-300 
                         ${"md:w-0.5 md:h-[110px] w-12 h-0.5 mx-2 md:mx-0 md:my-2"}`}
                       />
@@ -374,13 +374,13 @@ export default function GettingStartedModal({
     <div
       className={cn(
         "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
-        isDark ? "bg-[#100A33]" : "bg-black",
+        isDark ? "bg-black" : "bg-black",
       )}
     >
       <div
         className={cn(
           " rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto relative pt-12 pb-6",
-          isDark ? "bg-[#06021D] border border-gray-800" : "bg-white",
+          isDark ? "bg-[#161616] border border-white/10" : "bg-white",
         )}
       >
         <button
@@ -391,8 +391,8 @@ export default function GettingStartedModal({
           className={cn(
             "absolute top-4 left-4 sm:top-6 sm:left-6 z-10 px-4 sm:px-8 py-2 border rounded-full transition-all duration-200",
             isDark
-              ? "bg-[#06021D] border-white"
-              : "text-[#4A00BE] border-[#4A00BE] bg-white/80",
+              ? "bg-[#161616] border-white"
+              : "text-[#404040] border-[#e5e5e5] bg-white",
           )}
         >
           Back
@@ -403,8 +403,8 @@ export default function GettingStartedModal({
           className={cn(
             "absolute top-4 right-4 sm:top-6 sm:right-6 z-10 px-4 sm:px-8 py-2 border rounded-full transition-all duration-200",
             isDark
-              ? "bg-[#06021D] border-white"
-              : "text-[#4A00BE] border-[#4A00BE] bg-white/80",
+              ? "bg-[#161616] border-white"
+              : "text-[#404040] border-[#e5e5e5] bg-white",
           )}
         >
           Skip
@@ -427,8 +427,8 @@ export default function GettingStartedModal({
               className={cn(
                 "p-6 border rounded-lg",
                 isDark
-                  ? "bg-[#170337] border-[#7F39EC]"
-                  : "border-[#7F39EC] bg-[#D9C0FF26]",
+                  ? "bg-white/[0.03] border-white/10"
+                  : "border-[#e5e5e5] bg-white",
               )}
             >
               <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -437,7 +437,7 @@ export default function GettingStartedModal({
                     "p-2.5 rounded-full",
                     isDark
                       ? "bg-[#FFFFFF3D] text-white"
-                      : "bg-[#ECE1FC] text-purple-600",
+                      : "bg-[#f5f5f5] text-[#404040]",
                   )}
                 >
                   <Trophy className="w-6 h-6" />
@@ -450,7 +450,7 @@ export default function GettingStartedModal({
                     "py-1 px-3 rounded-full",
                     isDark
                       ? "bg-[#FFFFFF3D] text-white"
-                      : "bg-[#ECE1FC] text-purple-700",
+                      : "bg-[#f5f5f5] text-[#404040]",
                   )}
                 >
                   Competition Based
@@ -473,8 +473,8 @@ export default function GettingStartedModal({
                   className={cn(
                     "inline-block p-4 rounded-lg border",
                     isDark
-                      ? "bg-[#06021D26] border-[#7F39EC]"
-                      : "bg-[#D9C0FF26] border-[#7F39EC]",
+                      ? "bg-white/5 border-white/10"
+                      : "bg-[#fafafa] border-[#e5e5e5]",
                   )}
                 >
                   <div
@@ -502,7 +502,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -520,7 +520,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -538,7 +538,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -556,7 +556,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -601,8 +601,8 @@ export default function GettingStartedModal({
               className={cn(
                 "p-6 border rounded-lg",
                 isDark
-                  ? "bg-[#170337] border-[#7F39EC]"
-                  : "border-[#7F39EC] bg-[#D9C0FF26]",
+                  ? "bg-white/[0.03] border-white/10"
+                  : "border-[#e5e5e5] bg-white",
               )}
             >
               <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -611,7 +611,7 @@ export default function GettingStartedModal({
                     "p-2.5 rounded-full",
                     isDark
                       ? "bg-[#FFFFFF3D] text-white"
-                      : "bg-[#ECE1FC] text-purple-600",
+                      : "bg-[#f5f5f5] text-[#404040]",
                   )}
                 >
                   <DollarSign className="w-6 h-6" />
@@ -634,7 +634,7 @@ export default function GettingStartedModal({
                     "py-1 px-3 rounded-full",
                     isDark
                       ? "bg-[#FFFFFF3D] text-white"
-                      : "bg-[#ECE1FC] text-purple-700",
+                      : "bg-[#f5f5f5] text-[#404040]",
                   )}
                 >
                   Pay Per 1000 Views
@@ -644,8 +644,8 @@ export default function GettingStartedModal({
                   className={cn(
                     "text-xs font-medium px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap",
                     isDark
-                      ? "bg-yellow-900/40 text-yellow-300 border border-yellow-700/30"
-                      : "bg-yellow-50 text-yellow-700 border border-yellow-200",
+                      ? "bg-white/10 text-neutral-200 border border-white/15"
+                      : "bg-[#f5f5f5] text-[#404040] border border-[#e5e5e5]",
                   )}
                 >
                   Paid plans only
@@ -668,8 +668,8 @@ export default function GettingStartedModal({
                   className={cn(
                     "inline-block p-4 rounded-lg border",
                     isDark
-                      ? "bg-[#06021D26] border-[#7F39EC]"
-                      : "bg-[#D9C0FF26] border-[#7F39EC]",
+                      ? "bg-white/5 border-white/10"
+                      : "bg-[#fafafa] border-[#e5e5e5]",
                   )}
                 >
                   <div
@@ -697,7 +697,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -715,7 +715,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -733,7 +733,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -751,7 +751,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -796,8 +796,8 @@ export default function GettingStartedModal({
               className={cn(
                 "p-6 border rounded-lg flex flex-col",
                 isDark
-                  ? "bg-[#170337] border-[#7F39EC]"
-                  : "border-[#7F39EC] bg-[#D9C0FF26]",
+                  ? "bg-white/[0.03] border-white/10"
+                  : "border-[#e5e5e5] bg-white",
               )}
             >
               <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -806,7 +806,7 @@ export default function GettingStartedModal({
                     "p-2.5 rounded-full",
                     isDark
                       ? "bg-[#FFFFFF3D] text-white"
-                      : "bg-[#ECE1FC] text-purple-600",
+                      : "bg-[#f5f5f5] text-[#404040]",
                   )}
                 >
                   <Target className="w-6 h-6" />
@@ -819,7 +819,7 @@ export default function GettingStartedModal({
                     "py-1 px-3 rounded-full",
                     isDark
                       ? "bg-[#FFFFFF3D] text-white"
-                      : "bg-[#ECE1FC] text-purple-700",
+                      : "bg-[#f5f5f5] text-[#404040]",
                   )}
                 >
                   Guaranteed Payouts
@@ -829,8 +829,8 @@ export default function GettingStartedModal({
                   className={cn(
                     "text-xs font-medium px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap",
                     isDark
-                      ? "bg-yellow-900/40 text-yellow-300 border border-yellow-700/30"
-                      : "bg-yellow-50 text-yellow-700 border border-yellow-200",
+                      ? "bg-white/10 text-neutral-200 border border-white/15"
+                      : "bg-[#f5f5f5] text-[#404040] border border-[#e5e5e5]",
                   )}
                 >
                   Paid plans only
@@ -852,8 +852,8 @@ export default function GettingStartedModal({
                   className={cn(
                     "inline-block p-4 rounded-lg border",
                     isDark
-                      ? "bg-[#06021D26] border-[#7F39EC]"
-                      : "bg-[#D9C0FF26] border-[#7F39EC]",
+                      ? "bg-white/5 border-white/10"
+                      : "bg-[#fafafa] border-[#e5e5e5]",
                   )}
                 >
                   <div
@@ -882,7 +882,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -900,7 +900,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -918,7 +918,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -936,7 +936,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -981,8 +981,8 @@ export default function GettingStartedModal({
               className={cn(
                 "p-6 border rounded-lg flex flex-col",
                 isDark
-                  ? "bg-[#170337] border-[#7F39EC]"
-                  : "border-[#7F39EC] bg-[#D9C0FF26]",
+                  ? "bg-white/[0.03] border-white/10"
+                  : "border-[#e5e5e5] bg-white",
               )}
             >
               <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -991,7 +991,7 @@ export default function GettingStartedModal({
                     "p-2.5 rounded-full",
                     isDark
                       ? "bg-[#FFFFFF3D] text-white"
-                      : "bg-[#ECE1FC] text-purple-600",
+                      : "bg-[#f5f5f5] text-[#404040]",
                   )}
                 >
                   <Award className="w-6 h-6" />
@@ -1004,7 +1004,7 @@ export default function GettingStartedModal({
                     "py-1 px-3 rounded-full",
                     isDark
                       ? "bg-[#FFFFFF3D] text-white"
-                      : "bg-[#ECE1FC] text-purple-700",
+                      : "bg-[#f5f5f5] text-[#404040]",
                   )}
                 >
                   CPM + Milestones
@@ -1014,8 +1014,8 @@ export default function GettingStartedModal({
                   className={cn(
                     "text-xs font-medium px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap",
                     isDark
-                      ? "bg-yellow-900/40 text-yellow-300 border border-yellow-700/30"
-                      : "bg-yellow-50 text-yellow-700 border border-yellow-200",
+                      ? "bg-white/10 text-neutral-200 border border-white/15"
+                      : "bg-[#f5f5f5] text-[#404040] border border-[#e5e5e5]",
                   )}
                 >
                   Paid plans only
@@ -1038,8 +1038,8 @@ export default function GettingStartedModal({
                   className={cn(
                     "inline-block p-4 rounded-lg border",
                     isDark
-                      ? "bg-[#06021D26] border-[#7F39EC]"
-                      : "bg-[#D9C0FF26] border-[#7F39EC]",
+                      ? "bg-white/5 border-white/10"
+                      : "bg-[#fafafa] border-[#e5e5e5]",
                   )}
                 >
                   <div
@@ -1069,7 +1069,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -1087,7 +1087,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -1105,7 +1105,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -1123,7 +1123,7 @@ export default function GettingStartedModal({
                   <Check
                     className={cn(
                       "w-5 h-5 mt-0.5 flex-shrink-0",
-                      isDark ? "text-purple-400" : "text-[#4A00BE]",
+                      isDark ? "text-neutral-300" : "text-[#404040]",
                     )}
                   />
                   <span
@@ -1174,8 +1174,8 @@ export default function GettingStartedModal({
             className={cn(
               "text-[14px] w-full py-3 rounded-full font-semibold",
               isDark
-                ? "bg-[#5F2BB1] text-white"
-                : "bg-[#D9C0FF61] text-purple-500 hover:from-purple-500 hover:to-purple-700",
+                ? "bg-white text-[#0a0a0a]"
+                : "bg-[#0a0a0a] text-white",
             )}
           >
             Next Step
@@ -1189,13 +1189,13 @@ export default function GettingStartedModal({
     <div
       className={cn(
         "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
-        isDark ? "bg-[#100A33]" : "bg-black",
+        isDark ? "bg-black" : "bg-black",
       )}
     >
       <div
         className={cn(
           "rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto px-4 py-8 md:px-8 md:py-12 text-center relative",
-          isDark ? "bg-[#06021D] border border-gray-800" : "bg-white",
+          isDark ? "bg-[#161616] border border-white/10" : "bg-white",
         )}
       >
         {/* Back (top-left) */}
@@ -1207,8 +1207,8 @@ export default function GettingStartedModal({
           className={cn(
             "absolute top-4 left-4 sm:top-6 sm:left-6 z-10 px-4 sm:px-8 py-2 border rounded-full transition-all duration-200",
             isDark
-              ? "bg-[#06021D] border-white"
-              : "text-[#4A00BE] border-[#4A00BE] bg-white/80",
+              ? "bg-[#161616] border-white"
+              : "text-[#404040] border-[#e5e5e5] bg-white",
           )}
         >
           Back
@@ -1220,8 +1220,8 @@ export default function GettingStartedModal({
           className={cn(
             "absolute top-6 right-6 z-10 px-8 py-2  border rounded-full transition-all duration-200 backdrop-blur-sm",
             isDark
-              ? "bg-[#06021D] border-white"
-              : "text-[#4A00BE] border-[#4A00BE] bg-white/80",
+              ? "bg-[#161616] border-white"
+              : "text-[#404040] border-[#e5e5e5] bg-white",
           )}
         >
           Skip
@@ -1231,8 +1231,8 @@ export default function GettingStartedModal({
           className={cn(
             "mt-12 md:mt-10 p-6 border rounded-2xl",
             isDark
-              ? "bg-[#170337] border-[#7F39EC]"
-              : "border-[#7F39EC] bg-[#D9C0FF26]",
+              ? "bg-white/[0.03] border-white/10"
+              : "border-[#e5e5e5] bg-white",
           )}
         >
           <div className="text-center mb-6">

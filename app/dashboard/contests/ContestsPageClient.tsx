@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, Phone } from "lucide-react";
+import { Loader2, Phone } from "lucide-react";
 import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
 import { cn } from "@/lib/utils";
@@ -250,12 +250,12 @@ export function ContestsPageClient({
         )}
       >
         <div className="min-w-0 space-y-0.5">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-balance">
+          <h1 className="text-[28px] font-bold tracking-[-0.56px] text-balance">
             My Campaigns
           </h1>
           <p
             className={cn(
-              "text-sm leading-relaxed max-w-xl",
+              "text-md leading-relaxed max-w-xl",
               isDark ? "text-slate-400" : "text-muted-foreground"
             )}
           >
@@ -285,16 +285,14 @@ export function ContestsPageClient({
             onClick={handleCreateContestClick}
             disabled={loading}
             className={cn(
-              "inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl shadow-sm transition-[opacity,box-shadow] hover:opacity-95",
-              isDark
-                ? "bg-white text-[#1a1a1a] ring-1 ring-white/20 hover:bg-white/90"
-                : "bg-[#1a1a1a] text-white ring-1 ring-black/10 hover:bg-black"
+              "inline-flex items-center justify-center gap-2 px-[18px] py-[11px] text-sm font-semibold rounded-full text-white transition-opacity hover:opacity-95 disabled:opacity-70",
+              "bg-gradient-to-b from-[#8551f3] to-[#6427d6] ",
             )}
           >
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin shrink-0" />
             ) : (
-              <Plus className="h-4 w-4 shrink-0" />
+              <img src="/images/contest-list/plus.svg" alt="" />
             )}
             Create Campaign
           </button>

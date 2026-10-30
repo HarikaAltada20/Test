@@ -20,13 +20,9 @@ function GocAnimatedLogoSpinner({
 
   return (
     <div className="relative flex items-center justify-center p-2">
-      {/* Orange Glow Effect */}
-      <div
-        className={cn(
-          "absolute h-24 w-24 rounded-full blur-2xl transition-all duration-700 animate-pulse",
-          isLight ? "bg-orange-500/15" : "bg-orange-500/25"
-        )}
-      />
+      {!isLight ? (
+        <div className="absolute h-24 w-24 rounded-full bg-orange-500/25 blur-2xl transition-all duration-700 animate-pulse" />
+      ) : null}
 
       <style>{`
         @keyframes gocBarTop {
@@ -71,7 +67,10 @@ function GocAnimatedLogoSpinner({
         viewBox="0 0 31 28.5"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className="relative z-10 h-16 w-16 sm:h-20 sm:w-20 drop-shadow-[0_0_15px_rgba(255,106,26,0.6)]"
+        className={cn(
+          "relative z-10 h-16 w-16 sm:h-20 sm:w-20",
+          !isLight && "drop-shadow-[0_0_15px_rgba(255,106,26,0.6)]",
+        )}
       >
         <defs>
           <linearGradient

@@ -38,8 +38,8 @@ export function getBrandSubmissionsStyles(isDark: boolean) {
     isDark ? "bg-white/5" : "bg-[#f5f5f5]",
   );
   const pill = cn(
-    "group flex-1 gap-1.5 items-center px-3 py-1.5 h-9 rounded-lg border-0 shadow-none whitespace-nowrap disabled:opacity-100",
-    "text-[13px] font-medium",
+    "group flex-1 gap-1.5 items-center px-3 py-1.5 h-10 rounded-lg border-0 shadow-none whitespace-nowrap disabled:opacity-100",
+    "text-base font-medium",
     "hover:scale-100 active:scale-100 hover:bg-transparent",
     "data-[state=active]:scale-100 data-[state=active]:shadow-none data-[state=active]:ring-0 data-[state=active]:border-0 data-[state=active]:font-medium",
     isDark
@@ -47,7 +47,7 @@ export function getBrandSubmissionsStyles(isDark: boolean) {
       : "text-[#404040] hover:text-[#0a0a0a] data-[state=active]:bg-[#0a0a0a] data-[state=active]:text-white",
   );
   const pillCount = cn(
-    "inline-flex items-center gap-1 px-0 py-0 h-auto rounded-none border-0 bg-transparent shadow-none text-[13px] font-normal tabular-nums hover:bg-transparent",
+    "inline-flex items-center gap-1 px-0 py-0 h-auto rounded-none border-0 bg-transparent shadow-none text-base font-normal tabular-nums hover:bg-transparent",
     isDark
       ? "text-slate-400 group-data-[state=active]:text-[#0a0a0a]/60"
       : "text-[#737373] group-data-[state=active]:text-white/70",

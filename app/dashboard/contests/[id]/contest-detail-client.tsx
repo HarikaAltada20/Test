@@ -16616,7 +16616,7 @@ export default function ContestDetailClient({
               type="button"
               onClick={() => setActiveTab(item.id)}
               className={cn(
-                "-mb-px whitespace-nowrap border-b-2 px-0.5 py-3 text-sm transition-colors inline-flex items-center gap-2",
+                "-mb-px whitespace-nowrap border-b-2 px-0.5 py-3 text-base transition-colors inline-flex items-center gap-2",
                 active
                   ? isDark
                     ? "border-white font-semibold text-white"
@@ -16630,7 +16630,7 @@ export default function ContestDetailClient({
               {typeof item.count === "number" && (
                 <span
                   className={cn(
-                    "rounded-full px-2 py-1 text-[11px] font-semibold leading-none tabular-nums",
+                    "rounded-full px-2.5 py-1 text-[13px] font-semibold leading-none tabular-nums",
                     active
                       ? isDark
                         ? "bg-white text-[#0a0a0a]"
@@ -22181,6 +22181,24 @@ export default function ContestDetailClient({
                       tot.totalExpectedReward + tot.totalBonusExpected;
                     const cardClass = sx.statTile;
                     const labelClass = sx.statLabel;
+                    const details = currentContest?.contest_based_details as
+                      | {
+                          cpm_contest?: { flat_fee_bonus?: number | null };
+                          leaderboard_contest?: {
+                            flat_fee_bonus?: number | null;
+                          };
+                        }
+                      | null
+                      | undefined;
+                    const hasFlatFeeBonus =
+                      (Number(details?.cpm_contest?.flat_fee_bonus) || 0) > 0 ||
+                      (Number(details?.leaderboard_contest?.flat_fee_bonus) ||
+                        0) > 0;
+                    const hasBonus =
+                      hasFlatFeeBonus ||
+                      overviewFlatFeeSlices.length > 0 ||
+                      showMostVerifiedViewsBonusColumns ||
+                      showMostVerifiedReelsCreatorColumn;
                     const cards = [
                       {
                         label: "Expected Reward",
@@ -22192,16 +22210,20 @@ export default function ContestDetailClient({
                         value: tot.totalRewardGranted,
                         green: true,
                       },
-                      {
-                        label: "Expected Bonus",
-                        value: tot.totalBonusExpected,
-                        green: false,
-                      },
-                      {
-                        label: "Bonus Granted",
-                        value: tot.totalBonusGranted,
-                        green: true,
-                      },
+                      ...(hasBonus
+                        ? [
+                            {
+                              label: "Expected Bonus",
+                              value: tot.totalBonusExpected,
+                              green: false,
+                            },
+                            {
+                              label: "Bonus Granted",
+                              value: tot.totalBonusGranted,
+                              green: true,
+                            },
+                          ]
+                        : []),
                       {
                         label: "Total Expected",
                         value: expectedTotal,
@@ -22209,7 +22231,12 @@ export default function ContestDetailClient({
                       },
                     ];
                     return (
-                      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+                      <div
+                        className={cn(
+                          "mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3",
+                          hasBonus ? "xl:grid-cols-5" : "xl:grid-cols-3",
+                        )}
+                      >
                         {cards.map((card) => (
                           <div key={card.label} className={cardClass}>
                             <p className={labelClass}>{card.label}</p>
@@ -22223,25 +22250,109 @@ export default function ContestDetailClient({
                   })()}
 
                 <div className={cn(sx.card, "mb-3 flex flex-col gap-3.5 p-4")}>
-                {/* Status filters — Twitter text/image uses the compact row near the table only */}
-                {!isTwitterTextImageContest && (
-                  <TwitterContestSubmissionStatusTabs
-                    fit
-                    activeStatusTab={activeStatusTab}
-                    onValueChange={(value) => {
-                      if (isHydratingSubmissions) return;
-                      setActiveStatusTab(value as any);
-                    }}
-                    isDark={isDark}
-                    counts={liveSubmissionStatusCounts}
-                    loadedCounts={loadedSubmissionStatusCounts}
-                    isLoading={isHydratingSubmissions}
-                  />
+                {isTwitterTextImageContest && (
+                  <>
+                    <div
+                      className="flex w-full flex-wrap gap-2"
+                      role="tablist"
+                      aria-label="Submission eligibility"
+                    >
+                      {(
+                        [
+                          {
+                            value: "all" as const,
+                            label: "All",
+                            icon: Users,
+                            count: currentSubmissions.filter(
+                              (s) => (s as any).is_twitter_tweet === true,
+                            ).length,
+                          },
+                          {
+                            value: "eligible" as const,
+                            label: "Eligible",
+                            icon: CheckCircle2,
+                            count: currentSubmissions.filter(
+                              (s) =>
+                                (s as any).is_twitter_tweet === true &&
+                                twitterSubmissionIsCampaignEligible(s),
+                            ).length,
+                          },
+                          {
+                            value: "not_eligible" as const,
+                            label: "Not Eligible",
+                            icon: XCircle,
+                            count: currentSubmissions.filter(
+                              (s) =>
+                                (s as any).is_twitter_tweet === true &&
+                                !twitterSubmissionIsCampaignEligible(s),
+                            ).length,
+                          },
+                        ] as const
+                      ).map((tab) => {
+                        const active = activeEligibilityTab === tab.value;
+                        const Icon = tab.icon;
+                        return (
+                          <button
+                            key={tab.value}
+                            type="button"
+                            role="tab"
+                            aria-selected={active}
+                            onClick={() => setActiveEligibilityTab(tab.value)}
+                            className={cn(
+                              "flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[10px] border px-3 text-[13px] whitespace-nowrap",
+                              active
+                                ? isDark
+                                  ? "border-white bg-white font-semibold text-[#0a0a0a]"
+                                  : "border-[#0a0a0a] bg-[#0a0a0a] font-semibold text-white"
+                                : isDark
+                                  ? "border-white/10 bg-[#111113] font-medium text-slate-300 hover:bg-white/5"
+                                  : "border-[#e5e5e5] bg-white font-medium text-[#404040] hover:bg-[#fafafa]",
+                            )}
+                          >
+                            <Icon className="h-3.5 w-3.5 shrink-0" />
+                            <span>
+                              {tab.label} ({tab.count})
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <TwitterContestSubmissionStatusTabs
+                      className="w-full"
+                      activeStatusTab={activeStatusTab}
+                      onValueChange={(value) => {
+                        if (isHydratingSubmissions) return;
+                        setActiveStatusTab(value as any);
+                        setCurrentPage(1);
+                        setCreatorWisePage(1);
+                      }}
+                      isDark={isDark}
+                      counts={liveSubmissionStatusCounts}
+                      loadedCounts={loadedSubmissionStatusCounts}
+                      isLoading={isHydratingSubmissions}
+                    />
+                  </>
                 )}
 
-                {/* Platform filter (multi-platform video contests) */}
-                {overviewVideoPlatforms.length >= 2 && (
-                  <ContestDetailPlatformTabs
+                  {/* Status filters */}
+                  {!isTwitterTextImageContest && (
+                    <TwitterContestSubmissionStatusTabs
+                      fit
+                      activeStatusTab={activeStatusTab}
+                      onValueChange={(value) => {
+                        if (isHydratingSubmissions) return;
+                        setActiveStatusTab(value as any);
+                      }}
+                      isDark={isDark}
+                      counts={liveSubmissionStatusCounts}
+                      loadedCounts={loadedSubmissionStatusCounts}
+                      isLoading={isHydratingSubmissions}
+                    />
+                  )}
+
+                  {/* Platform filter (multi-platform video contests) */}
+                  {overviewVideoPlatforms.length >= 2 && (
+                    <ContestDetailPlatformTabs
                       platforms={overviewVideoPlatforms}
                       active={submissionsPlatformTab}
                       onChange={setSubmissionsPlatformTab}
@@ -22251,276 +22362,237 @@ export default function ContestDetailClient({
                       counts={submissionsPlatformTabCounts}
                       disabled={false} /* browse unlocked during refresh */
                     />
-                )}
-
-                {/* Eligibility Filter Tabs - Only for Twitter campaigns */}
-                {(currentContest?.platform?.toLowerCase() === "twitter" ||
-                  currentContest?.platform?.toLowerCase() === "x") &&
-                  currentContest?.contest_format === "text_image" && (
-                    <div>
-                      <div className="py-2">
-                        <Tabs
-                          value={activeEligibilityTab}
-                          onValueChange={(value) =>
-                            setActiveEligibilityTab(value as any)
-                          }
-                          className="w-full"
-                        >
-                          <TabsList className={sx.pillList}>
-                            <TabsTrigger value="all" className={cn(sx.pill)}>
-                              <div className="flex items-center gap-1">
-                                <Users className="h-3.5 w-3.5 mr-1" />
-                                <span className="text-[13px] font-medium">
-                                  All
-                                </span>
-                              </div>
-                              <Badge
-                                variant="secondary"
-                                className={sx.pillCount}
-                              >
-                                {
-                                  currentSubmissions.filter(
-                                    (s) => (s as any).is_twitter_tweet === true,
-                                  ).length
-                                }
-                              </Badge>
-                            </TabsTrigger>
-                            <TabsTrigger
-                              value="eligible"
-                              className={cn(sx.pill)}
-                            >
-                              <div className="flex items-center gap-1">
-                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                                <span className="text-[13px] font-medium">
-                                  Eligible
-                                </span>
-                              </div>
-                              <Badge
-                                variant="secondary"
-                                className={sx.pillCount}
-                              >
-                                {
-                                  currentSubmissions.filter(
-                                    (s) =>
-                                      (s as any).is_twitter_tweet === true &&
-                                      twitterSubmissionIsCampaignEligible(s),
-                                  ).length
-                                }
-                              </Badge>
-                            </TabsTrigger>
-                            <TabsTrigger
-                              value="not_eligible"
-                              className={cn(sx.pill)}
-                            >
-                              <div className="flex items-center gap-1">
-                                <XCircle className="h-3.5 w-3.5 mr-1" />
-                                <span className="text-[13px] font-medium">
-                                  Not Eligible
-                                </span>
-                              </div>
-                              <Badge
-                                variant="secondary"
-                                className={sx.pillCount}
-                              >
-                                {
-                                  currentSubmissions.filter(
-                                    (s) =>
-                                      (s as any).is_twitter_tweet === true &&
-                                      !twitterSubmissionIsCampaignEligible(s),
-                                  ).length
-                                }
-                              </Badge>
-                            </TabsTrigger>
-                          </TabsList>
-                        </Tabs>
-                      </div>
-                    </div>
                   )}
 
-                      <div className="flex flex-wrap items-center gap-2.5">
-                        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5">
-                          <div className="flex flex-col gap-2 text-md sm:flex-row sm:items-center sm:gap-3">
-                            <Select
-                              value={sortOption}
-                              onValueChange={(v) => {
-                                if (isHydratingSubmissions) return;
-                                setSortOption(v as SortOption);
-                              }}
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5">
+                      <div className="flex flex-col gap-2 text-md sm:flex-row sm:items-center sm:gap-3">
+                        <Select
+                          value={sortOption}
+                          onValueChange={(v) => {
+                            if (isHydratingSubmissions) return;
+                            setSortOption(v as SortOption);
+                          }}
+                          disabled={isHydratingSubmissions}
+                        >
+                          <SelectTrigger
+                            className={cn(
+                              sx.control,
+                              "h-11 w-full justify-start gap-2 px-3.5 text-sm sm:w-[320px] [&>svg]:ml-auto [&>svg]:shrink-0",
+                            )}
+                          >
+                            <img
+                              src="/images/contest-details/filters/sort.svg"
+                              alt=""
+                              className="shrink-0"
+                            />
+                            <span className="shrink-0 text-sm font-medium">
+                              Sort:
+                            </span>
+                            <SelectValue placeholder="Sort submissions" />
+                          </SelectTrigger>
+                          <SelectContent isDark={isDark}>
+                            {isTwitterTextImageContest ? (
+                              <>
+                                <SelectItem isDark={isDark} value="points_desc">
+                                  Points • High → Low
+                                </SelectItem>
+                                <SelectItem isDark={isDark} value="points_asc">
+                                  Points • Low → High
+                                </SelectItem>
+                                <SelectItem
+                                  isDark={isDark}
+                                  value="impressions_desc"
+                                >
+                                  Impressions • High → Low
+                                </SelectItem>
+                                <SelectItem
+                                  isDark={isDark}
+                                  value="impressions_asc"
+                                >
+                                  Impressions • Low → High
+                                </SelectItem>
+                                <SelectItem isDark={isDark} value="time_desc">
+                                  Submitted • Newest First
+                                </SelectItem>
+                                <SelectItem isDark={isDark} value="time_asc">
+                                  Submitted • Oldest First
+                                </SelectItem>
+                                <SelectItem
+                                  isDark={isDark}
+                                  value="submissions_desc"
+                                >
+                                  Submissions • High → Low
+                                </SelectItem>
+                                <SelectItem
+                                  isDark={isDark}
+                                  value="submissions_asc"
+                                >
+                                  Submissions • Low → High
+                                </SelectItem>
+                              </>
+                            ) : (
+                              <>
+                                <SelectItem isDark={isDark} value="views_desc">
+                                  Views • High → Low
+                                </SelectItem>
+                                <SelectItem value="views_asc" isDark={isDark}>
+                                  Views • Low → High
+                                </SelectItem>
+                                <SelectItem value="time_desc" isDark={isDark}>
+                                  Submitted • Newest First
+                                </SelectItem>
+                                <SelectItem value="time_asc" isDark={isDark}>
+                                  Submitted • Oldest First
+                                </SelectItem>
+                                <SelectItem
+                                  isDark={isDark}
+                                  value="submissions_desc"
+                                >
+                                  Submissions • High → Low
+                                </SelectItem>
+                                <SelectItem
+                                  isDark={isDark}
+                                  value="submissions_asc"
+                                >
+                                  Submissions • Low → High
+                                </SelectItem>
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {/* Multi-select Quality Score filter (video campaigns only) */}
+                      {showNormalViewQualityScoreColumn && (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
                               disabled={isHydratingSubmissions}
+                              className={cn(
+                                sx.control,
+                                "h-11 w-full justify-start gap-2 px-3.5 text-left text-sm font-medium sm:w-[260px]",
+                              )}
                             >
-                              <SelectTrigger
+                              <img
+                                src="/images/contest-details/filters/star.svg"
+                                alt=""
+                                className="shrink-0"
+                              />
+                              <span className="truncate text-sm font-medium">
+                                {submissionQualityScoreFilters.length === 0
+                                  ? "Quality: All scores"
+                                  : `Quality: ${submissionQualityScoreFilterButtonLabel}`}
+                              </span>
+                              <img
+                                src="/images/contest-details/filters/chevron-down.svg"
+                                alt=""
+                                className="ml-auto shrink-0"
+                              />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            className={cn(
+                              "w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800",
+                              isDark ? "bg-[#0f172a]" : "bg-white",
+                            )}
+                            align="start"
+                          >
+                            <div className="flex flex-col gap-1">
+                              <div
                                 className={cn(
-                                  sx.control,
-                                  "h-11 w-full justify-start gap-2 px-3.5 text-sm sm:w-[320px] [&>svg]:ml-auto [&>svg]:shrink-0",
+                                  "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                                  isDark
+                                    ? "hover:bg-slate-800"
+                                    : "hover:bg-slate-50",
                                 )}
+                                onClick={() =>
+                                  setSubmissionQualityScoreFilters([])
+                                }
                               >
-                                <img
-                                  src="/images/contest-details/filters/sort.svg"
-                                  alt=""
-                                  className="shrink-0"
-                                />
-                                <span className="shrink-0 text-sm font-medium">
-                                  Sort:
-                                </span>
-                                <SelectValue placeholder="Sort submissions" />
-                              </SelectTrigger>
-                              <SelectContent isDark={isDark}>
-                                {isTwitterTextImageContest ? (
-                                  <>
-                                    <SelectItem
-                                      isDark={isDark}
-                                      value="points_desc"
-                                    >
-                                      Points • High → Low
-                                    </SelectItem>
-                                    <SelectItem
-                                      isDark={isDark}
-                                      value="points_asc"
-                                    >
-                                      Points • Low → High
-                                    </SelectItem>
-                                    <SelectItem
-                                      isDark={isDark}
-                                      value="impressions_desc"
-                                    >
-                                      Impressions • High → Low
-                                    </SelectItem>
-                                    <SelectItem
-                                      isDark={isDark}
-                                      value="impressions_asc"
-                                    >
-                                      Impressions • Low → High
-                                    </SelectItem>
-                                    <SelectItem
-                                      isDark={isDark}
-                                      value="time_desc"
-                                    >
-                                      Submitted • Newest First
-                                    </SelectItem>
-                                    <SelectItem
-                                      isDark={isDark}
-                                      value="time_asc"
-                                    >
-                                      Submitted • Oldest First
-                                    </SelectItem>
-                                    <SelectItem
-                                      isDark={isDark}
-                                      value="submissions_desc"
-                                    >
-                                      Submissions • High → Low
-                                    </SelectItem>
-                                    <SelectItem
-                                      isDark={isDark}
-                                      value="submissions_asc"
-                                    >
-                                      Submissions • Low → High
-                                    </SelectItem>
-                                  </>
-                                ) : (
-                                  <>
-                                    <SelectItem
-                                      isDark={isDark}
-                                      value="views_desc"
-                                    >
-                                      Views • High → Low
-                                    </SelectItem>
-                                    <SelectItem
-                                      value="views_asc"
-                                      isDark={isDark}
-                                    >
-                                      Views • Low → High
-                                    </SelectItem>
-                                    <SelectItem
-                                      value="time_desc"
-                                      isDark={isDark}
-                                    >
-                                      Submitted • Newest First
-                                    </SelectItem>
-                                    <SelectItem
-                                      value="time_asc"
-                                      isDark={isDark}
-                                    >
-                                      Submitted • Oldest First
-                                    </SelectItem>
-                                    <SelectItem
-                                      isDark={isDark}
-                                      value="submissions_desc"
-                                    >
-                                      Submissions • High → Low
-                                    </SelectItem>
-                                    <SelectItem
-                                      isDark={isDark}
-                                      value="submissions_asc"
-                                    >
-                                      Submissions • Low → High
-                                    </SelectItem>
-                                  </>
-                                )}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          {/* Multi-select Quality Score filter (video campaigns only) */}
-                          {showNormalViewQualityScoreColumn && (
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={isHydratingSubmissions}
+                                <div
                                   className={cn(
-                                    sx.control,
-                                    "h-11 w-full justify-start gap-2 px-3.5 text-left text-sm font-medium sm:w-[260px]",
+                                    "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                                    submissionQualityScoreFilters.length === 0
+                                      ? "bg-[#0a0a0a] border-[#0a0a0a]"
+                                      : isDark
+                                        ? "border-slate-700 bg-slate-900"
+                                        : "border-slate-300 bg-white",
                                   )}
                                 >
-                                  <img
-                                    src="/images/contest-details/filters/star.svg"
-                                    alt=""
-                                    className="shrink-0"
-                                  />
-                                  <span className="truncate text-sm font-medium">
-                                    {submissionQualityScoreFilters.length === 0
-                                      ? "Quality: All scores"
-                                      : `Quality: ${submissionQualityScoreFilterButtonLabel}`}
-                                  </span>
-                                  <img
-                                    src="/images/contest-details/filters/chevron-down.svg"
-                                    alt=""
-                                    className="ml-auto shrink-0"
-                                  />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent
-                                className={cn(
-                                  "w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800",
-                                  isDark ? "bg-[#0f172a]" : "bg-white",
-                                )}
-                                align="start"
-                              >
-                                <div className="flex flex-col gap-1">
+                                  {submissionQualityScoreFilters.length ===
+                                    0 && (
+                                    <CheckCheck
+                                      className="w-3 h-3 text-white"
+                                      strokeWidth={3}
+                                    />
+                                  )}
+                                </div>
+                                <span
+                                  className={cn(
+                                    "text-[13px] font-medium",
+                                    isDark
+                                      ? "text-slate-300"
+                                      : "text-slate-600",
+                                  )}
+                                >
+                                  All Quality Scores
+                                </span>
+                              </div>
+
+                              {(
+                                [
+                                  { value: 5, label: "Score 5/5" },
+                                  { value: 4, label: "Score 4/5" },
+                                  { value: 3, label: "Score 3/5" },
+                                  { value: 2, label: "Score 2/5" },
+                                  { value: 1, label: "Score 1/5" },
+                                  {
+                                    value: "unscored",
+                                    label: "No Quality Score",
+                                  },
+                                ] as Array<{
+                                  value: QualityScore | "unscored";
+                                  label: string;
+                                }>
+                              ).map((opt) => {
+                                const checked =
+                                  submissionQualityScoreFilters.includes(
+                                    opt.value,
+                                  );
+                                return (
                                   <div
+                                    key={String(opt.value)}
                                     className={cn(
                                       "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
                                       isDark
                                         ? "hover:bg-slate-800"
                                         : "hover:bg-slate-50",
                                     )}
-                                    onClick={() =>
-                                      setSubmissionQualityScoreFilters([])
-                                    }
+                                    onClick={() => {
+                                      setSubmissionQualityScoreFilters(
+                                        (prev) =>
+                                          prev.includes(opt.value)
+                                            ? prev.filter(
+                                                (v) => v !== opt.value,
+                                              )
+                                            : [...prev, opt.value],
+                                      );
+                                    }}
                                   >
+                                    {" "}
                                     <div
                                       className={cn(
                                         "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                                        submissionQualityScoreFilters.length ===
-                                          0
+                                        checked
                                           ? "bg-[#0a0a0a] border-[#0a0a0a]"
                                           : isDark
                                             ? "border-slate-700 bg-slate-900"
                                             : "border-slate-300 bg-white",
                                       )}
                                     >
-                                      {submissionQualityScoreFilters.length ===
-                                        0 && (
+                                      {checked && (
                                         <CheckCheck
                                           className="w-3 h-3 text-white"
                                           strokeWidth={3}
@@ -22535,307 +22607,230 @@ export default function ContestDetailClient({
                                           : "text-slate-600",
                                       )}
                                     >
-                                      All Quality Scores
+                                      {opt.label}
                                     </span>
                                   </div>
-
-                                  {(
-                                    [
-                                      { value: 5, label: "Score 5/5" },
-                                      { value: 4, label: "Score 4/5" },
-                                      { value: 3, label: "Score 3/5" },
-                                      { value: 2, label: "Score 2/5" },
-                                      { value: 1, label: "Score 1/5" },
-                                      {
-                                        value: "unscored",
-                                        label: "No Quality Score",
-                                      },
-                                    ] as Array<{
-                                      value: QualityScore | "unscored";
-                                      label: string;
-                                    }>
-                                  ).map((opt) => {
-                                    const checked =
-                                      submissionQualityScoreFilters.includes(
-                                        opt.value,
-                                      );
-                                    return (
-                                      <div
-                                        key={String(opt.value)}
-                                        className={cn(
-                                          "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                                          isDark
-                                            ? "hover:bg-slate-800"
-                                            : "hover:bg-slate-50",
-                                        )}
-                                        onClick={() => {
-                                          setSubmissionQualityScoreFilters(
-                                            (prev) =>
-                                              prev.includes(opt.value)
-                                                ? prev.filter(
-                                                    (v) => v !== opt.value,
-                                                  )
-                                                : [...prev, opt.value],
-                                          );
-                                        }}
-                                      >
-                                        {" "}
-                                        <div
-                                          className={cn(
-                                            "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                                            checked
-                                              ? "bg-[#0a0a0a] border-[#0a0a0a]"
-                                              : isDark
-                                                ? "border-slate-700 bg-slate-900"
-                                                : "border-slate-300 bg-white",
-                                          )}
-                                        >
-                                          {checked && (
-                                            <CheckCheck
-                                              className="w-3 h-3 text-white"
-                                              strokeWidth={3}
-                                            />
-                                          )}
-                                        </div>
-                                        <span
-                                          className={cn(
-                                            "text-[13px] font-medium",
-                                            isDark
-                                              ? "text-slate-300"
-                                              : "text-slate-600",
-                                          )}
-                                        >
-                                          {opt.label}
-                                        </span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </PopoverContent>
-                            </Popover>
-                          )}
-                          {/* YouTube only: customize table columns */}
-                          {submissionsTablePlatform.includes("youtube") && (
-                            <Dialog
-                              open={ytColumnsModalOpen}
-                              onOpenChange={setYtColumnsModalOpen}
+                                );
+                              })}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                      {/* YouTube only: customize table columns */}
+                      {submissionsTablePlatform.includes("youtube") && (
+                        <Dialog
+                          open={ytColumnsModalOpen}
+                          onOpenChange={setYtColumnsModalOpen}
+                        >
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={anyYtRefreshInProgress}
+                              className={cn(
+                                sx.outlineBtn,
+                                anyYtRefreshInProgress &&
+                                  "opacity-60 cursor-not-allowed",
+                              )}
+                              title={
+                                anyYtRefreshInProgress
+                                  ? "Unavailable while metrics are refreshing"
+                                  : "Choose which columns to show in the table"
+                              }
                             >
-                              <DialogTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={anyYtRefreshInProgress}
-                                  className={cn(
-                                    sx.outlineBtn,
-                                    anyYtRefreshInProgress &&
-                                      "opacity-60 cursor-not-allowed",
-                                  )}
-                                  title={
-                                    anyYtRefreshInProgress
-                                      ? "Unavailable while metrics are refreshing"
-                                      : "Choose which columns to show in the table"
-                                  }
-                                >
-                                  <Columns2 className="h-4 w-4" />
-                                  Modify headers
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent
+                              <Columns2 className="h-4 w-4" />
+                              Modify headers
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent
+                            className={cn(
+                              "max-w-[95vw] w-full sm:max-w-md max-h-[90vh] flex flex-col rounded-3xl border border-[#e5e5e5] dark:border-white/10 bg-white dark:bg-[#111113] p-6 sm:p-7 shadow-2xl",
+                              isDark ? "text-white" : "text-[#0a0a0a]",
+                            )}
+                          >
+                            <div className="flex items-start gap-4 mb-2">
+                              <div
                                 className={cn(
-                                  "max-w-[95vw] w-full sm:max-w-md max-h-[90vh] flex flex-col rounded-3xl border border-[#e5e5e5] dark:border-white/10 bg-white dark:bg-[#111113] p-6 sm:p-7 shadow-2xl",
-                                  isDark ? "text-white" : "text-[#0a0a0a]",
+                                  "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl",
+                                  isDark
+                                    ? "bg-white/10 text-white"
+                                    : "bg-[#f3f3f5] text-[#1a1a1a]",
                                 )}
                               >
-                                <div className="flex items-start gap-4 mb-2">
-                                  <div
-                                    className={cn(
-                                      "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl",
-                                      isDark
-                                        ? "bg-white/10 text-white"
-                                        : "bg-[#f3f3f5] text-[#1a1a1a]",
-                                    )}
-                                  >
-                                    <Columns2 className="h-6 w-6" />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <DialogTitle className="text-xl font-bold tracking-tight text-[#0a0a0a] dark:text-white">
-                                      Customize columns
-                                    </DialogTitle>
-                                    <DialogDescription className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                                      Show or hide columns in the submissions
-                                      table.
-                                    </DialogDescription>
-                                  </div>
-                                </div>
-                                <div className="grid gap-2.5 py-3 overflow-y-auto min-h-0 max-h-[min(60vh,320px)] sm:max-h-[min(65vh,400px)] pr-1 -mr-1">
-                                  {ytColumnsAvailableInModal.map((col) => (
-                                    <div
-                                      key={col.id}
-                                      className={cn(
-                                        "flex items-center space-x-3 rounded-xl border p-2.5 transition-colors",
-                                        isDark
-                                          ? "border-white/5 bg-white/5 hover:bg-white/10"
-                                          : "border-slate-100 bg-[#f8f9fa] hover:bg-slate-100/70",
-                                      )}
-                                    >
-                                      <Checkbox
-                                        id={`yt-col-${col.id}`}
-                                        className="border-[#d4d4d8] data-[state=checked]:border-[#1a1a1a] data-[state=checked]:bg-[#1a1a1a] data-[state=checked]:text-white dark:border-white/20 dark:data-[state=checked]:border-white dark:data-[state=checked]:bg-white dark:data-[state=checked]:text-[#1a1a1a]"
-                                        checked={ytVisibleColumns.includes(
-                                          col.id,
-                                        )}
-                                        onCheckedChange={(checked) => {
-                                          if (checked) {
-                                            setYtVisibleColumnsAndPersist([
-                                              ...ytVisibleColumns,
-                                              col.id,
-                                            ]);
-                                          } else {
-                                            setYtVisibleColumnsAndPersist(
-                                              ytVisibleColumns.filter(
-                                                (c) => c !== col.id,
-                                              ),
-                                            );
-                                          }
-                                        }}
-                                      />
-                                      <Label
-                                        htmlFor={`yt-col-${col.id}`}
-                                        className={cn(
-                                          "text-sm font-medium cursor-pointer flex-1",
-                                          isDark
-                                            ? "text-slate-200"
-                                            : "text-slate-800",
-                                        )}
-                                      >
-                                        {col.label}
-                                      </Label>
-                                    </div>
-                                  ))}
-                                </div>
-                                <DialogFooter className="flex-shrink-0 border-t border-slate-100 dark:border-white/10 pt-4 mt-2 gap-2 sm:gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setYtVisibleColumnsAndPersist([
-                                        ...ytAvailableColumnIds,
-                                      ]);
-                                    }}
-                                    className="h-11 rounded-xl border-slate-200 dark:border-white/10 font-semibold px-4 hover:bg-slate-50 dark:hover:bg-white/5"
-                                  >
-                                    Show all
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    onClick={() => setYtColumnsModalOpen(false)}
-                                    className="h-11 rounded-xl bg-black dark:bg-white text-white dark:text-black hover:bg-slate-900 dark:hover:bg-slate-100 font-semibold px-6 shadow-xs"
-                                  >
-                                    Done
-                                  </Button>
-                                </DialogFooter>
-                              </DialogContent>
-                            </Dialog>
-                          )}
-                          {supportsInlineContentEmbed &&
-                            isSubmissionTableView && (
-                              <div className="flex items-center gap-2 h-12">
-                                <Checkbox
-                                  id="detailed-view-inline"
-                                  checked={detailedViewEnabled}
-                                  disabled={isHydratingSubmissions}
-                                  className="disabled:opacity-100"
-                                  onCheckedChange={(checked) => {
-                                    if (isHydratingSubmissions) return;
-                                    const enabled = checked === true;
-                                    setDetailedViewEnabled(enabled);
-                                    try {
-                                      if (enabled) {
-                                        localStorage.setItem(
-                                          DETAILED_VIEW_STORAGE_KEY,
-                                          "true",
-                                        );
-                                      } else {
-                                        localStorage.removeItem(
-                                          DETAILED_VIEW_STORAGE_KEY,
-                                        );
-                                      }
-                                    } catch (_) {}
-                                  }}
-                                />
-                                <Label
-                                  htmlFor="detailed-view-inline"
+                                <Columns2 className="h-6 w-6" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <DialogTitle className="text-xl font-bold tracking-tight text-[#0a0a0a] dark:text-white">
+                                  Customize columns
+                                </DialogTitle>
+                                <DialogDescription className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                                  Show or hide columns in the submissions table.
+                                </DialogDescription>
+                              </div>
+                            </div>
+                            <div className="grid gap-2.5 py-3 overflow-y-auto min-h-0 max-h-[min(60vh,320px)] sm:max-h-[min(65vh,400px)] pr-1 -mr-1">
+                              {ytColumnsAvailableInModal.map((col) => (
+                                <div
+                                  key={col.id}
                                   className={cn(
-                                    "text-sm font-medium cursor-pointer whitespace-nowrap",
-                                    isHydratingSubmissions &&
-                                      "pointer-events-none",
-                                    isDark ? "text-white" : "text-slate-700",
+                                    "flex items-center space-x-3 rounded-xl border p-2.5 transition-colors",
+                                    isDark
+                                      ? "border-white/5 bg-white/5 hover:bg-white/10"
+                                      : "border-slate-100 bg-[#f8f9fa] hover:bg-slate-100/70",
                                   )}
                                 >
-                                  Detailed View
-                                </Label>
-                              </div>
-                            )}
-                          {supportsInlineContentEmbed &&
-                            isSubmissionTableView && (
+                                  <Checkbox
+                                    id={`yt-col-${col.id}`}
+                                    className="border-[#d4d4d8] data-[state=checked]:border-[#1a1a1a] data-[state=checked]:bg-[#1a1a1a] data-[state=checked]:text-white dark:border-white/20 dark:data-[state=checked]:border-white dark:data-[state=checked]:bg-white dark:data-[state=checked]:text-[#1a1a1a]"
+                                    checked={ytVisibleColumns.includes(col.id)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setYtVisibleColumnsAndPersist([
+                                          ...ytVisibleColumns,
+                                          col.id,
+                                        ]);
+                                      } else {
+                                        setYtVisibleColumnsAndPersist(
+                                          ytVisibleColumns.filter(
+                                            (c) => c !== col.id,
+                                          ),
+                                        );
+                                      }
+                                    }}
+                                  />
+                                  <Label
+                                    htmlFor={`yt-col-${col.id}`}
+                                    className={cn(
+                                      "text-sm font-medium cursor-pointer flex-1",
+                                      isDark
+                                        ? "text-slate-200"
+                                        : "text-slate-800",
+                                    )}
+                                  >
+                                    {col.label}
+                                  </Label>
+                                </div>
+                              ))}
+                            </div>
+                            <DialogFooter className="flex-shrink-0 border-t border-slate-100 dark:border-white/10 pt-4 mt-2 gap-2 sm:gap-2">
                               <Button
-                                size="sm"
-                                disabled={!canOpenReviewMode}
-                                onClick={() => openReviewMode()}
-                                className={sx.primaryBtn}
-                                title="Watch submissions one at a time and approve, reject or select them"
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setYtVisibleColumnsAndPersist([
+                                    ...ytAvailableColumnIds,
+                                  ]);
+                                }}
+                                className="h-11 rounded-xl border-slate-200 dark:border-white/10 font-semibold px-4 hover:bg-slate-50 dark:hover:bg-white/5"
                               >
-                                <PlaySquare className="h-4 w-4 shrink-0" />
-                                Review Mode
+                                Show all
                               </Button>
-                            )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={
-                              isHydratingSubmissions ||
-                              (isSubmissionTableView
-                                ? sortedSubmissions.length === 0
-                                : (filteredCreatorGroups?.length ?? 0) === 0) ||
-                              anyYtRefreshInProgress
-                            }
-                            className={cn(
-                              sx.outlineBtn,
-                              "h-9 shrink-0",
-                              anyYtRefreshInProgress &&
-                                "opacity-60 cursor-not-allowed",
-                            )}
-                            title={
-                              viewMode === "creator-wise"
-                                ? "Download creator-wise leaderboard report"
-                                : "Download submissions leaderboard report"
-                            }
-                            onClick={() => {
+                              <Button
+                                type="button"
+                                onClick={() => setYtColumnsModalOpen(false)}
+                                className="h-11 rounded-xl bg-black dark:bg-white text-white dark:text-black hover:bg-slate-900 dark:hover:bg-slate-100 font-semibold px-6 shadow-xs"
+                              >
+                                Done
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      )}
+                      {supportsInlineContentEmbed && isSubmissionTableView && (
+                        <div className="flex items-center gap-2 h-12">
+                          <Checkbox
+                            id="detailed-view-inline"
+                            checked={detailedViewEnabled}
+                            disabled={isHydratingSubmissions}
+                            className="disabled:opacity-100"
+                            onCheckedChange={(checked) => {
                               if (isHydratingSubmissions) return;
-                              setExportDialogOpen(true);
+                              const enabled = checked === true;
+                              setDetailedViewEnabled(enabled);
+                              try {
+                                if (enabled) {
+                                  localStorage.setItem(
+                                    DETAILED_VIEW_STORAGE_KEY,
+                                    "true",
+                                  );
+                                } else {
+                                  localStorage.removeItem(
+                                    DETAILED_VIEW_STORAGE_KEY,
+                                  );
+                                }
+                              } catch (_) {}
                             }}
-                          >
-                            {isHydratingSubmissions ? (
-                              <Loader2 className="h-4 w-4 animate-spin shrink-0 text-[#737373]" />
-                            ) : (
-                              <img
-                                src="/images/contest-details/filters/download.svg"
-                                alt=""
-                                className="shrink-0"
-                              />
+                          />
+                          <Label
+                            htmlFor="detailed-view-inline"
+                            className={cn(
+                              "text-sm font-medium cursor-pointer whitespace-nowrap",
+                              isHydratingSubmissions && "pointer-events-none",
+                              isDark ? "text-white" : "text-slate-700",
                             )}
-                            Download report
-                          </Button>
+                          >
+                            Detailed View
+                          </Label>
                         </div>
-                      </div>
+                      )}
+                      {supportsInlineContentEmbed && isSubmissionTableView && (
+                        <Button
+                          size="sm"
+                          disabled={!canOpenReviewMode}
+                          onClick={() => openReviewMode()}
+                          className={sx.primaryBtn}
+                          title="Watch submissions one at a time and approve, reject or select them"
+                        >
+                          <PlaySquare className="h-4 w-4 shrink-0" />
+                          Review Mode
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          isHydratingSubmissions ||
+                          (isSubmissionTableView
+                            ? sortedSubmissions.length === 0
+                            : (filteredCreatorGroups?.length ?? 0) === 0) ||
+                          anyYtRefreshInProgress
+                        }
+                        className={cn(
+                          sx.outlineBtn,
+                          "h-9 shrink-0",
+                          anyYtRefreshInProgress &&
+                            "opacity-60 cursor-not-allowed",
+                        )}
+                        title={
+                          viewMode === "creator-wise"
+                            ? "Download creator-wise leaderboard report"
+                            : "Download submissions leaderboard report"
+                        }
+                        onClick={() => {
+                          if (isHydratingSubmissions) return;
+                          setExportDialogOpen(true);
+                        }}
+                      >
+                        {isHydratingSubmissions ? (
+                          <Loader2 className="h-4 w-4 animate-spin shrink-0 text-[#737373]" />
+                        ) : (
+                          <img
+                            src="/images/contest-details/filters/download.svg"
+                            alt=""
+                            className="shrink-0"
+                          />
+                        )}
+                        Download report
+                      </Button>
+                    </div>
+                  </div>
                 </div>
                 <div className={cn("min-w-0 max-w-full", sx.card)}>
                   <CardContent className="p-0">
                     <div className="w-full min-w-0">
                       <div
                         className={cn(
-                          "flex w-full min-w-0 items-center border-b px-3 py-3 sm:px-4",
-                          isDark ? "border-white/10" : "border-[#e5e5e5]",
+                          "flex w-full min-w-0 items-center px-3 py-3 sm:px-4",
                         )}
                       >
                         <Select
@@ -22950,19 +22945,6 @@ export default function ContestDetailClient({
                             submissionsReportScopedSubmissions
                           }
                           reportContest={submissionsReportExportContest}
-                        />
-                      )}
-                      {isTwitterTextImageContest && isSubmissionTableView && (
-                        <TwitterContestSubmissionStatusTabs
-                          activeStatusTab={activeStatusTab}
-                          onValueChange={(v) => {
-                            setActiveStatusTab(v as any);
-                            setCurrentPage(1);
-                          }}
-                          isDark={isDark}
-                          counts={liveSubmissionStatusCounts}
-                          loadedCounts={loadedSubmissionStatusCounts}
-                          isLoading={isHydratingSubmissions}
                         />
                       )}
                       {isSubmissionTableView &&
@@ -26799,20 +26781,6 @@ export default function ContestDetailClient({
                       {viewMode === "creator-wise" &&
                         groupSubmissionsByCreator && (
                           <>
-                            {/* Creator-wise: compact status filters (Twitter); large top row hidden for Twitter */}
-                            {isTwitterTextImageContest && (
-                              <TwitterContestSubmissionStatusTabs
-                                activeStatusTab={activeStatusTab}
-                                onValueChange={(v) => {
-                                  setActiveStatusTab(v as any);
-                                  setCreatorWisePage(1);
-                                }}
-                                isDark={isDark}
-                                counts={liveSubmissionStatusCounts}
-                                loadedCounts={loadedSubmissionStatusCounts}
-                                isLoading={isHydratingSubmissions}
-                              />
-                            )}
                             {showCreatorWiseSelectionUi &&
                               creatorWiseSelectedCreators.size > 0 && (
                                 <div className={cn("mx-4 mb-4", sx.bulkBar)}>
@@ -29508,10 +29476,10 @@ export default function ContestDetailClient({
                                                     size="sm"
                                                     variant="outline"
                                                     className={cn(
-                                                      "border",
+                                                      "border shadow-none",
                                                       isDark
-                                                        ? "bg-[#170337] border-gray-600 text-white"
-                                                        : "border-gray-400 bg-white text-gray-800",
+                                                        ? "border-white/15 bg-white/5 text-white hover:bg-white/10"
+                                                        : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
                                                     )}
                                                     onClick={() =>
                                                       setSelectedCreatorForModal(
@@ -30294,7 +30262,7 @@ export default function ContestDetailClient({
                             )}
                           >
                             {isHydratingSubmissions ? (
-                              <Loader2 className="h-4 w-4 mr-2 shrink-0 animate-spin text-[#7F39EC]" />
+                              <Loader2 className="h-4 w-4 mr-2 shrink-0 animate-spin" />
                             ) : (
                               <Star
                                 className={cn(
@@ -30334,7 +30302,9 @@ export default function ContestDetailClient({
                                 className={cn(
                                   "w-4 h-4 rounded border flex items-center justify-center transition-all",
                                   analyticsQualityScoreFilters.length === 0
-                                    ? "bg-[#4211a1] border-[#4211a1]"
+                                    ? isDark
+                                      ? "bg-white border-white text-[#0a0a0a]"
+                                      : "bg-[#0a0a0a] border-[#0a0a0a]"
                                     : isDark
                                       ? "border-slate-700 bg-slate-900"
                                       : "border-slate-300 bg-white",
@@ -30342,7 +30312,10 @@ export default function ContestDetailClient({
                               >
                                 {analyticsQualityScoreFilters.length === 0 && (
                                   <CheckCheck
-                                    className="w-3 h-3 text-white"
+                                    className={cn(
+                                      "w-3 h-3",
+                                      isDark ? "text-[#0a0a0a]" : "text-white",
+                                    )}
                                     strokeWidth={3}
                                   />
                                 )}
@@ -30398,7 +30371,9 @@ export default function ContestDetailClient({
                                     className={cn(
                                       "w-4 h-4 rounded border flex items-center justify-center transition-all",
                                       checked
-                                        ? "bg-[#4211a1] border-[#4211a1]"
+                                        ? isDark
+                                      ? "bg-white border-white text-[#0a0a0a]"
+                                      : "bg-[#0a0a0a] border-[#0a0a0a]"
                                         : isDark
                                           ? "border-slate-700 bg-slate-900"
                                           : "border-slate-300 bg-white",
@@ -30406,7 +30381,10 @@ export default function ContestDetailClient({
                                   >
                                     {checked && (
                                       <CheckCheck
-                                        className="w-3 h-3 text-white"
+                                        className={cn(
+                                          "w-3 h-3",
+                                          isDark ? "text-[#0a0a0a]" : "text-white",
+                                        )}
                                         strokeWidth={3}
                                       />
                                     )}
@@ -30436,7 +30414,10 @@ export default function ContestDetailClient({
                         analyticsQualityFilteredSubmissions.length === 0
                       }
                       className={cn(
-                        "gap-2 shrink-0 rounded-[10px] border-0 bg-gradient-to-r from-[#7F39EC] to-[#6366F1] text-white shadow-none hover:from-[#7F39EC] hover:to-[#6366F1] hover:text-white hover:opacity-90 disabled:opacity-60",
+                        "h-9 gap-2 shrink-0 rounded-[10px] border-0 shadow-none disabled:opacity-60",
+                        isDark
+                          ? "bg-white text-[#0a0a0a] hover:bg-white/90 hover:text-[#0a0a0a]"
+                          : "bg-[#0a0a0a] text-white hover:bg-[#0a0a0a]/90 hover:text-white",
                       )}
                       onClick={() => {
                         if (isHydratingSubmissions) return;
@@ -30465,7 +30446,7 @@ export default function ContestDetailClient({
                   </div>
                 </div>
                 {/* Analytics Filter Tabs */}
-                <div className="mt-4">
+                <div className="mt-4 min-w-0">
                   <Tabs
                     value={activeAnalyticsTab}
                     onValueChange={(value) => {
@@ -30476,13 +30457,13 @@ export default function ContestDetailClient({
                   >
                     <TabsList
                       data-brand-pill-tabs
-                      className="flex flex-wrap gap-2 w-full h-auto p-0 bg-transparent"
+                      className="flex w-full min-w-0 flex-nowrap gap-2 h-auto p-0 bg-transparent"
                     >
                       <TabsTrigger
                         value="all"
                         disabled={isHydratingSubmissions}
                         className={cn(
-                          "flex-1 text-sm gap-1.5 disabled:opacity-100 whitespace-nowrap",
+                          "min-w-0 flex-1 px-2 text-[13px] scale-100 gap-1.5 disabled:opacity-100 whitespace-nowrap data-[state=active]:scale-100 data-[state=active]:shadow-none data-[state=active]:ring-0",
                           isDark
                             ? "text-white border border-gray-500"
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
@@ -30500,7 +30481,7 @@ export default function ContestDetailClient({
                         value="not_rejected"
                         disabled={isHydratingSubmissions}
                         className={cn(
-                          "flex-1 text-sm gap-1.5 disabled:opacity-100 whitespace-nowrap",
+                          "min-w-0 flex-1 px-2 text-[13px] scale-100 gap-1.5 disabled:opacity-100 whitespace-nowrap data-[state=active]:scale-100 data-[state=active]:shadow-none data-[state=active]:ring-0",
                           isDark
                             ? "text-white border border-gray-500"
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
@@ -30522,7 +30503,7 @@ export default function ContestDetailClient({
                         value="verified"
                         disabled={isHydratingSubmissions}
                         className={cn(
-                          "flex-1 text-sm gap-1.5 disabled:opacity-100 whitespace-nowrap",
+                          "min-w-0 flex-1 px-2 text-[13px] scale-100 gap-1.5 disabled:opacity-100 whitespace-nowrap data-[state=active]:scale-100 data-[state=active]:shadow-none data-[state=active]:ring-0",
                           isDark
                             ? "text-white border border-gray-500"
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
@@ -30544,7 +30525,7 @@ export default function ContestDetailClient({
                         value="paid"
                         disabled={isHydratingSubmissions}
                         className={cn(
-                          "flex-1 text-sm gap-1.5 disabled:opacity-100 whitespace-nowrap",
+                          "min-w-0 flex-1 px-2 text-[13px] scale-100 gap-1.5 disabled:opacity-100 whitespace-nowrap data-[state=active]:scale-100 data-[state=active]:shadow-none data-[state=active]:ring-0",
                           isDark
                             ? "text-white border border-gray-500"
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
@@ -30566,7 +30547,7 @@ export default function ContestDetailClient({
                         value="pending"
                         disabled={isHydratingSubmissions}
                         className={cn(
-                          "flex-1 text-sm gap-1.5 disabled:opacity-100 whitespace-nowrap",
+                          "min-w-0 flex-1 px-2 text-[13px] scale-100 gap-1.5 disabled:opacity-100 whitespace-nowrap data-[state=active]:scale-100 data-[state=active]:shadow-none data-[state=active]:ring-0",
                           isDark
                             ? "text-white border border-gray-500"
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
@@ -30588,7 +30569,7 @@ export default function ContestDetailClient({
                         value="rejected"
                         disabled={isHydratingSubmissions}
                         className={cn(
-                          "flex-1 text-sm gap-1.5 disabled:opacity-100 whitespace-nowrap",
+                          "min-w-0 flex-1 px-2 text-[13px] scale-100 gap-1.5 disabled:opacity-100 whitespace-nowrap data-[state=active]:scale-100 data-[state=active]:shadow-none data-[state=active]:ring-0",
                           isDark
                             ? "text-white border border-gray-500"
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
@@ -30610,7 +30591,7 @@ export default function ContestDetailClient({
                         value="verified_or_paid"
                         disabled={isHydratingSubmissions}
                         className={cn(
-                          "flex-1 text-sm gap-1.5 disabled:opacity-100 whitespace-nowrap",
+                          "min-w-0 flex-1 px-2 text-[13px] scale-100 gap-1.5 disabled:opacity-100 whitespace-nowrap data-[state=active]:scale-100 data-[state=active]:shadow-none data-[state=active]:ring-0",
                           isDark
                             ? "text-white border border-gray-500"
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
@@ -33883,7 +33864,9 @@ export default function ContestDetailClient({
             <div
               className={cn(
                 "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
-                isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#1a1a1a]",
+                isDark
+                  ? "bg-white/10 text-white"
+                  : "bg-[#f3f3f5] text-[#1a1a1a]",
               )}
             >
               <RotateCcw className="h-4 w-4" />
@@ -34240,7 +34223,9 @@ export default function ContestDetailClient({
             <div
               className={cn(
                 "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
-                isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#1a1a1a]",
+                isDark
+                  ? "bg-white/10 text-white"
+                  : "bg-[#f3f3f5] text-[#1a1a1a]",
               )}
             >
               <RotateCcw className="h-4 w-4" />

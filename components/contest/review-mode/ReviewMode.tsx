@@ -247,8 +247,10 @@ function NeighbourCard({
         {label}
       </span>
       <span className={cn(
-        "relative block h-[132px] w-[92px] overflow-hidden rounded-xl transition-all shadow-xs group-hover:ring-2 group-hover:ring-violet-500",
-        isDark ? "bg-slate-800 ring-1 ring-white/10" : "bg-white border border-slate-200/90 shadow-sm",
+        "relative block h-[132px] w-[92px] overflow-hidden rounded-xl transition-all shadow-xs group-hover:ring-2",
+        isDark
+          ? "bg-[#161616] ring-1 ring-white/10 group-hover:ring-white/40"
+          : "bg-white border border-slate-200/90 shadow-sm group-hover:ring-slate-300",
       )}>
         {thumb && !thumbFailed ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -261,7 +263,7 @@ function NeighbourCard({
             decoding="async"
           />
         ) : (
-          <span className={cn("block h-full w-full", isDark ? "bg-gradient-to-br from-slate-800 to-slate-900" : "bg-gradient-to-br from-slate-100 to-slate-200")} />
+          <span className={cn("block h-full w-full", isDark ? "bg-[#161616]" : "bg-gradient-to-br from-slate-100 to-slate-200")} />
         )}
       </span>
       {handle && (
@@ -586,14 +588,27 @@ function ReviewSession({
   const progress = queue.length > 0 ? (position / queue.length) * 100 : 0;
   const settingsControls = (
     <>
-      <label className={cn("flex items-center gap-2 text-xs font-semibold cursor-pointer", isDark ? "text-slate-200" : "text-slate-700")}>
-        <Switch checked={autoAdvance} onCheckedChange={onAutoAdvanceChange} />
+      <label className={cn("flex items-center gap-2 text-xs font-semibold cursor-pointer", isDark ? "text-neutral-200" : "text-slate-700")}>
+        <Switch
+          checked={autoAdvance}
+          onCheckedChange={onAutoAdvanceChange}
+          className={
+            isDark
+              ? "data-[state=checked]:bg-white data-[state=unchecked]:bg-white/15 [&>span]:data-[state=checked]:bg-[#0a0a0a]"
+              : undefined
+          }
+        />
         Auto-advance
       </label>
-      <label className={cn("flex items-center gap-2 text-xs font-semibold cursor-pointer", isDark ? "text-slate-200" : "text-slate-700")}>
+      <label className={cn("flex items-center gap-2 text-xs font-semibold cursor-pointer", isDark ? "text-neutral-200" : "text-slate-700")}>
         <Switch
           checked={unreviewedOnly}
           onCheckedChange={(v) => onUnreviewedOnlyChange(v, activeId)}
+          className={
+            isDark
+              ? "data-[state=checked]:bg-white data-[state=unchecked]:bg-white/15 [&>span]:data-[state=checked]:bg-[#0a0a0a]"
+              : undefined
+          }
         />
         Unreviewed only
       </label>
@@ -605,7 +620,7 @@ function ReviewSession({
           className={cn(
             "h-8 border",
             isDark
-              ? "border-slate-700 bg-transparent text-slate-200 hover:bg-white/10 hover:text-white"
+              ? "border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white"
               : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs font-medium",
           )}
         >
@@ -619,7 +634,7 @@ function ReviewSession({
         className={cn(
           "h-8 gap-1 px-2 tabular-nums font-semibold transition-colors",
           isDark
-            ? cn("hover:bg-white/10 hover:text-white", playbackRate !== 1 ? "text-violet-300" : "text-slate-200")
+            ? cn("hover:bg-white/10 hover:text-white", playbackRate !== 1 ? "text-white" : "text-neutral-200")
             : cn("hover:bg-slate-100 hover:text-slate-900", playbackRate !== 1 ? "text-violet-600 font-bold" : "text-slate-700"),
         )}
         title="Playback speed (< / >). Applies to YouTube and direct videos."
@@ -640,7 +655,7 @@ function ReviewSession({
     <div
       className={cn(
         "fixed inset-0 z-[45] flex flex-col",
-        isDark ? "bg-slate-950 text-white" : "bg-[#f8f9fa] text-slate-900",
+        isDark ? "bg-[#0a0a0a] text-white" : "bg-[#f8f9fa] text-slate-900",
       )}
       role="region"
       aria-label="Review Mode"
@@ -649,7 +664,7 @@ function ReviewSession({
         className={cn(
           "relative border-b",
           isDark
-            ? "border-slate-800 bg-slate-950 text-white"
+            ? "border-white/10 bg-[#0a0a0a] text-white"
             : "border-slate-200 bg-white text-slate-900",
         )}
       >
@@ -662,7 +677,7 @@ function ReviewSession({
             className={cn(
               "shrink-0 gap-1.5 px-3 rounded-lg border text-sm font-semibold transition-colors",
               isDark
-                ? "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white"
+                ? "border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
                 : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
             )}
           >
@@ -729,13 +744,13 @@ function ReviewSession({
             <div
               className={cn(
                 "hidden h-2 w-28 overflow-hidden rounded-full sm:block",
-                isDark ? "bg-slate-800" : "bg-slate-200",
+                isDark ? "bg-white/15" : "bg-slate-200",
               )}
             >
               <div
                 className={cn(
                   "h-full rounded-full transition-[width] duration-300",
-                  isDark ? "bg-violet-500" : "bg-violet-600",
+                  isDark ? "bg-white" : "bg-[#0a0a0a]",
                 )}
                 style={{ width: `${progress}%` }}
               />
@@ -753,7 +768,7 @@ function ReviewSession({
             className={cn(
               "h-8 w-8 shrink-0 lg:hidden transition-colors",
               isDark
-                ? cn("hover:bg-white/10 hover:text-white", settingsOpen || autoAdvance || unreviewedOnly || playbackRate !== 1 ? "text-violet-300" : "text-slate-200")
+                ? cn("hover:bg-white/10 hover:text-white", settingsOpen || autoAdvance || unreviewedOnly || playbackRate !== 1 ? "text-white" : "text-neutral-200")
                 : cn("hover:bg-slate-100 hover:text-slate-900", settingsOpen || autoAdvance || unreviewedOnly || playbackRate !== 1 ? "text-violet-600" : "text-slate-700"),
             )}
           >
@@ -777,7 +792,7 @@ function ReviewSession({
         {settingsOpen && (
           <div className={cn(
             "flex flex-wrap items-center gap-x-4 gap-y-2 border-t px-3 py-2 lg:hidden",
-            isDark ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-slate-50",
+            isDark ? "border-white/10 bg-[#0a0a0a]" : "border-slate-200 bg-slate-50",
           )}>
             {settingsControls}
             <div className="flex items-center gap-3 text-xs font-semibold tabular-nums md:hidden">
@@ -796,7 +811,7 @@ function ReviewSession({
 
         <div className="h-0.5 bg-slate-800 sm:hidden">
           <div
-            className="h-full bg-violet-500 transition-[width] duration-300"
+            className="h-full bg-white transition-[width] duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -820,7 +835,7 @@ function ReviewSession({
         <div
           className={cn(
             "relative min-h-0 flex-1",
-            isDark ? "bg-neutral-950" : "bg-[#f4f4f5]",
+            isDark ? "bg-black" : "bg-[#f4f4f5]",
           )}
           onMouseMove={pokeOverlays}
         >
@@ -851,8 +866,8 @@ function ReviewSession({
               );
             })}
             <div className="flex h-full w-full snap-start snap-always items-center justify-center p-6">
-              <div className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900 p-6 text-center text-white shadow-2xl">
-                <PartyPopper className="mx-auto mb-3 h-10 w-10 text-violet-400" />
+              <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#161616] p-6 text-center text-white shadow-2xl">
+                <PartyPopper className="mx-auto mb-3 h-10 w-10 text-white" />
                 <h2 className="text-lg font-bold">You reached the end</h2>
                 <p className="mt-1 text-sm text-slate-400">
                   Reviewed {visitedRef.current.size} of {queue.length} clips
@@ -866,8 +881,8 @@ function ReviewSession({
                     <p className="text-xl font-bold text-red-400">{stats.rejected}</p>
                     <p className="text-xs text-slate-400">rejected</p>
                   </div>
-                  <div className="rounded-xl bg-violet-500/10 p-3">
-                    <p className="text-xl font-bold text-violet-300">{selectedCount}</p>
+                  <div className="rounded-xl bg-white/10 p-3">
+                    <p className="text-xl font-bold text-white">{selectedCount}</p>
                     <p className="text-xs text-slate-400">selected</p>
                   </div>
                 </div>
@@ -879,7 +894,12 @@ function ReviewSession({
                   >
                     Back to start
                   </Button>
-                  <Button onClick={onExit}>Exit Review Mode</Button>
+                  <Button
+                    className="bg-white text-[#0a0a0a] hover:bg-white/90"
+                    onClick={onExit}
+                  >
+                    Exit Review Mode
+                  </Button>
                 </div>
               </div>
             </div>
@@ -912,7 +932,7 @@ function ReviewSession({
                     : "border-slate-200 bg-white/95 text-slate-700",
                 )}
               >
-                <Keyboard className={cn("h-4 w-4", isDark ? "text-violet-300" : "text-slate-500")} />
+                <Keyboard className={cn("h-4 w-4", isDark ? "text-white" : "text-slate-500")} />
                 <span>↑ ↓ browse</span>
                 <span>Space play</span>
                 <span>M mute</span>
@@ -925,7 +945,7 @@ function ReviewSession({
                   className={cn(
                     "ml-1 rounded-full px-2 py-0.5 font-bold transition-colors",
                     isDark
-                      ? "text-violet-300 hover:bg-white/10"
+                      ? "text-white hover:bg-white/10"
                       : "text-slate-900 hover:bg-slate-100",
                   )}
                 >

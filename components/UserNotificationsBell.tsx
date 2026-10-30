@@ -185,8 +185,8 @@ function NotificationLead({
           className={cn(
             "text-sm font-semibold",
             isDark
-              ? "bg-purple-500/20 text-purple-200"
-              : "bg-purple-100 text-purple-700",
+              ? "bg-white/10 text-white"
+              : "bg-[#f5f5f5] text-[#0a0a0a]",
           )}
         >
           {avatarInitial(displayName)}
@@ -219,8 +219,8 @@ function NotificationIcon({
     },
     campaign_application_received: {
       icon: Inbox,
-      light: "bg-purple-100 text-purple-600",
-      dark: "bg-purple-500/20 text-purple-300",
+      light: "bg-[#f5f5f5] text-[#404040]",
+      dark: "bg-white/10 text-white",
     },
     campaign_access_granted: {
       icon: KeyRound,
@@ -240,13 +240,9 @@ function NotificationIcon({
     <div
       className={cn(
         "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-        accessStyle ? (isDark ? accessStyle.dark : accessStyle.light) : isSupport
-          ? isDark
-            ? "bg-purple-500/20 text-purple-300"
-            : "bg-purple-100 text-purple-600"
-          : isDark
-            ? "bg-slate-800 text-slate-300"
-            : "bg-slate-100 text-slate-600",
+        accessStyle ? (isDark ? accessStyle.dark : accessStyle.light) : isDark
+          ? "bg-white/10 text-white"
+          : "bg-[#f5f5f5] text-[#404040]",
       )}
     >
       <Icon className="h-5 w-5" aria-hidden="true" />
@@ -279,14 +275,14 @@ function NotificationCard({
       onClick={onClick}
       className={cn(
         "group w-full rounded-xl border p-4 text-left transition-all",
-        "hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/40",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a]/15",
         isDark
-          ? "border-slate-700/80 bg-slate-900/40 hover:border-purple-500/30 hover:bg-slate-800/60"
-          : "border-slate-200 bg-white hover:border-purple-200 hover:bg-purple-50/30",
+          ? "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/5"
+          : "border-[#e5e5e5] bg-white hover:border-[#d4d4d4] hover:bg-[#fafafa]",
         !n.is_read &&
           (isDark
-            ? "border-purple-500/40 bg-purple-500/5"
-            : "border-purple-200 bg-purple-50/50"),
+            ? "border-white/40 bg-white/5"
+            : "border-[#0a0a0a]"),
       )}
     >
       <div className="flex gap-3">
@@ -301,7 +297,10 @@ function NotificationCard({
                 </span>
                 {!n.is_read && (
                   <span
-                    className="h-2 w-2 shrink-0 rounded-full bg-purple-600"
+                    className={cn(
+                      "h-2 w-2 shrink-0 rounded-full",
+                      isDark ? "bg-white" : "bg-[#0a0a0a]",
+                    )}
                     aria-label="Unread"
                   />
                 )}
@@ -351,8 +350,8 @@ function NotificationCard({
               className={cn(
                 "mt-2.5 flex items-center gap-0.5 text-xs font-medium transition-colors",
                 isDark
-                  ? "text-purple-400 group-hover:text-purple-300"
-                  : "text-purple-600 group-hover:text-purple-700",
+                  ? "text-white group-hover:text-neutral-300"
+                  : "text-[#0a0a0a] group-hover:text-[#404040]",
               )}
             >
               {n.notification_type === "campaign_application_received"
@@ -366,8 +365,8 @@ function NotificationCard({
               className={cn(
                 "mt-2.5 flex items-center gap-0.5 text-xs font-medium transition-colors",
                 isDark
-                  ? "text-purple-400 group-hover:text-purple-300"
-                  : "text-purple-600 group-hover:text-purple-700",
+                  ? "text-white group-hover:text-neutral-300"
+                  : "text-[#0a0a0a] group-hover:text-[#404040]",
               )}
             >
               {isAdminSupportMessage ? "Open in support" : "View conversation"}
@@ -517,7 +516,7 @@ export function UserNotificationsBell({
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-purple-600 px-1 text-[10px] font-bold text-white">
+          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#0a0a0a] px-1 text-[10px] font-bold text-white">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
@@ -554,8 +553,8 @@ export function UserNotificationsBell({
                   className={cn(
                     "h-7 px-2 text-xs",
                     isDark
-                      ? "text-purple-300 hover:bg-white/10"
-                      : "text-purple-700 hover:bg-purple-50",
+                      ? "text-white hover:bg-white/10"
+                      : "text-[#404040] hover:bg-[#f5f5f5]",
                   )}
                   disabled={markingAll}
                   onClick={markAllRead}
@@ -628,7 +627,7 @@ export function UserNotificationsBell({
                               })
                             }
                             className={cn(
-                              "ml-4 flex items-center gap-1 rounded-sm text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/40",
+                              "ml-4 flex items-center gap-1 rounded-sm text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a]/15",
                               isDark ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-700",
                             )}
                           >
@@ -639,7 +638,7 @@ export function UserNotificationsBell({
                             )}
                             {expanded ? "Hide" : "Show"} {more.length} more about this campaign
                             {more.some((m) => !m.is_read) && !expanded && (
-                              <span className="ml-1 h-1.5 w-1.5 rounded-full bg-purple-600" aria-label="Unread" />
+                              <span className={cn("ml-1 h-1.5 w-1.5 rounded-full", isDark ? "bg-white" : "bg-[#0a0a0a]")} aria-label="Unread" />
                             )}
                           </button>
                           {expanded && (

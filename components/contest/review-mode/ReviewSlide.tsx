@@ -114,7 +114,7 @@ export const ReviewSlide = forwardRef<ReviewPlayerHandle, ReviewSlideProps>(
                 {getPlatformIcon(submission.platform, "sm")}
               </span>
               {selected && (
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-500 text-white shadow-lg ring-2 ring-white/70">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-[#0a0a0a] shadow-lg ring-2 ring-white/70">
                   <Check className="h-4 w-4" />
                 </span>
               )}

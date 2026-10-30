@@ -144,10 +144,16 @@
   padding: 0 !important;
   gap: 8px !important;
   height: auto !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  width: 100% !important;
+  min-width: 0;
 }
 [data-brand-analytics] [data-brand-pill-tabs] button {
-  flex: 1 1 auto;
+  flex: 1 1 0% !important;
+  min-width: 0;
   height: 36px;
+  padding: 0 8px !important;
   border-radius: 10px;
   border: 1px solid var(--ba-border);
   background: var(--ba-card);
@@ -155,6 +161,9 @@
   font-size: 13px;
   font-weight: 500;
   box-shadow: none;
+  transform: none !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition:
     background-color 0.15s ease,
     color 0.15s ease,
@@ -169,6 +178,7 @@
   color: var(--ba-accent-fg);
   font-weight: 600;
   box-shadow: none;
+  transform: none !important;
 }
 [data-brand-analytics] [data-brand-pill-tabs] button[data-state="inactive"] {
   background: var(--ba-card);

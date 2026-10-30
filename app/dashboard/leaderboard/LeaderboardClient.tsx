@@ -1164,7 +1164,7 @@ export default function LeaderboardClient({
               {(currentPage === 1 ? leaders.slice(3) : leaders).length > 0 && (
                 <div
                   className={cn(
-                    "overflow-x-auto rounded-2xl border",
+                    "overflow-hidden rounded-2xl border",
                     isDark
                       ? "border-white/10 bg-[#161616]"
                       : "border-[#e8e8ec] bg-white",
@@ -1182,7 +1182,7 @@ export default function LeaderboardClient({
                         <div
                           key={entry.user_id}
                           className={cn(
-                            "flex items-center gap-4 border-b px-4 py-4 last:border-b-0 sm:px-6",
+                            "flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-4 last:border-b-0 sm:px-6",
                             isDark ? "border-white/10" : "border-[#f1f1f3]",
                           )}
                         >
@@ -1201,7 +1201,7 @@ export default function LeaderboardClient({
                             isDark={isDark}
                             className="h-12 w-12 text-base"
                           />
-                          <div className="min-w-0 w-36 shrink-0 sm:w-52">
+                          <div className="min-w-0 flex-1 basis-36">
                             <div
                               className={cn(
                                 "truncate text-base font-semibold",
@@ -1221,12 +1221,12 @@ export default function LeaderboardClient({
                               </div>
                             )}
                           </div>
-                          <div className="ml-auto flex min-w-0 items-center justify-end gap-2">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
                             {pills.map((pill) => (
                               <span
                                 key={pill}
                                 className={cn(
-                                  "inline-flex h-8 items-center whitespace-nowrap rounded-full px-3.5 text-sm font-medium leading-none",
+                                  "inline-flex h-8 max-w-full items-center rounded-full px-3.5 text-sm font-medium leading-none",
                                   isDark
                                     ? "bg-white/10 text-white"
                                     : "bg-[#f2f2f4] text-[#2f2f33]",

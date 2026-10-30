@@ -2478,7 +2478,12 @@ export default function ProfilePage({
                   </span>
                 )}
               </div>
-              <div className={cn("mt-4 grid grid-cols-5 border-b", isDark ? "border-white/10" : "border-neutral-200")}>
+              <div
+                className={cn(
+                  "mt-4 flex gap-4 overflow-x-auto border-b [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+                  isDark ? "border-white/10" : "border-neutral-200",
+                )}
+              >
                 {(
                   [
                     ["about", "About you"],
@@ -2493,7 +2498,7 @@ export default function ProfilePage({
                     type="button"
                     onClick={() => setProfileStep(id)}
                     className={cn(
-                      "-mb-px border-b-2 pb-3 text-left text-md font-medium",
+                      "-mb-px shrink-0 whitespace-nowrap border-b-2 px-1 pb-3 text-left text-base font-medium",
                       profileStep === id
                         ? isDark
                           ? "border-[#ff7a1a] text-white"

@@ -51,7 +51,7 @@ export function VideoPlatformMultiSelect({
   if (variant === "cards") {
     return (
       <div className="space-y-2">
-        <div className="grid w-full grid-cols-3 gap-3">
+        <div className="flex w-full flex-wrap gap-2">
             {VIDEO_CONTEST_PLATFORMS.map((platform) => {
               const selected = value.includes(platform);
               return (
@@ -61,7 +61,7 @@ export function VideoPlatformMultiSelect({
                   disabled={disabled}
                   onClick={() => toggle(platform, !selected)}
                   className={cn(
-                    "flex w-full items-center justify-between gap-2 rounded-xl border px-4 py-3 text-base font-medium",
+                    "flex min-w-[9.5rem] flex-1 items-center justify-between gap-2 rounded-xl border px-4 py-3 text-base font-medium",
                     selected
                       ? isDark
                         ? "border-white bg-white/10 text-white"

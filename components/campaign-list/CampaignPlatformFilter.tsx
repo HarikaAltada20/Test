@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +31,9 @@ type CampaignPlatformFilterProps = {
   isDark?: boolean;
   className?: string;
   triggerClassName?: string;
+  caption?: string;
+  leading?: ReactNode;
+  trailing?: ReactNode;
 };
 
 export function CampaignPlatformFilter({
@@ -39,6 +43,9 @@ export function CampaignPlatformFilter({
   isDark = false,
   className,
   triggerClassName,
+  caption,
+  leading,
+  trailing,
 }: CampaignPlatformFilterProps) {
   const available = CAMPAIGN_FILTER_PLATFORMS.filter((platform) =>
     platforms.includes(platform),
@@ -61,19 +68,40 @@ export function CampaignPlatformFilter({
           type="button"
           variant="outline"
           className={cn(
-            "w-full min-w-0 h-12 justify-between rounded-xl font-medium",
+            caption
+              ? "!h-auto w-full min-w-0 justify-between gap-2 !whitespace-normal rounded-xl px-3.5 py-2.5 font-medium shadow-none"
+              : "h-12 w-full min-w-0 justify-between rounded-xl font-medium",
             isDark
               ? "border-white/10 bg-[#161616] text-white hover:bg-white/10"
-              : "border-[#e6e6e8] bg-white text-[#1a1a1a] hover:bg-[#e6e6e8]",
+              : caption
+                ? "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-white"
+                : "border-[#e6e6e8] bg-white text-[#1a1a1a] hover:bg-[#e6e6e8]",
             triggerClassName,
           )}
         >
-          <span className="truncate">
-            {isAllCampaignPlatformFilter(normalized)
-              ? platformLabel
-              : `${matchMode === "single" ? "Single" : "Multiple"}: ${platformLabel}`}
-          </span>
-          <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+          {caption ? (
+            <>
+              {leading}
+              <span className="flex min-w-0 flex-1 flex-col items-start text-left">
+                <span className={cn("text-[10px] font-medium", isDark ? "text-neutral-400" : "text-[#a3a3a3]")}>
+                  {caption}
+                </span>
+                <span className="w-full truncate text-[13px] font-medium">
+                  {platformLabel}
+                </span>
+              </span>
+              {trailing}
+            </>
+          ) : (
+            <>
+              <span className="truncate">
+                {isAllCampaignPlatformFilter(normalized)
+                  ? platformLabel
+                  : `${matchMode === "single" ? "Single" : "Multiple"}: ${platformLabel}`}
+              </span>
+              <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+            </>
+          )}
         </Button>
       </PopoverTrigger>
       <PopoverContent
