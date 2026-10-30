@@ -299,7 +299,7 @@ export function DashboardSidebar({
       label: "Workspace",
       items: [
         {
-          name: "Overview",
+          name: "Dashboard",
           href: "/dashboard",
           icon: LayoutDashboard,
           description: "Overview & analytics",

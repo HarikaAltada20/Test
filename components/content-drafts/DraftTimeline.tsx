@@ -26,8 +26,8 @@ import {
 } from "@/lib/content-drafts";
 
 const EVENT_ICONS: Record<DraftEventKind, { icon: LucideIcon; tone: string }> = {
-  submitted: { icon: Upload, tone: "text-[#7F39EC] bg-purple-50 dark:bg-[#7F39EC]/20 dark:text-purple-200" },
-  revised: { icon: Upload, tone: "text-[#7F39EC] bg-purple-50 dark:bg-[#7F39EC]/20 dark:text-purple-200" },
+  submitted: { icon: Upload, tone: "text-[#0a0a0a] bg-[#f5f5f5] dark:bg-white/10 dark:text-white" },
+  revised: { icon: Upload, tone: "text-[#0a0a0a] bg-[#f5f5f5] dark:bg-white/10 dark:text-white" },
   approved: { icon: CircleCheck, tone: "text-emerald-700 bg-emerald-50 dark:bg-emerald-500/15 dark:text-emerald-300" },
   revision_requested: { icon: RotateCcw, tone: "text-amber-700 bg-amber-50 dark:bg-amber-500/15 dark:text-amber-300" },
   rejected: { icon: CircleX, tone: "text-red-700 bg-red-50 dark:bg-red-500/15 dark:text-red-300" },
@@ -102,7 +102,7 @@ export function DraftTimeline({ events, canComment, onComment, placeholder = "Wr
                   className={cn(
                     "max-w-[85%] rounded-2xl px-3 py-2 text-sm",
                     e.is_me
-                      ? "rounded-br-sm bg-[#7F39EC] text-white"
+                      ? "rounded-br-sm bg-[#0a0a0a] text-white dark:bg-white dark:text-[#0a0a0a]"
                       : "rounded-bl-sm bg-gray-100 text-gray-900 dark:bg-white/10 dark:text-gray-100",
                   )}
                 >
@@ -112,7 +112,7 @@ export function DraftTimeline({ events, canComment, onComment, placeholder = "Wr
                     </p>
                   )}
                   <p className="whitespace-pre-wrap break-words">{e.body}</p>
-                  <p className={cn("mt-1 text-[11px]", e.is_me ? "text-white/70" : "text-gray-500 dark:text-gray-400")}>
+                  <p className={cn("mt-1 text-[11px]", e.is_me ? "text-white/70 dark:text-[#0a0a0a]/60" : "text-gray-500 dark:text-gray-400")}>
                     <RelativeTime value={e.created_at} />
                   </p>
                 </div>
@@ -146,7 +146,7 @@ export function DraftTimeline({ events, canComment, onComment, placeholder = "Wr
                     href={postLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-1 inline-flex max-w-full items-center gap-1 truncate rounded-sm text-xs font-medium text-[#7F39EC] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:text-purple-300"
+                    className="mt-1 inline-flex max-w-full items-center gap-1 truncate rounded-sm text-xs font-medium text-[#0a0a0a] dark:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a] dark:focus-visible:ring-white dark:text-white"
                   >
                     <Link2 className="h-3 w-3 shrink-0" aria-hidden="true" />
                     <span className="truncate">{postLink}</span>
@@ -182,7 +182,7 @@ export function DraftTimeline({ events, canComment, onComment, placeholder = "Wr
             <span className="text-xs text-gray-400 dark:text-gray-500">
               {body.length > MAX_DRAFT_COMMENT_LENGTH - 200 ? `${body.length}/${MAX_DRAFT_COMMENT_LENGTH}` : ""}
             </span>
-            <Button size="sm" onClick={send} disabled={!trimmed || sending} className="bg-[#7F39EC] hover:bg-[#7F39EC]/90">
+            <Button size="sm" onClick={send} disabled={!trimmed || sending} className="bg-[#0a0a0a] text-white hover:bg-[#171717] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-neutral-200">
               {sending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
               Send
             </Button>

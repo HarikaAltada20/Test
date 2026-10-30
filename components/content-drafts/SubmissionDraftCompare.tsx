@@ -234,7 +234,7 @@ export function DraftCompareDialog({ link, post, onClose, onOpenDraft }: DialogP
               )}
               {onOpenDraft && (
                 <Button
-                  className="bg-[#7F39EC] hover:bg-[#7F39EC]/90"
+                  className="bg-[#0a0a0a] text-white hover:bg-[#171717] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-neutral-200"
                   onClick={() => {
                     onOpenDraft(link.draftId);
                     onClose();

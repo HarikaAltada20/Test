@@ -672,13 +672,13 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
       {/* Unified Filter */}
       <div
         className={cn(
-          "rounded-2xl border p-4 shadow-none",
+          "w-full min-w-0 rounded-2xl border p-4 shadow-none",
           isDark
             ? "border-white/10 bg-white/5 text-white"
             : "border-neutral-200 bg-white text-[#171717]",
         )}
       >
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+        <div className="mb-4 flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <h3
             className={cn(
               "text-base font-semibold tracking-tight",
@@ -687,15 +687,15 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
           >
             Filters
           </h3>
-          <div className="flex flex-wrap items-center gap-2 justify-start md:justify-end">
+          <div className="flex w-full min-w-0 flex-col gap-2 xl:w-auto xl:flex-row xl:flex-wrap xl:items-center xl:justify-end">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
                   size="sm"
                   className={cn(
-                    "flex items-center gap-2 min-w-[160px] justify-between",
-                    "h-10 rounded-full border shadow-none",
+                    "flex w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden",
+                    "h-10 rounded-full border shadow-none xl:w-auto xl:min-w-[160px] xl:max-w-xs",
                     isDark
                       ? "border-white/15 bg-transparent text-white hover:bg-white/10"
                       : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
@@ -706,7 +706,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   twitterAnalytics ? (
                     <>
                       <Video className="w-4 h-4 shrink-0" />
-                      <span className="truncate">
+                      <span className="min-w-0 flex-1 truncate text-left">
                         {[
                           videoYoutube && "YouTube",
                           videoInstagram && "Instagram",
@@ -720,7 +720,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   ) : videoYoutube || videoInstagram || videoTiktok ? (
                     <>
                       <Video className="w-4 h-4 shrink-0" />
-                      <span className="truncate">
+                      <span className="min-w-0 flex-1 truncate text-left">
                         Video
                         <span className="text-muted-foreground font-normal">
                           {" "}
@@ -739,7 +739,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   ) : !isPcSubmissions && twitterAnalytics ? (
                     <>
                       <ImageIcon className="w-4 h-4 shrink-0" />
-                      <span className="truncate">
+                      <span className="min-w-0 flex-1 truncate text-left">
                         Text/Image
                         <span className="text-muted-foreground font-normal">
                           {" "}
@@ -749,7 +749,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                     </>
                   ) : (
                     <>
-                      <span className="truncate text-muted-foreground">
+                      <span className="min-w-0 flex-1 truncate text-left text-muted-foreground">
                         Select platforms
                       </span>
                     </>
@@ -1003,14 +1003,14 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   variant="outline"
                   size="sm"
                   className={cn(
-                    "flex items-center gap-2 min-w-[180px] justify-between",
-                    "h-10 rounded-full border shadow-none",
+                    "flex w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden",
+                    "h-10 rounded-full border shadow-none xl:w-auto xl:min-w-[180px]",
                     isDark
                       ? "border-white/15 bg-transparent text-white hover:bg-white/10"
                       : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
                   )}
                 >
-                  <span className="max-w-[150px] truncate">
+                  <span className="min-w-0 flex-1 truncate text-left">
                     {contestTypeButtonLabel}
                   </span>
                   <ChevronDown className="w-4 h-4 shrink-0 opacity-70" />
@@ -1065,14 +1065,14 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   variant="outline"
                   size="sm"
                   className={cn(
-                    "flex items-center gap-2 min-w-[200px] justify-between",
-                    "h-10 rounded-full border shadow-none",
+                    "flex w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden",
+                    "h-10 rounded-full border shadow-none xl:w-auto xl:min-w-[200px]",
                     isDark
                       ? "border-white/15 bg-transparent text-white hover:bg-white/10"
                       : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
                   )}
                 >
-                  <span className="max-w-[160px] truncate">{campaignButtonLabel}</span>
+                  <span className="min-w-0 flex-1 truncate text-left">{campaignButtonLabel}</span>
                   <ChevronDown className="w-4 h-4 shrink-0 opacity-70" />
                 </Button>
               </DropdownMenuTrigger>
@@ -1151,7 +1151,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
               size="sm"
               onClick={() => setShowTileSettings(!showTileSettings)}
               className={cn(
-                "h-10 rounded-full border px-4 shadow-none",
+                "h-10 w-full min-w-0 rounded-full border px-4 shadow-none xl:w-auto",
                 isDark
                   ? "border-white/15 bg-transparent text-white hover:bg-white/10"
                   : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
@@ -1164,10 +1164,10 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
         </div>
 
         {/* Submissions vs PC Submissions — drives overview tiles + graph */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div
             className={cn(
-              "inline-flex w-fit items-center gap-0.5 rounded-full p-1",
+              "flex w-full min-w-0 items-center gap-0.5 rounded-full p-1 sm:w-fit",
               isDark ? "bg-white/10" : "bg-[#E4E4E4]",
             )}
           >
@@ -1177,7 +1177,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 type="button"
                 onClick={() => setDataSource(tab.id)}
                 className={cn(
-                  "inline-flex h-9 items-center rounded-full px-4 text-sm font-medium leading-none outline-none transition-colors",
+                  "inline-flex h-9 min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-full px-3 text-sm font-medium leading-none outline-none transition-colors sm:flex-none sm:px-4",
                   dataSource === tab.id
                     ? isDark
                       ? "bg-white/15 text-white shadow-sm"
@@ -1196,6 +1196,13 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
             value={dateRange}
             presetLabel={dateRangePresetLabel}
             maxHistoryDays={BRAND_ANALYTICS_MAX_RANGE_DAYS}
+            triggerClassName={cn(
+              "h-10 w-full min-w-0 max-w-none shrink rounded-full px-4 shadow-none",
+              "sm:w-auto sm:min-w-[180px] sm:max-w-[220px] sm:shrink-0",
+              isDark
+                ? "border-white/15 bg-transparent hover:bg-white/10"
+                : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
+            )}
             onChange={(next, label) => {
               setDateRange(next);
               setDateRangePresetLabel(label);
@@ -1206,7 +1213,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
 
         <div
           className={cn(
-            "mt-3 inline-flex max-w-full flex-wrap gap-0.5 rounded-full p-1",
+            "mt-3 flex w-full min-w-0 flex-wrap gap-1 rounded-2xl p-1 xl:inline-flex xl:w-fit xl:max-w-full xl:gap-0.5 xl:rounded-full",
             isDark ? "bg-white/10" : "bg-[#E4E4E4]",
           )}
         >
@@ -1219,7 +1226,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 type="button"
                 onClick={() => setActiveFilter(option.id)}
                 className={cn(
-                  "inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium leading-none outline-none transition-colors",
+                  "inline-flex h-9 max-w-full shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-sm font-medium leading-none outline-none transition-colors",
                   isActive
                     ? isDark
                       ? "bg-white/15 text-white shadow-sm"
@@ -1230,7 +1237,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 )}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0 opacity-80" />
-                {option.label}
+                <span className="truncate">{option.label}</span>
               </button>
             );
           })}
@@ -1381,34 +1388,47 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
       )}
 
       {/* Tabs */}
-      <div
-        className={cn(
-          "flex max-w-full gap-x-6 gap-y-1 overflow-x-auto border-b [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-          isDark ? "border-white/15" : "border-[#d9d9de]",
-        )}
-      >
-        {computedTabs.map((tab) => {
-          const active = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "-mb-px shrink-0 whitespace-nowrap border-b-2 px-0.5 pb-3 text-base outline-none transition-colors focus:outline-none focus-visible:outline-none",
-                active
-                  ? isDark
-                    ? "border-white font-semibold text-white"
-                    : "border-[#1a1a1a] font-semibold text-[#1a1a1a]"
-                  : isDark
-                    ? "border-transparent font-medium text-white"
-                    : "border-transparent font-medium text-[#1a1a1a]",
-              )}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
+      <div className="max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div
+          className={cn(
+            "flex w-max min-w-full gap-x-6 border-b",
+            isDark ? "border-white/15" : "border-[#d9d9de]",
+          )}
+        >
+          {computedTabs.map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "relative shrink-0 whitespace-nowrap px-0.5 pb-3 text-base outline-none focus:outline-none focus-visible:outline-none",
+                  active
+                    ? isDark
+                      ? "font-semibold text-white"
+                      : "font-semibold text-[#1a1a1a]"
+                    : isDark
+                      ? "font-medium text-white"
+                      : "font-medium text-[#1a1a1a]",
+                )}
+              >
+                {tab.label}
+                <span
+                  aria-hidden
+                  className={cn(
+                    "absolute inset-x-0 -bottom-px h-0.5",
+                    active
+                      ? isDark
+                        ? "bg-white"
+                        : "bg-[#1a1a1a]"
+                      : "bg-transparent",
+                  )}
+                />
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Tab Content */}

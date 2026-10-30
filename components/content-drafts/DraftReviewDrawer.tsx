@@ -182,7 +182,7 @@ export function DraftReviewDrawer({ rows, index, onIndexChange, onChanged, isDar
           }}
           className={cn(
             "flex w-full flex-col gap-0 p-0 sm:max-w-lg",
-            isDark && "dark border-white/10 bg-[#06021D] text-white",
+            isDark && "dark border-white/10 bg-[#111113] text-white",
           )}
         >
           {row && (
@@ -215,7 +215,7 @@ export function DraftReviewDrawer({ rows, index, onIndexChange, onChanged, isDar
                   </div>
                 </SheetDescription>
                 <p className="flex items-center gap-1.5 pt-1 text-xs text-gray-600 dark:text-gray-300">
-                  <ShieldCheck className="h-3.5 w-3.5 text-[#7F39EC] dark:text-purple-300" aria-hidden="true" />
+                  <ShieldCheck className="h-3.5 w-3.5 text-[#0a0a0a] dark:text-white" aria-hidden="true" />
                   Draft record: {formatDraftRecord(record)}
                   {record && <span className="font-medium">· Draft trust {record.draft_trust}%</span>}
                 </p>
@@ -290,7 +290,7 @@ export function DraftReviewDrawer({ rows, index, onIndexChange, onChanged, isDar
                       </Button>
                       {canApprove && (
                         <Button
-                          className="bg-[#7F39EC] hover:bg-[#7F39EC]/90"
+                          className="bg-[#0a0a0a] text-white hover:bg-[#171717] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-neutral-200"
                           disabled={busy}
                           onClick={() => decide("approve", null)}
                         >

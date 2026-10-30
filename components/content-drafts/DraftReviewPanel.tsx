@@ -159,13 +159,13 @@ export function DraftReviewPanel({ contestId, onPendingCountChange, initialDraft
         <div className="flex flex-wrap items-center justify-between gap-3">
           <TabsPrimitive.List
             aria-label="Draft status"
-            className="flex max-w-full overflow-x-auto rounded-lg bg-gray-100 p-1 dark:bg-white/5"
+            className="flex max-w-full overflow-x-auto rounded-xl bg-[#f5f5f5] p-1 dark:bg-white/5"
           >
             {CAMPAIGN_DRAFT_FILTERS.map((s) => (
               <TabsPrimitive.Trigger
                 key={s}
                 value={s}
-                className="flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] data-[state=active]:bg-white data-[state=active]:text-[#4A00BE] data-[state=active]:shadow-sm dark:text-gray-300 dark:hover:text-white dark:data-[state=active]:bg-[#7F39EC] dark:data-[state=active]:text-white"
+                className="flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a] dark:focus-visible:ring-white data-[state=active]:bg-white data-[state=active]:text-[#0a0a0a] data-[state=active]:shadow-sm dark:text-neutral-300 dark:hover:text-white dark:data-[state=active]:bg-white dark:data-[state=active]:text-[#0a0a0a]"
               >
                 {CAMPAIGN_DRAFT_FILTER_LABELS[s]}
                 <span
@@ -198,7 +198,7 @@ export function DraftReviewPanel({ contestId, onPendingCountChange, initialDraft
                 <button
                   type="button"
                   aria-label="Clear search"
-                  className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:hover:bg-white/10 dark:hover:text-white"
+                  className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a] dark:focus-visible:ring-white dark:hover:bg-white/10 dark:hover:text-white"
                   onClick={() => setSearchInput("")}
                 >
                   <X className="h-3.5 w-3.5" />
@@ -224,7 +224,7 @@ export function DraftReviewPanel({ contestId, onPendingCountChange, initialDraft
         <TabsPrimitive.Content value={status} className="focus-visible:outline-none">
           <div className="rounded-md border border-gray-200 dark:border-white/10">
             {loading ? (
-              <ul className="divide-y divide-gray-200 dark:divide-white/10" aria-busy="true">
+              <ul className="divide-y divide-[#e5e5e5] overflow-hidden rounded-2xl border border-[#e5e5e5] bg-white dark:divide-white/10 dark:border-white/10 dark:bg-[#111113]" aria-busy="true">
                 {Array.from({ length: 4 }, (_, i) => (
                   <li key={i} className="flex items-center gap-3 px-4 py-3">
                     <Skeleton className="h-16 w-12 rounded-md dark:bg-white/10" />
@@ -269,7 +269,7 @@ export function DraftReviewPanel({ contestId, onPendingCountChange, initialDraft
                 />
               )
             ) : (
-              <ul className="divide-y divide-gray-200 dark:divide-white/10">
+              <ul className="divide-y divide-[#e5e5e5] overflow-hidden rounded-2xl border border-[#e5e5e5] bg-white dark:divide-white/10 dark:border-white/10 dark:bg-[#111113]">
                 {rows.map((row, i) => (
                   <ReviewRow
                     key={row.id}
@@ -329,7 +329,7 @@ function ReviewRow({
       <button
         type="button"
         onClick={onOpen}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#fafafa] focus-visible:bg-[#fafafa] focus-visible:outline-none dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
       >
         <DraftThumb posterUrl={posterUrl} durationSec={v?.duration_sec} />
         <CreatorAvatar

@@ -101,7 +101,7 @@ export function CampaignDraftPanel({
       tabIndex={-1}
       aria-labelledby="review-before-posting-heading"
       className={cn(
-        "rounded-xl border border-purple-200 bg-purple-50/50 p-4 focus:outline-none sm:p-5 dark:border-[#7F39EC]/40 dark:bg-[#7F39EC]/10",
+        "rounded-2xl border border-[#e5e5e5] bg-[#fafafa] p-4 focus:outline-none sm:p-5 dark:border-white/10 dark:bg-white/[0.04]",
         isDark && "dark",
         className,
       )}
@@ -112,7 +112,7 @@ export function CampaignDraftPanel({
             id="review-before-posting-heading"
             className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-white"
           >
-            <ShieldCheck className="h-4 w-4 text-[#7F39EC] dark:text-purple-300" aria-hidden="true" />
+            <ShieldCheck className="h-4 w-4 text-[#0a0a0a] dark:text-white" aria-hidden="true" />
             Review before posting
           </h2>
           <p className="text-sm text-gray-600 dark:text-gray-300">
@@ -123,7 +123,7 @@ export function CampaignDraftPanel({
           {linkable && (
             <Link
               href={`/dashboard/opportunities/${contestId}/submit`}
-              className={cn(buttonVariants(), "bg-[#7F39EC] hover:bg-[#7F39EC]/90")}
+              className={cn(buttonVariants(), "bg-[#0a0a0a] text-white hover:bg-[#171717] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-neutral-200")}
             >
               <Send aria-hidden="true" /> Submit posted link
             </Link>
@@ -133,7 +133,7 @@ export function CampaignDraftPanel({
             className={
               linkable
                 ? "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10"
-                : "bg-[#7F39EC] hover:bg-[#7F39EC]/90"
+                : "bg-[#0a0a0a] text-white hover:bg-[#171717] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-neutral-200"
             }
             disabled={!status.can_upload}
             onClick={() => setUploadOpen(true)}
@@ -149,7 +149,7 @@ export function CampaignDraftPanel({
             key={step}
             className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm text-gray-700 shadow-sm dark:bg-white/5 dark:text-gray-200"
           >
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#7F39EC] text-xs font-semibold text-white">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0a0a0a] text-xs font-semibold text-white dark:bg-white dark:text-[#0a0a0a]">
               {i + 1}
             </span>
             {step}
@@ -170,7 +170,7 @@ export function CampaignDraftPanel({
         {(summary.length > 0 || (counts.rejected ?? 0) > 0) && (
           <Link
             href={draftsHref}
-            className="inline-flex items-center gap-1 rounded-sm font-medium text-[#7F39EC] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:text-purple-300"
+            className="inline-flex items-center gap-1 rounded-sm font-medium text-[#0a0a0a] dark:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a] dark:focus-visible:ring-white dark:text-white"
           >
             <Clapperboard className="h-3.5 w-3.5" aria-hidden="true" /> My drafts
             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />

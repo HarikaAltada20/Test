@@ -196,7 +196,7 @@ export function DraftDetailSheet({ draftId, onClose, onChanged, isDark }: Props)
   })();
 
   const toneClass: Record<string, string> = {
-    purple: "bg-purple-50 text-[#4A00BE] dark:bg-[#7F39EC]/15 dark:text-purple-200",
+    purple: "bg-[#f5f5f5] text-[#404040] dark:bg-white/10 dark:text-neutral-200",
     amber: "bg-amber-50 text-amber-900 dark:bg-amber-500/10 dark:text-amber-200",
     green: "bg-emerald-50 text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-200",
     slate: "bg-slate-100 text-slate-800 dark:bg-white/5 dark:text-slate-200",
@@ -211,7 +211,7 @@ export function DraftDetailSheet({ draftId, onClose, onChanged, isDark }: Props)
           side="right"
           className={cn(
             "flex w-full flex-col gap-0 p-0 sm:max-w-lg",
-            isDark && "dark border-white/10 bg-[#06021D] text-white",
+            isDark && "dark border-white/10 bg-[#111113] text-white",
           )}
         >
           <SheetHeader className="border-b border-gray-200 p-5 pr-12 text-left dark:border-white/10">
@@ -224,7 +224,7 @@ export function DraftDetailSheet({ draftId, onClose, onChanged, isDark }: Props)
                 {detail?.campaign && (
                   <Link
                     href={`/dashboard/opportunities/${detail.contest_id}`}
-                    className="inline-flex items-center gap-1 rounded-sm font-medium text-[#7F39EC] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:text-purple-300"
+                    className="inline-flex items-center gap-1 rounded-sm font-medium text-[#0a0a0a] dark:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a] dark:focus-visible:ring-white dark:text-white"
                   >
                     {campaignTitle}
                     <ExternalLink className="h-3 w-3" aria-hidden="true" />
@@ -294,7 +294,7 @@ export function DraftDetailSheet({ draftId, onClose, onChanged, isDark }: Props)
                               href={p.content_link}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="shrink-0 rounded-sm text-xs font-medium text-[#7F39EC] hover:underline dark:text-purple-300"
+                              className="shrink-0 rounded-sm text-xs font-medium text-[#0a0a0a] dark:text-white hover:underline dark:text-white"
                             >
                               Open post
                             </a>
@@ -322,21 +322,21 @@ export function DraftDetailSheet({ draftId, onClose, onChanged, isDark }: Props)
               )}
               <div className="flex flex-col gap-2 sm:flex-row-reverse">
                 {detail.can.revise && (
-                  <Button className="bg-[#7F39EC] hover:bg-[#7F39EC]/90 sm:flex-1" onClick={() => setReviseOpen(true)}>
+                  <Button className="bg-[#0a0a0a] text-white hover:bg-[#171717] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-neutral-200 sm:flex-1" onClick={() => setReviseOpen(true)}>
                     <RotateCcw className="mr-1.5 h-4 w-4" /> Upload revision
                   </Button>
                 )}
                 {detail.can.post && detail.display_status === "approved" && (
                   <Link
                     href={`/dashboard/opportunities/${detail.contest_id}/submit?draft=${detail.id}`}
-                    className={cn(buttonVariants(), "bg-[#7F39EC] hover:bg-[#7F39EC]/90 sm:flex-1")}
+                    className={cn(buttonVariants(), "bg-[#0a0a0a] text-white hover:bg-[#171717] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-neutral-200 sm:flex-1")}
                   >
                     <Send aria-hidden="true" /> Submit posted link
                   </Link>
                 )}
                 {(detail.status === "rejected" || detail.status === "withdrawn") &&
                   !detail.campaign?.has_ended && (
-                    <Button className="bg-[#7F39EC] hover:bg-[#7F39EC]/90 sm:flex-1" onClick={openNewDraft}>
+                    <Button className="bg-[#0a0a0a] text-white hover:bg-[#171717] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-neutral-200 sm:flex-1" onClick={openNewDraft}>
                       <Plus className="mr-1.5 h-4 w-4" /> Start a new draft
                     </Button>
                   )}
@@ -357,7 +357,7 @@ export function DraftDetailSheet({ draftId, onClose, onChanged, isDark }: Props)
       </Sheet>
 
       <AlertDialog open={confirmWithdraw} onOpenChange={(o) => !busy && setConfirmWithdraw(o)}>
-        <AlertDialogContent className={cn(isDark && "dark border-white/10 bg-[#06021D] text-white")}>
+        <AlertDialogContent className={cn(isDark && "dark border-white/10 bg-[#111113] text-white")}>
           <AlertDialogHeader>
             <AlertDialogTitle>Withdraw this draft?</AlertDialogTitle>
             <AlertDialogDescription className="dark:text-gray-400">

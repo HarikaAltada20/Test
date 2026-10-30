@@ -374,7 +374,7 @@ export function UploadDraftsDialog({
               {formatDuration(MAX_DRAFT_DURATION_SEC)} each
             </p>
             {allSent ? (
-              <Button onClick={() => onOpenChange(false)} className="bg-[#7F39EC] hover:bg-[#7F39EC]/90">
+              <Button onClick={() => onOpenChange(false)} className="bg-[#0a0a0a] text-white hover:bg-[#171717] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-neutral-200">
                 Done
               </Button>
             ) : (
@@ -385,7 +385,7 @@ export function UploadDraftsDialog({
                 <Button
                   onClick={submit}
                   disabled={running || anyBusy}
-                  className="bg-[#7F39EC] hover:bg-[#7F39EC]/90"
+                  className="bg-[#0a0a0a] text-white hover:bg-[#171717] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-neutral-200"
                 >
                   {running ? (
                     <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
@@ -407,7 +407,7 @@ export function UploadDraftsDialog({
       </Dialog>
 
       <AlertDialog open={confirmClose} onOpenChange={setConfirmClose}>
-        <AlertDialogContent className={cn(isDark && "dark border-white/10 bg-[#06021D] text-white")}>
+        <AlertDialogContent className={cn(isDark && "dark border-white/10 bg-[#111113] text-white")}>
           <AlertDialogHeader>
             <AlertDialogTitle>Stop uploading?</AlertDialogTitle>
             <AlertDialogDescription className="dark:text-gray-400">
@@ -515,10 +515,10 @@ function DraftCardForm({ card, index, showIndex, canRemove, multiple, locked, on
               if (!disabled) onFiles(Array.from(e.dataTransfer.files ?? []));
             }}
             className={cn(
-              "relative flex aspect-[9/16] w-28 flex-col items-center justify-center gap-1 overflow-hidden rounded-md border-2 border-dashed text-center text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] sm:w-36",
+              "relative flex aspect-[9/16] w-28 flex-col items-center justify-center gap-1 overflow-hidden rounded-md border-2 border-dashed text-center text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a] dark:focus-visible:ring-white sm:w-36",
               dragging
-                ? "border-[#7F39EC] bg-purple-50 dark:bg-[#7F39EC]/10"
-                : "border-gray-300 bg-gray-50 hover:border-[#7F39EC]/60 dark:border-white/20 dark:bg-white/5",
+                ? "border-[#0a0a0a] bg-[#fafafa] dark:border-white dark:bg-white/10"
+                : "border-[#e5e5e5] bg-[#fafafa] hover:border-[#0a0a0a]/50 dark:border-white/15 dark:bg-white/5 dark:hover:border-white/40",
               disabled && "cursor-default",
             )}
             aria-label={card.file ? `Change video (${card.file.name})` : "Choose a video"}
@@ -530,7 +530,7 @@ function DraftCardForm({ card, index, showIndex, canRemove, multiple, locked, on
               <Film className="h-6 w-6 text-gray-400" aria-hidden="true" />
             ) : (
               <>
-                <Upload className="h-5 w-5 text-[#7F39EC]" aria-hidden="true" />
+                <Upload className="h-5 w-5 text-[#0a0a0a] dark:text-white" aria-hidden="true" />
                 <span className="px-2 font-medium text-gray-700 dark:text-gray-200">
                   {multiple ? "Choose videos" : "Choose a video"}
                 </span>
@@ -601,7 +601,7 @@ function DraftCardForm({ card, index, showIndex, canRemove, multiple, locked, on
                 {tags.map((t) => (
                   <span
                     key={t.toLowerCase()}
-                    className="rounded-full bg-purple-50 px-2 py-0.5 text-xs text-[#4A00BE] dark:bg-[#7F39EC]/20 dark:text-purple-200"
+                    className="rounded-full bg-[#f5f5f5] px-2 py-0.5 text-xs text-[#404040] dark:bg-white/10 dark:text-neutral-200"
                   >
                     #{t}
                   </span>
@@ -638,7 +638,7 @@ function DraftCardForm({ card, index, showIndex, canRemove, multiple, locked, on
             aria-label="Upload progress"
           >
             <div
-              className="h-full rounded-full bg-[#7F39EC] transition-[width] duration-300"
+              className="h-full rounded-full bg-[#0a0a0a] dark:bg-white transition-[width] duration-300"
               style={{ width: `${Math.max(2, Math.round(card.progress * 100))}%` }}
             />
           </div>

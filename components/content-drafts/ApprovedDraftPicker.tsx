@@ -80,7 +80,7 @@ export function ApprovedDraftPicker({
     <section
       aria-labelledby="approved-draft-heading"
       className={cn(
-        "mb-6 rounded-xl border border-purple-200 bg-purple-50/50 p-4 dark:border-[#7F39EC]/40 dark:bg-[#7F39EC]/10",
+        "mb-6 rounded-2xl border border-[#e5e5e5] bg-[#fafafa] p-4 dark:border-white/10 dark:bg-white/[0.04]",
         isDark && "dark",
       )}
     >
@@ -121,7 +121,7 @@ export function ApprovedDraftPicker({
             <div className="flex flex-wrap gap-2">
               <Link
                 href={`/dashboard/opportunities/${contestId}`}
-                className={cn(buttonVariants({ size: "sm" }), "bg-[#7F39EC] hover:bg-[#7F39EC]/90")}
+                className={cn(buttonVariants({ size: "sm" }), "bg-[#0a0a0a] text-white hover:bg-[#171717] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-neutral-200")}
               >
                 <Upload aria-hidden="true" /> Upload a draft
               </Link>
@@ -157,10 +157,10 @@ export function ApprovedDraftPicker({
                     <span
                       className={cn(
                         "flex items-center gap-3 rounded-lg border bg-white p-3 transition-colors dark:bg-white/5",
-                        "peer-focus-visible:ring-2 peer-focus-visible:ring-[#7F39EC] peer-focus-visible:ring-offset-1",
+                        "peer-focus-visible:ring-2 peer-focus-visible:ring-[#0a0a0a] dark:focus-visible:ring-white peer-focus-visible:ring-offset-1",
                         checked
-                          ? "border-[#7F39EC] ring-1 ring-[#7F39EC]"
-                          : "border-gray-200 hover:border-[#7F39EC]/60 dark:border-white/10",
+                          ? "border-[#0a0a0a] ring-1 ring-[#0a0a0a] dark:border-white dark:ring-white"
+                          : "border-gray-200 hover:border-[#0a0a0a]/40 dark:border-white/15 dark:hover:border-white/40",
                       )}
                     >
                       <DraftThumb
@@ -185,7 +185,7 @@ export function ApprovedDraftPicker({
                         </span>
                       </span>
                       <CheckCircle2
-                        className={cn("h-5 w-5 shrink-0", checked ? "text-[#7F39EC]" : "text-transparent")}
+                        className={cn("h-5 w-5 shrink-0", checked ? "text-[#0a0a0a] dark:text-white" : "text-transparent")}
                         aria-hidden="true"
                       />
                     </span>

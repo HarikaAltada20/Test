@@ -60,13 +60,19 @@ export function ReviewBeforePostingSettings({ value, onChange, isDark, confirmCh
     <div
       className={cn(
         "space-y-4 rounded-lg border p-4",
-        isDark ? "border-[#C9A7FF] bg-[#C9A7FF26]" : "bg-gray-50",
+        isDark ? "border-white/10 bg-white/[0.03]" : "border-[#e5e5e5] bg-[#fafafa]",
       )}
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <Label htmlFor={`${id}-switch`} className="flex items-center gap-2 text-base font-semibold">
-            <ShieldCheck className="h-4 w-4 text-[#7F39EC]" aria-hidden="true" />
+          <Label
+            htmlFor={`${id}-switch`}
+            className={cn(
+              "flex items-center gap-2 text-base font-semibold",
+              isDark ? "text-white" : "text-[#0a0a0a]",
+            )}
+          >
+            <ShieldCheck className={cn("h-4 w-4", isDark ? "text-white" : "text-[#0a0a0a]")} aria-hidden="true" />
             Review before posting
           </Label>
           <p id={`${id}-help`} className={cn("mt-1 text-sm", muted)}>
@@ -86,7 +92,7 @@ export function ReviewBeforePostingSettings({ value, onChange, isDark, confirmCh
       </div>
 
       {enabled && (
-        <div className="space-y-4 border-t pt-4">
+        <div className={cn("space-y-4 border-t pt-4", isDark ? "border-white/10" : "border-[#e5e5e5]")}>
           <p className={cn("text-sm", muted)}>
             Creators upload drafts from the campaign page, and you review them in the campaign&apos;s Drafts
             tab. Videos can be up to {maxMb} MB and {maxMin} minutes (MP4, MOV or WebM).
@@ -129,7 +135,7 @@ export function ReviewBeforePostingSettings({ value, onChange, isDark, confirmCh
       )}
 
       <AlertDialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
-        <AlertDialogContent className={cn(isDark && "dark border-white/10 bg-[#06021D] text-white")}>
+        <AlertDialogContent className={cn(isDark && "dark border-white/10 bg-[#111113] text-white")}>
           <AlertDialogHeader>
             <AlertDialogTitle>
               {pending ? "Turn on review before posting?" : "Turn off review before posting?"}
@@ -147,7 +153,7 @@ export function ReviewBeforePostingSettings({ value, onChange, isDark, confirmCh
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              className="bg-[#7F39EC] hover:bg-[#7F39EC]/90"
+              className="bg-[#0a0a0a] text-white hover:bg-[#171717] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-neutral-200"
               onClick={() => {
                 if (pending !== null) onChange({ ...value, review_before_posting: pending });
                 setPending(null);
@@ -220,7 +226,7 @@ function LimitField({
           const n = Math.min(range.max, Math.max(range.min, parseInt(raw, 10)));
           if (Number.isFinite(n)) onChange(n);
         }}
-        className={cn("max-w-[10rem]", isDark ? "border border-gray-400 bg-[#C9A7FF26] text-white" : "bg-white text-black")}
+        className={cn("max-w-[10rem]", isDark ? "border-white/15 bg-[#161616] text-white" : "border-[#e5e5e5] bg-white text-[#0a0a0a]")}
       />
       <p id={`${id}-help`} className={cn("text-xs", isDark ? "text-gray-400" : "text-gray-500")}>
         {help}

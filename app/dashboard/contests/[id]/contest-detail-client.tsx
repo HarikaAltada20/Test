@@ -16063,10 +16063,10 @@ export default function ContestDetailClient({
                   {draftReviewOn && (
                     <span
                       className={cn(
-                        "rounded-full px-3 py-1 text-xs font-semibold sm:text-sm",
+                        "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium",
                         isDark
-                          ? "bg-[#7F39EC]/20 text-purple-200"
-                          : "bg-purple-50 text-[#4A00BE]",
+                          ? "border-white/15 bg-white/5 text-slate-200"
+                          : "border-[#e5e5e5] bg-white text-[#404040]",
                       )}
                     >
                       Review before posting
@@ -16077,10 +16077,10 @@ export default function ContestDetailClient({
                       type="button"
                       onClick={() => setActiveTab("drafts")}
                       className={cn(
-                        "rounded-full px-3 py-1 text-xs font-semibold underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] sm:text-sm",
+                        "rounded-full px-3 py-1 text-xs font-semibold underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 sm:text-sm",
                         isDark
-                          ? "bg-amber-500/15 text-amber-200"
-                          : "bg-amber-50 text-amber-800",
+                          ? "bg-amber-500/15 text-amber-200 focus-visible:ring-white"
+                          : "bg-amber-50 text-amber-800 focus-visible:ring-[#0a0a0a]",
                       )}
                     >
                       {draftCounts?.toReview} draft

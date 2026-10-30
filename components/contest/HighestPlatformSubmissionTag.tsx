@@ -12,9 +12,9 @@ import { cn } from "@/lib/utils";
 import { Crown } from "lucide-react";
 
 const COUNTED_CLASSES = {
-  light: "border-amber-200 bg-amber-50 text-amber-800",
-  dark: "border-amber-700/50 bg-amber-900/30 text-amber-200",
-  auto: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-700/50 dark:bg-amber-900/30 dark:text-amber-200",
+  light: "border-[#e5e5e5] bg-[#f5f5f5] text-[#404040]",
+  dark: "border-white/15 bg-white/10 text-neutral-200",
+  auto: "border-[#e5e5e5] bg-[#f5f5f5] text-[#404040] dark:border-white/15 dark:bg-white/10 dark:text-neutral-200",
 };
 
 /**

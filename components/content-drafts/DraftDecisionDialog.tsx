@@ -101,10 +101,10 @@ export function DraftDecisionDialog({ kind, revoking, name, busy, isDark, onCanc
                 aria-pressed={preset === value}
                 onClick={() => choose(value)}
                 className={cn(
-                  "rounded-full border px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]",
+                  "rounded-full border px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a] dark:focus-visible:ring-white",
                   preset === value
-                    ? "border-[#7F39EC] bg-[#7F39EC] text-white"
-                    : "border-gray-200 text-gray-700 hover:border-[#7F39EC]/60 dark:border-white/15 dark:text-gray-200",
+                    ? "border-[#0a0a0a] bg-[#0a0a0a] text-white dark:border-white dark:bg-white dark:text-[#0a0a0a]"
+                    : "border-[#e5e5e5] text-[#404040] hover:bg-[#fafafa] dark:border-white/15 dark:text-neutral-200 dark:hover:bg-white/5",
                 )}
               >
                 {value}

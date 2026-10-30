@@ -32,21 +32,21 @@ function themeClass(
 }
 
 const NOTE_CLASSES = {
-  light: "border-amber-200 bg-amber-50 text-amber-900",
-  dark: "border-amber-700/50 bg-amber-900/20 text-amber-100",
-  auto: "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-100",
+  light: "border-[#e5e5e5] bg-[#fafafa] text-[#404040]",
+  dark: "border-white/10 bg-white/[0.04] text-neutral-200",
+  auto: "border-[#e5e5e5] bg-[#fafafa] text-[#404040] dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-200",
 };
 
 const BADGE_CLASSES = {
-  light: "bg-amber-50 text-amber-800 border-amber-200",
-  dark: "bg-amber-900/30 text-amber-200 border-amber-700/50",
-  auto: "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-700/50",
+  light: "bg-[#f5f5f5] text-[#404040] border-[#e5e5e5]",
+  dark: "bg-white/10 text-neutral-200 border-white/15",
+  auto: "bg-[#f5f5f5] text-[#404040] border-[#e5e5e5] dark:bg-white/10 dark:text-neutral-200 dark:border-white/15",
 };
 
 const CHIP_CLASSES = {
-  light: "border-slate-200 bg-slate-100 text-slate-600",
-  dark: "border-slate-600 bg-slate-800 text-slate-300",
-  auto: "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300",
+  light: "border-[#e5e5e5] bg-[#fafafa] text-[#737373]",
+  dark: "border-white/10 bg-white/5 text-slate-300",
+  auto: "border-[#e5e5e5] bg-[#fafafa] text-[#737373] dark:border-white/10 dark:bg-white/5 dark:text-slate-300",
 };
 
 export function highestPlatformNoteText(
@@ -90,7 +90,7 @@ export function HighestPlatformPayoutNote({
   return (
     <div
       className={cn(
-        "flex items-start gap-2 rounded-lg border",
+        "flex items-start gap-2 rounded-xl border",
         compact ? "px-3 py-2 text-xs" : "px-4 py-3 text-sm",
         themeClass(isDark, NOTE_CLASSES),
         className,
@@ -99,7 +99,18 @@ export function HighestPlatformPayoutNote({
     >
       <Crown className={cn("mt-0.5 shrink-0", compact ? "h-3.5 w-3.5" : "h-4 w-4")} />
       <div className="min-w-0">
-        <p className="font-semibold">{title}</p>
+        <p
+          className={cn(
+            "font-semibold",
+            themeClass(isDark, {
+              light: "text-[#0a0a0a]",
+              dark: "text-white",
+              auto: "text-[#0a0a0a] dark:text-white",
+            }),
+          )}
+        >
+          {title}
+        </p>
         <p className={cn("mt-0.5", compact ? "" : "leading-relaxed")}>{body}</p>
       </div>
     </div>

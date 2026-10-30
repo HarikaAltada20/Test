@@ -139,10 +139,10 @@ export function MyDraftsPanel({ isDark, onActionCountChange }: Props) {
               aria-selected={status === f}
               onClick={() => setParam({ status: f === "all" ? null : f, draft: null })}
               className={cn(
-                "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]",
+                "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a] dark:focus-visible:ring-white",
                 status === f
-                  ? "border-[#7F39EC] bg-[#7F39EC] text-white"
-                  : "border-gray-200 text-gray-700 hover:border-[#7F39EC]/60 dark:border-white/15 dark:text-gray-200",
+                  ? "border-[#0a0a0a] bg-[#0a0a0a] text-white dark:border-white dark:bg-white dark:text-[#0a0a0a]"
+                  : "border-[#e5e5e5] text-[#404040] hover:bg-[#fafafa] dark:border-white/15 dark:text-neutral-200 dark:hover:bg-white/5",
               )}
             >
               {DRAFT_FILTER_LABELS[f]}
@@ -155,12 +155,12 @@ export function MyDraftsPanel({ isDark, onActionCountChange }: Props) {
           ))}
         </div>
         {campaignId && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 py-1 pl-3 pr-1 text-sm text-[#4A00BE] dark:bg-[#7F39EC]/20 dark:text-purple-200">
+          <span className="inline-flex items-center gap-1 rounded-full bg-[#f5f5f5] py-1 pl-3 pr-1 text-sm text-[#404040] dark:bg-white/10 dark:text-neutral-200">
             {campaignTitle ? `Campaign: ${campaignTitle}` : "One campaign"}
             <button
               type="button"
               aria-label="Show drafts from all campaigns"
-              className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-purple-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:hover:bg-white/10"
+              className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-[#f5f5f5] dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a] dark:focus-visible:ring-white dark:hover:bg-white/10"
               onClick={() => setParam({ campaign: null, draft: null })}
             >
               <X className="h-3.5 w-3.5" />
@@ -201,7 +201,7 @@ export function MyDraftsPanel({ isDark, onActionCountChange }: Props) {
               actions={
                 <Link
                   href="/dashboard/opportunities"
-                  className={cn(buttonVariants({ size: "sm" }), "bg-[#7F39EC] hover:bg-[#7F39EC]/90")}
+                  className={cn(buttonVariants({ size: "sm" }), "bg-[#0a0a0a] text-white hover:bg-[#171717] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-neutral-200")}
                 >
                   Find campaigns
                 </Link>
@@ -209,7 +209,7 @@ export function MyDraftsPanel({ isDark, onActionCountChange }: Props) {
             />
           )
         ) : (
-          <ul className="divide-y divide-gray-200 dark:divide-white/10">
+          <ul className="divide-y divide-[#e5e5e5] overflow-hidden rounded-2xl border border-[#e5e5e5] bg-white dark:divide-white/10 dark:border-white/10 dark:bg-[#111113]">
             {rows.map((row) => (
               <DraftRow
                 key={row.id}
@@ -253,9 +253,9 @@ function MyDraftRecord({ counts }: { counts: DraftListPage["counts"] }) {
   if (total === 0) return null;
   const { approved, rejected, trust } = draftRecordFromCounts(counts);
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-gray-200 px-4 py-3 text-sm dark:border-white/10">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-[#e5e5e5] bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-[#111113]">
       <span className="inline-flex items-center gap-1.5 font-semibold text-gray-900 dark:text-white">
-        <ShieldCheck className="h-4 w-4 text-[#7F39EC] dark:text-purple-300" aria-hidden="true" />
+        <ShieldCheck className="h-4 w-4 text-[#0a0a0a] dark:text-white" aria-hidden="true" />
         Draft trust {trust}%
       </span>
       <span className="text-gray-600 dark:text-gray-300">
@@ -285,7 +285,7 @@ function DraftRow({
       <button
         type="button"
         onClick={onOpen}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#fafafa] focus-visible:bg-[#fafafa] focus-visible:outline-none dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
       >
         <DraftThumb posterUrl={posterUrl} durationSec={v?.duration_sec} />
         <div className="min-w-0 flex-1">
@@ -302,7 +302,7 @@ function DraftRow({
           <p
             className={cn(
               "mt-0.5 truncate text-xs",
-              needsAction ? "font-medium text-[#7F39EC] dark:text-purple-300" : "text-gray-500 dark:text-gray-400",
+              needsAction ? "font-medium text-[#0a0a0a] dark:text-white" : "text-gray-500 dark:text-gray-400",
             )}
           >
             {draftNextStep(row)}

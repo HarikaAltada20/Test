@@ -57,7 +57,7 @@ export const DRAFT_STATUS_LABELS: Record<DraftDisplayStatus, string> = {
 
 export type DraftBadgeTone = "green" | "slate" | "purple" | "amber" | "red" | "gray";
 export const DRAFT_STATUS_TONES: Record<DraftDisplayStatus, DraftBadgeTone> = {
-  pending_review: "purple",
+  pending_review: "slate",
   revision_requested: "amber",
   approved: "green",
   posted: "slate",

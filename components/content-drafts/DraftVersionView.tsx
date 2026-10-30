@@ -45,10 +45,10 @@ export function DraftVersionView({
                 aria-selected={active}
                 onClick={() => onSelect(v.id)}
                 className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]",
+                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a] dark:focus-visible:ring-white",
                   active
-                    ? "border-[#7F39EC] bg-[#7F39EC] text-white"
-                    : "border-gray-200 text-gray-700 hover:border-[#7F39EC]/60 dark:border-white/15 dark:text-gray-200",
+                    ? "border-[#0a0a0a] bg-[#0a0a0a] text-white dark:border-white dark:bg-white dark:text-[#0a0a0a]"
+                    : "border-[#e5e5e5] text-[#404040] hover:bg-[#fafafa] dark:border-white/15 dark:text-neutral-200 dark:hover:bg-white/5",
                 )}
               >
                 v{v.version_no}
@@ -80,7 +80,7 @@ export function DraftVersionView({
             {selected.hashtags.map((t) => (
               <span
                 key={t}
-                className="rounded-full bg-purple-50 px-2 py-0.5 text-xs text-[#4A00BE] dark:bg-[#7F39EC]/20 dark:text-purple-200"
+                className="rounded-full bg-[#f5f5f5] px-2 py-0.5 text-xs text-[#404040] dark:bg-white/10 dark:text-neutral-200"
               >
                 #{t}
               </span>
