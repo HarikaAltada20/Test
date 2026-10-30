@@ -1197,7 +1197,7 @@ export function BudgetProgress({
         <div className="relative w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
           <div
             className={`absolute h-full transition-all duration-300 ${
-              isNearLimit ? "bg-yellow-500" : "bg-blue-500"
+              isNearLimit ? "bg-yellow-500" : "bg-[#7C3AED]"
             }`}
             style={{ width: `${Math.min(totalPercentage, 100)}%` }}
           />
@@ -1240,7 +1240,7 @@ export function BudgetProgress({
         <div
           className={cn(
             "relative w-full h-4 rounded-full overflow-hidden",
-            isDark ? "bg-[#FFFFFF42]" : "bg-gray-200",
+            isDark ? "bg-white/10" : "bg-[#EDE9FE]",
           )}
         >
           <div
@@ -1312,7 +1312,7 @@ export function BudgetProgress({
       <div
         className={cn(
           "relative w-full h-4 rounded-full overflow-hidden",
-          isDark ? "bg-[#FFFFFF42]" : "bg-gray-200",
+          isDark ? "bg-white/10" : "bg-[#EDE9FE]",
         )}
         title={
           hasFlatFeeBonus && bonusPaid > 0
@@ -1368,7 +1368,7 @@ export function BudgetProgress({
       >
         {/* CPM/Leaderboard earnings portion */}
         <div
-          className="absolute h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300"
+          className="absolute h-full bg-[#7C3AED] transition-all duration-300"
           style={{ width: `${Math.min(cpmPercentage, 100)}%` }}
         />
         {/* Flat fee bonus (CPM) or creator bonus (milestone / dual) */}
@@ -1391,7 +1391,7 @@ export function BudgetProgress({
         <div className="space-y-3 text-sm">
           {renderLegendRow(
             <div className="flex items-start gap-1.5 min-w-0">
-              <div className="w-3 h-3 mt-0.5 shrink-0 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm" />
+              <div className="w-3 h-3 mt-0.5 shrink-0 bg-gradient-to-r from-[#7C3AED] to-[#6D28D9] rounded-sm" />
               <div className="min-w-0">
                 <p
                   className={cn(
@@ -1426,7 +1426,7 @@ export function BudgetProgress({
           }`}
         >
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm" />
+            <div className="w-3 h-3 bg-gradient-to-r from-[#7C3AED] to-[#6D28D9] rounded-sm" />
             <div className="flex-1">
               <p
                 className={cn(

@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Clock,
   ExternalLink,
   Square,
   SquareCheck,
@@ -821,15 +822,16 @@ export function ReviewSidePanel({
                 variant="outline"
                 disabled={busy}
                 onClick={onReject}
+                title="Reject (R)"
                 className={cn(
-                  "h-11 rounded-xl border text-sm font-semibold transition-all shadow-xs gap-1.5 px-2",
+                  "h-11 rounded-full border text-sm font-semibold shadow-none gap-1.5 px-3",
                   isDark
-                    ? "border-red-900/40 bg-red-950/20 text-red-300 hover:bg-red-900/40"
-                    : "border-red-300 bg-white text-red-500 hover:bg-red-50 hover:text-red-600 hover:border-red-400",
+                    ? "border-red-500/40 bg-transparent text-red-400 hover:bg-red-500/10"
+                    : "border-[#e5e5e5] bg-white text-[#dc2626] hover:bg-[#fef2f2]",
                 )}
               >
+                <X className="h-4 w-4 shrink-0" />
                 <span className="truncate">Reject</span>
-                <span className="text-[11px] font-bold opacity-60">R</span>
               </Button>
             )}
             {options.canMoveToPending && (
@@ -837,27 +839,35 @@ export function ReviewSidePanel({
                 variant="outline"
                 disabled={busy}
                 onClick={onMoveToPending}
+                title="Pending (P)"
                 className={cn(
-                  "h-11 rounded-xl border text-sm font-semibold transition-all shadow-xs gap-1.5 px-2",
+                  "h-11 rounded-full border text-sm font-semibold shadow-none gap-1.5 px-3",
                   isDark
-                    ? "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900",
+                    ? "border-white/10 bg-transparent text-white hover:bg-white/10"
+                    : "border-[#e5e5e5] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
                 )}
               >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {busy ? (
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                ) : (
+                  <Clock className="h-4 w-4 shrink-0" />
+                )}
                 <span className="truncate">Pending</span>
-                <span className="text-[11px] font-bold opacity-60">P</span>
               </Button>
             )}
             {options.canApprove && (
               <Button
                 disabled={busy}
                 onClick={onApprove}
-                className="h-11 rounded-xl bg-[#7F39EC] text-white hover:bg-[#6c28d9] text-sm font-bold shadow-md hover:shadow-lg transition-all gap-1.5 px-2"
+                title="Approve (A)"
+                className="h-11 rounded-full bg-[#1a1a1a] px-3 text-sm font-semibold text-white shadow-none hover:bg-black gap-1.5 dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-[#f3f3f5]"
               >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {busy ? (
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4 shrink-0" />
+                )}
                 <span className="truncate">Approve</span>
-                <span className="text-[11px] font-bold opacity-80">A</span>
               </Button>
             )}
           </div>

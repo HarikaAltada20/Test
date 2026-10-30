@@ -419,8 +419,8 @@ export function BulkVideoDownloadResultsTable({
 
         <div
           className={cn(
-            "w-full rounded-lg border",
-            isDark ? "border-gray-600" : "border-slate-200",
+            "w-full rounded-2xl border",
+            isDark ? "border-white/10" : "border-[#ececef]",
           )}
         >
           <ul className="divide-y divide-slate-200/80 dark:divide-white/10">
@@ -455,12 +455,14 @@ export function BulkVideoDownloadResultsTable({
             type="button"
             onClick={() => setTab("success")}
             className={cn(
-              "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+              "rounded-full px-3 py-1 text-xs font-medium transition-colors",
               tab === "success"
-                ? "bg-emerald-600 text-white"
+                ? isDark
+                  ? "bg-white text-[#1a1a1a]"
+                  : "bg-[#1a1a1a] text-white"
                 : isDark
                   ? "bg-white/10 text-slate-300 hover:bg-white/15"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200",
+                  : "bg-[#f3f3f5] text-[#1a1a1a] hover:bg-[#e6e6e8]",
             )}
           >
             Succeeded ({succeeded.length})
@@ -469,12 +471,14 @@ export function BulkVideoDownloadResultsTable({
             type="button"
             onClick={() => setTab("failed")}
             className={cn(
-              "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+              "rounded-full px-3 py-1 text-xs font-medium transition-colors",
               tab === "failed"
-                ? "bg-red-600 text-white"
+                ? isDark
+                  ? "bg-white text-[#1a1a1a]"
+                  : "bg-[#1a1a1a] text-white"
                 : isDark
                   ? "bg-white/10 text-slate-300 hover:bg-white/15"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200",
+                  : "bg-[#f3f3f5] text-[#1a1a1a] hover:bg-[#e6e6e8]",
             )}
           >
             Failed ({failed.length})
@@ -491,8 +495,8 @@ export function BulkVideoDownloadResultsTable({
             className={cn(
               "flex h-9 min-w-[200px] max-w-[260px] items-center justify-between rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
               isDark
-                ? "border-gray-700 bg-[#07031D] text-white hover:bg-gray-700"
-                : "border-input bg-white text-slate-800 hover:bg-accent/50",
+                ? "border-white/10 bg-[#161616] text-white hover:bg-white/10"
+                : "border-[#e5e5e5] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
             )}
           >
             <span className="truncate pr-1">
@@ -513,8 +517,8 @@ export function BulkVideoDownloadResultsTable({
               className={cn(
                 "absolute right-0 z-20 mt-1 w-[240px] overflow-hidden rounded-lg border shadow-lg",
                 isDark
-                  ? "border-gray-700 bg-[#07031D] text-white"
-                  : "border-slate-200 bg-white text-slate-900",
+                  ? "border-white/10 bg-[#161616] text-white"
+                  : "border-[#ececef] bg-white text-[#1a1a1a]",
               )}
             >
               {(
@@ -541,10 +545,12 @@ export function BulkVideoDownloadResultsTable({
                   className={cn(
                     "flex w-full items-center px-3 py-2 text-left text-sm font-medium transition-colors",
                     viewMode === option.value
-                      ? "bg-purple-600 text-white"
+                      ? isDark
+                        ? "bg-white text-[#1a1a1a]"
+                        : "bg-[#1a1a1a] text-white"
                       : isDark
-                        ? "hover:bg-purple-500/30"
-                        : "hover:bg-purple-100 hover:text-purple-800",
+                        ? "hover:bg-white/10"
+                        : "hover:bg-[#f3f3f5]",
                   )}
                 >
                   {option.label}
@@ -557,8 +563,8 @@ export function BulkVideoDownloadResultsTable({
 
       <div
         className={cn(
-          "w-full rounded-lg border",
-          isDark ? "border-gray-600" : "border-slate-200",
+          "w-full rounded-2xl border",
+          isDark ? "border-white/10" : "border-[#ececef]",
         )}
       >
         {visible.length === 0 ? (

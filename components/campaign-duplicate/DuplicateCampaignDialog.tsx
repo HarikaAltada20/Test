@@ -314,7 +314,7 @@ function SourcePicker({
 
   return (
     <div>
-      <div className="space-y-3 border-b border-slate-100 px-4 pb-4 dark:border-slate-800 sm:px-6">
+      <div className="space-y-3 pb-1">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input
@@ -354,7 +354,7 @@ function SourcePicker({
         )}
       </div>
 
-      <div className="min-h-[240px] px-4 py-3">
+      <div className="min-h-[200px]">
         {loading ? (
           <div className="flex h-full min-h-[200px] items-center justify-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -875,11 +875,11 @@ export function DuplicateCampaignDialog({
     <Dialog open={open} onOpenChange={(v) => !submitting && onOpenChange(v)} isdark={isDark}>
       <DialogContent
         className={cn(
-          "flex max-h-[92vh] w-[calc(100vw-24px)] max-w-xl flex-col gap-0 overflow-y-auto rounded-[24px] sm:rounded-[28px] border border-slate-200/80 bg-white p-0 shadow-2xl dark:border-slate-800 dark:bg-[#121212] sm:max-h-[88vh]",
+          "flex max-h-[90vh] w-[min(36rem,calc(100vw-1.5rem))] max-w-xl flex-col gap-3 overflow-y-auto rounded-2xl border border-[#ececef] bg-white p-4 shadow-xl dark:border-white/10 dark:bg-[#161616] sm:max-h-[88vh]",
           isDark && "dark text-white",
         )}
       >
-        <DialogHeader className="space-y-2 p-4 pb-2 text-left">
+        <DialogHeader className="space-y-1 pr-6 text-left">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3 pr-8">
               {canGoBack && (
@@ -892,8 +892,8 @@ export function DuplicateCampaignDialog({
                   <ArrowLeft className="h-5 w-5" />
                 </button>
               )}
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-900 shadow-2xs dark:bg-slate-800 dark:text-slate-100">
-                <Copy className="h-5 w-5" />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f3f3f5] text-[#1a1a1a] dark:bg-white/10 dark:text-white">
+                <Copy className="h-4 w-4" />
               </div>
               <div>
                 <DialogTitle className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white">
@@ -922,7 +922,7 @@ export function DuplicateCampaignDialog({
           />
         ) : (
           <>
-            <div className="px-4 py-2">
+            <div>
               {loadingPreview ? (
                 <div className="flex min-h-[220px] items-center justify-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1025,7 +1025,7 @@ export function DuplicateCampaignDialog({
               ) : null}
             </div>
 
-            <div className="border-t border-slate-100 p-4 dark:border-slate-800">
+            <div>
               {submitError && (
                 <p className="mb-2 flex items-start gap-2 text-xs sm:text-sm text-red-600 dark:text-red-400" role="alert">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -1040,7 +1040,7 @@ export function DuplicateCampaignDialog({
                     if (canGoBack) backToPicker();
                     else onOpenChange(false);
                   }}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs sm:text-sm font-semibold text-slate-900 shadow-2xs transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700/80"
+                  className="h-10 rounded-full border border-[#e5e5e5] bg-white px-4 text-sm font-medium text-[#1a1a1a] transition-colors hover:bg-[#f6f6f7] dark:border-white/15 dark:bg-transparent dark:text-white dark:hover:bg-white/10"
                 >
                   Back
                 </button>
@@ -1048,7 +1048,7 @@ export function DuplicateCampaignDialog({
                   type="button"
                   disabled={!preview || submitting || loadingPreview}
                   onClick={() => void handleCreate()}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-black px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-sm transition-all hover:bg-slate-800 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black dark:hover:bg-slate-100"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#1a1a1a] px-4 text-sm font-medium text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-[#f3f3f5]"
                 >
                   {submitting ? (
                     <>

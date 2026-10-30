@@ -436,6 +436,38 @@ export default function DailyChallengeClient({
     payload != null && payload.period !== leaderboardPeriod;
   const showFullPageLoader = leaderboardMisaligned || (loading && payload === null);
   const panelClass = panelClassName(isDark);
+  const fieldClass = cn(
+    "h-11 rounded-[10px] text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0",
+    isDark
+      ? "border-white/10 bg-white/5 text-white placeholder:text-slate-500"
+      : "border-[#e5e5e5] bg-white text-[#0a0a0a] placeholder:text-[#a3a3a3]",
+  );
+  const labelClass = cn(
+    "mb-1.5 text-xs font-medium",
+    isDark ? "text-slate-400" : "text-[#737373]",
+  );
+  const primaryBtnClass = cn(
+    "h-10 rounded-[10px] px-4 text-sm font-medium shadow-none",
+    isDark
+      ? "!bg-white !text-[#0a0a0a] hover:!bg-slate-200"
+      : "!bg-[#0a0a0a] !text-white hover:!bg-[#262626]",
+  );
+  const outlineBtnClass = cn(
+    "h-9 rounded-[10px] px-3 text-sm font-medium shadow-none",
+    isDark
+      ? "border-white/10 bg-transparent text-white hover:bg-white/10"
+      : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
+  );
+  const tabTriggerClass = cn(
+    "h-10 flex-1 rounded-[10px] px-4 text-sm font-medium shadow-none",
+    "data-[state=active]:!border-transparent data-[state=active]:!font-medium data-[state=active]:!shadow-none",
+    isDark
+      ? "text-slate-400 hover:text-white data-[state=active]:!bg-white data-[state=active]:!text-[#0a0a0a]"
+      : "text-[#737373] hover:text-[#0a0a0a] data-[state=active]:!bg-[#0a0a0a] data-[state=active]:!text-white",
+  );
+  const switchClass = isDark
+    ? "data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-white/15"
+    : "data-[state=checked]:bg-[#0a0a0a] data-[state=unchecked]:bg-[#e5e5e5]";
 
   const refreshNow = async () => {
     if (!canRefresh) return;
@@ -825,11 +857,11 @@ export default function DailyChallengeClient({
   );
 
   const setupPanel = (
-    <Card className={panelClass}>
+    <Card className={cn(panelClass, "rounded-[14px] border shadow-none", isDark ? "border-white/10" : "border-[#e5e5e5]")}>
       <CardHeader className="pb-2 flex flex-row flex-wrap items-start justify-between gap-2">
         <div>
-          <CardTitle className="text-base">Competition windows</CardTitle>
-          <p className="text-xs text-muted-foreground mt-1 font-normal">
+          <CardTitle className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#0a0a0a]")}>Competition windows</CardTitle>
+          <p className={cn("text-xs mt-1 font-normal", isDark ? "text-slate-400" : "text-[#737373]")}>
             Launch Daily Challenge events with a start/end date and prize. Only one selected event
             can drive the creator leaderboard at a time.
           </p>
@@ -840,6 +872,7 @@ export default function DailyChallengeClient({
           size="sm"
           onClick={loadCompetitionEvents}
           disabled={loadingCompetitionEvents}
+          className={outlineBtnClass}
         >
           {loadingCompetitionEvents ? <Loader2 className="w-4 h-4 animate-spin" /> : "Reload windows"}
         </Button>
@@ -854,54 +887,54 @@ export default function DailyChallengeClient({
 
         <div
           className={cn(
-            "space-y-3 rounded-xl border p-3.5",
-            isDark ? "border-white/10" : "border-gray-200",
+            "space-y-3 rounded-[14px] border p-4",
+            isDark ? "border-white/10 bg-white/[0.03]" : "border-[#e5e5e5] bg-white",
           )}
         >
-          <p className="text-sm font-semibold">Create new window</p>
+          <p className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#0a0a0a]")}>Create new window</p>
           <div>
-            <p className="text-xs text-muted-foreground mb-1">Event name</p>
+            <p className={labelClass}>Event name</p>
             <Input
               value={eventForm.name}
               onChange={(e) => setEventForm((p) => ({ ...p, name: e.target.value }))}
-              className="h-10 text-sm"
+              className={fieldClass}
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Start date & time (IST)</p>
+              <p className={labelClass}>Start date & time (IST)</p>
               <Input
                 type="datetime-local"
                 value={eventForm.startsLocal}
                 onChange={(e) => setEventForm((p) => ({ ...p, startsLocal: e.target.value }))}
-                className="h-10 text-sm"
+                className={fieldClass}
               />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-1">End date & time (IST)</p>
+              <p className={labelClass}>End date & time (IST)</p>
               <Input
                 type="datetime-local"
                 value={eventForm.endsLocal}
                 onChange={(e) => setEventForm((p) => ({ ...p, endsLocal: e.target.value }))}
-                className="h-10 text-sm"
+                className={fieldClass}
               />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-3">
             <div className="space-y-2">
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Daily prize per winner</p>
+                <p className={labelClass}>Daily prize per winner</p>
                 <Input
                   type="number"
                   min={0}
                   step="0.01"
                   value={eventForm.prizeAmount}
                   onChange={(e) => setEventForm((p) => ({ ...p, prizeAmount: e.target.value }))}
-                  className="h-10 text-sm"
+                  className={fieldClass}
                 />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground mb-1">
+                <p className={labelClass}>
                   Weekly prize (optional, defaults to daily)
                 </p>
                 <Input
@@ -912,12 +945,12 @@ export default function DailyChallengeClient({
                   onChange={(e) =>
                     setEventForm((p) => ({ ...p, weeklyPrizeAmount: e.target.value }))
                   }
-                  className="h-10 text-sm"
+                  className={fieldClass}
                   placeholder="Same as daily"
                 />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground mb-1">
+                <p className={labelClass}>
                   Monthly prize (optional, defaults to daily)
                 </p>
                 <Input
@@ -928,13 +961,13 @@ export default function DailyChallengeClient({
                   onChange={(e) =>
                     setEventForm((p) => ({ ...p, monthlyPrizeAmount: e.target.value }))
                   }
-                  className="h-10 text-sm"
+                  className={fieldClass}
                   placeholder="Same as daily"
                 />
               </div>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Currency</p>
+              <p className={labelClass}>Currency</p>
               <Input
                 value={eventForm.prizeCurrency}
                 onChange={(e) =>
@@ -943,11 +976,11 @@ export default function DailyChallengeClient({
                     prizeCurrency: e.target.value.toUpperCase().slice(0, 3),
                   }))
                 }
-                className="h-10 text-sm"
+                className={fieldClass}
               />
             </div>
           </div>
-          <Button onClick={createCompetitionEvent} disabled={creatingEvent} className="w-full sm:w-auto">
+          <Button onClick={createCompetitionEvent} disabled={creatingEvent} className={cn(primaryBtnClass, "w-full sm:w-auto")}>
             {creatingEvent ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
             Launch Daily Challenge event
           </Button>
@@ -966,7 +999,7 @@ export default function DailyChallengeClient({
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-semibold">All events</p>
+          <p className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#0a0a0a]")}>All events</p>
           {loadingCompetitionEvents ? (
             <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -995,16 +1028,16 @@ export default function DailyChallengeClient({
                         <div
                           key={row.id}
                           className={cn(
-                            "rounded-xl border p-3 space-y-2",
+                            "rounded-[14px] border p-3 space-y-2",
                             isDark
                               ? "border-white/10 bg-white/[0.03]"
-                              : "border-gray-200 bg-gray-50/50",
+                              : "border-[#e5e5e5] bg-white",
                           )}
                         >
                           {editingEventId === row.id && editEventDraft ? (
                             <div className="space-y-3">
                               <div>
-                                <p className="text-xs text-muted-foreground mb-1">Name</p>
+                                <p className={labelClass}>Name</p>
                                 <Input
                                   value={editEventDraft.name}
                                   onChange={(e) =>
@@ -1012,12 +1045,12 @@ export default function DailyChallengeClient({
                                       d ? { ...d, name: e.target.value } : d,
                                     )
                                   }
-                                  className="h-10 text-sm"
+                                  className={fieldClass}
                                 />
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
-                                  <p className="text-xs text-muted-foreground mb-1">Starts (IST)</p>
+                                  <p className={labelClass}>Starts (IST)</p>
                                   <Input
                                     type="datetime-local"
                                     value={editEventDraft.startsLocal}
@@ -1026,11 +1059,11 @@ export default function DailyChallengeClient({
                                         d ? { ...d, startsLocal: e.target.value } : d,
                                       )
                                     }
-                                    className="h-10 text-sm"
+                                    className={fieldClass}
                                   />
                                 </div>
                                 <div>
-                                  <p className="text-xs text-muted-foreground mb-1">Ends (IST)</p>
+                                  <p className={labelClass}>Ends (IST)</p>
                                   <Input
                                     type="datetime-local"
                                     value={editEventDraft.endsLocal}
@@ -1039,14 +1072,14 @@ export default function DailyChallengeClient({
                                         d ? { ...d, endsLocal: e.target.value } : d,
                                       )
                                     }
-                                    className="h-10 text-sm"
+                                    className={fieldClass}
                                   />
                                 </div>
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-3">
                                 <div className="space-y-2">
                                   <div>
-                                    <p className="text-xs text-muted-foreground mb-1">
+                                    <p className={labelClass}>
                                       Daily prize per winner
                                     </p>
                                     <Input
@@ -1059,11 +1092,11 @@ export default function DailyChallengeClient({
                                           d ? { ...d, prizeAmount: e.target.value } : d,
                                         )
                                       }
-                                      className="h-10 text-sm"
+                                      className={fieldClass}
                                     />
                                   </div>
                                   <div>
-                                    <p className="text-xs text-muted-foreground mb-1">
+                                    <p className={labelClass}>
                                       Weekly prize per winner
                                     </p>
                                     <Input
@@ -1076,11 +1109,11 @@ export default function DailyChallengeClient({
                                           d ? { ...d, weeklyPrizeAmount: e.target.value } : d,
                                         )
                                       }
-                                      className="h-10 text-sm"
+                                      className={fieldClass}
                                     />
                                   </div>
                                   <div>
-                                    <p className="text-xs text-muted-foreground mb-1">
+                                    <p className={labelClass}>
                                       Monthly prize per winner
                                     </p>
                                     <Input
@@ -1093,12 +1126,12 @@ export default function DailyChallengeClient({
                                           d ? { ...d, monthlyPrizeAmount: e.target.value } : d,
                                         )
                                       }
-                                      className="h-10 text-sm"
+                                      className={fieldClass}
                                     />
                                   </div>
                                 </div>
                                 <div>
-                                  <p className="text-xs text-muted-foreground mb-1">Currency</p>
+                                  <p className={labelClass}>Currency</p>
                                   <Input
                                     value={editEventDraft.prizeCurrency}
                                     onChange={(e) =>
@@ -1113,11 +1146,11 @@ export default function DailyChallengeClient({
                                           : d,
                                       )
                                     }
-                                    className="h-10 text-sm"
+                                    className={fieldClass}
                                   />
                                 </div>
                               </div>
-                              <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+                              <div className={cn("flex items-center justify-between rounded-[10px] border px-3 py-2", isDark ? "border-white/10" : "border-[#e5e5e5]")}>
                                 <span className="text-sm">Selected for leaderboard</span>
                                 <Switch
                                   checked={editEventDraft.is_active}
@@ -1126,6 +1159,7 @@ export default function DailyChallengeClient({
                                       d ? { ...d, is_active: Boolean(c) } : d,
                                     )
                                   }
+                                  className={switchClass}
                                 />
                               </div>
                               <div className="flex flex-col sm:flex-row flex-wrap gap-2">
@@ -1133,6 +1167,7 @@ export default function DailyChallengeClient({
                                   size="sm"
                                   onClick={() => saveEditedEvent(row.id, false)}
                                   disabled={savingEventId === row.id}
+                                  className={primaryBtnClass}
                                 >
                                   {savingEventId === row.id ? (
                                     <Loader2 className="w-4 h-4 mr-1 animate-spin" />
@@ -1141,9 +1176,10 @@ export default function DailyChallengeClient({
                                 </Button>
                                 <Button
                                   size="sm"
-                                  variant="secondary"
+                                  variant="outline"
                                   onClick={() => saveEditedEvent(row.id, true)}
                                   disabled={savingEventId === row.id}
+                                  className={outlineBtnClass}
                                 >
                                   Select as active event
                                 </Button>
@@ -1152,6 +1188,7 @@ export default function DailyChallengeClient({
                                   variant="outline"
                                   onClick={cancelEditEvent}
                                   type="button"
+                                  className={outlineBtnClass}
                                 >
                                   Cancel
                                 </Button>
@@ -1161,8 +1198,18 @@ export default function DailyChallengeClient({
                             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                               <div className="min-w-0 space-y-1">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <p className="font-medium truncate">{row.name}</p>
-                                  <Badge variant="outline" className="text-[10px] shrink-0">
+                                  <p className={cn("font-medium truncate", isDark ? "text-white" : "text-[#0a0a0a]")}>{row.name}</p>
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      "text-[10px] shrink-0 rounded-full border font-medium shadow-none",
+                                      row.phase === "live"
+                                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                        : isDark
+                                          ? "border-white/15 text-slate-300"
+                                          : "border-[#e5e5e5] bg-[#f5f5f5] text-[#404040]",
+                                    )}
+                                  >
                                     {row.phase === "live"
                                       ? "Live"
                                       : row.phase === "upcoming"
@@ -1170,7 +1217,16 @@ export default function DailyChallengeClient({
                                         : "Ended"}
                                   </Badge>
                                   {row.is_active ? (
-                                    <Badge className="text-[10px] shrink-0">Active</Badge>
+                                    <Badge
+                                      className={cn(
+                                        "text-[10px] shrink-0 rounded-full border-0 font-medium shadow-none",
+                                        isDark
+                                          ? "bg-white text-[#0a0a0a]"
+                                          : "bg-[#0a0a0a] text-white",
+                                      )}
+                                    >
+                                      Active
+                                    </Badge>
                                   ) : null}
                                 </div>
                                 <p className="text-xs text-muted-foreground break-words">
@@ -1204,7 +1260,7 @@ export default function DailyChallengeClient({
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="shrink-0"
+                                className={cn(outlineBtnClass, "shrink-0")}
                                 onClick={() => beginEditEvent(row)}
                                 type="button"
                               >
@@ -1237,12 +1293,12 @@ export default function DailyChallengeClient({
 
         <div
           className={cn(
-            "space-y-3 rounded-xl border p-4",
-            isDark ? "border-white/10 bg-[#161616]" : "border-gray-200 bg-muted/40",
+            "space-y-3 rounded-[14px] border p-4",
+            isDark ? "border-white/10 bg-white/[0.03]" : "border-[#e5e5e5] bg-[#fafafa]",
           )}
         >
           <div>
-            <p className="text-sm font-semibold">Contest rules · selected event</p>
+            <p className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#0a0a0a]")}>Contest rules · selected event</p>
             <p className="text-xs text-muted-foreground mt-1">
               These thresholds drive eligibility on the live leaderboard.
             </p>
@@ -1254,7 +1310,7 @@ export default function DailyChallengeClient({
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Views winner min verified views</p>
+              <p className={labelClass}>Views winner min verified views</p>
               <Input
                 type="number"
                 min={0}
@@ -1262,11 +1318,11 @@ export default function DailyChallengeClient({
                 onChange={(e) =>
                   setAdminRules((prev) => ({ ...prev, viewsMinViews: e.target.value }))
                 }
-                className="h-10 text-sm"
+                className={fieldClass}
               />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Reels winner min verified reels</p>
+              <p className={labelClass}>Reels winner min verified reels</p>
               <Input
                 type="number"
                 min={0}
@@ -1274,11 +1330,11 @@ export default function DailyChallengeClient({
                 onChange={(e) =>
                   setAdminRules((prev) => ({ ...prev, reelsMinReels: e.target.value }))
                 }
-                className="h-10 text-sm"
+                className={fieldClass}
               />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Reels winner min verified views</p>
+              <p className={labelClass}>Reels winner min verified views</p>
               <Input
                 type="number"
                 min={0}
@@ -1286,11 +1342,11 @@ export default function DailyChallengeClient({
                 onChange={(e) =>
                   setAdminRules((prev) => ({ ...prev, reelsMinViews: e.target.value }))
                 }
-                className="h-10 text-sm"
+                className={fieldClass}
               />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Min views per reel for reels board</p>
+              <p className={labelClass}>Min views per reel for reels board</p>
               <Input
                 type="number"
                 min={0}
@@ -1298,11 +1354,11 @@ export default function DailyChallengeClient({
                 onChange={(e) =>
                   setAdminRules((prev) => ({ ...prev, minViewsPerReel: e.target.value }))
                 }
-                className="h-10 text-sm"
+                className={fieldClass}
               />
             </div>
           </div>
-          <div className="flex items-center justify-between rounded-xl border px-3 py-2">
+          <div className={cn("flex items-center justify-between rounded-[10px] border px-3 py-2", isDark ? "border-white/10 bg-transparent" : "border-[#e5e5e5] bg-white")}>
             <p className="text-sm">Promote next eligible when rank #1 is not eligible</p>
             <Switch
               checked={adminRules.promoteNextEligible}
@@ -1312,6 +1368,7 @@ export default function DailyChallengeClient({
                   promoteNextEligible: Boolean(checked),
                 }))
               }
+              className={switchClass}
             />
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -1321,7 +1378,7 @@ export default function DailyChallengeClient({
             <Button
               onClick={saveEligibilityRules}
               disabled={savingRules || !hasSelectedEvent}
-              className="sm:w-auto w-full"
+              className={cn(primaryBtnClass, "sm:w-auto w-full")}
             >
               {savingRules ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
               Save contest rules
@@ -1352,14 +1409,14 @@ export default function DailyChallengeClient({
         >
           <TabsList
             className={cn(
-              "min-h-0 w-full max-w-xl gap-1.5 rounded-xl border p-1.5 py-2",
-              panelClass,
+              "h-auto min-h-0 w-full max-w-xl gap-1 rounded-[14px] border p-1 py-1 shadow-none",
+              isDark ? "border-white/10 bg-[#161616]" : "border-[#e5e5e5] bg-[#f5f5f5]",
             )}
           >
-            <TabsTrigger value="setup" className="rounded-lg text-xs sm:text-sm">
+            <TabsTrigger value="setup" className={tabTriggerClass}>
               Contest setup
             </TabsTrigger>
-            <TabsTrigger value="live" className="rounded-lg text-xs sm:text-sm">
+            <TabsTrigger value="live" className={tabTriggerClass}>
               Live event & leaderboard
             </TabsTrigger>
           </TabsList>

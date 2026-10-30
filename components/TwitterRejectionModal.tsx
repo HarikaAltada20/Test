@@ -381,13 +381,13 @@ export default function TwitterRejectionModal({
                             className={cn(
                                 "w-full text-md rounded-full flex-1 sm:flex-none",
                                 isDark
-                                    ? "bg-[#7F39EC] py-3 text-white"
-                                    : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+                                    ? "bg-white py-3 text-[#1a1a1a] hover:bg-[#f3f3f5]"
+                                    : "bg-[#1a1a1a] py-3 text-white hover:bg-black"
                             )}
                         >
                             {isLoading ? (
                                 <div className="flex items-center justify-center gap-2">
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                    <div className={cn("animate-spin rounded-full h-4 w-4 border-b-2", isDark ? "border-[#1a1a1a]" : "border-white")}></div>
                                     <span>Rejecting...</span>
                                 </div>
                             ) : (
@@ -400,10 +400,10 @@ export default function TwitterRejectionModal({
                             onClick={handleClose}
                             disabled={isLoading}
                             className={cn(
-                                "w-full text-md rounded-full flex-1 sm:flex-none",
+                                "w-full rounded-full border text-md flex-1 sm:flex-none",
                                 isDark
-                                    ? "py-3 border border-[#FF5353] text-[#FF5353]"
-                                    : "bg-[#FF323224] text-[#E50000] py-4"
+                                    ? "border-white/15 bg-transparent py-3 text-white hover:bg-white/10"
+                                    : "border-[#e5e5e5] bg-white py-3 text-[#1a1a1a] hover:bg-[#f6f6f7]"
                             )}
                         >
                             Cancel

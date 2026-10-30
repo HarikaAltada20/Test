@@ -39,10 +39,6 @@ import type {
 
 type Preset = "day" | "7d" | "30d" | "365d" | "overall" | "custom";
 
-/** Instagram Insights–inspired accent (bars / highlights) */
-const IG_PINK = "#E1306C";
-const IG_PURPLE = "#833AB4";
-
 const METRIC_ORDER = [
   "reach",
   "views",
@@ -258,7 +254,7 @@ function DemographicBarList({
   return (
     <div className="space-y-3 max-h-[min(320px,50vh)] overflow-y-auto pr-1">
       {withPct.map(({ row, pct }, i) => {
-        const barColor = i % 2 === 0 ? IG_PINK : IG_PURPLE;
+        const barColor = isDark ? "#ffffff" : "#1a1a1a";
         const { primary, short } = expandDemographicLabel(row.label, dimension);
         const titleAttr =
           short && short !== primary ? `${primary} (${short})` : primary;
@@ -698,7 +694,7 @@ function InteractionMetricsCard({
                     className="h-full rounded-full opacity-90"
                     style={{
                       width: `${barPct}%`,
-                      background: `linear-gradient(90deg, ${IG_PINK}, ${IG_PURPLE})`,
+                      background: isDark ? "#ffffff" : "#1a1a1a",
                     }}
                   />
                 </div>
@@ -735,7 +731,7 @@ function ProfileSection({
           rel="noopener noreferrer"
           className={cn(
             "inline-flex items-center justify-end gap-1.5 font-medium hover:underline",
-            isDark ? "text-purple-300" : "text-[#4A00BE]",
+            isDark ? "text-white hover:text-white" : "text-[#1a1a1a]",
           )}
         >
           @{un}
@@ -956,10 +952,10 @@ export function InstagramCreatorAnalyticsModal({
       <Dialog open={open} onOpenChange={handleOpenChange} isdark={!!isDark}>
         <DialogContent
           className={cn(
-            "max-w-2xl max-h-[90vh] overflow-y-auto gap-0",
+            "max-w-2xl max-h-[90vh] overflow-y-auto gap-0 rounded-2xl",
             isDark
-              ? "bg-[#050505] border-white/10 text-white shadow-2xl shadow-black/50"
-              : "border-slate-200 bg-white text-slate-900 shadow-lg",
+              ? "border-white/10 bg-[#161616] text-white"
+              : "border-[#ececef] bg-white text-[#1a1a1a]",
           )}
         >
           <DialogHeader className="pb-2">
@@ -1004,7 +1000,7 @@ export function InstagramCreatorAnalyticsModal({
                   className={cn(
                     "rounded-full h-8",
                     preset === p.id &&
-                      "bg-[#4A00BE] hover:bg-[#4A00BE]/90 text-white border-0",
+                      "border-0 bg-[#1a1a1a] text-white hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-[#f3f3f5]",
                     preset !== p.id &&
                       (isDark
                         ? "border-white/15 bg-white/5 text-slate-200 hover:bg-white/10"
@@ -1209,8 +1205,7 @@ export function InstagramCreatorAnalyticsModal({
             <Button
               type="button"
               className={cn(
-                "gap-2 rounded-full",
-                "bg-[#4A00BE] hover:bg-[#4A00BE]/90 text-white",
+                "gap-2 rounded-full bg-[#1a1a1a] text-white hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-[#f3f3f5]",
               )}
               disabled={
                 loading ||

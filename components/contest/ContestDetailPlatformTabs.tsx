@@ -1,7 +1,5 @@
 "use client";
 
-import { Users } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getPlatformIcon } from "@/lib/platform-icons";
 import {
@@ -22,8 +20,18 @@ type ContestDetailPlatformTabsProps = {
   counts?: Partial<Record<PlatformTabValue, number>>;
   /** When true, tab clicks are ignored (e.g. refresh metrics in progress). */
   disabled?: boolean;
+  /** Compact pills that sit in a heading row instead of stretching full width. */
+  compact?: boolean;
   /** Neutral (Figma brand redesign) pill look: grey segmented group, solid black active pill. */
   neutral?: boolean;
+};
+
+const FILTER_ICON = "/images/contest-details/filters";
+
+const PLATFORM_FILTER_ICONS: Partial<Record<VideoContestPlatform, string>> = {
+  youtube: `${FILTER_ICON}/youtube.svg`,
+  instagram: `${FILTER_ICON}/instagram.svg`,
+  tiktok: `${FILTER_ICON}/tiktok.svg`,
 };
 
 export function ContestDetailPlatformTabs({
@@ -34,25 +42,33 @@ export function ContestDetailPlatformTabs({
   fullWidth = false,
   counts,
   disabled = false,
+  compact = false,
   neutral = false,
 }: ContestDetailPlatformTabsProps) {
   if (platforms.length < 2) return null;
 
   const tabs: PlatformTabValue[] = [ALL_PLATFORM_TAB, ...platforms];
 
-  if (fullWidth && neutral) {
+  if (neutral) {
     return (
-      <div
-        className={cn(
-          "flex flex-wrap items-center gap-1 w-full rounded-xl p-1",
-          isDark ? "bg-white/5" : "bg-[#f5f5f5]",
-        )}
-      >
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={cn(
+            "text-xs font-medium",
+            isDark ? "text-slate-400" : "text-[#737373]",
+          )}
+        >
+          Platform
+        </span>
         {tabs.map((tab) => {
           const isActive = tab === active;
           const label =
-            tab === ALL_PLATFORM_TAB ? "All" : VIDEO_PLATFORM_LABELS[tab];
+            tab === ALL_PLATFORM_TAB
+              ? "All platforms"
+              : VIDEO_PLATFORM_LABELS[tab];
           const count = counts?.[tab];
+          const icon =
+            tab === ALL_PLATFORM_TAB ? null : PLATFORM_FILTER_ICONS[tab];
           return (
             <button
               key={tab}
@@ -63,40 +79,29 @@ export function ContestDetailPlatformTabs({
                 onChange(tab);
               }}
               className={cn(
-                "flex-1 min-w-[7.5rem] h-9 inline-flex items-center justify-center gap-2 rounded-lg px-3 text-[13px] font-medium transition-colors whitespace-nowrap",
+                "inline-flex shrink-0 items-center gap-[7px] rounded-full px-3 py-1.5 text-xs whitespace-nowrap transition-colors",
                 isActive
                   ? isDark
-                    ? "bg-white text-[#0a0a0a]"
-                    : "bg-[#0a0a0a] text-white"
+                    ? "bg-white font-semibold text-[#0a0a0a]"
+                    : "bg-[#0a0a0a] font-semibold text-white"
                   : isDark
-                    ? "text-slate-300 hover:text-white"
-                    : "text-[#404040] hover:text-[#0a0a0a]",
-                disabled && "opacity-60 cursor-not-allowed",
+                    ? "border border-white/10 bg-transparent font-semibold text-slate-200"
+                    : "border border-[#e5e5e5] bg-white font-semibold text-[#404040]",
+                disabled && "cursor-not-allowed opacity-60",
               )}
-              title={
-                disabled
-                  ? "Platform tabs are locked while metrics refresh is running"
-                  : undefined
-              }
             >
-              <div className="flex items-center gap-1.5">
-                {tab === ALL_PLATFORM_TAB ? (
-                  <Users className="h-4 w-4 shrink-0" />
-                ) : (
-                  <span className="shrink-0 inline-flex [&_svg]:text-current">
-                    {getPlatformIcon(tab, "sm", "currentColor")}
-                  </span>
-                )}
-                <span>{label}</span>
-              </div>
+              {icon ? (
+                <img src={icon} alt="" className="shrink-0" />
+              ) : null}
+              <span>{label}</span>
               {typeof count === "number" ? (
                 <span
                   className={cn(
-                    "text-[13px] font-normal tabular-nums",
+                    "font-medium tabular-nums",
                     isActive
                       ? isDark
                         ? "text-[#0a0a0a]/60"
-                        : "text-white/70"
+                        : "text-white/60"
                       : isDark
                         ? "text-slate-400"
                         : "text-[#737373]",
@@ -112,48 +117,19 @@ export function ContestDetailPlatformTabs({
     );
   }
 
-  if (!fullWidth) {
-    return (
-      <div className="flex flex-wrap gap-2">
-        {tabs.map((tab) => {
-          const isActive = tab === active;
-          const label =
-            tab === ALL_PLATFORM_TAB ? "All" : VIDEO_PLATFORM_LABELS[tab];
-          return (
-            <button
-              key={tab}
-              type="button"
-              disabled={disabled}
-              onClick={() => {
-                if (disabled) return;
-                onChange(tab);
-              }}
-              className={cn(
-                "h-9 px-3 rounded-lg text-sm font-medium border transition-colors inline-flex items-center gap-2",
-                isActive
-                  ? "bg-[#7F39EC] text-white border-[#7F39EC]"
-                  : isDark
-                    ? "bg-transparent border-gray-600 text-white hover:bg-[#D9C0FF26]"
-                    : "bg-white border-gray-300 text-foreground hover:bg-gray-50",
-                disabled && "opacity-60 cursor-not-allowed hover:bg-transparent",
-              )}
-              title={
-                disabled
-                  ? "Platform tabs are locked while metrics refresh is running"
-                  : undefined
-              }
-            >
-              {tab !== ALL_PLATFORM_TAB ? getPlatformIcon(tab, "sm") : null}
-              {label}
-            </button>
-          );
-        })}
-      </div>
-    );
-  }
+  const stretch = fullWidth || !compact;
 
   return (
-    <div className="flex flex-wrap gap-3 w-full">
+    <div
+      className={cn(
+        "items-center rounded-xl p-1",
+        neutral ? "gap-1" : "gap-0.5",
+        stretch
+          ? "flex w-full flex-nowrap"
+          : "inline-flex w-max max-w-full flex-wrap",
+        isDark ? "bg-white/[0.06]" : "bg-[#f5f5f5]",
+      )}
+    >
       {tabs.map((tab) => {
         const isActive = tab === active;
         const label =
@@ -169,13 +145,26 @@ export function ContestDetailPlatformTabs({
               onChange(tab);
             }}
             className={cn(
-              "flex-1 min-w-[7.5rem] min-h-12 inline-flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-medium border transition-colors whitespace-nowrap",
-              isActive
-                ? "bg-[#7F39EC] text-white border-[#7F39EC] shadow-sm"
-                : isDark
-                  ? "bg-transparent text-white border-gray-400 hover:bg-[#D9C0FF26]"
-                  : "bg-white text-[#7F39EC] border-[#7F39EC] hover:bg-purple-50",
-              disabled && "opacity-60 cursor-not-allowed",
+              "inline-flex items-center justify-center whitespace-nowrap transition-colors",
+              stretch
+                ? "h-9 min-w-0 flex-1 gap-1.5 rounded-lg px-3 text-[13px]"
+                : "min-w-[88px] shrink-0 gap-1.5 rounded-[9px] px-3 py-1.5 text-sm",
+              neutral
+                ? isActive
+                  ? isDark
+                    ? "bg-white font-medium text-[#0a0a0a]"
+                    : "bg-[#0a0a0a] font-medium text-white"
+                  : isDark
+                    ? "font-medium text-slate-300 hover:text-white"
+                    : "font-medium text-[#404040] hover:text-[#0a0a0a]"
+                : isActive
+                  ? isDark
+                    ? "bg-white/10 font-semibold text-white shadow-[0px_1px_6px_0px_rgba(10,10,10,0.1)]"
+                    : "bg-white font-semibold text-[#0a0a0a] shadow-[0px_1px_6px_0px_rgba(10,10,10,0.1)]"
+                  : isDark
+                    ? "font-medium text-slate-400 hover:text-white"
+                    : "font-medium text-[#737373] hover:text-[#0a0a0a]",
+              disabled && "cursor-not-allowed opacity-60",
             )}
             title={
               disabled
@@ -183,28 +172,31 @@ export function ContestDetailPlatformTabs({
                 : undefined
             }
           >
-            <div className="flex items-center gap-1.5">
-              {tab === ALL_PLATFORM_TAB ? (
-                <Users className="h-4 w-4 shrink-0" />
-              ) : (
-                <span className="shrink-0 inline-flex [&_svg]:text-current">
-                  {getPlatformIcon(tab, "sm", "currentColor")}
-                </span>
-              )}
-              <span className="text-[13px] font-medium">{label}</span>
-            </div>
-            {typeof count === "number" ? (
-              <Badge
-                variant="secondary"
+            {tab !== ALL_PLATFORM_TAB ? (
+              <span className="inline-flex shrink-0 [&_svg]:h-3.5 [&_svg]:w-3.5">
+                {getPlatformIcon(
+                  tab,
+                  "sm",
+                  neutral && isActive ? "currentColor" : undefined,
+                )}
+              </span>
+            ) : null}
+            <span>{label}</span>
+            {neutral && typeof count === "number" ? (
+              <span
                 className={cn(
-                  "px-1.5 py-0.5 text-xs h-5",
-                  isDark
-                    ? "text-white bg-[#FFFFFF36]"
-                    : "text-[#7F39EC] bg-purple-200",
+                  "font-normal tabular-nums",
+                  isActive
+                    ? isDark
+                      ? "text-[#0a0a0a]/60"
+                      : "text-white/70"
+                    : isDark
+                      ? "text-slate-400"
+                      : "text-[#737373]",
                 )}
               >
-                {count}
-              </Badge>
+                ({count})
+              </span>
             ) : null}
           </button>
         );

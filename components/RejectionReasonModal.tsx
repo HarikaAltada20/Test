@@ -279,9 +279,12 @@ export default function RejectionReasonModal({
 
                     {/* Selected Reason Preview */}
                     {selectedReason && selectedReason !== 'other' && (
-                        <Alert className="border-[#7F39EC17] bg-[#7F39EC17]">
+                        <Alert className={cn(
+                          "border",
+                          isDark ? "border-white/10 bg-white/5" : "border-[#ececef] bg-[#f6f6f7]",
+                        )}>
                             {/* <CheckCircle2 className="h-4 w-4 text-[#7F39EC]]" /> */}
-                            <AlertDescription className="text-[#7F39EC]">
+                            <AlertDescription className={isDark ? "text-white" : "text-[#1a1a1a]"}>
                                 <div className="space-y-1">
                                     <div className="font-medium">Selected Reason: {getSelectedReasonLabel()}</div>
                                     <div className="text-sm">{getSelectedReasonDescription()}</div>
@@ -371,13 +374,13 @@ export default function RejectionReasonModal({
                         className={cn(
                             "w-full text-md rounded-full flex-1 sm:flex-none",
                             isDark
-                                ? "bg-[#7F39EC] py-3 text-white"
-                                : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+                                ? "bg-white py-3 text-[#1a1a1a] hover:bg-[#f3f3f5]"
+                                : "bg-[#1a1a1a] py-3 text-white hover:bg-black"
                         )}
                     >
                         {isLoading ? (
                             <div className="flex items-center justify-center text-center">
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#7F39EC] mr-2"></div>
+                                <div className={cn("animate-spin rounded-full h-4 w-4 border-b-2 mr-2", isDark ? "border-[#1a1a1a]" : "border-white")}></div>
                                 Rejecting...
                             </div>
                         ) : (
@@ -393,10 +396,10 @@ export default function RejectionReasonModal({
 
                         disabled={isLoading}
                         className={cn(
-                            "w-full text-md rounded-full flex-1 sm:flex-none",
+                            "w-full rounded-full border text-md flex-1 sm:flex-none",
                             isDark
-                                ? "py-3 border border-[#FF5353] text-[#FF5353]"
-                                : "bg-[#FF323224] text-[#E50000] py-4"
+                                ? "border-white/15 bg-transparent py-3 text-white hover:bg-white/10"
+                                : "border-[#e5e5e5] bg-white py-3 text-[#1a1a1a] hover:bg-[#f6f6f7]"
                         )}
                     >
                         Cancel

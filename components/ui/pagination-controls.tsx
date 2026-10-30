@@ -224,8 +224,8 @@ export function PaginationControls({
   const pageButtonActiveClass = cn(
     "border shadow-none",
     isDark
-      ? "border-white bg-white text-[#1a1a1a] hover:bg-white hover:text-[#1a1a1a]"
-      : "border-[#1a1a1a] bg-[#1a1a1a] text-white hover:bg-black hover:text-white",
+      ? "border-white !bg-white !text-[#1a1a1a] hover:!bg-white hover:!text-[#1a1a1a]"
+      : "border-[#1a1a1a] !bg-[#1a1a1a] !text-white hover:!bg-black hover:!text-white",
   );
 
   return (

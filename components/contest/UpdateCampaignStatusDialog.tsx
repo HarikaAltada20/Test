@@ -204,16 +204,16 @@ function LoadingPanel({
   return (
     <div
       className={cn(
-        "rounded-xl border p-4 sm:p-5 space-y-3",
+        "rounded-xl border p-3 space-y-2",
         isDark
-          ? "border-purple-400/30 bg-purple-500/5"
-          : "border-purple-200 bg-purple-50/60",
+          ? "border-white/10 bg-white/5"
+          : "border-[#ececef] bg-[#f6f6f7]",
       )}
       aria-live="polite"
       aria-busy="true"
     >
       <div className="flex items-center gap-3">
-        <Loader2 className="h-5 w-5 shrink-0 animate-spin text-purple-500" />
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#1a1a1a] dark:text-white" />
         <p
           className={cn(
             "font-medium text-sm leading-snug",
@@ -386,17 +386,16 @@ export function UpdateCampaignStatusDialog({
       <DialogContent
         hideCloseButton={isUpdating}
         className={cn(
-          "w-[calc(100vw-1.5rem)] max-w-[460px] gap-0 p-0 overflow-hidden rounded-2xl border shadow-xl",
-          "max-h-[min(92vh,680px)] flex flex-col",
+          "flex max-h-[90vh] w-[min(460px,calc(100vw-1.5rem))] max-w-[460px] flex-col gap-3 overflow-y-auto rounded-2xl border p-4 shadow-xl",
           isDark
-            ? "bg-[#111113] border-white/10 text-white"
-            : "bg-white border-neutral-200 text-neutral-900",
+            ? "border-white/10 bg-[#161616] text-white"
+            : "border-[#ececef] bg-white text-[#1a1a1a]",
         )}
       >
-        <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-4 overflow-y-auto flex-1 min-h-0">
+        <div>
           <DialogHeader className="flex flex-row items-center gap-3 text-left space-y-0 pr-6">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-100 border border-neutral-200/60 dark:bg-white/10 dark:border-white/10">
-              <SlidersHorizontal className="h-5 w-5 text-neutral-800 dark:text-neutral-200" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f3f3f5] text-[#1a1a1a] dark:bg-white/10 dark:text-white">
+              <SlidersHorizontal className="h-4 w-4" />
             </div>
             <div className="min-w-0 flex-1">
               <DialogTitle
@@ -418,7 +417,7 @@ export function UpdateCampaignStatusDialog({
             </div>
           </DialogHeader>
 
-          <div className="mt-3.5 space-y-3.5">
+          <div className="mt-3 space-y-3">
             {isUpdating ? (
               <LoadingPanel
                 isDark={isDark}
@@ -522,17 +521,17 @@ export function UpdateCampaignStatusDialog({
                 {showImpactAlert ? (
                   <Alert
                     className={cn(
-                      "items-start rounded-xl p-3 border",
+                      "items-start rounded-xl border p-3",
                       isDark
-                        ? "border-sky-500/30 bg-sky-500/10 [&>svg]:text-sky-400"
-                        : "border-sky-200 bg-sky-50/70 [&>svg]:text-sky-600",
+                        ? "border-white/10 bg-white/5 [&>svg]:text-slate-300"
+                        : "border-[#ececef] bg-[#f6f6f7] [&>svg]:text-[#1a1a1a]",
                     )}
                   >
                     <AlertTriangle className="h-4 w-4 mt-0.5" />
                     <AlertTitle
                       className={cn(
-                        "text-xs font-semibold mb-1",
-                        isDark ? "text-sky-100" : "text-sky-900",
+                        "mb-1 text-xs font-semibold",
+                        isDark ? "text-white" : "text-[#1a1a1a]",
                       )}
                     >
                       {STATUS_TRANSITION_IMPACT_TITLE}
@@ -540,7 +539,7 @@ export function UpdateCampaignStatusDialog({
                     <AlertDescription
                       className={cn(
                         "text-xs leading-relaxed",
-                        isDark ? "text-sky-100/90" : "text-sky-900/90",
+                        isDark ? "text-slate-300" : "text-[#737373]",
                       )}
                     >
                       <ul className="space-y-1 list-none pl-0">
@@ -552,7 +551,7 @@ export function UpdateCampaignStatusDialog({
                         <p
                           className={cn(
                             "mt-2 text-[11px] leading-relaxed",
-                            isDark ? "text-sky-200/70" : "text-sky-800/80",
+                            isDark ? "text-slate-400" : "text-[#737373]",
                           )}
                         >
                           If any step fails, the status will not change.
@@ -591,23 +590,17 @@ export function UpdateCampaignStatusDialog({
           </div>
         </div>
 
-        <DialogFooter
-          className={cn(
-            "shrink-0 flex items-center justify-end gap-2",
-            "px-4 py-3 sm:px-5 sm:py-3 border-t",
-            isDark ? "border-white/10 bg-[#111113]" : "border-neutral-200 bg-white",
-          )}
-        >
+        <DialogFooter className="flex-row justify-end gap-2 sm:space-x-0">
           <Button
             type="button"
             variant="outline"
             onClick={() => handleOpenChange(false)}
             disabled={isUpdating}
             className={cn(
-              "rounded-xl h-9 px-4 text-xs font-semibold border transition-colors",
+              "h-10 rounded-full px-4 text-sm font-medium shadow-none",
               isDark
-                ? "border-white/10 text-neutral-300 hover:bg-white/5 hover:text-white"
-                : "border-neutral-200 text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900",
+                ? "border-white/15 bg-transparent text-white hover:bg-white/10"
+                : "border-[#e5e5e5] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
             )}
           >
             Cancel
@@ -621,10 +614,10 @@ export function UpdateCampaignStatusDialog({
             loading={isUpdating}
             loadingText="Updating…"
             className={cn(
-              "rounded-xl h-9 px-5 text-xs font-semibold transition-colors shadow-xs",
+              "h-10 rounded-full px-4 text-sm font-medium shadow-none",
               isDark
-                ? "bg-white text-neutral-900 hover:bg-neutral-100"
-                : "bg-neutral-900 text-white hover:bg-neutral-800",
+                ? "bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]"
+                : "bg-[#1a1a1a] text-white hover:bg-black",
             )}
           >
             Confirm update

@@ -2241,16 +2241,16 @@ export function CreatorSubmissionsModal({
             {showSelectionCheckboxes && selectedSubmissions.size > 0 && (
               <div
                 className={cn(
-                  "border-b p-2 sm:p-3",
-                  isDark ? "bg-blue-900/20" : "bg-blue-50",
+                  "rounded-2xl border p-3",
+                  isDark ? "border-white/10 bg-white/5" : "border-[#e5e5e5] bg-[#fafafa]",
                 )}
               >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
                   <div className="flex shrink-0 items-center gap-2">
                     <span
                       className={cn(
-                        "text-sm font-medium",
-                        isDark ? "text-blue-300" : "text-blue-900",
+                        "text-[13px] font-medium",
+                        isDark ? "text-slate-100" : "text-[#0a0a0a]",
                       )}
                     >
                       {selectedSubmissions.size} selected
@@ -2281,10 +2281,10 @@ export function CreatorSubmissionsModal({
                               : "Verifying submissions..."
                           }
                           className={cn(
-                            "h-8 shrink-0 whitespace-nowrap rounded-md",
+                            "h-8 shrink-0 whitespace-nowrap rounded-[10px] border-0 text-[13px] font-medium shadow-none",
                             isDark
-                              ? "border bg-green-900/30 text-green-400 border-green-500"
-                              : "bg-green-600 text-white hover:bg-green-700 ",
+                              ? "bg-white text-[#0a0a0a] hover:bg-slate-200"
+                              : "bg-[#0a0a0a] text-white hover:bg-[#262626]",
                           )}
                         >
                           <CheckCircle className="h-4 w-4 mr-1" />
@@ -2295,10 +2295,10 @@ export function CreatorSubmissionsModal({
                           onClick={() => handleBulkAction("reject")}
                           disabled={bulkStatusActionsBusy}
                           className={cn(
-                            "h-8 shrink-0 whitespace-nowrap rounded-md",
+                            "h-8 shrink-0 whitespace-nowrap rounded-[10px] border text-[13px] font-medium shadow-none",
                             isDark
-                              ? "border bg-red-900/30 text-red-400 border-red-500"
-                              : "bg-red-600 text-white hover:bg-red-700 ",
+                              ? "border-white/10 bg-transparent text-red-400 hover:bg-red-500/10"
+                              : "border-[#e5e5e5] bg-white text-[#dc2626] hover:bg-[#fef2f2]",
                           )}
                         >
                           <XCircle className="h-4 w-4 mr-1" />
@@ -2309,10 +2309,10 @@ export function CreatorSubmissionsModal({
                           onClick={() => handleBulkAction("pending")}
                           disabled={bulkStatusActionsBusy}
                           className={cn(
-                            "h-8 shrink-0 whitespace-nowrap rounded-md",
+                            "h-8 shrink-0 whitespace-nowrap rounded-[10px] border text-[13px] font-medium shadow-none",
                             isDark
-                              ? "border bg-yellow-900/30 text-yellow-400 border-yellow-500"
-                              : "bg-yellow-600 text-white hover:bg-yellow-700 ",
+                              ? "border-white/10 bg-transparent text-slate-100 hover:bg-white/10"
+                              : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
                           )}
                         >
                           <Clock className="h-4 w-4 mr-1" />
@@ -2329,10 +2329,10 @@ export function CreatorSubmissionsModal({
                       loading={bulkDownloading}
                       loadingText="Downloading..."
                       className={cn(
-                        "h-8 shrink-0 whitespace-nowrap rounded-md",
+                        "h-8 shrink-0 whitespace-nowrap rounded-[10px] border text-[13px] font-medium shadow-none",
                         isDark
-                          ? "border border-white/10 bg-white/5 text-slate-100 hover:bg-white/10"
-                          : "border border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
+                          ? "border-white/10 bg-transparent text-slate-100 hover:bg-white/10"
+                          : "border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#fafafa]",
                       )}
                     >
                       <Download className="h-4 w-4 mr-1" />
@@ -2351,8 +2351,8 @@ export function CreatorSubmissionsModal({
                               className={cn(
                                 "shrink-0 rounded p-1",
                                 isDark
-                                  ? "text-blue-300/90 hover:bg-white/10"
-                                  : "text-blue-800/80 hover:bg-blue-100/80",
+                                  ? "text-slate-300 hover:bg-white/10"
+                                  : "text-[#737373] hover:bg-[#f3f3f5]",
                               )}
                               aria-label="How payout works"
                             >
@@ -2376,7 +2376,7 @@ export function CreatorSubmissionsModal({
                                 handleBulkPayment("standard", false)
                               }
                               disabled={isAnyBulkPaymentBusy}
-                              className="h-8 shrink-0 bg-blue-600 text-white hover:bg-blue-700"
+                              className="h-8 shrink-0 rounded-[10px] border border-[#e5e5e5] bg-white text-[13px] font-medium text-[#0a0a0a] shadow-none hover:bg-[#fafafa] dark:border-white/10 dark:bg-transparent dark:text-slate-100 dark:hover:bg-white/10"
                             >
                               {isBulkPayBtnLoading("standard", false) ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2397,7 +2397,7 @@ export function CreatorSubmissionsModal({
                                       handleBulkPayment("bonus", false)
                                     }
                                     disabled={isAnyBulkPaymentBusy}
-                                    className="h-8 shrink-0 bg-green-600 text-white hover:bg-green-700"
+                                    className="h-8 shrink-0 rounded-[10px] border border-[#e5e5e5] bg-white text-[13px] font-medium text-[#0a0a0a] shadow-none hover:bg-[#fafafa] dark:border-white/10 dark:bg-transparent dark:text-slate-100 dark:hover:bg-white/10"
                                   >
                                     {isBulkPayBtnLoading("bonus", false) ? (
                                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2415,7 +2415,7 @@ export function CreatorSubmissionsModal({
                                     handleBulkPayment("both", false)
                                   }
                                   disabled={isAnyBulkPaymentBusy}
-                                  className="h-8 shrink-0 bg-[#0a0a0a] text-white hover:bg-[#262626] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-slate-200"
+                                  className="h-8 shrink-0 rounded-[10px] border-0 bg-[#0a0a0a] text-[13px] font-medium text-white shadow-none hover:bg-[#262626] dark:bg-white dark:text-[#0a0a0a] dark:hover:bg-slate-200"
                                 >
                                   {isBulkPayBtnLoading("both", false) ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2439,7 +2439,7 @@ export function CreatorSubmissionsModal({
                                     handleBulkPayment("standard", true)
                                   }
                                   disabled={isAnyBulkPaymentBusy}
-                                  className="h-8 shrink-0 border border-blue-500/80 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
+                                  className="h-8 shrink-0 rounded-[10px] border border-[#e5e5e5] bg-white text-[13px] font-medium text-[#0a0a0a] shadow-none hover:bg-[#fafafa] dark:border-white/10 dark:bg-transparent dark:text-slate-100 dark:hover:bg-white/10"
                                 >
                                   {isBulkPayBtnLoading("standard", true) ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2458,7 +2458,7 @@ export function CreatorSubmissionsModal({
                                       handleBulkPayment("bonus", true)
                                     }
                                     disabled={isAnyBulkPaymentBusy}
-                                    className="h-8 shrink-0 border border-green-500/80 bg-green-500/10 text-green-700 hover:bg-green-500/20 dark:text-green-300"
+                                    className="h-8 shrink-0 rounded-[10px] border border-[#e5e5e5] bg-white text-[13px] font-medium text-[#0a0a0a] shadow-none hover:bg-[#fafafa] dark:border-white/10 dark:bg-transparent dark:text-slate-100 dark:hover:bg-white/10"
                                   >
                                     {isBulkPayBtnLoading("bonus", true) ? (
                                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2476,7 +2476,7 @@ export function CreatorSubmissionsModal({
                                     handleBulkPayment("both", true)
                                   }
                                   disabled={isAnyBulkPaymentBusy}
-                                  className="h-8 shrink-0 border border-neutral-400/80 bg-neutral-500/10 text-neutral-800 hover:bg-neutral-500/20 dark:border-white/20 dark:bg-white/10 dark:text-slate-200"
+                                  className="h-8 shrink-0 rounded-[10px] border border-[#e5e5e5] bg-white text-[13px] font-medium text-[#0a0a0a] shadow-none hover:bg-[#fafafa] dark:border-white/10 dark:bg-transparent dark:text-slate-100 dark:hover:bg-white/10"
                                 >
                                   {isBulkPayBtnLoading("both", true) ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2503,7 +2503,7 @@ export function CreatorSubmissionsModal({
                                     handleBulkPayment("standard", true)
                                   }
                                   disabled={isAnyBulkPaymentBusy}
-                                  className="h-8 shrink-0 border border-blue-500/80 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
+                                  className="h-8 shrink-0 rounded-[10px] border border-[#e5e5e5] bg-white text-[13px] font-medium text-[#0a0a0a] shadow-none hover:bg-[#fafafa] dark:border-white/10 dark:bg-transparent dark:text-slate-100 dark:hover:bg-white/10"
                                 >
                                   {isBulkPayBtnLoading("standard", true) ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />

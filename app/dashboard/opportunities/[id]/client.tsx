@@ -1922,16 +1922,23 @@ export function ContestClientPage({
       setLoadingCreatorVideosModal(false);
       return;
     }
-    if (creatorWiseLeaderboard.length === 0) {
-      setSelectedCreatorSubmissions([]);
-      setLoadingCreatorVideosModal(false);
-      return;
-    }
     const existing = creatorWiseLeaderboard.find(
       (r) => r.creator_id === selectedCreatorId,
     );
-    if (existing?.submissions?.length) {
-      setSelectedCreatorSubmissions(existing.submissions);
+    const grouped = groupedLeaderboardByCreator?.find(
+      (group) => group.creator_id === selectedCreatorId,
+    );
+    const knownCount = Number(
+      grouped?.submission_count ?? existing?.submission_count ?? 0,
+    );
+    const attached = existing?.submissions?.length
+      ? existing.submissions
+      : grouped?.submissions || [];
+    if (
+      attached.length > 0 &&
+      (knownCount <= 0 || attached.length >= knownCount)
+    ) {
+      setSelectedCreatorSubmissions(attached);
       setLoadingCreatorVideosModal(false);
       return;
     }
@@ -1960,8 +1967,8 @@ export function ContestClientPage({
     selectedCreatorId,
     leaderboardDisplayMode,
     contest?.platform,
-    creatorWiseLeaderboard.length,
     creatorWiseLeaderboard,
+    groupedLeaderboardByCreator,
   ]);
 
   // Get user's submissions (now memoized)
@@ -12230,19 +12237,6 @@ export function ContestClientPage({
                             </div>
                           </div>
                         )}
-                        {showLeaderboardPlatformIcons &&
-                          contest?.platform?.toLowerCase() !== "twitter" &&
-                          contest?.platform?.toLowerCase() !== "x" && (
-                            <div className="mb-4">
-                              <ContestDetailPlatformTabs
-                                platforms={detailVideoPlatforms}
-                                active={leaderboardPlatformTab}
-                                onChange={setLeaderboardPlatformTab}
-                                isDark={isDark}
-                                fullWidth
-                              />
-                            </div>
-                          )}
                         {/* Top creators podium (top 3 of the current first page) */}
                         {(() => {
                           const isTwitterLb =
@@ -12264,25 +12258,50 @@ export function ContestClientPage({
                             earnings: number;
                             verified: boolean;
                             badgeSource: any;
+                            creatorId?: string;
+                            submissionCount?: number;
                           }[] = useCreatorRows
                             ? (groupedLeaderboardByCreator || [])
                                 .slice(0, 3)
-                                .map((g: any, i: number) => ({
-                                  rank: i + 1,
-                                  name:
-                                    g.user_platform_username ??
-                                    g.creator_username ??
-                                    "",
-                                  pfp:
-                                    g.user_platform_pfp_url ??
-                                    g.creator_pfp_url,
-                                  views: Number(g.total_views || 0),
-                                  earnings: Number(g.total_earnings || 0),
-                                  verified:
+                                .map((g: any, i: number) => {
+                                  const creatorId = String(g.creator_id || "");
+                                  const earned = Number(g.total_earnings || 0);
+                                  const paid =
                                     g.has_paid_submission === true ||
-                                    (g.submissions || []).some(isVerifiedStatus),
-                                  badgeSource: g,
-                                }))
+                                    (g.submissions || []).some(isVerifiedStatus);
+                                  const isMilestone = isMilestoneContestType(
+                                    contest?.contest_type,
+                                  );
+                                  const expectedTotal = isMilestone
+                                    ? (milestoneDerivedData.creatorExpectedRewardMap.get(
+                                        creatorId,
+                                      ) || 0) +
+                                      (milestoneDerivedData.creatorMostVerifiedViewsBonusMap.get(
+                                        creatorId,
+                                      ) || 0) +
+                                      (milestoneDerivedData.creatorMostVerifiedReelsBonusMap.get(
+                                        creatorId,
+                                      ) || 0)
+                                    : earned;
+                                  const showEarned = paid && earned > 0;
+                                  const amount = showEarned ? earned : expectedTotal;
+                                  return {
+                                    rank: i + 1,
+                                    creatorId,
+                                    name:
+                                      g.user_platform_username ??
+                                      g.creator_username ??
+                                      "",
+                                    pfp:
+                                      g.user_platform_pfp_url ??
+                                      g.creator_pfp_url,
+                                    views: Number(g.total_views || 0),
+                                    earnings: amount > 0 ? amount : 0,
+                                    verified: showEarned,
+                                    badgeSource: g,
+                                    submissionCount: Number(g.submission_count || 0),
+                                  };
+                                })
                             : leaderboard.slice(0, 3).map((e: any, i) => ({
                                 rank: i + 1,
                                 name: e.user_platform_username ?? "",
@@ -12310,21 +12329,21 @@ export function ContestClientPage({
                                   : "mb-3",
                               )}
                             >
-                              <div className="mb-5 flex items-center gap-3">
-                                <div
-                                  className={cn(
-                                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border",
-                                    isDark
-                                      ? "border-slate-700 bg-white/10 text-white"
-                                      : "border-neutral-200 bg-[#fff6d6] text-[#b7791f]",
-                                  )}
-                                >
-                                  <Trophy className="h-4 w-4" />
-                                </div>
-                                <div className="min-w-0">
+                              <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-3">
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className={cn(
+                                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border",
+                                      isDark
+                                        ? "border-slate-700 bg-white/10 text-white"
+                                        : "border-neutral-200 bg-[#fff6d6] text-[#b7791f]",
+                                    )}
+                                  >
+                                    <Trophy className="h-4 w-4" />
+                                  </div>
                                   <h3
                                     className={cn(
-                                      "text-sm font-semibold",
+                                      "whitespace-nowrap text-sm font-semibold",
                                       isDark ? "text-white" : "text-[#171717]",
                                     )}
                                   >
@@ -12332,31 +12351,20 @@ export function ContestClientPage({
                                       ? "All creators"
                                       : "All submissions"}
                                   </h3>
-                                  {/* <p
-                                    className={cn(
-                                      "text-xs",
-                                      isDark
-                                        ? "text-slate-400"
-                                        : "text-slate-500",
-                                    )}
-                                  >
-                                    {useCreatorRows
-                                      ? "Highest total views among approved creators"
-                                      : "Highest views among approved submissions"}
-                                  </p> */}
                                 </div>
-                                <span
-                                  className={cn(
-                                    "ml-auto shrink-0 self-start text-xs",
-                                    isDark
-                                      ? "text-slate-400"
-                                      : "text-slate-500",
-                                  )}
-                                >
-                                  Ranked by views
-                                </span>
+                                {showLeaderboardPlatformIcons ? (
+                                  <div className="ml-auto max-w-full shrink-0">
+                                    <ContestDetailPlatformTabs
+                                      platforms={detailVideoPlatforms}
+                                      active={leaderboardPlatformTab}
+                                      onChange={setLeaderboardPlatformTab}
+                                      isDark={isDark}
+                                      compact
+                                    />
+                                  </div>
+                                ) : null}
                               </div>
-                              <div className="grid grid-cols-3 items-end gap-2 sm:gap-4">
+                              <div className="grid grid-cols-3 items-end gap-2 pt-3 sm:gap-4">
                                 {podiumOrder.map((p) => {
                                   const isFirst = p.rank === 1;
                                   return (
@@ -12430,6 +12438,22 @@ export function ContestClientPage({
                                       <div className="mt-1 flex min-h-[1.25rem] max-w-full justify-center">
                                         {renderVerificationBadges(p.badgeSource)}
                                       </div>
+                                      {useCreatorRows &&
+                                      typeof p.submissionCount === "number" ? (
+                                        <p
+                                          className={cn(
+                                            "mt-1 text-[11px]",
+                                            isDark
+                                              ? "text-slate-400"
+                                              : "text-slate-500",
+                                          )}
+                                        >
+                                          {p.submissionCount}{" "}
+                                          {p.submissionCount === 1
+                                            ? "submission"
+                                            : "submissions"}
+                                        </p>
+                                      ) : null}
                                       <p
                                         className={cn(
                                           "mt-1 font-bold tabular-nums",
@@ -12443,17 +12467,38 @@ export function ContestClientPage({
                                       >
                                         {p.views.toLocaleString()}
                                       </p>
-                                      <p
-                                        className={cn(
-                                          "text-[11px]",
-                                          isDark
-                                            ? "text-slate-400"
-                                            : "text-slate-500",
-                                        )}
-                                      >
-                                        views
-                                      </p>
-                                     
+                                      <div className="flex items-center justify-center gap-0.5">
+                                        <p
+                                          className={cn(
+                                            "text-[11px]",
+                                            isDark
+                                              ? "text-slate-400"
+                                              : "text-slate-500",
+                                          )}
+                                        >
+                                          views
+                                        </p>
+                                        {useCreatorRows && p.creatorId ? (
+                                          <button
+                                            type="button"
+                                            title="View submissions"
+                                            onClick={() => {
+                                              setSelectedCreatorId(p.creatorId!);
+                                              setShowCreatorVideosModal(true);
+                                              setCreatorVideosCurrentPage(1);
+                                            }}
+                                            className={cn(
+                                              "inline-flex h-6 w-6 items-center justify-center rounded-md",
+                                              isDark
+                                                ? "text-slate-400 hover:bg-white/10 hover:text-white"
+                                                : "text-slate-600 hover:bg-black/5 hover:text-[#1a1a1a]",
+                                            )}
+                                          >
+                                            <Eye className="h-4 w-4" />
+                                          </button>
+                                        ) : null}
+                                      </div>
+                                      {p.earnings > 0 ? (
                                         <p
                                           className={cn(
                                             "mt-2 text-xs font-semibold tabular-nums sm:text-sm",
@@ -12469,6 +12514,7 @@ export function ContestClientPage({
                                           {p.verified ? "Earned" : "Expected"}:{" "}
                                           {formatMoney(p.earnings)}
                                         </p>
+                                      ) : null}
                                      
                                     </div>
                                   );
@@ -12507,10 +12553,10 @@ export function ContestClientPage({
                               contest?.platform?.toLowerCase() !== "x" &&
                               leaderboardCurrentPage === 1
                             ) && (
-                            <div className="flex items-center justify-between gap-3 px-5 py-3.5">
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-3 px-5 py-3.5">
                               <h3
                                 className={cn(
-                                  "text-sm font-semibold",
+                                  "whitespace-nowrap text-sm font-semibold",
                                   isDark ? "text-white" : "text-[#171717]",
                                 )}
                               >
@@ -12519,19 +12565,28 @@ export function ContestClientPage({
                                   ? "All creators"
                                   : "All submissions"}
                               </h3>
-                              <span
-                                className={cn(
-                                  "text-xs",
-                                  isDark ? "text-slate-400" : "text-slate-500",
-                                )}
-                              >
-                                Ranked by{" "}
-                                {contest?.platform?.toLowerCase() ===
-                                  "twitter" ||
-                                contest?.platform?.toLowerCase() === "x"
-                                  ? "points"
-                                  : "views"}
-                              </span>
+                              {showLeaderboardPlatformIcons &&
+                              contest?.platform?.toLowerCase() !== "twitter" &&
+                              contest?.platform?.toLowerCase() !== "x" ? (
+                                <div className="ml-auto max-w-full shrink-0">
+                                  <ContestDetailPlatformTabs
+                                    platforms={detailVideoPlatforms}
+                                    active={leaderboardPlatformTab}
+                                    onChange={setLeaderboardPlatformTab}
+                                    isDark={isDark}
+                                    compact
+                                  />
+                                </div>
+                              ) : (
+                                <span
+                                  className={cn(
+                                    "ml-auto text-xs",
+                                    isDark ? "text-slate-400" : "text-slate-500",
+                                  )}
+                                >
+                                  Ranked by points
+                                </span>
+                              )}
                             </div>
                           )}
                           {leaderboardDisplayMode === "creator" &&
@@ -13426,7 +13481,7 @@ export function ContestClientPage({
                                                     );
                                                   }}
                                                   className="h-7 w-7 p-0 shrink-0"
-                                                  title="View all videos by this creator"
+                                                  title="View submissions"
                                                 >
                                                   <Eye
                                                     className={cn(

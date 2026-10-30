@@ -95,6 +95,7 @@ export function ContestDetailsCover({
   const isLive = status?.toLowerCase() === "active";
   const isUpcoming = status?.toLowerCase() === "upcoming";
   const primaryPlatform = platforms[0];
+  const isMultiPlatform = platforms.length > 1;
 
   return (
     <motion.div
@@ -227,7 +228,10 @@ export function ContestDetailsCover({
 
       <div
         className={cn(
-          "grid grid-cols-1 gap-px border-t sm:grid-cols-2 lg:grid-cols-4",
+          "grid grid-cols-1 gap-px border-t sm:grid-cols-2",
+          isMultiPlatform
+            ? "lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]"
+            : "lg:grid-cols-4",
           isDark ? "border-white/10 bg-white/10" : "border-[#ececef] bg-[#ececef]",
         )}
       >
@@ -289,7 +293,7 @@ export function ContestDetailsCover({
             >
               {kpi.icon}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p
                 className={cn(
                   "text-sm font-medium",
@@ -300,7 +304,10 @@ export function ContestDetailsCover({
               </p>
               <p
                 className={cn(
-                  "mt-1 truncate text-2xl font-semibold tracking-[-0.3px]",
+                  "mt-1 font-semibold tracking-[-0.3px]",
+                  kpi.key === "platform" && isMultiPlatform
+                    ? "whitespace-normal break-words text-xl leading-snug"
+                    : "truncate text-2xl",
                   isDark ? "text-white" : "text-[#0a0a0a]",
                 )}
               >

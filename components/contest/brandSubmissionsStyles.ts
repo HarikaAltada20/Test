@@ -10,25 +10,31 @@ export function getBrandSubmissionsStyles(isDark: boolean) {
     isDark ? "bg-[#111113] border-white/10" : "bg-white border-[#e5e5e5]",
   );
 
-  /** Stat tile (Expected reward etc.) */
+  /** Stat tile (Expected reward etc.) — 5-up row from Contest Details Redesign */
   const statTile = cn(
-    "rounded-2xl border px-5 py-4 shadow-[0px_1px_3px_0px_rgba(10,10,10,0.04)]",
+    "rounded-[14px] border p-4 shadow-[0px_1px_3px_0px_rgba(10,10,10,0.04)]",
     isDark ? "bg-[#111113] border-white/10" : "bg-white border-[#e5e5e5]",
   );
   const statLabel = cn(
-    "text-[11px] font-medium uppercase tracking-wide",
+    "text-[10px] font-semibold uppercase tracking-wide",
     isDark ? "text-slate-400" : "text-[#737373]",
   );
-  // Figma shows all tile values in the primary text color (no green accent).
-  const statValue = (_green?: boolean) =>
+  // Granted amounts are green; expected amounts stay in the primary text color.
+  const statValue = (green?: boolean) =>
     cn(
-      "mt-1 text-[22px] leading-7 font-bold",
-      isDark ? "text-white" : "text-[#0a0a0a]",
+      "mt-1 text-[20px] leading-6 font-bold tracking-[-0.3px]",
+      green
+        ? isDark
+          ? "text-emerald-400"
+          : "text-[#059669]"
+        : isDark
+          ? "text-white"
+          : "text-[#0a0a0a]",
     );
 
   /** Segmented pill group for status filters */
   const pillList = cn(
-    "flex flex-wrap items-center gap-1 w-full h-auto rounded-xl p-1 border-0 shadow-none",
+    "flex flex-wrap items-center gap-1 w-full h-auto min-h-0 min-w-0 py-0 rounded-xl p-1 border-0 shadow-none",
     isDark ? "bg-white/5" : "bg-[#f5f5f5]",
   );
   const pill = cn(
@@ -122,9 +128,6 @@ export function getBrandSubmissionsStyles(isDark: boolean) {
   /** Pagination footer wrapper: restyles shared <PaginationControls> buttons via descendant selectors. */
   const pagination = cn(
     "[&_button]:rounded-[10px] [&_button]:text-[13px] [&_button]:font-medium [&_button]:shadow-none",
-    isDark
-      ? ""
-      : "[&_button]:border-[#e5e5e5] [&_button:not(.bg-primary)]:bg-white [&_button:not(.bg-primary)]:text-[#0a0a0a] [&_button.bg-primary]:border-[#0a0a0a] [&_button.bg-primary]:bg-[#0a0a0a] [&_button.bg-primary]:text-white",
   );
   /** Secondary text-link inside a row (e.g. "View Content", "Download"). */
   const rowLink = isDark

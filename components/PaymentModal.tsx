@@ -158,7 +158,7 @@ export default function PaymentModal({
                 step="0.01"
                 className={cn(
                   isDark
-                    ? "bg-[#06021D] border border-gray-600 text-white"
+                    ? "bg-[#161616] border border-white/10 text-white"
                     : "bg-white text-black"
                 )}
                 placeholder="0.00"
@@ -187,7 +187,7 @@ export default function PaymentModal({
                 value={customMessage}
                 className={cn(
                   isDark
-                    ? "bg-[#06021D] border border-gray-600 text-white"
+                    ? "bg-[#161616] border border-white/10 text-white"
                     : "bg-white text-black"
                 )}
                 onChange={(e) => setCustomMessage(e.target.value)}
@@ -218,7 +218,7 @@ export default function PaymentModal({
                 disabled={isLoading}
                 className={cn(
                   isDark
-                    ? "bg-[#06021D] border border-gray-600 text-white"
+                    ? "bg-[#161616] border border-white/10 text-white"
                     : "bg-white text-black"
                 )}
               />
@@ -245,7 +245,7 @@ export default function PaymentModal({
                 rows={3}
                 className={cn(
                   isDark
-                    ? "bg-[#06021D] border border-gray-600 text-white"
+                    ? "bg-[#161616] border border-white/10 text-white"
                     : "bg-white text-black"
                 )}
               />

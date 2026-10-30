@@ -753,12 +753,6 @@ body {
   /* .dashboard-container {
     zoom: 0.85;
   } */
-
-  /* Ensure sidebar takes full height despite zoom */
-  .dashboard-container aside {
-    height: 117.647vh !important; /* 100vh / 0.85 = 117.647vh */
-    min-height: 117.647vh !important;
-  }
 }
 
 /* Vertical scroll for mobile */

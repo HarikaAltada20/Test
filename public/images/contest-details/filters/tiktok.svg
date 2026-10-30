@@ -1,0 +1,12 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="platform/tiktok" clip-path="url(#clip0_0_84)">
+<path id="Vector" d="M10 0.9375H5C2.75634 0.9375 0.9375 2.75634 0.9375 5V10C0.9375 12.2437 2.75634 14.0625 5 14.0625H10C12.2437 14.0625 14.0625 12.2437 14.0625 10V5C14.0625 2.75634 12.2437 0.9375 10 0.9375Z" fill="#0A0A0A"/>
+<path id="Vector_2" d="M8.25 3.75V8.5C8.25 8.78431 8.16569 9.06224 8.00774 9.29863C7.84978 9.53503 7.62528 9.71928 7.36261 9.82808C7.09994 9.93688 6.81091 9.96535 6.53206 9.90988C6.25321 9.85441 5.99707 9.7175 5.79603 9.51647C5.595 9.31543 5.45809 9.05929 5.40262 8.78044C5.34715 8.50159 5.37562 8.21256 5.48442 7.94989C5.59322 7.68722 5.77747 7.46272 6.01387 7.30476C6.25026 7.14681 6.52819 7.0625 6.8125 7.0625" stroke-width="1.125" stroke-linecap="round" stroke="white"/>
+<path id="Vector_3" d="M8.25 3.75C8.4375 4.875 9.125 5.5625 10.25 5.6875" stroke-width="1.125" stroke-linecap="round" stroke="white"/>
+</g>
+<defs>
+<clipPath id="clip0_0_84">
+<rect width="15" height="15" fill="white"/>
+</clipPath>
+</defs>
+</svg>

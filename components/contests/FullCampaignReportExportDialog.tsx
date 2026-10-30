@@ -379,8 +379,8 @@ export function FullCampaignReportExportDialog({
         className={cn(
           "sm:max-w-lg max-h-[90vh] overflow-y-auto",
           isDark
-            ? "border-gray-600 bg-[#06021D] text-slate-100"
-            : "border-slate-200 bg-white text-slate-900",
+            ? "border-white/10 bg-[#161616] text-white"
+            : "border-[#ececef] bg-white text-[#1a1a1a]",
         )}
       >
         <DialogHeader>
@@ -411,8 +411,8 @@ export function FullCampaignReportExportDialog({
             className={cn(
               "rounded-lg border p-3",
               isDark
-                ? "border-gray-600 bg-[#170337]/60"
-                : "border-slate-200 bg-slate-50",
+                ? "border-white/10 bg-white/5"
+                : "border-[#ececef] bg-[#f6f6f7]",
             )}
           >
             <Label
@@ -434,8 +434,8 @@ export function FullCampaignReportExportDialog({
                 className={cn(
                   "h-10 text-sm font-medium",
                   isDark
-                    ? "border-gray-500 bg-[#07031D] text-white"
-                    : "border-slate-300 bg-white text-slate-900",
+                    ? "border-white/10 bg-[#161616] text-white"
+                    : "border-[#e5e5e5] bg-white text-[#1a1a1a]",
                 )}
               >
                 <SelectValue placeholder="Choose data scope">
@@ -456,8 +456,8 @@ export function FullCampaignReportExportDialog({
             className={cn(
               "rounded-lg border p-3",
               isDark
-                ? "border-gray-600 bg-[#170337]/60"
-                : "border-slate-200 bg-slate-50",
+                ? "border-white/10 bg-white/5"
+                : "border-[#ececef] bg-[#f6f6f7]",
             )}
           >
             <Label
@@ -479,8 +479,8 @@ export function FullCampaignReportExportDialog({
                 className={cn(
                   "h-10 text-sm font-medium",
                   isDark
-                    ? "border-gray-500 bg-[#07031D] text-white"
-                    : "border-slate-300 bg-white text-slate-900",
+                    ? "border-white/10 bg-[#161616] text-white"
+                    : "border-[#e5e5e5] bg-white text-[#1a1a1a]",
                 )}
               >
                 <SelectValue placeholder="Choose sort order">
@@ -516,8 +516,8 @@ export function FullCampaignReportExportDialog({
             className={cn(
               "rounded-lg border p-3",
               isDark
-                ? "border-gray-600 bg-[#170337]/60"
-                : "border-slate-200 bg-slate-50",
+                ? "border-white/10 bg-white/5"
+                : "border-[#ececef] bg-[#f6f6f7]",
             )}
           >
             <Label
@@ -537,8 +537,8 @@ export function FullCampaignReportExportDialog({
                 className={cn(
                   "h-10 text-sm font-medium",
                   isDark
-                    ? "border-gray-500 bg-[#07031D] text-white"
-                    : "border-slate-300 bg-white text-slate-900",
+                    ? "border-white/10 bg-[#161616] text-white"
+                    : "border-[#e5e5e5] bg-white text-[#1a1a1a]",
                 )}
               >
                 <SelectValue placeholder="Choose format">
@@ -577,8 +577,8 @@ export function FullCampaignReportExportDialog({
             disabled={exporting}
             className={cn(
               isDark
-                ? "border-gray-600 text-slate-300 hover:bg-slate-800"
-                : "",
+                ? "border-white/10 text-white hover:bg-white/10"
+                : "rounded-full border-[#e5e5e5] text-[#1a1a1a] hover:bg-[#f6f6f7]",
             )}
           >
             Cancel
@@ -591,7 +591,7 @@ export function FullCampaignReportExportDialog({
               submissionColumnIds.length === 0 ||
               creatorColumnIds.length === 0
             }
-            className="gap-2 bg-[#4A00BE] hover:bg-[#4A00BE]/90 text-white"
+            className="gap-2 rounded-full bg-[#1a1a1a] text-white hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-[#f3f3f5]"
           >
             {exporting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -626,8 +626,8 @@ function ColumnPickerSection({
       className={cn(
         "rounded-lg border p-3",
         isDark
-          ? "border-gray-600 bg-[#170337]/60"
-          : "border-slate-200 bg-slate-50",
+          ? "border-white/10 bg-white/5"
+          : "border-[#ececef] bg-[#f6f6f7]",
       )}
     >
       <Label
@@ -655,10 +655,7 @@ function ColumnPickerSection({
                 onCheckedChange={(checked) =>
                   onToggle(col.id, checked === true)
                 }
-                className={cn(
-                  isDark &&
-                    "border-gray-500 data-[state=checked]:bg-[#4A00BE]",
-                )}
+                className="border-[#d4d4d8] data-[state=checked]:border-[#1a1a1a] data-[state=checked]:bg-[#1a1a1a] data-[state=checked]:text-white dark:border-white/20 dark:data-[state=checked]:border-white dark:data-[state=checked]:bg-white dark:data-[state=checked]:text-[#1a1a1a]"
               />
               <Label
                 htmlFor={id}
