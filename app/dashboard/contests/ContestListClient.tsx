@@ -8,78 +8,29 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { EnhancedTabs } from "@/components/ui/enhancedTabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import {
-  Edit,
-  Trophy,
-  Calendar,
-  Clock,
-  Users,
-  DollarSign,
-  ExternalLink,
-  Info,
-  Shield,
-  CheckCircle,
-  XCircle,
-  Eye,
-  FileText,
-  CheckCheck,
-  Tag,
-  Star,
-  AlertTriangle,
-  PlayCircle,
-  StopCircle,
-  Building,
-  LayoutGrid,
-  List,
-  Search,
-  X,
-  RefreshCw,
-  Hourglass,
-} from "lucide-react";
-import { DeleteContestButton } from "@/components/delete-contest-button";
-import { formatLocalDateTime, cn } from "@/lib/utils";
-import { AccessModeBadge } from "@/components/campaign-access/AccessBadge";
-import { CampaignAccessInfo } from "@/components/campaign-access/CampaignAccessInfo";
+import { RefreshCw } from "lucide-react";
+import { DuplicateCampaignDialog } from "@/components/campaign-duplicate/DuplicateCampaignDialog";
+import { cn } from "@/lib/utils";
 import { isModifiedLinkClick } from "@/lib/navigation-link-utils";
-import {
-  KNOWN_POST_CONTEST_STATUSES,
-  getEndedOpportunityBadgeClassName,
-  getEndedOpportunityPhaseLabel,
-} from "@/lib/contest-ended-phase-display";
+import { KNOWN_POST_CONTEST_STATUSES } from "@/lib/contest-ended-phase-display";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { isCpmContestType } from "@/lib/contest-type";
 import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
-import { getMultipleSubmissionsBadgeLabel } from "@/lib/contest-list-card-metrics";
 import {
   formatContestListCpmRatesText,
-  formatContestPlatformLabel,
-  resolveBonusDetails,
   resolveContestPlatformCpmRates,
   resolveContestPoolBudgetCents,
   resolveLeaderboardFlatFeeBonusBudgetCents,
 } from "@/lib/video-platform-campaigns";
-import { getContestPlatformIcons } from "@/lib/platform-icons";
+import { BrandCampaignCard } from "@/components/campaign-list/BrandCampaignCard";
+import { BrandCampaignFilters } from "@/components/campaign-list/BrandCampaignFilters";
 import { CampaignListPagination } from "@/components/campaign-list/CampaignListPagination";
 import { useToast } from "@/hooks/use-toast";
 import { PaidPlanUpgradeModal } from "@/components/PaidPlanUpgradeModal";
-import {
-  ButtonLoadingSpinner,
-  PageLoadingSpinner,
-} from "@/components/loading/LoadingSpinner";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   ADMIN_CONTEST_LIST_TAB_KEY,
   DEFAULT_CAMPAIGN_LIST_TAB,
@@ -100,26 +51,12 @@ import {
 } from "@/lib/campaign-list-filters-storage";
 import { useServerCampaignList } from "@/lib/use-server-campaign-list";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { ContestRequirementBadges } from "@/components/ContestRequirementBadges";
-import { CampaignPlatformFilter } from "@/components/campaign-list/CampaignPlatformFilter";
-import {
   CAMPAIGN_FILTER_PLATFORMS,
   expandAvailableCampaignPlatforms,
   isAllCampaignPlatformFilter,
   normalizeCampaignPlatformFilter,
   type CampaignFilterPlatform,
 } from "@/lib/campaign-platform-filter";
-import {
-  ContestListFlatFeeBonusBadge,
-  ContestListStatsFooter,
-  ContestListSubmissionBadges,
-} from "@/components/ContestListCardMetrics";
-
 // Define the type for a campaign
 type Contest = {
   id: string;
@@ -259,47 +196,6 @@ type SortOptionType =
   | "cpm_rate_asc"
   | "submissions_desc"
   | "submissions_asc";
-
-// Moderation status configuration
-const moderationStatusConfig = {
-  draft: {
-    label: "Draft",
-    color: "bg-gray-500",
-    icon: FileText,
-    description: "Campaign is being created",
-  },
-  pending_approval: {
-    label: "Pending Approval",
-    color: "bg-yellow-500",
-    icon: Clock,
-    description: "Waiting for admin review",
-  },
-  approved: {
-    label: "Ready",
-    color: "bg-blue-500",
-    icon: CheckCircle,
-    description: "Approved and ready to publish",
-  },
-  published: {
-    label: "Published",
-    color: "bg-green-500",
-    icon: Eye,
-    description: "Live on platform",
-  },
-  rejected: {
-    label: "Rejected",
-    color: "bg-red-500",
-    icon: XCircle,
-    description: "Needs revision",
-  },
-};
-
-// Contest lifecycle status configuration
-const contestStatusConfig = {
-  upcoming: { label: "Upcoming", color: "bg-purple-500", icon: Calendar },
-  active: { label: "Active", color: "bg-green-600", icon: PlayCircle },
-  ended: { label: "Ended", color: "bg-gray-600", icon: StopCircle },
-};
 
 const BRAND_CONTEST_TAB_IDS = [
   "all",
@@ -546,47 +442,6 @@ export function ContestListClient({
     [],
   );
 
-  const renderContestCardLink = (contest: Contest) => (
-    <Link
-      href={getContestDetailHref(contest.id)}
-      prefetch={false}
-      className="absolute inset-0 z-[1]"
-      aria-label={`View ${contest.title || "campaign"} details`}
-      onClick={(e) => handleContestDetailLinkClick(contest.id, e)}
-    />
-  );
-
-  const renderViewDetailsLink = (
-    contest: Contest,
-    className?: string,
-    options?: {
-      fullWidth?: boolean;
-      eyeClassName?: string;
-      textClassName?: string;
-    },
-  ) => (
-    <Link
-      href={getContestDetailHref(contest.id)}
-      prefetch={false}
-      className={cn(
-        "pointer-events-auto relative z-[2] flex items-center justify-center gap-2 rounded-full",
-        isDark ? "bg-[#7F39EC] text-white" : "bg-[#D9C0FF61] text-[#7F39EC]",
-        options?.fullWidth && "w-full",
-        className,
-      )}
-      onClick={(e) => {
-        e.stopPropagation();
-        handleContestDetailLinkClick(contest.id, e);
-      }}
-    >
-      {navigatingContestId === contest.id ? (
-        <ButtonLoadingSpinner />
-      ) : (
-        <Eye className={cn("h-4 w-4", options?.eyeClassName)} />
-      )}
-      <span className={options?.textClassName}>View Details</span>
-    </Link>
-  );
   const { toast } = useToast();
   const [sortOption, setSortOption] =
     useState<SortOptionType>("created_at_desc");
@@ -807,6 +662,9 @@ export function ContestListClient({
     };
   }>({});
 
+  // "Duplicate" on a card opens the copy dialog for that campaign.
+  const [duplicateSourceId, setDuplicateSourceId] = useState<string | null>(null);
+
   // Helper functions for loading states
   const setButtonLoading = (
     contestId: string,
@@ -956,112 +814,6 @@ export function ContestListClient({
   }, [mode]);
   const isDark = mode === "dark";
 
-  const brandPipelineTabs = useMemo(() => {
-    const countBadge = (n: number) => (
-      <Badge
-        variant="secondary"
-        className={cn(
-          "ml-1.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
-          isDark
-            ? "border-0 bg-white/20 text-white"
-            : "border-0 bg-white text-gray-800 shadow-sm",
-        )}
-      >
-        {n}
-      </Badge>
-    );
-    const row = (text: string, n: number) => (
-      <span className="flex items-center justify-center gap-0.5">
-        <span>{text}</span>
-        {countBadge(n)}
-      </span>
-    );
-    return [
-      { id: "all", label: row("All", serverTabCounts.all) },
-      { id: "draft", label: row("Draft", serverTabCounts.draft) },
-      {
-        id: "pending_approval",
-        label: row("Pending approval", serverTabCounts.pending_approval),
-      },
-      { id: "ready", label: row("Ready", serverTabCounts.ready) },
-      {
-        id: "upcoming",
-        label: row("Upcoming", serverTabCounts.upcoming),
-      },
-      { id: "live", label: row("Live", serverTabCounts.live) },
-      { id: "ended", label: row("Ended", serverTabCounts.ended) },
-      { id: "rejected", label: row("Rejected", serverTabCounts.rejected) },
-    ];
-  }, [serverTabCounts, isDark]);
-
-  const brandPostContestTabs = useMemo(() => {
-    const countBadge = (n: number) => (
-      <Badge
-        variant="secondary"
-        className={cn(
-          "ml-1.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
-          isDark
-            ? "border-0 bg-white/20 text-white"
-            : "border-0 bg-white text-gray-800 shadow-sm",
-        )}
-      >
-        {n}
-      </Badge>
-    );
-    const row = (text: string, n: number, title?: string) => (
-      <span
-        className="flex items-center justify-center gap-0.5 max-w-[min(100%,14rem)]"
-        title={title}
-      >
-        <span className="leading-tight text-center">{text}</span>
-        {countBadge(n)}
-      </span>
-    );
-    const endedTotal = serverTabCounts.ended;
-    return [
-      {
-        id: "all",
-        label: row(
-          "All phases",
-          endedTotal,
-          "All ended campaigns ? any payout step",
-        ),
-      },
-      {
-        id: "post_pending_review",
-        label: row(
-          "Pending review",
-          postPhaseCounts.post_pending_review,
-          "Ended campaigns awaiting initial review",
-        ),
-      },
-      {
-        id: "post_in_review",
-        label: row(
-          "In review",
-          postPhaseCounts.post_in_review,
-          "Verification in progress",
-        ),
-      },
-      {
-        id: "post_payment_pending",
-        label: row(
-          "Payment pending",
-          postPhaseCounts.post_payment_pending,
-          "Verification complete ? payment pending",
-        ),
-      },
-      {
-        id: "post_paid",
-        label: row(
-          "Completed paid",
-          postPhaseCounts.post_paid,
-          "Payout completed",
-        ),
-      },
-    ];
-  }, [serverTabCounts.ended, isDark, postPhaseCounts]);
-
   useLayoutEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
     const apply = () => {
@@ -1073,1626 +825,55 @@ export function ContestListClient({
     return () => mq.removeEventListener("change", apply);
   }, [setViewMode]);
 
-  const getModerationStatusBadge = (moderationStatus: string) => {
-    const config =
-      moderationStatusConfig[
-        moderationStatus as keyof typeof moderationStatusConfig
-      ];
-    if (!config) return null;
-
-    const Icon = config.icon;
-    return (
-      <Badge
-        className={`${config.color} text-white px=3 py-1 text-sm bg-[#7F39EC] border-0`}
-      >
-        {/* <Icon className="w-3 h-3 mr-1" /> */}
-        {config.label}
-      </Badge>
-    );
-  };
-
-  const getContestStatusBadge = (status: string | null) => {
-    if (!status) return null;
-
-    const config =
-      contestStatusConfig[status as keyof typeof contestStatusConfig];
-    if (!config) return null;
-
-    const Icon = config.icon;
-    return (
-      <Badge className={`${config.color} text-white border-0 ml-2`}>
-        <Icon className="w-3 h-3 mr-1" />
-        {config.label}
-      </Badge>
-    );
-  };
-
-  const renderContestCard = (contest: Contest) => {
-    const isPublished = contest.moderation_status === "published";
-
-    // Simple opportunities-style design for published contests
-    if (isPublished) {
-      return (
-        <Card
-          key={contest.id}
-          className={cn(
-            "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
-            isDark
-              ? "bg-[#06021D] border-slate-700"
-              : "bg-white border-slate-200",
-          )}
-        >
-          {renderContestCardLink(contest)}
-          <div className="pointer-events-none flex flex-col flex-grow">
-            <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
-              {contest.thumbnail_url ? (
-                <img
-                  src={contest.thumbnail_url || "/placeholder.svg"}
-                  alt={contest.title || "Campaign thumbnail"}
-                  className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
-                />
-              ) : (
-                <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
-              )}
-              <div className="absolute top-2 right-2 flex flex-wrap justify-end gap-1.5">
-                {(contest.access_mode === "private" ||
-                  contest.access_mode === "restricted") && (
-                  <span className={cn("inline-flex", isDark && "dark")}>
-                    <AccessModeBadge mode={contest.access_mode} size="md" />
-                  </span>
-                )}
-                <Badge
-                  className={cn(
-                    "text-sm px-3 py-1 font-medium border",
-                    contest.status === "active" &&
-                      "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
-                    contest.status === "upcoming" &&
-                      "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
-                    contest.status === "ended" &&
-                      `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
-                    !["active", "upcoming", "ended"].includes(
-                      contest.status || "",
-                    ) && "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
-                  )}
-                >
-                  {contest.status === "active"
-                    ? "Live"
-                    : contest.status === "upcoming"
-                      ? "Upcoming"
-                      : contest.status === "ended"
-                        ? getEndedOpportunityPhaseLabel(
-                            contest.post_contest_status,
-                          )
-                        : contest.status || "Unknown"}
-                </Badge>
-              </div>
-            </div>
-            <CardHeader className="p-4 pb-2">
-              <CardTitle
-                className="text-lg font-bold mr-2 leading-tight"
-                style={{
-                  color: isDark ? "white" : "#1e293b",
-                  transition: "none",
-                }}
-              >
-                {contest.title || "Untitled Campaign"}
-              </CardTitle>
-              {/* New Features Indicators */}
-              <div className="flex flex-wrap items-center gap-2 mt-3">
-                {/* Show campaign type badge (RAID/AWARENESS) for Twitter text_image contests */}
-                {(() => {
-                  const isTwitterTextImage =
-                    (contest.platform?.toLowerCase() === "twitter" ||
-                      contest.platform?.toLowerCase() === "x") &&
-                    contest.contest_format === "text_image";
-
-                  if (isTwitterTextImage) {
-                    const campaignType =
-                      contest.contest_based_details?.twitter_campaign
-                        ?.campaign_type;
-                    if (
-                      campaignType === "raid" ||
-                      campaignType === "awareness"
-                    ) {
-                      return (
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[12px]",
-                            isDark
-                              ? campaignType === "raid"
-                                ? "bg-red-900/30 text-red-300 border-red-700/50"
-                                : "bg-cyan-900/30 text-cyan-300 border-cyan-700/50"
-                              : campaignType === "raid"
-                                ? "bg-red-50 text-red-700 border-red-200"
-                                : "bg-cyan-50 text-cyan-700 border-cyan-200",
-                          )}
-                        >
-                          {campaignType.toUpperCase()}
-                        </Badge>
-                      );
-                    }
-                    return null;
-                  }
-
-                  if (contest.multiple_submissions_enabled) {
-                    return (
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-[12px]",
-                          isDark
-                            ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                            : "bg-purple-50 text-purple-700 border-purple-200",
-                        )}
-                      >
-                        <CheckCheck className="h-3 w-3 mr-1" />
-                        {getMultipleSubmissionsBadgeLabel(contest)}
-                      </Badge>
-                    );
-                  }
-                  return null;
-                })()}
-                <ContestListFlatFeeBonusBadge
-                  contest={contest}
-                  isDark={isDark}
-                  size="compact"
-                />
-                {/* Don't show content_type badge for Twitter text_image contests (we show campaign_type badge instead) */}
-                {(() => {
-                  const isTwitterTextImage =
-                    (contest.platform?.toLowerCase() === "twitter" ||
-                      contest.platform?.toLowerCase() === "x") &&
-                    contest.contest_format === "text_image";
-
-                  if (isTwitterTextImage) {
-                    return null;
-                  }
-
-                  if (contest.content_type) {
-                    return (
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-[12px]",
-                          isDark
-                            ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
-                            : "bg-blue-50 text-blue-700 border-blue-200",
-                        )}
-                      >
-                        <Tag className="h-3 w-3 mr-1" />
-                        {contest.content_type.toUpperCase()}
-                      </Badge>
-                    );
-                  }
-                  return null;
-                })()}
-                {resolveBonusDetails(contest)?.description_html && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[12px]",
-                      isDark
-                        ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
-                        : "bg-amber-50 text-amber-700 border-amber-200",
-                    )}
-                  >
-                    <Star className="h-3 w-3 mr-1" />
-                    Bonus Available
-                  </Badge>
-                )}
-                <ContestListSubmissionBadges
-                  contest={contest}
-                  isDark={isDark}
-                  size="compact"
-                />
-                <ContestRequirementBadges
-                  contest={contest}
-                  isDark={isDark}
-                  size="compact"
-                />
-              </div>
-              {renderAccessInfo(contest)}
-            </CardHeader>
-            <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
-              <div
-                className="space-y-2 text-md mb-4"
-                style={{
-                  color: isDark ? "white" : "#475569",
-                  transition: "none",
-                }}
-              >
-                <div className="flex items-center">
-                  <div className="mr-2 flex-shrink-0">
-                    {getContestPlatformIcons(contest.platform, "sm")}
-                  </div>
-                  <span>
-                    Platform:{" "}
-                    <span className="font-medium ">
-                      {formatContestPlatformLabel(contest.platform)}
-                    </span>
-                  </span>
-                </div>
-                {contest.start_date && (
-                  <div className="flex items-center">
-                    <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span>
-                      Starts:{" "}
-                      <span className="font-medium">
-                        {formatLocalDateTime(contest.start_date, {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </span>
-                  </div>
-                )}
-                {contest.end_date && (
-                  <div className="flex items-center">
-                    <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span>
-                      Ends:{" "}
-                      <span className="font-medium ">
-                        {formatLocalDateTime(contest.end_date, {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </span>
-                  </div>
-                )}
-                {(() => {
-                  const isTwitterTextImage =
-                    (contest.platform?.toLowerCase() === "twitter" ||
-                      contest.platform?.toLowerCase() === "x") &&
-                    contest.contest_format === "text_image";
-
-                  if (!isTwitterTextImage) return null;
-
-                  const participantsCount =
-                    contest.twitter_participants_count ?? 0;
-                  const maxParticipants = contest.twitter_max_participants;
-                  const displayValue = maxParticipants
-                    ? `${participantsCount} / ${maxParticipants}`
-                    : participantsCount;
-
-                  return (
-                    <div className="flex items-center">
-                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span>
-                        Participants:{" "}
-                        <span className="font-medium ">{displayValue}</span>
-                      </span>
-                    </div>
-                  );
-                })()}
-                <div className="flex items-center">
-                  <Info className="h-4 w-4 mr-2 flex-shrink-0" />
-                  <span>
-                    Campaign Type:{" "}
-                    <span className="font-medium">
-                      {getContestTypeLabel(contest.contest_type)}
-                    </span>
-                  </span>
-                </div>
-                {(() => {
-                  const cpmRow = getContestListCpmRateRow(contest);
-                  if (!cpmRow) return null;
-                  return (
-                    <div className="flex items-start">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 mt-0.5" />
-                      <span>
-                        {cpmRow.label}
-                        <span className="font-medium">{cpmRow.value}</span>
-                      </span>
-                    </div>
-                  );
-                })()}
-                {isCpmContestType(contest.contest_type) &&
-                  getContestListPoolBudgetCents(contest) > 0 && (
-                    <div className="flex items-center">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span>
-                        Total Budget:{" "}
-                        <span className="font-medium ">
-                          {formatMoney(
-                            getContestListPoolBudgetCents(contest),
-                          )}
-                        </span>
-                      </span>
-                    </div>
-                  )}
-                {contest.contest_type === "leaderboard" &&
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.total_prize != null &&
-                  contest.contest_based_details.leaderboard_contest
-                    .total_prize > 0 && (
-                    <div className="flex items-center">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span>
-                        Total Prize Pool:{" "}
-                        <span className="font-medium">
-                          {formatMoney(
-                            contest.contest_based_details.leaderboard_contest
-                              .total_prize,
-                          )}
-                        </span>
-                      </span>
-                    </div>
-                  )}
-                {getContestListLeaderboardBonusBudgetCents(contest) > 0 && (
-                    <div className="flex items-center">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
-                      <span>
-                        Total Bonus Budget:{" "}
-                        <span className="font-medium text-green-700 dark:text-green-300">
-                          {formatMoney(
-                            getContestListLeaderboardBonusBudgetCents(contest),
-                          )}
-                        </span>
-                      </span>
-                    </div>
-                  )}
-                {contest.contest_type === "milestone" &&
-                  getContestListPoolBudgetCents(contest) > 0 && (
-                    <div className="flex items-center">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-blue-600" />
-                      <span>
-                        Total Budget:{" "}
-                        <span className="font-medium text-blue-700 dark:text-blue-300">
-                          {formatMoney(getContestListPoolBudgetCents(contest))}
-                        </span>
-                      </span>
-                    </div>
-                  )}
-              </div>
-
-              {/* Budget Spent Progress Bar for CPM and dual contests */}
-              {isCpmContestType(contest.contest_type) &&
-                getContestListPoolBudgetCents(contest) > 0 &&
-                (() => {
-                  const totalBudget = getContestListPoolBudgetCents(contest);
-                  const tracker = getBudgetTrackerValues(
-                    totalBudget,
-                    getContestBudgetSpentForTracker(contest),
-                  );
-
-                  return (
-                    <div className="mt-3 mb-3">
-                      <div
-                        className="flex justify-between text-sm mb-2"
-                        style={{
-                          color: isDark ? "#d1d5db" : "#374151",
-                          transition: "none",
-                        }}
-                      >
-                        <span className="font-medium">Budget Tracker</span>
-                        <span className="font-semibold">
-                          {formatMoney(tracker.spent)} /{" "}
-                          {formatMoney(totalBudget)}
-                        </span>
-                      </div>
-                      <div
-                        className={cn(
-                          "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
-                          isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
-                        )}
-                        title={`Total Budget Spent: ${formatMoney(tracker.spent)}`}
-                      >
-                        <div
-                          className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                          style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
-                        ></div>
-                      </div>
-                      <div
-                        className="flex justify-between text-xs mt-1.5"
-                        style={{
-                          color: isDark ? "#d1d5db" : "#64748b",
-                          transition: "none",
-                        }}
-                      >
-                        <span>{tracker.percentage.toFixed(1)}% used</span>
-                        <span>{formatMoney(tracker.remaining)} remaining</span>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-              {/* Bonus Budget Tracker for Leaderboard campaigns */}
-              {getContestListLeaderboardBonusBudgetCents(contest) > 0 &&
-                (() => {
-                  const totalBudget =
-                    getContestListLeaderboardBonusBudgetCents(contest);
-                  const tracker = getBudgetTrackerValues(
-                    totalBudget,
-                    getContestBudgetSpentForTracker(contest),
-                  );
-
-                  return (
-                    <div className="mt-3 mb-3">
-                      <div
-                        className="flex justify-between text-sm mb-2"
-                        style={{
-                          color: isDark ? "#cbd5e1" : "#475569",
-                          transition: "none",
-                        }}
-                      >
-                        <span className="font-medium">
-                          Flat Fee Bonus Budget Tracker
-                        </span>
-                        <span className="font-semibold">
-                          {formatMoney(tracker.spent)} /{" "}
-                          {formatMoney(totalBudget)}
-                        </span>
-                      </div>
-                      <div
-                        className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden"
-                        title={`Flat Fee Bonus Budget Spent: ${formatMoney(
-                          tracker.spent,
-                        )}`}
-                      >
-                        <div
-                          className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500 ease-out"
-                          style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
-                        ></div>
-                      </div>
-                      <div
-                        className="flex justify-between text-xs mt-1.5"
-                        style={{
-                          color: isDark ? "#94a3b8" : "#64748b",
-                          transition: "none",
-                        }}
-                      >
-                        <span>{tracker.percentage.toFixed(1)}% used</span>
-                        <span>{formatMoney(tracker.remaining)} remaining</span>
-                      </div>
-                    </div>
-                  );
-                })()}
-              {/* Budget Tracker for Milestone campaigns — same pool helper as CPM/dual. */}
-              {contest.contest_type === "milestone" &&
-                getContestListPoolBudgetCents(contest) > 0 &&
-                (() => {
-                  const totalBudget = getContestListPoolBudgetCents(contest);
-                  const budgetSpent = getContestBudgetSpentForTracker(contest);
-                  const tracker = getBudgetTrackerValues(
-                    totalBudget,
-                    budgetSpent,
-                  );
-
-                  return (
-                    <div className="mt-3 mb-3">
-                      <div
-                        className="flex justify-between text-sm mb-2"
-                        style={{
-                          color: isDark ? "#d1d5db" : "#374151",
-                          transition: "none",
-                        }}
-                      >
-                        <span className="font-medium">Budget Tracker</span>
-                        <span className="font-semibold">
-                          {formatMoney(tracker.spent)} /{" "}
-                          {formatMoney(totalBudget)}
-                        </span>
-                      </div>
-                      <div
-                        className={cn(
-                          "relative w-full rounded-full h-3 overflow-hidden",
-                          isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
-                        )}
-                        title={`Total Budget Spent: ${formatMoney(tracker.spent)}`}
-                      >
-                        <div
-                          className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                          style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
-                        ></div>
-                      </div>
-                      <div
-                        className="flex justify-between text-xs mt-1.5"
-                        style={{
-                          color: isDark ? "#d1d5db" : "#64748b",
-                          transition: "none",
-                        }}
-                      >
-                        <span>{tracker.percentage.toFixed(1)}% used</span>
-                        <span>{formatMoney(tracker.remaining)} remaining</span>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-              <ContestListStatsFooter contest={contest} isDark={isDark} />
-
-              {renderViewDetailsLink(contest, "px-3 py-3", {
-                fullWidth: true,
-                eyeClassName: "mr-1",
-              })}
-            </CardContent>
-          </div>
-        </Card>
-      );
-    }
-
-    return (
-      <Card
-        key={contest.id}
-        className={cn(
-          "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
-          isDark
-            ? "bg-[#06021D] border-slate-700"
-            : "bg-white border-slate-200",
-        )}
-      >
-        {renderContestCardLink(contest)}
-        <div className="pointer-events-none flex flex-col flex-grow">
-          <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
-            {contest.thumbnail_url ? (
-              <img
-                src={contest.thumbnail_url || "/placeholder.svg"}
-                alt={contest.title || "Campaign thumbnail"}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500">
-                <Trophy className="h-12 w-12 mb-2" />
-                <span className="text-sm font-medium">No Image</span>
-              </div>
-            )}
-            {/* Status badges overlay */}
-            <div className="absolute top-3 right-3 flex flex-wrap gap-1">
-              {getModerationStatusBadge(contest.moderation_status)}
-            </div>
-          </div>
-
-          <CardContent className="flex-grow p-4 flex flex-col">
-            <div className="mb-3">
-              <h3
-                className="font-bold text-lg leading-tight line-clamp-2"
-                style={{
-                  color: isDark ? "white" : "#0f172a",
-                  transition: "none",
-                }}
-              >
-                {contest.title || "Untitled Campaign"}
-              </h3>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              <Badge
-                variant="outline"
-                className="text-sm  bg-[#7F39EC] text-white py-1"
-              >
-                {formatContestPlatformLabel(contest.platform)}
-              </Badge>
-              <Badge
-                variant="outline"
-                className="text-sm  bg-[#7F39EC] text-white py-1 capitalize"
-              >
-                {getContestTypeLabel(contest.contest_type)}
-              </Badge>
-              <ContestRequirementBadges
-                contest={contest}
-                isDark={isDark}
-                size="compact"
-              />
-            </div>
-
-            <div
-              className="space-y-2 text-md mb-4 flex-grow"
-              style={{
-                color: isDark ? "white" : "#475569",
-                transition: "none",
-              }}
-            >
-              {contest.start_date && contest.end_date ? (
-                <div className="flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  <span>
-                    {formatLocalDateTime(contest.start_date)} -{" "}
-                    {formatLocalDateTime(contest.end_date)}
-                  </span>
-                </div>
-              ) : (
-                <div
-                  className={cn(
-                    "flex items-center gap-1",
-                    isDark ? "text-amber-400" : "text-amber-600",
-                  )}
-                >
-                  <AlertTriangle className="h-3 w-3" />
-                  <span>Dates not set</span>
-                </div>
-              )}
-              {contest.submitted_for_approval_at && (
-                <div className="flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  <span>
-                    Submitted:{" "}
-                    <span className="font-medium">
-                      {formatLocalDateTime(contest.submitted_for_approval_at, {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </span>
-                </div>
-              )}
-              {contest.published_at && (
-                <div className="flex items-center gap-1">
-                  <Eye className="h-3 w-3" />
-                  <span>
-                    Published:{" "}
-                    <span className="font-medium">
-                      {formatLocalDateTime(contest.published_at, {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </span>
-                </div>
-              )}
-              {contest.contest_based_details && (
-                <div className="flex items-center gap-1">
-                  <DollarSign className="h-3 w-3" />
-                  <span>{getContestPrimaryFinancialText(contest)}</span>
-                </div>
-              )}
-              {contest.moderation_status === "rejected" &&
-                contest.rejection_reason && (
-                  <div className="flex items-start gap-1 text-red-600 dark:text-red-400">
-                    <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                    <span className="text-xs">{contest.rejection_reason}</span>
-                  </div>
-                )}
-            </div>
-
-            <div className="pointer-events-auto relative z-[2] flex gap-2 items-center">
-              {canPublishContestFromList(
-                contest.moderation_status,
-                isAdminView,
-              ) ? (
-                <>
-                  <button
-                    className={cn(
-                      "flex w-full items-center justify-center gap-2  px-3 py-3 rounded-full",
-                      isDark
-                        ? "bg-[#7F39EC] text-white"
-                        : "bg-[#D9C0FF61] text-[#7F39EC]",
-                    )}
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      try {
-                        const response = await fetch(
-                          `/api/contests/${contest.id}/publish`,
-                          {
-                            method: "POST",
-                          },
-                        );
-                        if (response.ok) {
-                          window.location.reload();
-                        } else {
-                          const error = await response.json();
-                          alert(error.error || "Failed to publish campaign");
-                        }
-                      } catch (error) {
-                        alert("Failed to publish campaign");
-                      }
-                    }}
-                  >
-                    <PlayCircle className="h-4 w-4 mr-1" />
-                    Publish
-                  </button>
-                  <Button
-                    variant="outline"
-                    size="md"
-                    className={cn(
-                      "text-[13px]",
-                      isDark
-                        ? "text-purple-400 border-gray-700"
-                        : "text-purple-500",
-                    )}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setButtonLoading(contest.id, "editDates", true);
-                      router.push(
-                        `/dashboard/contests/${contest.id}/edit?dates=true`,
-                      );
-                    }}
-                    disabled={loadingButtons[contest.id]?.editDates}
-                  >
-                    {loadingButtons[contest.id]?.editDates ? (
-                      <ButtonLoadingSpinner />
-                    ) : (
-                      <Calendar className="h-4 w-4" />
-                    )}
-                    <span>Edit Dates</span>
-                  </Button>
-                </>
-              ) : contest.moderation_status !== "published" ? (
-                // Non-published contests: Show Edit Campaign button
-                <button
-                  className={cn(
-                    "flex w-full items-center justify-center gap-2  px-3 py-3 rounded-full",
-                    isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#D9C0FF61] text-[#7F39EC]",
-                  )}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setButtonLoading(contest.id, "edit", true);
-                    const href = isAdminView
-                      ? `/dashboard/contests/${contest.id}/edit`
-                      : `/dashboard/contests/${contest.id}/edit`;
-                    router.push(href);
-                  }}
-                  disabled={loadingButtons[contest.id]?.edit}
-                >
-                  {loadingButtons[contest.id]?.edit ? (
-                    <ButtonLoadingSpinner />
-                  ) : (
-                    <Edit className="h-4 w-4" />
-                  )}
-                  <span>Edit Campaign</span>
-                </button>
-              ) : (
-                renderViewDetailsLink(contest, "px-3 py-3", { fullWidth: true })
-              )}
-
-              {contest.moderation_status !== "published" && (
-                <DeleteContestButton
-                  contestId={contest.id}
-                  contestTitle={contest.title || "this campaign"}
-                  isDeletable={true}
-                  className="flex items-center gap-2"
-                />
-              )}
-            </div>
-          </CardContent>
-        </div>
-      </Card>
-    );
-  };
-
-  const renderContestListItem = (contest: Contest) => {
-    const isPublished = contest.moderation_status === "published";
-
-    if (isPublished) {
-      return (
-        <Card
-          key={contest.id}
-          className={cn(
-            "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer",
-            isDark
-              ? "bg-[#06021D] border-slate-700"
-              : "bg-white border-slate-200",
-          )}
-        >
-          {renderContestCardLink(contest)}
-          <div className="pointer-events-none flex flex-col sm:flex-row flex-1 w-full">
-            {/* Status Badge - Top Right Corner */}
-            {(contest.status === "active" ||
-              contest.status === "upcoming" ||
-              contest.status === "ended") && (
-              <div className="absolute top-3 right-3 z-10">
-                <Badge
-                  className={cn(
-                    "text-sm px-3 py-1 font-medium border",
-                    contest.status === "active" &&
-                      "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
-                    contest.status === "upcoming" &&
-                      "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
-                    contest.status === "ended" &&
-                      `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
-                  )}
-                >
-                  {contest.status === "active"
-                    ? "Live"
-                    : contest.status === "upcoming"
-                      ? "Upcoming"
-                      : contest.status === "ended"
-                        ? getEndedOpportunityPhaseLabel(
-                            contest.post_contest_status,
-                          )
-                        : contest.status || "Unknown"}
-                </Badge>
-              </div>
-            )}
-            {/* Thumbnail */}
-            <div className="w-full sm:w-64 md:w-80 lg:w-72 xl:w-96 sm:h-[200px] md:h-[220px] lg:h-[250px] min-h-[12rem] flex-shrink-0 flex items-center justify-center overflow-hidden relative">
-              {contest.thumbnail_url ? (
-                <img
-                  src={contest.thumbnail_url || "/placeholder.svg"}
-                  alt={contest.title || "Campaign thumbnail"}
-                  className="w-full h-full object-contain transition-transform duration-300 ease-in-out group-hover:scale-105"
-                />
-              ) : (
-                <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
-              )}
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 flex flex-col p-3 sm:p-4">
-              <CardHeader className="p-0 pb-2">
-                <CardTitle
-                  className="text-base sm:text-lg font-bold leading-tight mb-2"
-                  style={{
-                    color: isDark ? "white" : "#1e293b",
-                    transition: "none",
-                  }}
-                >
-                  {contest.title || "Untitled Campaign"}
-                </CardTitle>
-                {/* Badges */}
-                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                  {/* Show campaign type badge (RAID/AWARENESS) for Twitter text_image contests */}
-                  {(() => {
-                    const isTwitterTextImage =
-                      (contest.platform?.toLowerCase() === "twitter" ||
-                        contest.platform?.toLowerCase() === "x") &&
-                      contest.contest_format === "text_image";
-
-                    if (isTwitterTextImage) {
-                      const campaignType =
-                        contest.contest_based_details?.twitter_campaign
-                          ?.campaign_type;
-                      if (
-                        campaignType === "raid" ||
-                        campaignType === "awareness"
-                      ) {
-                        return (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-sm px-3 py-1 font-medium",
-                              isDark
-                                ? campaignType === "raid"
-                                  ? "bg-red-900/30 text-red-300 border-red-700/50"
-                                  : "bg-cyan-900/30 text-cyan-300 border-cyan-700/50"
-                                : campaignType === "raid"
-                                  ? "bg-red-50 text-red-700 border-red-200"
-                                  : "bg-cyan-50 text-cyan-700 border-cyan-200",
-                            )}
-                          >
-                            {campaignType.toUpperCase()}
-                          </Badge>
-                        );
-                      }
-                      return null;
-                    }
-
-                    if (contest.multiple_submissions_enabled) {
-                      return (
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-sm px-3 py-1 font-medium",
-                            isDark
-                              ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                              : "bg-purple-50 text-purple-700 border-purple-200",
-                          )}
-                        >
-                          <CheckCheck className="h-3 w-3 mr-1" />
-                          {getMultipleSubmissionsBadgeLabel(contest)}
-                        </Badge>
-                      );
-                    }
-                    return null;
-                  })()}
-                  {/* Content Type Badge (UGC, Clipping, etc.) - Don't show for Twitter text_image contests (we show campaign_type badge instead) */}
-                  {(() => {
-                    const isTwitterTextImage =
-                      (contest.platform?.toLowerCase() === "twitter" ||
-                        contest.platform?.toLowerCase() === "x") &&
-                      contest.contest_format === "text_image";
-
-                    if (isTwitterTextImage) {
-                      return null;
-                    }
-
-                    if (contest.content_type) {
-                      return (
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-sm px-3 py-1 font-medium",
-                            isDark
-                              ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
-                              : "bg-blue-50 text-blue-700 border-blue-200",
-                          )}
-                        >
-                          <Tag className="h-3 w-3 mr-1" />
-                          {contest.content_type.toUpperCase()}
-                        </Badge>
-                      );
-                    }
-                    return null;
-                  })()}
-                  <ContestListFlatFeeBonusBadge
-                    contest={contest}
-                    isDark={isDark}
-                    size="default"
-                  />
-                  {/* Bonus Available Badge */}
-                  {resolveBonusDetails(contest)?.description_html && (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-sm px-3 py-1 font-medium",
-                        isDark
-                          ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
-                          : "bg-amber-50 text-amber-700 border-amber-200",
-                      )}
-                    >
-                      <Star className="h-3 w-3 mr-1" />
-                      Bonus Available
-                    </Badge>
-                  )}
-                  <ContestListSubmissionBadges
-                    contest={contest}
-                    isDark={isDark}
-                    size="default"
-                  />
-                  <ContestRequirementBadges
-                    contest={contest}
-                    isDark={isDark}
-                    size="default"
-                  />
-                </div>
-                {renderAccessInfo(contest)}
-              </CardHeader>
-              <CardContent className="p-0 pt-2 flex-1">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-resp">
-                  <div className="flex items-center">
-                    <div className="mr-2 flex-shrink-0">
-                      {getContestPlatformIcons(contest.platform, "sm")}
-                    </div>
-                    <span
-                      style={{
-                        color: isDark ? "white" : "#475569",
-                        transition: "none",
-                      }}
-                    >
-                      Platform:{" "}
-                      <span className="font-medium">
-                        {formatContestPlatformLabel(contest.platform)}
-                      </span>
-                    </span>
-                  </div>
-                  {contest.start_date && (
-                    <div className="flex items-center">
-                      <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span
-                        style={{
-                          color: isDark ? "white" : "#475569",
-                          transition: "none",
-                        }}
-                      >
-                        Starts:{" "}
-                        <span className="font-medium">
-                          {formatLocalDateTime(contest.start_date, {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      </span>
-                    </div>
-                  )}
-                  {contest.end_date && (
-                    <div className="flex items-center">
-                      <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span
-                        style={{
-                          color: isDark ? "white" : "#475569",
-                          transition: "none",
-                        }}
-                      >
-                        Ends:{" "}
-                        <span className="font-medium">
-                          {formatLocalDateTime(contest.end_date, {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      </span>
-                    </div>
-                  )}
-                  {(() => {
-                    const isTwitterTextImage =
-                      (contest.platform?.toLowerCase() === "twitter" ||
-                        contest.platform?.toLowerCase() === "x") &&
-                      contest.contest_format === "text_image";
-
-                    if (!isTwitterTextImage) return null;
-
-                    const participantsCount =
-                      contest.twitter_participants_count ?? 0;
-                    const maxParticipants = contest.twitter_max_participants;
-                    const displayValue = maxParticipants
-                      ? `${participantsCount} / ${maxParticipants}`
-                      : participantsCount;
-
-                    return (
-                      <div className="flex items-center">
-                        <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                        <span
-                          style={{
-                            color: isDark ? "white" : "#475569",
-                            transition: "none",
-                          }}
-                        >
-                          Participants:{" "}
-                          <span className="font-medium">{displayValue}</span>
-                        </span>
-                      </div>
-                    );
-                  })()}
-                  <div className="flex items-center">
-                    <Info className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span
-                      style={{
-                        color: isDark ? "white" : "#475569",
-                        transition: "none",
-                      }}
-                    >
-                      Campaign Type:{" "}
-                      <span className="font-medium">
-                        {getContestTypeLabel(contest.contest_type)}
-                      </span>
-                    </span>
-                  </div>
-                  {(() => {
-                    const cpmRow = getContestListCpmRateRow(contest);
-                    if (!cpmRow) return null;
-                    return (
-                      <div className="flex items-start">
-                        <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 mt-0.5" />
-                        <span
-                          style={{
-                            color: isDark ? "white" : "#475569",
-                            transition: "none",
-                          }}
-                        >
-                          {cpmRow.label}
-                          <span className="font-medium">{cpmRow.value}</span>
-                        </span>
-                      </div>
-                    );
-                  })()}
-                  {isCpmContestType(contest.contest_type) &&
-                    getContestListPoolBudgetCents(contest) > 0 && (
-                      <div className="flex items-center">
-                        <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                        <span
-                          style={{
-                            color: isDark ? "white" : "#475569",
-                            transition: "none",
-                          }}
-                        >
-                          Total Budget:{" "}
-                          <span className="font-medium">
-                            {formatMoney(
-                              getContestListPoolBudgetCents(contest),
-                            )}
-                          </span>
-                        </span>
-                      </div>
-                    )}
-                  {contest.contest_type === "leaderboard" &&
-                    contest.contest_based_details?.leaderboard_contest
-                      ?.total_prize != null &&
-                    contest.contest_based_details.leaderboard_contest
-                      .total_prize > 0 && (
-                      <div className="flex items-center">
-                        <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                        <span
-                          style={{
-                            color: isDark ? "white" : "#475569",
-                            transition: "none",
-                          }}
-                        >
-                          Total Prize Pool:{" "}
-                          <span className="font-medium">
-                            {formatMoney(
-                              contest.contest_based_details.leaderboard_contest
-                                .total_prize,
-                            )}
-                          </span>
-                        </span>
-                      </div>
-                    )}
-                  {getContestListLeaderboardBonusBudgetCents(contest) > 0 && (
-                      <div className="flex items-center">
-                        <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
-                        <span
-                          style={{
-                            color: isDark ? "white" : "#475569",
-                            transition: "none",
-                          }}
-                        >
-                          Total Bonus Budget:{" "}
-                          <span className="font-medium text-green-700 dark:text-green-300">
-                            {formatMoney(
-                              getContestListLeaderboardBonusBudgetCents(
-                                contest,
-                              ),
-                            )}
-                          </span>
-                        </span>
-                      </div>
-                    )}
-                  {contest.contest_type === "milestone" &&
-                    getContestListPoolBudgetCents(contest) > 0 && (
-                      <div className="flex items-center">
-                        <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-blue-600" />
-                        <span
-                          style={{
-                            color: isDark ? "white" : "#475569",
-                            transition: "none",
-                          }}
-                        >
-                          Total Budget:{" "}
-                          <span className="font-medium text-blue-700 dark:text-blue-300">
-                            {formatMoney(getContestListPoolBudgetCents(contest))}
-                          </span>
-                        </span>
-                      </div>
-                    )}
-                </div>
-
-                {/* Budget Spent Progress Bar for CPM and dual contests */}
-                {isCpmContestType(contest.contest_type) &&
-                  getContestListPoolBudgetCents(contest) > 0 &&
-                  (() => {
-                    const totalBudget = getContestListPoolBudgetCents(contest);
-                    const tracker = getBudgetTrackerValues(
-                      totalBudget,
-                      getContestBudgetSpentForTracker(contest),
-                    );
-
-                    return (
-                      <div className="mt-3">
-                        <div
-                          className="flex justify-between text-sm mb-2"
-                          style={{
-                            color: isDark ? "#d1d5db" : "#374151",
-                            transition: "none",
-                          }}
-                        >
-                          <span className="font-medium">Budget Tracker</span>
-                          <span className="font-semibold">
-                            {formatMoney(tracker.spent)} /{" "}
-                            {formatMoney(totalBudget)}
-                          </span>
-                        </div>
-                        <div
-                          className={cn(
-                            "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
-                            isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
-                          )}
-                        >
-                          <div
-                            className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                            style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
-                          ></div>
-                        </div>
-                        <div
-                          className="flex justify-between text-xs mt-1.5"
-                          style={{
-                            color: isDark ? "#d1d5db" : "#64748b",
-                            transition: "none",
-                          }}
-                        >
-                          <span>{tracker.percentage.toFixed(1)}% used</span>
-                          <span>
-                            {formatMoney(tracker.remaining)} remaining
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                {/* Bonus Budget Tracker for Leaderboard campaigns */}
-                {getContestListLeaderboardBonusBudgetCents(contest) > 0 &&
-                  (() => {
-                    const totalBudget =
-                      getContestListLeaderboardBonusBudgetCents(contest);
-                    const tracker = getBudgetTrackerValues(
-                      totalBudget,
-                      getContestBudgetSpentForTracker(contest),
-                    );
-
-                    return (
-                      <div className="mt-3">
-                        <div
-                          className="flex justify-between text-sm mb-2"
-                          style={{
-                            color: isDark ? "#cbd5e1" : "#475569",
-                            transition: "none",
-                          }}
-                        >
-                          <span className="font-medium">
-                            Flat Fee Bonus Budget Tracker
-                          </span>
-                          <span className="font-semibold">
-                            {formatMoney(tracker.spent)} /{" "}
-                            {formatMoney(totalBudget)}
-                          </span>
-                        </div>
-                        <div className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
-                          <div
-                            className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500 ease-out"
-                            style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
-                          ></div>
-                        </div>
-                        <div
-                          className="flex justify-between text-xs mt-1.5"
-                          style={{
-                            color: isDark ? "#94a3b8" : "#64748b",
-                            transition: "none",
-                          }}
-                        >
-                          <span>{tracker.percentage.toFixed(1)}% used</span>
-                          <span>
-                            {formatMoney(tracker.remaining)} remaining
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                {/* Milestone budget: pool helper so multi-platform contests still show */}
-                {contest.contest_type === "milestone" &&
-                  getContestListPoolBudgetCents(contest) > 0 &&
-                  (() => {
-                    const totalBudget = getContestListPoolBudgetCents(contest);
-                    const budgetSpent =
-                      getContestBudgetSpentForTracker(contest);
-                    const tracker = getBudgetTrackerValues(
-                      totalBudget,
-                      budgetSpent,
-                    );
-
-                    return (
-                      <div className="mt-3">
-                        <div
-                          className="flex justify-between text-sm mb-2"
-                          style={{
-                            color: isDark ? "#d1d5db" : "#374151",
-                            transition: "none",
-                          }}
-                        >
-                          <span className="font-medium">Budget Tracker</span>
-                          <span className="font-semibold">
-                            {formatMoney(tracker.spent)} /{" "}
-                            {formatMoney(totalBudget)}
-                          </span>
-                        </div>
-                        <div
-                          className={cn(
-                            "relative w-full rounded-full h-3 overflow-hidden",
-                            isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
-                          )}
-                          title={`Total Budget Spent: ${formatMoney(tracker.spent)}`}
-                        >
-                          <div
-                            className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                            style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
-                          ></div>
-                        </div>
-                        <div
-                          className="flex justify-between text-xs mt-1.5"
-                          style={{
-                            color: isDark ? "#d1d5db" : "#64748b",
-                            transition: "none",
-                          }}
-                        >
-                          <span>{tracker.percentage.toFixed(1)}% used</span>
-                          <span>
-                            {formatMoney(tracker.remaining)} remaining
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                <ContestListStatsFooter contest={contest} isDark={isDark} />
-              </CardContent>
-            </div>
-
-            {/* Third Column - View Details Button */}
-            <div className="flex flex-col items-center justify-center gap-3 p-4 w-32 sm:w-40 flex-shrink-0">
-              {renderViewDetailsLink(contest, "px-4 py-3 whitespace-nowrap", {
-                textClassName: "text-sm font-medium",
-              })}
-            </div>
-          </div>
-        </Card>
-      );
-    }
-
-    // List view for unpublished contests
-    return (
-      <Card
-        key={contest.id}
-        className={cn(
-          "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer",
-          isDark
-            ? "bg-[#06021D] border-slate-700"
-            : "bg-white border-slate-200",
-        )}
-      >
-        {renderContestCardLink(contest)}
-        <div className="pointer-events-none flex flex-col sm:flex-row flex-1 w-full">
-          <div className="absolute top-4 right-3 z-10">
-            {getModerationStatusBadge(contest.moderation_status)}
-          </div>
-          {/* Thumbnail */}
-          <div className="w-full sm:w-64 md:w-80 lg:w-72 xl:w-96 sm:h-[200px] md:h-[220px] lg:h-[250px] min-h-[12rem] flex-shrink-0 flex items-center justify-center overflow-hidden relative">
-            {contest.thumbnail_url ? (
-              <img
-                src={contest.thumbnail_url || "/placeholder.svg"}
-                alt={contest.title || "Campaign thumbnail"}
-                className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500">
-                <Trophy className="h-12 w-12 mb-2" />
-                <span className="text-sm font-medium">No Image</span>
-              </div>
-            )}
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 flex flex-col p-4">
-            <div className="mb-3">
-              <h3
-                className="font-bold text-lg leading-tight line-clamp-2"
-                style={{
-                  color: isDark ? "white" : "#0f172a",
-                  transition: "none",
-                }}
-              >
-                {contest.title || "Untitled Campaign"}
-              </h3>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              <Badge
-                variant="outline"
-                className="text-sm bg-[#7F39EC] text-white py-1"
-              >
-                {formatContestPlatformLabel(contest.platform)}
-              </Badge>
-              <Badge
-                variant="outline"
-                className="text-sm bg-[#7F39EC] text-white py-1 capitalize"
-              >
-                {getContestTypeLabel(contest.contest_type)}
-              </Badge>
-              <ContestRequirementBadges
-                contest={contest}
-                isDark={isDark}
-                size="compact"
-              />
-            </div>
-
-            <div
-              className="space-y-2 flex-grow"
-              style={{
-                color: isDark ? "white" : "#475569",
-                transition: "none",
-              }}
-            >
-              {contest.start_date && contest.end_date ? (
-                <div className="flex items-center gap-1 text-base">
-                  <Calendar className="h-3 w-3" />
-                  <span>
-                    {formatLocalDateTime(contest.start_date)} -{" "}
-                    {formatLocalDateTime(contest.end_date)}
-                  </span>
-                </div>
-              ) : (
-                <div
-                  className={cn(
-                    "flex items-center gap-1 text-base",
-                    isDark ? "text-amber-400" : "text-amber-600",
-                  )}
-                >
-                  <AlertTriangle className="h-3 w-3" />
-                  <span>Dates not set</span>
-                </div>
-              )}
-              {contest.submitted_for_approval_at && (
-                <div className="flex items-center gap-1 text-base">
-                  <Clock className="h-3 w-3" />
-                  <span>
-                    Submitted:{" "}
-                    <span className="font-medium">
-                      {formatLocalDateTime(contest.submitted_for_approval_at, {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </span>
-                </div>
-              )}
-              {contest.published_at && (
-                <div className="flex items-center gap-1 text-base">
-                  <Eye className="h-3 w-3" />
-                  <span>
-                    Published:{" "}
-                    <span className="font-medium">
-                      {formatLocalDateTime(contest.published_at, {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </span>
-                </div>
-              )}
-              {contest.contest_based_details && (
-                <div className="flex items-center gap-1 text-base">
-                  <DollarSign className="h-3 w-3" />
-                  <span>{getContestPrimaryFinancialText(contest)}</span>
-                </div>
-              )}
-              {contest.rejection_reason && (
-                <div className="flex items-start gap-1 text-red-600 dark:text-red-400">
-                  <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                  <span className="text-xs">{contest.rejection_reason}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Third Column - Action Buttons */}
-          <div
-            className={cn(
-              "pointer-events-auto relative z-[2] flex items-center justify-center gap-2 p-4 flex-shrink-0",
-              contest.moderation_status === "approved" ||
-                contest.moderation_status !== "published"
-                ? "flex-row w-auto sm:w-auto"
-                : "flex-col w-32 sm:w-40",
-            )}
-          >
-            {canPublishContestFromList(
-              contest.moderation_status,
-              isAdminView,
-            ) ? (
-              <>
-                <button
-                  className={cn(
-                    "flex items-center justify-center gap-2 px-3 py-3 rounded-full text-sm font-medium whitespace-nowrap",
-                    isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#D9C0FF61] text-[#7F39EC]",
-                  )}
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    try {
-                      const response = await fetch(
-                        `/api/contests/${contest.id}/publish`,
-                        {
-                          method: "POST",
-                        },
-                      );
-                      if (response.ok) {
-                        window.location.reload();
-                      } else {
-                        const error = await response.json();
-                        alert(error.error || "Failed to publish campaign");
-                      }
-                    } catch (error) {
-                      alert("Failed to publish campaign");
-                    }
-                  }}
-                >
-                  <PlayCircle className="h-4 w-4" />
-                  <span>Publish</span>
-                </button>
-                <Button
-                  variant="outline"
-                  size="md"
-                  className={cn(
-                    "text-[13px] whitespace-nowrap",
-                    isDark
-                      ? "text-purple-400 border-gray-700"
-                      : "text-purple-500",
-                  )}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setButtonLoading(contest.id, "editDates", true);
-                    router.push(
-                      `/dashboard/contests/${contest.id}/edit?dates=true`,
-                    );
-                  }}
-                  disabled={loadingButtons[contest.id]?.editDates}
-                >
-                  {loadingButtons[contest.id]?.editDates ? (
-                    <ButtonLoadingSpinner />
-                  ) : (
-                    <Calendar className="h-4 w-4" />
-                  )}
-                  <span>Edit Dates</span>
-                </Button>
-                <DeleteContestButton
-                  contestId={contest.id}
-                  contestTitle={contest.title || "this campaign"}
-                  isDeletable={true}
-                  className="flex items-center gap-2 justify-center"
-                />
-              </>
-            ) : contest.moderation_status !== "published" ? (
-              <>
-                <button
-                  className={cn(
-                    "flex items-center justify-center gap-2 px-5 py-3 rounded-full text-sm font-medium whitespace-nowrap min-w-[140px]",
-                    isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#D9C0FF61] text-[#7F39EC]",
-                  )}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setButtonLoading(contest.id, "edit", true);
-                    const href = isAdminView
-                      ? `/dashboard/contests/${contest.id}/edit`
-                      : `/dashboard/contests/${contest.id}/edit`;
-                    router.push(href);
-                  }}
-                  disabled={loadingButtons[contest.id]?.edit}
-                >
-                  {loadingButtons[contest.id]?.edit ? (
-                    <ButtonLoadingSpinner />
-                  ) : (
-                    <Edit className="h-4 w-4" />
-                  )}
-                  <span>Edit Campaign</span>
-                </button>
-                <DeleteContestButton
-                  contestId={contest.id}
-                  contestTitle={contest.title || "this campaign"}
-                  isDeletable={true}
-                  className="flex items-center gap-2 justify-center"
-                />
-              </>
-            ) : (
-              renderViewDetailsLink(contest, "px-3 py-3 text-sm font-medium", {
-                fullWidth: true,
-              })
-            )}
-          </div>
-        </div>
-      </Card>
-    );
-  };
-
-  // Server already returned the sorted page ? do not re-sort or re-slice.
-  const displayContests = contests;
-  const paginatedContests = contests;
-
-  const renderAccessInfo = (contest: Contest) => (
-    <CampaignAccessInfo
-      accessMode={contest.access_mode}
-      applicationsOpen={contest.applications_open ?? null}
-      pendingCount={contest.pending_applications ?? null}
-      skipsRequirements={contest.access_list_skips_requirements}
+  const renderContestCard = (
+    contest: Contest,
+    layout: "grid" | "list" = "grid",
+  ) => (
+    <BrandCampaignCard
+      key={contest.id}
+      contest={contest}
       isDark={isDark}
+      layout={layout}
+      detailHref={getContestDetailHref(contest.id)}
+      navigating={navigatingContestId === contest.id}
+      onDetailClick={(event) => handleContestDetailLinkClick(contest.id, event)}
+      onDuplicate={() => setDuplicateSourceId(contest.id)}
+      canPublish={canPublishContestFromList(
+        contest.moderation_status,
+        !!isAdminView,
+      )}
+      editLoading={!!loadingButtons[contest.id]?.edit}
+      editDatesLoading={!!loadingButtons[contest.id]?.editDates}
+      onEdit={() => {
+        setButtonLoading(contest.id, "edit", true);
+        router.push(`/dashboard/contests/${contest.id}/edit`);
+      }}
+      onEditDates={() => {
+        setButtonLoading(contest.id, "editDates", true);
+        router.push(`/dashboard/contests/${contest.id}/edit?dates=true`);
+      }}
+      onPublish={() => {
+        void (async () => {
+          try {
+            const response = await fetch(`/api/contests/${contest.id}/publish`, {
+              method: "POST",
+            });
+            if (response.ok) {
+              window.location.reload();
+            } else {
+              const error = await response.json();
+              alert(error.error || "Failed to publish campaign");
+            }
+          } catch {
+            alert("Failed to publish campaign");
+          }
+        })();
+      }}
     />
   );
+
+  // Server already returned the sorted page ? do not re-sort or re-slice.
+  const paginatedContests = contests;
 
   useEffect(() => {
     if (!filtersHydrated) return;
@@ -2964,8 +1145,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   1
@@ -3004,8 +1185,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   2
@@ -3044,8 +1225,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   3
@@ -3073,7 +1254,7 @@ export function ContestListClient({
             </div>
             <button
               type="button"
-              className="w-full bg-purple-600 text-md rounded-lg font-medium text-white py-2 hover:bg-purple-700"
+              className="w-full bg-[#1a1a1a] text-md rounded-lg font-semibold text-white py-2.5 hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-white/90 shadow-sm transition-colors"
               onClick={() =>
                 router.push(
                   "/dashboard/contests/create?new=true&contestType=leaderboard",
@@ -3177,8 +1358,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   1
@@ -3217,8 +1398,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   2
@@ -3257,8 +1438,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   3
@@ -3286,7 +1467,7 @@ export function ContestListClient({
             </div>
             <button
               type="button"
-              className="w-full bg-purple-600 text-md rounded-lg font-medium text-white py-2 hover:bg-purple-700"
+              className="w-full bg-[#1a1a1a] text-md rounded-lg font-semibold text-white py-2.5 hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-white/90 shadow-sm transition-colors"
               onClick={handleCreateCpmContest}
               disabled={isCheckingCpmAccess}
             >
@@ -3387,8 +1568,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   1
@@ -3427,8 +1608,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   2
@@ -3467,8 +1648,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   3
@@ -3497,7 +1678,7 @@ export function ContestListClient({
             </div>
             <button
               type="button"
-              className="w-full bg-purple-600 text-md rounded-lg font-medium text-white py-2 hover:bg-purple-700"
+              className="w-full bg-[#1a1a1a] text-md rounded-lg font-semibold text-white py-2.5 hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-white/90 shadow-sm transition-colors"
               onClick={handleCreateMilestoneContest}
               disabled={isCheckingCpmAccess}
             >
@@ -3598,8 +1779,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   1
@@ -3637,8 +1818,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   2
@@ -3677,8 +1858,8 @@ export function ContestListClient({
                   className={cn(
                     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     isDark
-                      ? "bg-purple-900/60 text-purple-200"
-                      : "bg-purple-100 text-purple-700",
+                      ? "bg-white/10 text-white"
+                      : "bg-zinc-100 text-zinc-800",
                   )}
                 >
                   3
@@ -3707,7 +1888,7 @@ export function ContestListClient({
             </div>
             <button
               type="button"
-              className="w-full bg-purple-600 text-md rounded-lg font-medium text-white py-2 hover:bg-purple-700"
+              className="w-full bg-[#1a1a1a] text-md rounded-lg font-semibold text-white py-2.5 hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-white/90 shadow-sm transition-colors"
               onClick={handleCreateDualRewardsContest}
               disabled={isCheckingCpmAccess}
             >
@@ -3752,368 +1933,49 @@ export function ContestListClient({
         onClose={() => setShowCpmUpgradeModal(false)}
         featureName={upgradeFeatureName}
       />
+      <DuplicateCampaignDialog
+        open={duplicateSourceId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDuplicateSourceId(null);
+        }}
+        isAdmin={!!isAdminView}
+        sourceContestId={duplicateSourceId}
+        allowChangeTarget={!!isAdminView}
+      />
       {hasCreatedContests ? (
         <>
-          {/* Header with filters */}
-          <div className="flex flex-col gap-4 mb-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch w-full min-w-0 lg:max-w-xl xl:max-w-2xl">
-              <div className="relative flex-1 min-w-0">
-                <Search
-                  className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none"
-                  aria-hidden
-                />
-                {searchQuery.trim() !== "" && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-md"
-                    aria-label="Clear search"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-                <Input
-                  type="text"
-                  role="searchbox"
-                  enterKeyHint="search"
-                  autoComplete="off"
-                  placeholder="Search by title..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && searchQuery.trim() !== "") {
-                      e.preventDefault();
-                      brandContestsResultsRef.current?.scrollIntoView({
-                        behavior: "smooth",
-                        block: "start",
-                      });
-                    }
-                  }}
-                  className={cn(
-                    "pl-10 h-11 w-full text-sm sm:text-base border rounded-xl shadow-sm",
-                    searchQuery.trim() !== "" && "pr-10",
-                    isDark
-                      ? "border-gray-600 bg-[#020817] text-white placeholder:text-gray-500"
-                      : "border-gray-300 bg-white text-gray-900 placeholder:text-gray-500",
-                  )}
-                />
-              </div>
-              {searchQuery.trim() !== "" && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={cn(
-                    "h-11 w-full sm:w-auto shrink-0 rounded-xl font-semibold text-sm",
-                    isDark
-                      ? "border-violet-400/60 text-violet-100 bg-transparent hover:bg-white/10 hover:text-white"
-                      : "border-[#7F39EC] text-[#7F39EC] bg-[#D9C0FF26] hover:bg-[#D9C0FF61]",
-                  )}
-                  onClick={() =>
-                    brandContestsResultsRef.current?.scrollIntoView({
-                      behavior: "smooth",
-                      block: "start",
-                    })
-                  }
-                >
-                  Search
-                </Button>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:justify-between lg:gap-4">
-              <div
-                className={cn(
-                  "w-full min-w-0 overflow-x-auto -mx-1 px-1 sm:mx-0 sm:px-0 sm:overflow-visible",
-                  "[scrollbar-width:thin]",
-                )}
-              >
-                <div
-                  role="group"
-                  aria-label="Contest format"
-                  className={cn(
-                    "flex w-full sm:w-auto rounded-xl border p-1 gap-1 min-h-[2.75rem] box-border",
-                    isDark
-                      ? "border-gray-600 bg-[#020817]/60"
-                      : "border-gray-300 bg-gray-50/90",
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setContestFormatFilter("all")}
-                    title="All campaigns"
-                    className={cn(
-                      "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
-                      contestFormatFilter === "all"
-                        ? "bg-[#7F39EC] text-white shadow-sm"
-                        : isDark
-                          ? "text-gray-300 hover:text-white hover:bg-white/10"
-                          : "text-gray-700 hover:bg-white hover:text-gray-900",
-                    )}
-                  >
-                    <LayoutGrid className="h-4 w-4 shrink-0 opacity-90" />
-                    <span>All</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setContestFormatFilter("text_image")}
-                    title="Text and image campaigns"
-                    className={cn(
-                      "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
-                      contestFormatFilter === "text_image"
-                        ? "bg-[#7F39EC] text-white shadow-sm"
-                        : isDark
-                          ? "text-gray-300 hover:text-white hover:bg-white/10"
-                          : "text-gray-700 hover:bg-white hover:text-gray-900",
-                    )}
-                  >
-                    <FileText className="h-4 w-4 shrink-0 opacity-90" />
-                    <span>Text & image</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setContestFormatFilter("video")}
-                    title="Video campaigns"
-                    className={cn(
-                      "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
-                      contestFormatFilter === "video"
-                        ? "bg-[#7F39EC] text-white shadow-sm"
-                        : isDark
-                          ? "text-gray-300 hover:text-white hover:bg-white/10"
-                          : "text-gray-700 hover:bg-white hover:text-gray-900",
-                    )}
-                  >
-                    <PlayCircle className="h-4 w-4 shrink-0 opacity-90" />
-                    <span>Video</span>
-                  </button>
-                </div>
-              </div>
-
-              <div
-                role="group"
-                aria-label="Layout"
-                className={cn(
-                  "hidden lg:flex w-full sm:w-auto shrink-0 rounded-xl border p-1 gap-1 min-h-[2.75rem] items-stretch box-border",
-                  isDark
-                    ? "border-gray-600 bg-[#020817]/60"
-                    : "border-gray-300 bg-gray-50/90",
-                )}
-              >
-                <button
-                  type="button"
-                  onClick={() => setViewMode("grid")}
-                  title="Grid view"
-                  className={cn(
-                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors min-w-[5.5rem]",
-                    displayViewMode === "grid"
-                      ? "bg-[#7F39EC] text-white shadow-sm"
-                      : isDark
-                        ? "text-gray-300 hover:text-white hover:bg-white/10"
-                        : "text-gray-700 hover:bg-white hover:text-gray-900",
-                  )}
-                >
-                  <LayoutGrid className="h-4 w-4 shrink-0 opacity-90" />
-                  <span>Grid</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("list")}
-                  title="List view"
-                  className={cn(
-                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors min-w-[5.5rem]",
-                    displayViewMode === "list"
-                      ? "bg-[#7F39EC] text-white shadow-sm"
-                      : isDark
-                        ? "text-gray-300 hover:text-white hover:bg-white/10"
-                        : "text-gray-700 hover:bg-white hover:text-gray-900",
-                  )}
-                >
-                  <List className="h-4 w-4 shrink-0 opacity-90" />
-                  <span>List</span>
-                </button>
-              </div>
-            </div>
-            {/* Sort, platform, type ? workflow status is in tabs below */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 w-full">
-              <Select
-                value={sortOption}
-                onValueChange={(value) =>
-                  setSortOption(value as SortOptionType)
-                }
-              >
-                <SelectTrigger className="w-full min-w-0 border border-gray-400 rounded-xl">
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent isDark={isDark}>
-                  <SelectItem isDark={isDark} value="created_at_desc">
-                    Date Created: Latest
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="created_at_asc">
-                    Date Created: Earliest
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="start_date_asc">
-                    Launch Date: Closest
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="start_date_desc">
-                    Launch Date: Farthest
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="end_date_asc">
-                    End Date: Closest
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="end_date_desc">
-                    End Date: Farthest
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="value_desc">
-                    Prize/Budget: High to Low
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="value_asc">
-                    Prize/Budget: Low to High
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="budget_remaining_desc">
-                    Budget Left: Most
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="budget_remaining_asc">
-                    Budget Left: Least
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="budget_used_desc">
-                    Budget Used: Most
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="budget_used_asc">
-                    Budget Used: Least
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="approval_rate_desc">
-                    Approval Rate: High
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="approval_rate_asc">
-                    Approval Rate: Low
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="views_desc">
-                    Views: High 
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="views_asc">
-                    Views: Low
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="cpm_rate_desc">
-                    CPM Rate: High to Low
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="cpm_rate_asc">
-                    CPM Rate: Low to High
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="submissions_desc">
-                    Submissions: High to Low
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="submissions_asc">
-                    Submissions: Low to High
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-
-              <CampaignPlatformFilter
-                value={platformFilter}
-                onChange={setPlatformFilter}
-                platforms={platformFilterOptions}
-                isDark={isDark}
-                triggerClassName="border border-gray-400"
-              />
-
-              {/* Campaign Type Filter */}
-              <Select
-                value={contestTypeFilter}
-                onValueChange={setContestTypeFilter}
-              >
-                <SelectTrigger className="w-full min-w-0 border border-gray-400 rounded-xl">
-                  <SelectValue placeholder="Campaign Type" />
-                </SelectTrigger>
-                <SelectContent isDark={isDark}>
-                  <SelectItem isDark={isDark} value="all">
-                    All Types
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="leaderboard">
-                    Leaderboard
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="cpm">
-                    CPM
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="milestone">
-                    Milestone
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="dual_rewards">
-                    Dual Rewards
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Status ? workflow row; payout phases only for All / Ended */}
-          <div className="w-full space-y-4 mb-8">
-            <div className="w-full overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] scrollbar-hide">
-              <EnhancedTabs
-                tabs={brandPipelineTabs}
-                activeTab={
-                  brandPipelineTabs.some((t) => t.id === selectedTab)
-                    ? selectedTab
-                    : ""
-                }
-                onTabChange={(id) => setSelectedTab(id)}
-                isDark={isDark}
-                light={!isDark}
-                fillWidth={false}
-                className="shadow-sm"
-              />
-            </div>
-            {showPostContestPipeline ? (
-              <div
-                className={cn(
-                  "rounded-2xl border p-3 sm:p-4 space-y-3 transition-colors",
-                  isDark
-                    ? "border-white/10 bg-white/[0.04]"
-                    : "border-gray-200/90 bg-gray-50/70",
-                )}
-              >
-                <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-                  <p
-                    className={cn(
-                      "text-[11px] font-semibold uppercase tracking-wide",
-                      isDark ? "text-gray-400" : "text-gray-500",
-                    )}
-                  >
-                    After contest ends
-                  </p>
-                  <p
-                    className={cn(
-                      "text-xs leading-snug max-w-xl",
-                      isDark ? "text-gray-500" : "text-gray-600",
-                    )}
-                  >
-                    Narrow by payout step ? only applies to{" "}
-                    {selectedTab === "all" ? (
-                      <>
-                        <span className="font-medium text-[#7F39EC]">
-                          ended
-                        </span>{" "}
-                        contests in this list.
-                      </>
-                    ) : (
-                      <>your ended campaigns.</>
-                    )}
-                  </p>
-                </div>
-                <div className="w-full overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] scrollbar-hide">
-                  <EnhancedTabs
-                    tabs={brandPostContestTabs}
-                    activeTab={postContestPhaseFilter}
-                    onTabChange={(id) =>
-                      setPostContestPhaseFilter(id as BrandPostPhaseId)
-                    }
-                    isDark={isDark}
-                    light={!isDark}
-                    fillWidth={false}
-                    className="shadow-sm"
-                  />
-                </div>
-              </div>
-            ) : null}
-          </div>
+          <BrandCampaignFilters
+            isDark={isDark}
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            onSearchSubmit={() =>
+              brandContestsResultsRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              })
+            }
+            contestFormatFilter={contestFormatFilter}
+            onContestFormatChange={setContestFormatFilter}
+            displayViewMode={displayViewMode}
+            layoutAllowsListView={layoutAllowsListView}
+            onViewModeChange={(mode) => setViewMode(mode)}
+            sortOption={sortOption}
+            onSortChange={(value) => setSortOption(value as SortOptionType)}
+            platformFilter={platformFilter}
+            onPlatformFilterChange={setPlatformFilter}
+            platformOptions={platformFilterOptions}
+            contestTypeFilter={contestTypeFilter}
+            onContestTypeChange={setContestTypeFilter}
+            selectedTab={selectedTab}
+            onTabChange={setSelectedTab}
+            tabCounts={serverTabCounts}
+            showPostContestPipeline={showPostContestPipeline}
+            postContestPhaseFilter={postContestPhaseFilter}
+            onPostPhaseChange={(phase) =>
+              setPostContestPhaseFilter(phase as BrandPostPhaseId)
+            }
+            phaseCounts={postPhaseCounts}
+          />
 
           <div
             ref={brandContestsResultsRef}
@@ -4122,15 +1984,15 @@ export function ContestListClient({
             aria-busy={listLoading || listValidating}
           >
             <div
-              className="mb-3 flex min-h-7 items-center justify-end"
+              className="mb-4 flex min-h-7 items-center justify-end"
               aria-live="polite"
             >
               <span
                 className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-semibold tabular-nums shadow-sm",
+                  "rounded-full border px-[11px] py-[5px] text-xs font-medium",
                   isDark
-                    ? "border-white/10 bg-white/[0.05] text-slate-300"
-                    : "border-slate-200 bg-white text-slate-600",
+                    ? "border-white/10 bg-white/[0.04] text-neutral-300"
+                    : "border-[#e5e5e5] bg-[#fafafa] text-[#737373]",
                 )}
               >
                 {listError && contests.length === 0
@@ -4181,12 +2043,7 @@ export function ContestListClient({
                 </div>
               </div>
             ) : displayViewMode === "grid" ? (
-              <div
-                className="grid gap-6"
-                style={{
-                  gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-                }}
-              >
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {total > 0 ? (
                   paginatedContests.map((contest) => renderContestCard(contest))
                 ) : (
@@ -4220,9 +2077,7 @@ export function ContestListClient({
             ) : (
               <div className="flex flex-col gap-4">
                 {total > 0 ? (
-                  paginatedContests.map((contest) =>
-                    renderContestListItem(contest),
-                  )
+                  paginatedContests.map((contest) => renderContestCard(contest, "list"))
                 ) : (
                   <div className="text-center py-12">
                     <h3

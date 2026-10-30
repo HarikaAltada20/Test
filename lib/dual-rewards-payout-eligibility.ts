@@ -12,6 +12,7 @@ import {
   milestonesRequireContestWideFcfs,
 } from "@/lib/milestone-contest-expected-spend";
 import { buildDualRewardCreatorCapSplitMapsByPlatform } from "@/lib/dual-rewards-creator-cap";
+import { isHighestPlatformPayoutOnly } from "@/lib/highest-platform-payout";
 import {
   isKeyedMaxEarningsMap,
   resolveMaxEarningsCentsForSubmission,
@@ -176,6 +177,13 @@ export function buildDualCreatorCapMapsFromCreatorRows(
         : computeDualCpmRawCentsFromRow(r, cpmCfg as any),
     }));
   const keyed = isKeyedMaxEarningsMap(options?.maxEarningsPerCreator);
+  // Highest-platform-only campaigns cap each platform on its own (matches the
+  // winner calculation and every screen), even when the cap is one number.
+  const perPlatformCaps = isHighestPlatformPayoutOnly({
+    contest_type: "dual_rewards",
+    platform: options?.contestPlatformCsv,
+    contest_based_details: options?.details,
+  });
   return buildDualRewardCreatorCapSplitMapsByPlatform(
     dualRows,
     (platform) =>
@@ -188,7 +196,7 @@ export function buildDualCreatorCapMapsFromCreatorRows(
         },
         platform,
       ) ?? maxCap,
-    { keyedCaps: keyed },
+    { keyedCaps: keyed || perPlatformCaps },
   );
 }
 

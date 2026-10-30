@@ -13,16 +13,16 @@ type Props = {
 
 export function EmptyState({ icon: Icon, title, description, actions, className }: Props) {
   return (
-    <div className={cn("flex flex-col items-center px-4 py-10 text-center", className)}>
-      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-50 text-[#7F39EC] dark:bg-[#7F39EC]/20 dark:text-purple-200">
+    <div className={cn("flex flex-col items-center px-4 py-12 text-center", className)}>
+      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f3f3f5] text-[#1a1a1a] dark:bg-white/10 dark:text-white">
         <Icon className="h-6 w-6" aria-hidden="true" />
       </span>
-      <p className="mt-3 font-medium text-gray-900 dark:text-white">{title}</p>
+      <p className="mt-4 text-[17px] font-semibold text-[#1a1a1a] dark:text-white">{title}</p>
       {description && (
-        <p className="mt-1 max-w-sm text-sm text-gray-500 dark:text-gray-400">{description}</p>
+        <p className="mt-1.5 max-w-sm text-sm text-[#8d8d95] dark:text-white/50">{description}</p>
       )}
       {actions && (
-        <div className="mt-4 flex w-full flex-col justify-center gap-2 sm:w-auto sm:flex-row">
+        <div className="mt-5 flex w-full flex-col justify-center gap-2 sm:w-auto sm:flex-row">
           {actions}
         </div>
       )}

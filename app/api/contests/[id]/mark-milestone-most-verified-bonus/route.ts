@@ -34,6 +34,10 @@ import {
   buildDualRewardsPayoutPersistValue,
   dualRewardsPayoutForMilestoneTotal,
 } from "@/lib/dual-rewards-payout";
+import {
+  computeHighestPlatformDecisions,
+  isCreatorPlatformCounted,
+} from "@/lib/highest-platform-payout";
 
 function normalizeStatus(raw: string | null | undefined): string {
   const t = String(raw || "pending").toLowerCase();
@@ -102,7 +106,7 @@ export async function POST(
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
       .select(
-        "id, title, contest_type, platform, contest_based_details, post_contest_status, payout_adjustment_percentage, payout_adjustment_mode",
+        "id, title, contest_type, contest_format, platform, contest_based_details, post_contest_status, payout_adjustment_percentage, payout_adjustment_mode, max_earnings_per_creator, bonus_details",
       )
       .eq("id", contestId)
       .single();
@@ -159,10 +163,24 @@ export async function POST(
     }
 
     const submissions = subs || [];
+    // Highest-platform-only campaigns: a bonus won on a platform that is not
+    // the creator's highest-earning one is not paid (inactive when off).
+    const highestPlatformDecisions = computeHighestPlatformDecisions(
+      contest,
+      submissions,
+    );
     const map = buildMilestoneMostVerifiedBonusByCreatorMapFromDetails(
       submissions,
       details,
       contestPlatform,
+      undefined,
+      undefined,
+      (bonusCreatorId, platform) =>
+        isCreatorPlatformCounted(
+          highestPlatformDecisions,
+          bonusCreatorId,
+          platform,
+        ),
     );
     const row =
       map.get(String(creatorId).trim()) ??
@@ -288,7 +306,12 @@ export async function POST(
       );
     }
 
-    const creatorSubs = submissions.filter((s) => s.creator_id === creatorId);
+    // Highest-platform-only: attach the bonus to a submission on the paid platform.
+    const creatorSubs = submissions.filter(
+      (s) =>
+        s.creator_id === creatorId &&
+        isCreatorPlatformCounted(highestPlatformDecisions, creatorId, s.platform),
+    );
 
     const verifiedLike = creatorSubs.filter((s) =>
       isVerifiedLike(normalizeStatus(s.status)),

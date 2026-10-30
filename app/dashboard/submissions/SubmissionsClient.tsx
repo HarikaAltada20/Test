@@ -31,10 +31,8 @@ import {
 import {
   EnhancedTabs as Tabs,
   EnhancedTabsContent as TabsContent,
-  EnhancedTabsList as TabsList,
-  EnhancedTabsTrigger as TabsTrigger,
 } from "@/components/ui/enhanced-tabs";
-import { ExternalLink, Filter, Video, AlertCircle, Info, ArrowRight, Search, Layers, Clock, CheckCircle2, XCircle, History, DollarSign, Menu, MoreVertical, Eye, Trophy, TrendingUp, Coins, CalendarDays, Tag, ChevronLeft, ChevronRight, Check, ListOrdered, Gift, CheckCheck, Loader2, ShieldCheck, Star, Hash } from "lucide-react";
+import { ExternalLink, Filter, Video, AlertCircle, Info, ArrowRight, Search, Layers, Clock, CheckCircle2, XCircle, History, DollarSign, Menu, MoreVertical, Eye, Trophy, TrendingUp, Coins, CalendarDays, Tag, ChevronLeft, ChevronRight, ChevronDown, Check, ListOrdered, Gift, CheckCheck, Loader2, ShieldCheck, Star, Hash, SquareArrowOutUpRight } from "lucide-react";
 import Image from "next/image";
 import React from "react";
 import { centsToDollars, formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
@@ -68,6 +66,15 @@ import {
   formatQualitySumDisplay,
   formatTrustScoreDisplay,
 } from "@/lib/creator-profile-stats";
+import { isHighestPlatformPayoutOnly } from "@/lib/highest-platform-payout";
+import {
+  creatorSubmissionPayoutTag,
+  fetchCreatorHighestPlatformSummaries,
+  isCreatorSubmissionExcluded,
+  type CreatorHighestPlatformSummary,
+} from "@/lib/highest-platform-payout-creator";
+import { HighestPlatformPayoutNote } from "@/components/contest/HighestPlatformPayoutNote";
+import { HighestPlatformSubmissionTag } from "@/components/contest/HighestPlatformSubmissionTag";
 
 // Map human-readable rejection reason labels to their descriptions (new canonical set only)
 const REJECTION_REASON_DESCRIPTIONS: Record<string, string> = {
@@ -259,7 +266,6 @@ const SubmissionActionButtons = ({
   isGroup = false,
   isFullWidth = false,
   onAction,
-  disableAnimation = false
 }: {
   contentLink: string;
   contestId: string | null | undefined;
@@ -269,125 +275,42 @@ const SubmissionActionButtons = ({
   onAction?: () => void;
   disableAnimation?: boolean;
 }) => {
-  const [activeButton, setActiveButton] = useState<"content" | "contest" | null>(null);
-  const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-  const containerRef = React.useRef<HTMLDivElement>(null);
-
   const status = contestStatus || (contestId ? "active" : null);
   const isLive = status === "active" || status === "published" || status == null;
   const contestLink = contestId
     ? `/dashboard/opportunities/${contestId}?tab=leaderboard`
     : "#";
-  const contestLabel = isLive ? "View Contest" : "View Leaderboard";
-  const ContestIcon = isLive ? Info : Trophy;
-  const ActionIcon = isGroup ? ListOrdered : Video;
-  const actionLabel = isGroup ? "View Submissions" : "View Content";
-
-  const clearTimer = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-  };
-
-  const handleHover = (type: "content" | "contest") => {
-    if (disableAnimation) return;
-    clearTimer();
-    setActiveButton(type);
-  };
-
-  const handleLeave = () => {
-    if (disableAnimation) return;
-    clearTimer();
-    timeoutRef.current = setTimeout(() => {
-      setActiveButton(null);
-    }, 3000);
-  };
-
-  // Keyboard and Click Outside handling
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setActiveButton(null);
-    };
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setActiveButton(null);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("mousedown", handleClickOutside);
-      clearTimer();
-    };
-  }, []);
+  const contestLabel = isLive ? "View contest" : "View leaderboard";
+  const actionLabel = isGroup ? "View submissions" : "View content";
+  const pillClass = cn(
+    "inline-flex h-9 items-center justify-center gap-1 rounded-full border border-neutral-200 bg-[#E4E4E4] px-3 text-sm font-medium leading-none text-[#171717] shadow-none hover:bg-[#dadada]",
+    "dark:border-white/15 dark:bg-[#1a1a1a] dark:text-slate-100 dark:hover:bg-white/10",
+    isFullWidth && "flex-1",
+  );
+  const iconClass = "h-3.5 w-3.5 shrink-0 text-neutral-500 dark:text-slate-400";
 
   return (
     <div
-      ref={containerRef}
       className={cn(
         "flex items-center gap-2",
-        isFullWidth ? "w-full" : "w-auto justify-end md:justify-self-end self-center md:self-end"
+        isFullWidth ? "w-full" : "mt-auto w-auto justify-end self-end pt-3",
       )}
     >
-      <div className={cn(
-        "flex flex-row gap-2 items-center shrink-0",
-        isFullWidth ? "w-full" : "w-auto"
-      )}>
-        {/* Main Action Button (Content or Group) — square icon button */}
-        <Button
-          asChild={!onAction}
-          onMouseEnter={() => handleHover("content")}
-          onMouseLeave={handleLeave}
-          onClick={onAction ? (e) => {
-            e.preventDefault();
-            onAction();
-          } : undefined}
-          className={cn(
-            "relative flex items-center justify-center h-10 w-10 min-h-10 min-w-10 rounded-lg transition-all duration-300 ease-in-out p-0 overflow-hidden shadow-sm",
-            "bg-[#4211a1] hover:bg-[#350d81] border-none text-white",
-            isFullWidth ? (
-              (!disableAnimation && activeButton === "content") ? "flex-[2] min-w-0" : (!disableAnimation && activeButton === "contest" ? "flex-[0.5] min-w-0" : "flex-1 min-w-0")
-            ) : (
-              (!disableAnimation && activeButton === "content") ? "sm:w-[160px] sm:min-w-[160px] z-10 shadow-lg rounded-lg" : "sm:w-10 sm:min-w-10"
-            ),
-            (!disableAnimation && !isFullWidth && activeButton === "contest") ? "sm:w-9 sm:min-w-9 opacity-60" : "opacity-100"
-          )}
-        >
-          {onAction ? (
-            <div className="w-full h-full flex items-center justify-center" title={actionLabel}>
-              <ActionIcon className="w-5 h-5 text-white shrink-0" strokeWidth={2.5} />
-            </div>
-          ) : (
-            <Link href={contentLink || "#"} target="_blank" rel="noopener noreferrer" className="w-full h-full flex items-center justify-center" title={actionLabel}>
-              <ActionIcon className="w-5 h-5 text-white shrink-0" strokeWidth={2.5} />
-            </Link>
-          )}
-        </Button>
-
-        {/* View Contest / Leaderboard Button — square icon button */}
-        <Button
-          asChild
-          onMouseEnter={() => handleHover("contest")}
-          onMouseLeave={handleLeave}
-          className={cn(
-            "relative flex items-center justify-center h-10 w-10 min-h-10 min-w-10 rounded-lg transition-all duration-300 ease-in-out p-0 overflow-hidden shadow-sm",
-            "bg-[#4211a1] hover:bg-[#350d81] border-none text-white",
-            isFullWidth ? (
-              (!disableAnimation && activeButton === "contest") ? "flex-[2] min-w-0" : (!disableAnimation && activeButton === "content" ? "flex-[0.5] min-w-0" : "flex-1 min-w-0")
-            ) : (
-              (!disableAnimation && activeButton === "contest") ? "sm:w-[180px] sm:min-w-[180px] z-10 shadow-lg rounded-lg" : "sm:w-10 sm:min-w-10"
-            ),
-            (!disableAnimation && !isFullWidth && activeButton === "content") ? "sm:w-9 sm:min-w-9 opacity-60" : "opacity-100"
-          )}
-        >
-          <Link href={contestLink} className="w-full h-full flex items-center justify-center" title={contestLabel}>
-            <ContestIcon className="w-5 h-5 text-white shrink-0" strokeWidth={2.5} />
-          </Link>
-        </Button>
-      </div>
+      {onAction ? (
+        <button type="button" onClick={onAction} className={pillClass}>
+          <ExternalLink className={iconClass} />
+          <span>{actionLabel}</span>
+        </button>
+      ) : (
+        <Link href={contentLink || "#"} target="_blank" rel="noopener noreferrer" className={pillClass}>
+          <ExternalLink className={iconClass} />
+          <span>{actionLabel}</span>
+        </Link>
+      )}
+      <Link href={contestLink} className={pillClass}>
+        <SquareArrowOutUpRight className={iconClass} />
+        <span>{contestLabel}</span>
+      </Link>
     </div>
   );
 };
@@ -498,6 +421,38 @@ export default function SubmissionsClient({
   const isSubmissionPaid = (s: SubmissionWithContest) =>
     (s.status as string || "").toLowerCase() === "paid" || (s as any).paid === true;
 
+  // "Best platform paid" campaigns: which platform counts comes from the
+  // server (decided on every creator's submissions), never from loaded/filtered rows.
+  const [highestPlatformByContest, setHighestPlatformByContest] = useState<
+    Record<string, CreatorHighestPlatformSummary>
+  >({});
+  const highestPlatformContestKey = useMemo(() => {
+    const ids = new Set<string>();
+    for (const sub of allSubmissions) {
+      if (sub.contest_id && isHighestPlatformPayoutOnly(sub.contests)) {
+        ids.add(sub.contest_id);
+      }
+    }
+    return Array.from(ids).sort().join(",");
+  }, [allSubmissions]);
+  useEffect(() => {
+    if (!highestPlatformContestKey) return;
+    let cancelled = false;
+    fetchCreatorHighestPlatformSummaries(highestPlatformContestKey.split(","))
+      .then((byContest) => {
+        if (!cancelled) setHighestPlatformByContest(byContest);
+      })
+      .catch((err) => console.error("Error loading best-platform payouts:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [highestPlatformContestKey]);
+  const getHighestPlatformSummary = (s: SubmissionWithContest) =>
+    s.contest_id ? highestPlatformByContest[s.contest_id] : undefined;
+  /** Losing-platform submission on a "best platform paid" campaign: counts $0. */
+  const isNotCountedForPayout = (s: SubmissionWithContest) =>
+    isCreatorSubmissionExcluded(getHighestPlatformSummary(s), s.id);
+
   const formatContestTypeFilterLabel = (id: string) => {
     if (id === "dual_rewards") return "Dual Rewards";
     if (id === "cpm") return "CPM";
@@ -582,6 +537,7 @@ export default function SubmissionsClient({
       return submission.earnings ?? 0;
     }
     if (isPayoutsProcessed(contest)) return 0;
+    if (isNotCountedForPayout(submission)) return 0;
 
     if (campaignType === "cpm") {
       if (subStatus === "rejected") return 0;
@@ -634,6 +590,7 @@ export default function SubmissionsClient({
     // If contest payouts are fully processed, and this submission isn't paid,
     // there's nothing more to earn.
     if (isPayoutsProcessed(contest)) return 0;
+    if (isNotCountedForPayout(submission)) return 0;
 
     if (campaignType === "cpm") {
       if (subStatus === "rejected") return 0;
@@ -709,6 +666,7 @@ export default function SubmissionsClient({
     const isRejected = subStatus === "rejected";
 
     if (isRejected) return 0;
+    if (isNotCountedForPayout(submission)) return 0;
 
     // Gate: Participant bonus (flat fee) is ONLY shown/calculated once verified.
     // However, if an admin has ALREADY manually assigned a bonus_amount, we respect that immediately.
@@ -996,6 +954,21 @@ export default function SubmissionsClient({
   }, [showQualityScoreFilter]);
 
   const isDark = mode === "dark";
+  const filterPillClass = cn(
+    "!h-11 !min-w-[168px] !w-auto !justify-between !rounded-full !border !px-4 !py-0 text-sm font-medium shadow-none",
+    isDark
+      ? "!border-white/15 !bg-[#1a1a1a] !text-white hover:!bg-white/10"
+      : "!border-neutral-200 !bg-[#E4E4E4] !text-[#171717] hover:!bg-[#dadada]",
+  );
+  const platformSelectValue =
+    platformFilter.length === 1
+      ? platformFilter[0] === "x"
+        ? "twitter"
+        : platformFilter[0]
+      : platformFilter.length > 0 &&
+          platformFilter.every((platform) => platform === "twitter" || platform === "x")
+        ? "twitter"
+        : "all";
   // Helper for dynamic card titles and descriptions
   const filterDisplayInfo: Record<
     StatusFilter,
@@ -1252,7 +1225,7 @@ export default function SubmissionsClient({
 
     setAnalyticsFilteredSubmissions(submissionsForAnalytics);
     setFilteredSubmissions(submissions);
-  }, [allSubmissions, contestTypeFilter, statusFilter, platformFilter, activeSearch, sortOrder, dateFilter, dateRange, contestStatusFilter, qualityScoreFilters]);
+  }, [allSubmissions, contestTypeFilter, statusFilter, platformFilter, activeSearch, sortOrder, dateFilter, dateRange, contestStatusFilter, qualityScoreFilters, highestPlatformByContest]);
 
   const groupedContests = useMemo(() => {
     const groups: Record<string, {
@@ -1346,7 +1319,7 @@ export default function SubmissionsClient({
         }
       }
     });
-  }, [filteredSubmissions, sortOrder]);
+  }, [filteredSubmissions, sortOrder, highestPlatformByContest]);
 
   const stats = useMemo(() => {
     const contests = new Set(
@@ -1416,7 +1389,30 @@ export default function SubmissionsClient({
       estimatedEarnings,
       estimatedBonus,
     };
-  }, [analyticsFilteredSubmissions]);
+  }, [analyticsFilteredSubmissions, highestPlatformByContest]);
+
+  const statusCounts = useMemo(() => {
+    const counts = {
+      all: allSubmissions.length,
+      pending: 0,
+      verified: 0,
+      rejected: 0,
+      paid: 0,
+    };
+    for (const sub of allSubmissions) {
+      if (sub.status === "pending") counts.pending += 1;
+      if (sub.status === "verified") counts.verified += 1;
+      if (sub.status === "rejected") counts.rejected += 1;
+      const hasEarnings = sub.earnings != null && sub.earnings > 0;
+      const isContestCompleted =
+        sub.contests?.post_contest_status === "verification_complete" ||
+        sub.contests?.post_contest_status === "payouts_processed";
+      if (sub.status === "paid" || (hasEarnings && isContestCompleted)) {
+        counts.paid += 1;
+      }
+    }
+    return counts;
+  }, [allSubmissions]);
 
 
 
@@ -1509,6 +1505,15 @@ export default function SubmissionsClient({
       }
     }
 
+    const highestPlatformTag = creatorSubmissionPayoutTag(
+      getHighestPlatformSummary(submission),
+      submission,
+    );
+    // Not counted ("best platform paid"): neutral $0, never the rejected style.
+    if (earningsDisplay && highestPlatformTag && !highestPlatformTag.counted) {
+      earningsDisplay.color = isDark ? "text-slate-400" : "text-slate-500";
+    }
+
     const contestDetailsForBonus = contest?.contest_based_details as any;
     const bonusDetailsForCard = contest?.bonus_details as any;
     const platformCpmConfig = resolveCpmContestConfigForPlatform(
@@ -1584,27 +1589,12 @@ export default function SubmissionsClient({
       <div
         key={submission.id}
         className={cn(
-          "relative grid grid-cols-1 md:grid-cols-[280px_1fr] lg:grid-cols-[280px_1fr_220px] gap-6 p-4 md:p-6 rounded-[16px] border shadow-sm transition-none overflow-hidden",
-          isDark ? "bg-[#0f172a] border-slate-800" : "bg-white border-slate-200"
+          "rounded-2xl border p-4",
+          isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white"
         )}
       >
-        {/* Contest Status Badge - Absolute on desktop, relative flow on mobile column */}
-        <div className="md:absolute md:top-4 md:right-4 z-10 flex flex-row gap-2 mb-2 md:mb-0">
-          {(() => {
-            const contestStatusInfo = getContestStatusDisplay(contest);
-            return (
-              <span className={cn(
-                "inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border shadow-sm",
-                contestStatusInfo.styles.bg, contestStatusInfo.styles.text, contestStatusInfo.styles.border
-              )}>
-                {contestStatusInfo.label}
-              </span>
-            );
-          })()}
-        </div>
-
-        {/* Column 1: Thumbnail */}
-        <div className="relative w-full md:w-[280px] aspect-[16/9] md:aspect-[4/3] rounded-[12px] overflow-hidden border border-slate-200 dark:border-slate-800 shrink-0 bg-slate-100 dark:bg-slate-900 group/thumb">
+        <div className="flex flex-col items-stretch gap-4 md:flex-row">
+        <div className="relative w-full shrink-0 overflow-hidden rounded-[12px] border border-slate-200 bg-slate-100 dark:border-white/10 dark:bg-[#161616] md:w-[280px] md:aspect-[4/3] aspect-[16/9]">
 
           {(() => {
             const platformLower = (submission.platform || "").toLowerCase();
@@ -1660,62 +1650,60 @@ export default function SubmissionsClient({
           </div>
         </div>
 
-        {/* Column 2: Info */}
-        <div className="flex flex-col gap-2 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h3
-              className={cn(
-                "text-[20px] font-bold transition-all duration-300 cursor-default self-start",
-                isDark ? "text-white" : "text-slate-900",
-                "whitespace-normal overflow-visible lg:truncate lg:hover:whitespace-normal lg:hover:overflow-visible"
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 self-stretch">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <h3 className={cn("min-w-0 truncate text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>
+                {videoTitle}
+              </h3>
+              {videoTitle.length > 60 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedContestGroup({
+                      contest: submission.contests,
+                      submissions: [submission],
+                      isSingleSubmission: true
+                    });
+                  }}
+                  className="shrink-0 text-[11px] font-semibold text-[#525252] underline underline-offset-2 hover:text-[#171717]"
+                >
+                  View More
+                </button>
               )}
-            >
-              {contest?.title || "Untitled Contest"}
-            </h3>
+            </div>
             {(() => {
               const styles = getStatusBadgeStyles(submission.status, contest?.end_date, contest?.post_contest_status);
-
               return (
-                <div className="flex items-center gap-2">
-                  <span className={cn(
-                    "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border",
-                    styles.bg, styles.text, styles.border
-                  )}>
-                    {displayStatus}
-                  </span>
-                </div>
+                <span className={cn(
+                  "inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold",
+                  styles.bg, styles.text, styles.border
+                )}>
+                  {displayStatus}
+                </span>
               );
             })()}
           </div>
 
-          <div className="flex items-center gap-2 mt-[-6px]">
-            <p
-              className={cn(
-                "text-[13px] font-medium transition-all duration-300",
-                isDark ? "text-slate-400" : "text-slate-500",
-                "truncate max-w-[300px] lg:max-w-[500px]"
-              )}
-            >
-              {videoTitle}
+          <div className="flex min-w-0 items-center gap-2">
+            {(() => {
+              const contestStatusInfo = getContestStatusDisplay(contest);
+              return (
+                <span className={cn(
+                  "inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+                  contestStatusInfo.styles.bg, contestStatusInfo.styles.text, contestStatusInfo.styles.border
+                )}>
+                  {contestStatusInfo.label}
+                </span>
+              );
+            })()}
+            <p className={cn("truncate text-sm font-medium", isDark ? "text-slate-200" : "text-[#292524]")}>
+              {contest?.title || "Untitled Contest"}
             </p>
-            {videoTitle.length > 60 && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedContestGroup({
-                    contest: submission.contests,
-                    submissions: [submission],
-                    isSingleSubmission: true
-                  });
-                }}
-                className="text-[11px] font-bold text-indigo-500 hover:text-indigo-600 shrink-0 transition-colors"
-              >
-                View More
-              </button>
-            )}
           </div>
 
-          <div className={cn("flex items-center gap-1.5 text-[13px] font-medium whitespace-nowrap overflow-hidden flex-wrap", isDark ? "text-slate-300" : "text-slate-500")}>
+          <div className={cn("flex items-center gap-1.5 text-[13px] font-medium whitespace-nowrap overflow-hidden flex-wrap", isDark ? "text-slate-200" : "text-[#44403c]")}>
             <span className="flex items-center gap-1 flex-shrink-0">
               <History className="w-3 h-3 opacity-60" />
               {submission.formatted_created_at?.split(',')[0] || "Date N/A"}
@@ -1732,10 +1720,10 @@ export default function SubmissionsClient({
             {campaignType === "leaderboard" && null}
           </div>
 
-          <div className="flex flex-col gap-1 mt-1">
+          <div className="mt-3 flex min-w-0 flex-col gap-1">
             {earningsDisplay && (
               <div className="flex flex-col items-start gap-1">
-                <p className={cn("text-[15px] font-semibold flex items-center gap-1.5", earningsDisplay.color)}>
+                <p className={cn("flex items-center gap-1.5 text-[15px] font-semibold", isDark ? "text-white" : "text-[#171717]")}>
                   {earningsDisplay.label === "Winning Zone" && <Trophy className="h-4 w-4" />}
                   {earningsDisplay.label}:{" "}
                   {earningsDisplay.amount === "Check Ranking" ? (
@@ -1751,6 +1739,7 @@ export default function SubmissionsClient({
                     `$${earningsDisplay.amount} USD`
                   )}
                 </p>
+                <HighestPlatformSubmissionTag tag={highestPlatformTag} isDark={isDark} />
                 {campaignType === "milestone" &&
                   totalEarningsCents > 0 &&
                   milestoneMatch && (
@@ -1863,14 +1852,14 @@ export default function SubmissionsClient({
               )}
             </div>
           )}
-        </div>
 
-        {/* Column 3: Actions - Professional Enterprise Interaction */}
         <SubmissionActionButtons
           contentLink={submission.content_link || "#"}
           contestId={contestId}
           contestStatus={contest?.status}
         />
+        </div>
+        </div>
       </div>
     );
   };
@@ -1914,8 +1903,8 @@ export default function SubmissionsClient({
       <Card
         key={group.id}
         className={cn(
-          "overflow-hidden rounded-[16px] shadow-sm transition-all duration-300 border flex flex-col md:flex-row group w-full relative",
-          isDark ? "bg-[#0f172a] border-slate-800" : "bg-white border-slate-200"
+          "overflow-hidden rounded-[16px] shadow-none transition-all duration-300 border flex flex-col md:flex-row group w-full relative",
+          isDark ? "bg-[#161616] border-white/10" : "bg-white border-neutral-200"
         )}
       >
         {/* Status Badge - Fixed overlap issues on mobile */}
@@ -1938,7 +1927,7 @@ export default function SubmissionsClient({
         </div>
 
         {/* Thumbnail Section - Corrected logic for Thumbnail vs Logo */}
-        <div className="w-full md:w-[280px] aspect-[16/9] md:aspect-square flex-shrink-0 overflow-hidden bg-slate-100 dark:bg-slate-900 border-b md:border-b-0 md:border-r border-slate-100 dark:border-slate-800 relative">
+        <div className="w-full md:w-[280px] aspect-[16/9] md:aspect-square flex-shrink-0 overflow-hidden bg-slate-100 dark:bg-[#161616] border-b md:border-b-0 md:border-r border-slate-100 dark:border-white/10 relative">
           {contest?.thumbnail_url ? (
             <img
               src={contest.thumbnail_url}
@@ -1964,14 +1953,14 @@ export default function SubmissionsClient({
           <div>
             <div className="flex items-center gap-2 mb-3 flex-wrap">
               {contest?.advertiser_profiles?.company_name && (
-                <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-indigo-50/50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-900/50">
+                <Badge variant="outline" className="text-[10px] font-semibold uppercase tracking-widest px-2.5 py-1 rounded-full bg-[#E4E4E4] text-neutral-700 border-neutral-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
                   {contest.advertiser_profiles.company_name}
                 </Badge>
               )}
-              <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border-slate-200 dark:border-slate-800">
+              <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border-slate-200 dark:border-white/10">
                 {contest?.platform || "Platform"}
               </Badge>
-              <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border-slate-200 dark:border-slate-800">
+              <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border-slate-200 dark:border-white/10">
                 {contest?.contest_type || "Type"}
               </Badge>
             </div>
@@ -1980,7 +1969,7 @@ export default function SubmissionsClient({
               className={cn(
                 "text-[22px] md:text-[26px] font-black leading-tight mb-2 tracking-tight transition-all duration-300",
                 "flex flex-wrap line-clamp-2 group-hover:line-clamp-none break-words",
-                isDark ? "text-white group-hover:text-indigo-400" : "text-slate-900 group-hover:text-[#4211a1]"
+                isDark ? "text-white" : "text-neutral-950"
               )}
             >
               {contest?.title || (contest?.platform || group.submissions[0]?.platform || "Contest").replace(/_/g, " ").toUpperCase()}
@@ -1988,7 +1977,7 @@ export default function SubmissionsClient({
 
             <div className="flex items-center gap-4 flex-wrap">
               <p className={cn("text-[13px] font-semibold flex items-center gap-1.5", isDark ? "text-slate-400" : "text-slate-500")}>
-                <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                <Clock className={cn("w-3.5 h-3.5", isDark ? "text-slate-400" : "text-neutral-500")} />
                 {contest?.end_date
                   ? `${isEnded ? 'Ended' : 'Deadline'}: ${format(new Date(contest.end_date), "MMM d, yyyy")}`
                   : 'Deadline: No deadline'}
@@ -1996,7 +1985,7 @@ export default function SubmissionsClient({
               {contest?.advertiser_profiles?.company_name && (
                 <p className={cn("text-[13px] font-medium flex items-center gap-1.5", isDark ? "text-slate-500" : "text-slate-400")}>
                   <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-700" />
-                  by <span className="font-bold text-indigo-500">{contest.advertiser_profiles.company_name}</span>
+                  by <span className={cn("font-semibold", isDark ? "text-slate-200" : "text-neutral-800")}>{contest.advertiser_profiles.company_name}</span>
                 </p>
               )}
             </div>
@@ -2064,10 +2053,17 @@ export default function SubmissionsClient({
                 </Badge>
               )}
             </div>
+            <HighestPlatformPayoutNote
+              contest={contest}
+              audience="creator"
+              isDark={isDark}
+              compact
+              className="mt-3"
+            />
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-100 dark:border-white/10">
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-1.5 text-slate-400">
                 <Video className="w-3.5 h-3.5" />
@@ -2099,8 +2095,8 @@ export default function SubmissionsClient({
                     if (statusFilter === "rejected") return "text-red-500";
                     if (statusFilter === "paid" || isPaidOut) return "text-green-700";
                     // Leaderboard when not paid: "Check your rank" link in purple
-                    if (contest?.contest_type === "leaderboard") return "text-[#7F39EC]";
-                    return "text-[#7F39EC]";
+                    if (contest?.contest_type === "leaderboard") return isDark ? "text-white" : "text-neutral-950";
+                    return isDark ? "text-white" : "text-neutral-950";
                   })()
                 )}
               >
@@ -2129,7 +2125,7 @@ export default function SubmissionsClient({
                     {(statusFilter === "paid" || isPaidOut) ? "Bonus Earned" : "Estimated Bonus"}
                   </span>
                 </div>
-                <p className={cn("text-[16px] font-black text-purple-500")}>
+                <p className={cn("text-[16px] font-black", isDark ? "text-white" : "text-neutral-950")}>
                   ${centsToDollars(totalBonus).toFixed(2)}
                 </p>
               </div>
@@ -2152,7 +2148,7 @@ export default function SubmissionsClient({
             <Button
               size="sm"
               variant="outline"
-              className="rounded-full h-8 px-4 text-[12px] font-bold border-slate-200 dark:border-slate-700 transition-all hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="h-9 rounded-full border-neutral-200 bg-[#E4E4E4] px-4 text-[12px] font-semibold text-neutral-800 shadow-none hover:bg-[#dadada] dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               onClick={() => setSelectedContestGroup(group)}
             >
               View Submissions
@@ -2184,167 +2180,254 @@ export default function SubmissionsClient({
   return (
     <div className="max-w-[1280px] mx-auto py-[24px] px-[16px] flex flex-col gap-[24px]">
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
-        <div className="max-w-[360px]">
-          <h1
-            className={cn(
-              "text-[24px] font-semibold leading-tight",
-              isDark ? "text-white" : "text-slate-900"
-            )}
-          >
-            My Submissions & Earnings
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h1 className={cn("text-[28px] font-semibold leading-tight tracking-tight", isDark ? "text-white" : "text-neutral-950")}>
+            My submissions & earnings
           </h1>
-          <p
-            className={cn(
-              "text-[14px] mt-1 leading-snug",
-              isDark ? "text-slate-400" : "text-slate-500"
-            )}
-          >
-            Showing your submissions and analytics across different statuses
+          <p className={cn("mt-2 text-md", isDark ? "text-slate-400" : "text-neutral-700")}>
+            Every post you&apos;ve submitted, where it stands, and what it earned.
           </p>
         </div>
-
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:max-w-[520px] mt-3 md:mt-0 md:justify-end">
-          <div className="relative w-full sm:flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" strokeWidth={3} />
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
+          <div className={cn(
+            "flex h-11 w-full items-center rounded-full border px-4 sm:w-[320px]",
+            isDark ? "border-white/15 bg-[#1a1a1a]" : "border-neutral-200 bg-[#E4E4E4]",
+          )}>
+            <Search className={cn("h-4 w-4 shrink-0", isDark ? "text-slate-400" : "text-neutral-500")} />
             <Input
-              placeholder="Search by URL or Title..."
+              placeholder="Search by link or title"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleKeyDown}
               className={cn(
-                "pl-10 h-10 rounded-lg transition-all shadow-none w-full",
-                isDark
-                  ? "border-slate-700 bg-[#1e293b] text-slate-100 placeholder:text-slate-500 focus:border-[#6366f1]"
-                  : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:border-[#4211a1]"
+                "h-9 flex-1 border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0",
+                isDark ? "text-slate-100 placeholder:text-slate-500" : "text-neutral-900 placeholder:text-neutral-500",
               )}
             />
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-none">
             <Button
+              type="button"
+              variant="ghost"
               onClick={handleSearch}
               disabled={isSearching}
               className={cn(
-                "h-10 flex-1 sm:flex-none px-6 rounded-lg bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0 transition-all duration-200",
-                isSearching && "opacity-90 cursor-wait"
+                "h-8 shrink-0 rounded-full bg-transparent px-3 text-sm font-semibold shadow-none",
+                isDark ? "text-white hover:bg-white/10" : "text-[#171717] hover:bg-[#dadada]",
+                isSearching && "cursor-wait opacity-90",
               )}
             >
-              {isSearching ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-                  <span>Searching...</span>
-                </>
-              ) : (
-                "Search"
-              )}
-            </Button>
-
-            <Button asChild className="h-10 flex-1 sm:flex-none px-[18px] rounded-[10px] bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0 transition-all">
-              <button
-                onClick={() => {
-                  setOpportunitiesLoading(true);
-                  setTimeout(() => {
-                    window.location.href = '/dashboard/opportunities';
-                  }, 100);
-                }}
-                disabled={opportunitiesLoading}
-                className="w-full h-full flex items-center justify-center"
-              >
-                {opportunitiesLoading ? (
-                  <ButtonLoadingSpinner />
-                ) : null}
-                <span className="ml-2">Find Campaigns</span>
-              </button>
+              {isSearching ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : "Search"}
             </Button>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={opportunitiesLoading}
+            onClick={() => {
+              setOpportunitiesLoading(true);
+              setTimeout(() => {
+                window.location.href = "/dashboard/opportunities";
+              }, 100);
+            }}
+            className={cn(
+              "h-11 shrink-0 rounded-full px-4 text-sm font-medium shadow-none",
+              isDark
+                ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                : "border-neutral-200 bg-[#E4E4E4] text-neutral-800 hover:bg-[#dadada]",
+            )}
+          >
+            {opportunitiesLoading ? <ButtonLoadingSpinner /> : null}
+            Find campaigns
+          </Button>
         </div>
       </div>
 
-      {/* Quick Stats Summary — wider cards, consistent height and alignment */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 md:gap-4 items-stretch">
-        {[
-          {
-            label: "Trust %",
-            value:
-              creatorStats?.trustScorePct != null
-                ? formatTrustScoreDisplay(creatorStats.trustScorePct)
-                : "—",
-            sub: "",
-            icon: ShieldCheck,
-            color: "text-emerald-500",
-          },
-          {
-            label: "Trust Score",
-            value: formatTrustNumberDisplay(creatorStats?.trustNumber),
-            sub: "",
-            icon: Hash,
-            color: "text-[#7F39EC]",
-          },
-          {
-            label: "Avg Quality Score",
-            value: formatQualityScoreDisplay(creatorStats?.avgQualityScore),
-            sub: "",
-            icon: Star,
-            color: "text-amber-500",
-          },
-          {
-            label: "Best Quality Score",
-            value: formatQualityScoreDisplay(creatorStats?.bestQualityScore),
-            sub: "",
-            icon: Star,
-            color: "text-orange-500",
-          },
-          {
-            label: "Total Quality Score",
-            value: formatQualitySumDisplay(creatorStats?.totalQualityScore),
-            sub: "",
-            icon: Star,
-            color: "text-rose-500",
-          },
-          { label: "Submitted to", value: stats.contests, sub: "Campaigns", icon: Trophy, color: "text-blue-500" },
-          { label: "Total Views", value: stats.views.toLocaleString(), sub: "", icon: TrendingUp, color: "text-indigo-500" },
-          { label: "Cash Earned", value: `$${centsToDollars(stats.earnings).toFixed(2)}`, sub: "USD", icon: DollarSign, color: "text-green-500" },
-          { label: "Bonus Earned", value: `$${centsToDollars(stats.bonus).toFixed(2)}`, sub: "USD", icon: Coins, color: "text-purple-500" },
-          { label: "Estimated Cash", value: `$${centsToDollars(stats.estimatedEarnings).toFixed(2)}`, sub: "USD", icon: TrendingUp, color: "text-blue-400" },
-          { label: "Estimated Bonus", value: `$${centsToDollars(stats.estimatedBonus).toFixed(2)}`, sub: "USD", icon: Coins, color: "text-orange-400" },
-        ].map((item, idx) => (
-          <Card
-            key={idx}
-            className={cn(
-              "border shadow-none rounded-[16px] w-full min-h-[96px] flex",
-              isDark ? "bg-[#1e293b] border-slate-800" : "bg-white border-slate-100"
-            )}
-          >
-            <CardContent className="p-4 flex flex-1 items-center gap-4 min-w-0">
-              <div className={cn("p-2.5 rounded-xl shadow-sm shrink-0", isDark ? "bg-slate-800" : "bg-slate-50")}>
-                <item.icon className={cn("w-5 h-5", item.color)} strokeWidth={2.5} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className={cn("text-[10px] font-bold uppercase tracking-wider truncate", isDark ? "text-slate-500" : "text-slate-400")}>{item.label}</p>
-                <div className="flex items-baseline gap-1.5 leading-tight mt-0.5 flex-wrap">
-                  <h3 className={cn("text-[18px] font-black break-words", isDark ? "text-white" : "text-slate-900")}>{item.value}</h3>
-                  {item.sub ? <span className="text-[10px] text-slate-400 font-bold uppercase shrink-0">{item.sub}</span> : null}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.55fr)]">
+        <section className={cn("flex min-h-[176px] flex-col rounded-2xl border p-5", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
+          <div className={cn("flex items-center gap-2 text-sm font-medium", isDark ? "text-slate-200" : "text-neutral-700")}>
+            <ShieldCheck className="h-4 w-4" />
+            Your account
+          </div>
+          <p className={cn("mt-4 text-sm font-medium", isDark ? "text-slate-300" : "text-[#44403c]")}>Trust</p>
+          <p className={cn("mt-1.5 text-[28px] font-semibold leading-none tracking-tight", isDark ? "text-white" : "text-neutral-950")}>
+            {creatorStats?.trustScorePct != null ? formatTrustScoreDisplay(creatorStats.trustScorePct) : "—"}
+          </p>
+          <div className={cn("mt-auto flex items-end justify-between gap-4 border-t pt-4", isDark ? "border-white/10" : "border-neutral-200")}>
+            <span className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-[#44403c]")}>Trust score</span>
+            <span className={cn("mt-1 text-base font-semibold", isDark ? "text-slate-100" : "text-neutral-900")}>{formatTrustNumberDisplay(creatorStats?.trustNumber)}</span>
+          </div>
+        </section>
+
+        <section className={cn("flex min-h-[176px] flex-col rounded-2xl border p-5", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
+          <div className={cn("flex items-center gap-2 text-sm font-medium", isDark ? "text-slate-200" : "text-neutral-700")}>
+            <Star className="h-4 w-4" />
+            Quality
+          </div>
+          <p className={cn("mt-4 text-sm font-medium", isDark ? "text-slate-300" : "text-[#44403c]")}>Average</p>
+          <p className={cn("mt-1.5 text-[28px] font-semibold leading-none tracking-tight", isDark ? "text-white" : "text-neutral-950")}>
+            {formatQualityScoreDisplay(creatorStats?.avgQualityScore)}
+          </p>
+          <div className={cn("mt-auto grid grid-cols-2 gap-x-6 gap-y-1 border-t pt-4", isDark ? "border-white/10" : "border-neutral-200")}>
+            <div>
+              <p className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-[#44403c]")}>Best</p>
+              <p className={cn("mt-1 text-base font-semibold", isDark ? "text-slate-100" : "text-neutral-900")}>{formatQualityScoreDisplay(creatorStats?.bestQualityScore)}</p>
+            </div>
+            <div>
+              <p className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-[#44403c]")}>Total score</p>
+              <p className={cn("mt-1 text-base font-semibold", isDark ? "text-slate-100" : "text-neutral-900")}>{formatQualitySumDisplay(creatorStats?.totalQualityScore)}</p>
+            </div>
+          </div>
+        </section>
+
+        <section className={cn("flex min-h-[176px] flex-col rounded-2xl border p-5", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
+          <div className={cn("flex items-center gap-2 text-sm font-medium", isDark ? "text-slate-200" : "text-neutral-700")}>
+            <Eye className="h-4 w-4" />
+            Reach
+          </div>
+          <p className={cn("mt-4 text-sm font-medium", isDark ? "text-slate-300" : "text-[#44403c]")}>Total views</p>
+          <p className={cn("mt-1.5 text-[28px] font-semibold leading-none tracking-tight", isDark ? "text-white" : "text-neutral-950")}>
+            {stats.views.toLocaleString()}
+          </p>
+          <div className={cn("mt-auto flex items-end justify-between gap-4 border-t pt-4", isDark ? "border-white/10" : "border-neutral-200")}>
+            <span className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-[#44403c]")}>Campaigns</span>
+            <span className={cn("mt-1 text-base font-semibold", isDark ? "text-slate-100" : "text-neutral-900")}>{stats.contests}</span>
+          </div>
+        </section>
+
+        <section className={cn("flex min-h-[176px] flex-col rounded-2xl border p-5 md:col-span-2 xl:col-span-1", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
+          <div className={cn("flex items-center gap-2 text-sm font-medium", isDark ? "text-slate-200" : "text-neutral-700")}>
+            <DollarSign className="h-4 w-4" />
+            Earnings
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-x-8 gap-y-4">
+            <div>
+              <p className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-[#44403c]")}>Cash earned</p>
+              <p className={cn("mt-1.5 text-2xl font-semibold tracking-tight", isDark ? "text-white" : "text-neutral-950")}>${centsToDollars(stats.earnings).toFixed(2)}</p>
+            </div>
+            <div>
+              <p className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-[#44403c]")}>Estimated cash</p>
+              <p className={cn("mt-1.5 text-2xl font-semibold tracking-tight", isDark ? "text-white" : "text-neutral-950")}>${centsToDollars(stats.estimatedEarnings).toFixed(2)}</p>
+            </div>
+          </div>
+          <div className={cn("mt-5 grid grid-cols-2 gap-x-8 gap-y-1 border-t pt-4", isDark ? "border-white/10" : "border-neutral-200")}>
+            <div>
+              <p className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-[#44403c]")}>Bonus earned</p>
+              <p className={cn("mt-1 text-base font-semibold", isDark ? "text-slate-100" : "text-neutral-900")}>${centsToDollars(stats.bonus).toFixed(2)}</p>
+            </div>
+            <div>
+              <p className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-[#44403c]")}>Estimated bonus</p>
+              <p className={cn("mt-1 text-base font-semibold", isDark ? "text-slate-100" : "text-neutral-900")}>${centsToDollars(stats.estimatedBonus).toFixed(2)}</p>
+            </div>
+          </div>
+        </section>
       </div>
 
-      {/* Filters Row (Restored to Top) */}
-      <div className="flex flex-wrap items-center gap-3 md:gap-4 mt-6">
+      <Tabs defaultValue="all" value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)} className="flex w-full flex-col gap-2.5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div
+            className={cn(
+              "flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+              isDark ? "bg-white/10" : "bg-[#E4E4E4]",
+            )}
+          >
+            {([
+              { id: "all", label: "All" },
+              { id: "pending", label: "Pending" },
+              { id: "verified", label: "Verified" },
+              { id: "rejected", label: "Rejected" },
+              { id: "paid", label: "Paid" },
+            ] as const).map((tab) => {
+              const active = statusFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setStatusFilter(tab.id)}
+                  className={cn(
+                    "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium leading-none transition-colors",
+                    active
+                      ? isDark
+                        ? "bg-white/15 text-white shadow-sm"
+                        : "bg-white text-[#1a1a1a] shadow-sm"
+                      : isDark
+                        ? "text-white/75 hover:bg-white/10 hover:text-white"
+                        : "text-[#3f3f46] hover:bg-white/80 hover:text-[#1a1a1a]",
+                  )}
+                >
+                  {tab.label}
+                  <span className={cn("tabular-nums text-[13px] font-medium", active ? (isDark ? "text-white/70" : "text-[#71717a]") : isDark ? "text-white/45" : "text-[#71717a]")}>
+                    {statusCounts[tab.id]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className={cn("inline-flex h-11 items-center self-start rounded-full p-1", isDark ? "bg-white/10" : "bg-[#E4E4E4]")}>
+            <button
+              type="button"
+              onClick={() => setViewMode("all")}
+              className={cn(
+                "inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium leading-none transition-colors",
+                viewMode === "all"
+                  ? isDark
+                    ? "bg-white/15 text-white shadow-sm"
+                    : "bg-white text-[#1a1a1a] shadow-sm"
+                  : isDark
+                    ? "text-white/75 hover:bg-white/10"
+                    : "text-[#3f3f46] hover:bg-white/80",
+              )}
+            >
+              <Layers className="h-3.5 w-3.5" />
+              Submissions
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("contest")}
+              className={cn(
+                "inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium leading-none transition-colors",
+                viewMode === "contest"
+                  ? isDark
+                    ? "bg-white/15 text-white shadow-sm"
+                    : "bg-white text-[#1a1a1a] shadow-sm"
+                  : isDark
+                    ? "text-white/75 hover:bg-white/10"
+                    : "text-[#3f3f46] hover:bg-white/80",
+              )}
+            >
+              <Trophy className="h-3.5 w-3.5" />
+              Campaigns
+            </button>
+          </div>
+        </div>
+
+      <div className="flex flex-wrap items-center gap-3 mt-2">
+        <Select
+          value={platformSelectValue}
+          onValueChange={(value) => {
+            if (value === "all") setPlatformFilter(["youtube", "instagram", "tiktok"]);
+            else if (value === "twitter") setPlatformFilter(["twitter", "x"]);
+            else setPlatformFilter([value]);
+          }}
+        >
+          <SelectTrigger className={cn(filterPillClass, "w-[180px]")} aria-label="Platform">
+            <SelectValue placeholder="All platforms" />
+          </SelectTrigger>
+          <SelectContent isDark={isDark}>
+            <SelectItem isDark={isDark} value="all">All platforms</SelectItem>
+            <SelectItem isDark={isDark} value="youtube">YouTube</SelectItem>
+            <SelectItem isDark={isDark} value="instagram">Instagram</SelectItem>
+            <SelectItem isDark={isDark} value="twitter">Twitter</SelectItem>
+            <SelectItem isDark={isDark} value="tiktok">TikTok</SelectItem>
+          </SelectContent>
+        </Select>
         {/* Contest Status Multi-select Filter */}
         <Popover>
           <PopoverTrigger asChild>
             <Button
               variant="outline"
-              className={cn(
-                "w-full lg:w-[220px] h-10 rounded-lg justify-start text-left font-normal border-slate-200 dark:border-slate-700 shadow-none",
-                isDark ? "bg-[#1e293b] text-slate-100 hover:bg-slate-800" : "bg-white text-slate-900 hover:bg-slate-50"
-              )}
+              className={cn(filterPillClass, "max-w-[260px] text-left")}
             >
-              <Filter className="mr-2 h-4 w-4 opacity-70" />
               <span className="truncate">
                 {(() => {
                   const statusMap: Record<string, string> = {
@@ -2357,7 +2440,7 @@ export default function SubmissionsClient({
                   const endedStatuses = ["pending_review", "in_review", "verification_complete", "payouts_processed"];
                   const allEndedSelected = endedStatuses.every(s => contestStatusFilter.includes(s));
 
-                  if (contestStatusFilter.length === 5) return "All Campaign Status";
+                  if (contestStatusFilter.length === 5) return "All statuses";
                   if (contestStatusFilter.length === 0) return "No Status Selected";
 
                   const parts: string[] = [];
@@ -2374,16 +2457,16 @@ export default function SubmissionsClient({
                   return label.length > 20 ? `${parts.length} Selected` : label;
                 })()}
               </span>
-              <ChevronRight className="ml-auto h-4 w-4 opacity-50 rotate-90" />
+              <ChevronDown className="h-4 w-4 shrink-0 opacity-80" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className={cn("w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800", isDark ? "bg-[#0f172a]" : "bg-white")} align="start">
+          <PopoverContent className={cn("w-[240px] p-2 rounded-xl border-slate-200 dark:border-white/10", isDark ? "bg-[#161616]" : "bg-white")} align="start">
             <div className="flex flex-col gap-1">
               {/* LIVE option */}
               <div
                 className={cn(
                   "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                  isDark ? "hover:bg-slate-800" : "hover:bg-slate-50"
+                  isDark ? "hover:bg-white/10" : "hover:bg-slate-50"
                 )}
                 onClick={() => {
                   setContestStatusFilter(prev =>
@@ -2395,7 +2478,7 @@ export default function SubmissionsClient({
                   "w-4 h-4 rounded border flex items-center justify-center transition-all",
                   contestStatusFilter.includes("live")
                     ? "bg-[#4211a1] border-[#4211a1]"
-                    : isDark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"
+                    : isDark ? "border-white/10 bg-[#161616]" : "border-slate-300 bg-white"
                 )}>
                   {contestStatusFilter.includes("live") && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
                 </div>
@@ -2408,7 +2491,7 @@ export default function SubmissionsClient({
               <div
                 className={cn(
                   "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                  isDark ? "hover:bg-slate-800" : "hover:bg-slate-50"
+                  isDark ? "hover:bg-white/10" : "hover:bg-slate-50"
                 )}
                 onClick={() => {
                   const endedStatuses = ["pending_review", "in_review", "verification_complete", "payouts_processed"];
@@ -2426,7 +2509,7 @@ export default function SubmissionsClient({
                     ? "bg-[#4211a1] border-[#4211a1]"
                     : ["pending_review", "in_review", "verification_complete", "payouts_processed"].some(s => contestStatusFilter.includes(s))
                       ? "bg-[#4211a1]/50 border-[#4211a1]"
-                      : isDark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"
+                      : isDark ? "border-white/10 bg-[#161616]" : "border-slate-300 bg-white"
                 )}>
                   {["pending_review", "in_review", "verification_complete", "payouts_processed"].every(s => contestStatusFilter.includes(s)) && (
                     <Check className="w-3 h-3 text-white" strokeWidth={4} />
@@ -2446,7 +2529,7 @@ export default function SubmissionsClient({
                   key={child.id}
                   className={cn(
                     "flex items-center gap-2 pl-7 pr-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                    isDark ? "hover:bg-slate-800" : "hover:bg-slate-50"
+                    isDark ? "hover:bg-white/10" : "hover:bg-slate-50"
                   )}
                   onClick={() => {
                     setContestStatusFilter(prev =>
@@ -2458,7 +2541,7 @@ export default function SubmissionsClient({
                     "w-4 h-4 rounded border flex items-center justify-center transition-all",
                     contestStatusFilter.includes(child.id)
                       ? "bg-[#4211a1] border-[#4211a1]"
-                      : isDark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"
+                      : isDark ? "border-white/10 bg-[#161616]" : "border-slate-300 bg-white"
                   )}>
                     {contestStatusFilter.includes(child.id) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
                   </div>
@@ -2474,20 +2557,16 @@ export default function SubmissionsClient({
           <PopoverTrigger asChild>
             <Button
               variant="outline"
-              className={cn(
-                "w-full lg:w-[180px] h-10 rounded-lg justify-start text-left font-normal border-slate-200 dark:border-slate-700 shadow-none",
-                isDark ? "bg-[#1e293b] text-slate-100 hover:bg-slate-800" : "bg-white text-slate-900 hover:bg-slate-50"
-              )}
+              className={cn(filterPillClass, "max-w-[240px] text-left")}
             >
-              <Trophy className="mr-2 h-4 w-4 opacity-70" />
               <span className="truncate">
-                {contestTypeFilter.length === 4 ? "All Types" :
+                {contestTypeFilter.length === 4 ? "All types" :
                   contestTypeFilter.map((t) => formatContestTypeFilterLabel(t)).join(", ")}
               </span>
-              <ChevronRight className="ml-auto h-4 w-4 opacity-50 rotate-90" />
+              <ChevronDown className="h-4 w-4 shrink-0 opacity-80" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className={cn("w-[200px] p-2 rounded-xl border-slate-200 dark:border-slate-800", isDark ? "bg-[#0f172a]" : "bg-white")} align="start">
+          <PopoverContent className={cn("w-[200px] p-2 rounded-xl border-slate-200 dark:border-white/10", isDark ? "bg-[#161616]" : "bg-white")} align="start">
             <div className="flex flex-col gap-1">
               {[
                 { id: "leaderboard", label: "Leaderboard" },
@@ -2499,7 +2578,7 @@ export default function SubmissionsClient({
                   key={type.id}
                   className={cn(
                     "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                    isDark ? "hover:bg-slate-800" : "hover:bg-slate-50"
+                    isDark ? "hover:bg-white/10" : "hover:bg-slate-50"
                   )}
                   onClick={() => {
                     setContestTypeFilter(prev =>
@@ -2511,7 +2590,7 @@ export default function SubmissionsClient({
                     "w-4 h-4 rounded border flex items-center justify-center transition-all",
                     contestTypeFilter.includes(type.id)
                       ? "bg-[#4211a1] border-[#4211a1]"
-                      : isDark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"
+                      : isDark ? "border-white/10 bg-[#161616]" : "border-slate-300 bg-white"
                   )}>
                     {contestTypeFilter.includes(type.id) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
                   </div>
@@ -2522,87 +2601,86 @@ export default function SubmissionsClient({
           </PopoverContent>
         </Popover>
 
-        {/* Platform Multi-select Filter */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              className={cn(
-                "w-full lg:w-[180px] h-10 rounded-lg justify-start text-left font-normal border-slate-200 dark:border-slate-700 shadow-none",
-                isDark ? "bg-[#1e293b] text-slate-100 hover:bg-slate-800" : "bg-white text-slate-900 hover:bg-slate-50"
-              )}
-            >
-              <Video className="mr-2 h-4 w-4 opacity-70" />
-              <span className="truncate">
-                {platformFilter.length === 3 ? "All Platforms" :
-                  platformFilter.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(", ")}
-              </span>
-              <ChevronRight className="ml-auto h-4 w-4 opacity-50 rotate-90" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className={cn("w-[200px] p-2 rounded-xl border-slate-200 dark:border-slate-800", isDark ? "bg-[#0f172a]" : "bg-white")} align="start">
-            <div className="flex flex-col gap-1">
-              {[
-                { id: "youtube", label: "YouTube" },
-                { id: "instagram", label: "Instagram" },
-                { id: "tiktok", label: "TikTok" }
-              ].map(platform => (
-                <div
-                  key={platform.id}
-                  className={cn(
-                    "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                    isDark ? "hover:bg-slate-800" : "hover:bg-slate-50"
-                  )}
-                  onClick={() => {
-                    setPlatformFilter(prev =>
-                      prev.includes(platform.id) ? prev.filter(p => p !== platform.id) : [...prev, platform.id]
-                    );
-                  }}
-                >
-                  <div className={cn(
-                    "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                    platformFilter.includes(platform.id)
-                      ? "bg-[#4211a1] border-[#4211a1]"
-                      : isDark ? "border-slate-700 bg-slate-900" : "border-slate-300 bg-white"
-                  )}>
-                    {platformFilter.includes(platform.id) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
-                  </div>
-                  <span className={cn("text-[13px] font-medium", isDark ? "text-slate-300" : "text-slate-600")}>{platform.label}</span>
-                </div>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
+        <div className="flex items-center gap-2">
+          <Select
+            value={dateFilter}
+            onValueChange={(value) => setDateFilter(value as DateFilter)}
+          >
+            <SelectTrigger className={cn(filterPillClass, "w-[180px]")} aria-label="Date">
+              <SelectValue placeholder="All dates" />
+            </SelectTrigger>
+            <SelectContent isDark={isDark}>
+              <SelectItem isDark={isDark} value="all">All dates</SelectItem>
+              <SelectItem isDark={isDark} value="today">Today</SelectItem>
+              <SelectItem isDark={isDark} value="3days">Last 3 Days</SelectItem>
+              <SelectItem isDark={isDark} value="1week">Last 1 Week</SelectItem>
+              <SelectItem isDark={isDark} value="1month">Last 1 Month</SelectItem>
+              <SelectItem isDark={isDark} value="1year">Last 1 Year</SelectItem>
+              <SelectItem isDark={isDark} value="custom">Custom Range</SelectItem>
+            </SelectContent>
+          </Select>
 
-        <Select value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
-          <SelectTrigger className={cn(
-            "w-full lg:w-[180px] h-10 rounded-lg transition-none shadow-none",
-            isDark ? "border-slate-700 bg-[#1e293b] text-slate-100" : "border-slate-200 bg-white text-slate-900"
-          )}><SelectValue placeholder="View Mode" /></SelectTrigger>
-          <SelectContent isDark={isDark}>
-            <SelectItem isDark={isDark} value="all">Submission View</SelectItem>
-            <SelectItem isDark={isDark} value="contest">Contest View</SelectItem>
-          </SelectContent>
-        </Select>
+          {dateFilter === "custom" && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    filterPillClass,
+                    "w-full justify-start text-left font-normal sm:w-[240px]",
+                    !dateRange && "text-muted-foreground",
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4 opacity-70" />
+                  {dateRange?.from ? (
+                    dateRange?.to ? (
+                      <span className="truncate">
+                        {format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}
+                      </span>
+                    ) : (
+                      format(dateRange.from, "LLL dd, y")
+                    )
+                  ) : (
+                    <span>Pick a date</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="z-[100] w-min max-w-[calc(100vw-32px)] overflow-hidden rounded-xl border-slate-200 p-0 shadow-2xl dark:border-white/10"
+                align={calendarMonths === 1 ? "center" : "start"}
+                sideOffset={4}
+              >
+                <Calendar
+                  initialFocus
+                  mode="range"
+                  defaultMonth={dateRange?.from}
+                  selected={dateRange}
+                  onSelect={setDateRange}
+                  numberOfMonths={calendarMonths}
+                  className={isDark ? "bg-[#161616] text-white" : "bg-white"}
+                />
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
 
         <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as SortOrder)}>
-          <SelectTrigger className={cn(
-            "w-full lg:w-[180px] h-10 rounded-lg transition-none shadow-none",
-            isDark ? "border-slate-700 bg-[#1e293b] text-slate-100" : "border-slate-200 bg-white text-slate-900"
-          )}><SelectValue placeholder="Sort By" /></SelectTrigger>
+          <SelectTrigger className={cn(filterPillClass, "w-[180px]")} aria-label="Sort">
+            <SelectValue placeholder="Newest first" />
+          </SelectTrigger>
           <SelectContent isDark={isDark}>
-            <SelectItem isDark={isDark} value="newest">Newest to Oldest</SelectItem>
-            <SelectItem isDark={isDark} value="oldest">Oldest to Newest</SelectItem>
-            <SelectItem isDark={isDark} value="views_high">Highest to Lowest Views</SelectItem>
-            <SelectItem isDark={isDark} value="views_low">Lowest to Highest Views</SelectItem>
-            <SelectItem isDark={isDark} value="earnings_high">Most Earnings</SelectItem>
-            <SelectItem isDark={isDark} value="earnings_low">Lowest Earnings</SelectItem>
-            <SelectItem isDark={isDark} value="quality_high">Highest Quality Score</SelectItem>
-            <SelectItem isDark={isDark} value="quality_low">Lowest Quality Score</SelectItem>
+            <SelectItem isDark={isDark} value="newest">Newest first</SelectItem>
+            <SelectItem isDark={isDark} value="oldest">Oldest first</SelectItem>
+            <SelectItem isDark={isDark} value="views_high">Most views</SelectItem>
+            <SelectItem isDark={isDark} value="views_low">Fewest views</SelectItem>
+            <SelectItem isDark={isDark} value="earnings_high">Most earnings</SelectItem>
+            <SelectItem isDark={isDark} value="earnings_low">Least earnings</SelectItem>
+            <SelectItem isDark={isDark} value="quality_high">Highest quality</SelectItem>
+            <SelectItem isDark={isDark} value="quality_low">Lowest quality</SelectItem>
             {viewMode === "contest" && (
               <>
-                <SelectItem isDark={isDark} value="submissions_high">Most Submissions</SelectItem>
-                <SelectItem isDark={isDark} value="submissions_low">Least Submissions</SelectItem>
+                <SelectItem isDark={isDark} value="submissions_high">Most submissions</SelectItem>
+                <SelectItem isDark={isDark} value="submissions_low">Fewest submissions</SelectItem>
               </>
             )}
           </SelectContent>
@@ -2613,24 +2691,18 @@ export default function SubmissionsClient({
           <PopoverTrigger asChild>
             <Button
               variant="outline"
-              className={cn(
-                "w-full lg:w-[200px] h-10 rounded-lg justify-start text-left font-semibold text-sm border-slate-200 dark:border-slate-700 shadow-none",
-                isDark
-                  ? "bg-[#1e293b] text-slate-100 hover:bg-slate-800"
-                  : "bg-white text-slate-900 hover:bg-slate-50",
-              )}
+              className={cn(filterPillClass, "max-w-[260px] text-left")}
             >
-              <Star className="mr-2 h-4 w-4 shrink-0 text-[#7F39EC]" />
-              <span className="truncate font-semibold text-sm">
+              <span className="truncate">
                 {qualityScoreFilterButtonLabel}
               </span>
-              <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-50 rotate-90" />
+              <ChevronDown className="h-4 w-4 shrink-0 opacity-80" />
             </Button>
           </PopoverTrigger>
           <PopoverContent
             className={cn(
-              "w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800",
-              isDark ? "bg-[#0f172a]" : "bg-white",
+              "w-[240px] p-2 rounded-xl border-slate-200 dark:border-white/10",
+              isDark ? "bg-[#161616]" : "bg-white",
             )}
             align="start"
           >
@@ -2638,7 +2710,7 @@ export default function SubmissionsClient({
               <div
                 className={cn(
                   "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                  isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
+                  isDark ? "hover:bg-white/10" : "hover:bg-slate-50",
                 )}
                 onClick={() => setQualityScoreFilters([])}
               >
@@ -2648,7 +2720,7 @@ export default function SubmissionsClient({
                     qualityScoreFilters.length === 0
                       ? "bg-[#4211a1] border-[#4211a1]"
                       : isDark
-                        ? "border-slate-700 bg-slate-900"
+                        ? "border-white/15 bg-[#161616]"
                         : "border-slate-300 bg-white",
                   )}
                 >
@@ -2682,7 +2754,7 @@ export default function SubmissionsClient({
                     key={String(opt.value)}
                     className={cn(
                       "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                      isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
+                      isDark ? "hover:bg-white/10" : "hover:bg-slate-50",
                     )}
                     onClick={() => {
                       setQualityScoreFilters((prev) =>
@@ -2698,7 +2770,7 @@ export default function SubmissionsClient({
                         checked
                           ? "bg-[#4211a1] border-[#4211a1]"
                           : isDark
-                            ? "border-slate-700 bg-slate-900"
+                            ? "border-white/15 bg-[#161616]"
                             : "border-slate-300 bg-white",
                       )}
                     >
@@ -2721,108 +2793,8 @@ export default function SubmissionsClient({
           </PopoverContent>
         </Popover>
         )}
-
-        <div className="flex items-center gap-2">
-          <Select
-            value={dateFilter}
-            onValueChange={(value) => setDateFilter(value as DateFilter)}
-          >
-            <SelectTrigger className={cn(
-              "w-full lg:w-[150px] h-10 rounded-lg transition-none shadow-none",
-              isDark ? "border-slate-700 bg-[#1e293b] text-slate-100" : "border-slate-200 bg-white text-slate-900"
-            )}>
-              <SelectValue placeholder="Date" />
-            </SelectTrigger>
-            <SelectContent isDark={isDark}>
-              <SelectItem isDark={isDark} value="all">Anytime</SelectItem>
-              <SelectItem isDark={isDark} value="today">Today</SelectItem>
-              <SelectItem isDark={isDark} value="3days">Last 3 Days</SelectItem>
-              <SelectItem isDark={isDark} value="1week">Last 1 Week</SelectItem>
-              <SelectItem isDark={isDark} value="1month">Last 1 Month</SelectItem>
-              <SelectItem isDark={isDark} value="1year">Last 1 Year</SelectItem>
-              <SelectItem isDark={isDark} value="custom">Custom Range</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {dateFilter === "custom" && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "w-full sm:w-[240px] justify-start text-left font-normal h-10 rounded-lg",
-                    !dateRange && "text-muted-foreground",
-                    isDark ? "bg-[#1e293b] border-slate-700 text-white hover:bg-slate-800" : "bg-white border-slate-200"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4 opacity-70" strokeWidth={3} />
-                  {dateRange?.from ? (
-                    dateRange?.to ? (
-                      <span className="truncate">
-                        {format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}
-                      </span>
-                    ) : (
-                      format(dateRange.from, "LLL dd, y")
-                    )
-                  ) : (
-                    <span>Pick a date</span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                className="w-min max-w-[calc(100vw-32px)] p-0 rounded-xl overflow-hidden shadow-2xl border-slate-200 dark:border-slate-800 z-[100]"
-                align={calendarMonths === 1 ? "center" : "start"}
-                sideOffset={4}
-              >
-                <Calendar
-                  initialFocus
-                  mode="range"
-                  defaultMonth={dateRange?.from}
-                  selected={dateRange}
-                  onSelect={setDateRange}
-                  numberOfMonths={calendarMonths}
-                  className={isDark ? "bg-[#0f172a] text-white" : "bg-white"}
-                />
-              </PopoverContent>
-            </Popover>
-          )}
-        </div>
       </div>
 
-
-      {/* Status Tabs */}
-      <Tabs defaultValue="all" value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)} className="w-full">
-        <TabsList className="flex gap-2 bg-transparent p-0 h-auto w-full justify-start overflow-x-auto pb-2 scrollbar-hide">
-          {[
-            { id: "all", icon: Layers },
-            { id: "pending", icon: Clock },
-            { id: "verified", icon: CheckCircle2 },
-            { id: "rejected", icon: XCircle },
-            { id: "paid", icon: DollarSign },
-          ].map(({ id, icon: Icon }) => (
-            <TabsTrigger
-              key={id}
-              value={id}
-              className={cn(
-                "h-[36px] px-4 rounded-[8px] text-[14px] font-bold uppercase tracking-wider border shadow-none transition-all duration-200",
-                isDark ? (
-                  statusFilter === id
-                    ? "data-[state=active]:bg-[#4211a1] data-[state=active]:text-white data-[state=active]:border-[#4211a1] bg-[#4211a1] text-white shadow-sm"
-                    : "bg-transparent border-slate-800 text-white/70 hover:bg-slate-800/50 hover:text-white"
-                ) : (
-                  statusFilter === id
-                    ? "data-[state=active]:bg-[#4211a1] data-[state=active]:text-white data-[state=active]:border-[#4211a1] bg-[#4211a1] text-white border-transparent shadow-sm"
-                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                )
-              )}
-            >
-              <div className="flex items-center justify-center gap-2">
-                <Icon className="w-4 h-4 shrink-0" strokeWidth={3} />
-                <span className="font-bold">{id}</span>
-              </div>
-            </TabsTrigger>
-          ))}
-        </TabsList>
 
         <TabsContent value={statusFilter} className="mt-0">
           {/* Submission List Content */}
@@ -2831,18 +2803,66 @@ export default function SubmissionsClient({
               <>
                 {groupedContests.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((group) => renderContestGroupCard(group))}
                 {groupedContests.length === 0 && (
-                  <div className={cn("py-12 text-center rounded-xl border-2 border-dashed", isDark ? "bg-slate-800/20 border-slate-800" : "bg-slate-50 border-slate-200")}>
-                    <p className={isDark ? "text-slate-400" : "text-slate-500"}>No submissions found matching the criteria.</p>
-                  </div>
+                  allSubmissions.length === 0 ? (
+                    <div className="px-4 py-16 text-center">
+                      <h3 className={cn("text-xl font-semibold", isDark ? "text-white" : "text-neutral-950")}>No submissions yet</h3>
+                      <p className={cn("mt-2 text-sm", isDark ? "text-slate-400" : "text-neutral-500")}>
+                        Join a campaign and submit your first post.
+                      </p>
+                      <div className={cn("mx-auto mb-4 mt-8 h-1.5 w-10 rounded-full", isDark ? "bg-slate-200" : "bg-neutral-800")} />
+                      <Button
+                        type="button"
+                        disabled={opportunitiesLoading}
+                        onClick={() => {
+                          setOpportunitiesLoading(true);
+                          setTimeout(() => {
+                            window.location.href = "/dashboard/opportunities";
+                          }, 100);
+                        }}
+                        className="h-11 rounded-full goc-btn-primary px-6 text-sm font-semibold"
+                      >
+                        {opportunitiesLoading ? <ButtonLoadingSpinner /> : null}
+                        Find campaigns
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className={cn("rounded-xl border-2 border-dashed py-12 text-center", isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50")}>
+                      <p className={isDark ? "text-slate-400" : "text-slate-500"}>No submissions found matching the criteria.</p>
+                    </div>
+                  )
                 )}
               </>
             ) : (
               <>
                 {filteredSubmissions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((sub) => renderSubmissionCard(sub))}
                 {filteredSubmissions.length === 0 && (
-                  <div className={cn("py-12 text-center rounded-xl border-2 border-dashed", isDark ? "bg-slate-800/20 border-slate-800" : "bg-slate-50 border-slate-200")}>
-                    <p className={isDark ? "text-slate-400" : "text-slate-500"}>No submissions found matching the criteria.</p>
-                  </div>
+                  allSubmissions.length === 0 ? (
+                    <div className="px-4 py-16 text-center">
+                      <h3 className={cn("text-2xl font-semibold", isDark ? "text-white" : "text-neutral-950")}>No submissions yet</h3>
+                      <p className={cn("mt-2 text-md", isDark ? "text-slate-400" : "text-neutral-600")}>
+                        Join a campaign and submit your first post.
+                      </p>
+                      {/* <div className={cn("mx-auto mb-4 mt-8 h-1.5 w-10 rounded-full", isDark ? "bg-slate-200" : "bg-neutral-800")} /> */}
+                      <Button
+                        type="button"
+                        disabled={opportunitiesLoading}
+                        onClick={() => {
+                          setOpportunitiesLoading(true);
+                          setTimeout(() => {
+                            window.location.href = "/dashboard/opportunities";
+                          }, 100);
+                        }}
+                        className="h-11 mt-4 rounded-full goc-btn-primary px-6 text-sm font-semibold"
+                      >
+                        {opportunitiesLoading ? <ButtonLoadingSpinner /> : null}
+                        Find campaigns
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className={cn("rounded-xl border-2 border-dashed py-12 text-center", isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50")}>
+                      <p className={isDark ? "text-slate-400" : "text-slate-500"}>No submissions found matching the criteria.</p>
+                    </div>
+                  )
                 )}
               </>
             )}
@@ -2874,13 +2894,13 @@ export default function SubmissionsClient({
                   }}>
                     <SelectTrigger className={cn(
                       "h-10 w-[80px] rounded-lg border shadow-none text-sm font-bold",
-                      isDark ? "bg-[#1e293b] border-slate-700" : "bg-white border-slate-200"
+                      isDark ? "bg-[#1a1a1a] border-white/15" : "bg-white border-slate-200"
                     )}>
                       <SelectValue placeholder="25" />
                     </SelectTrigger>
                     <SelectContent className={cn(
                       "min-w-0 w-[80px]",
-                      isDark ? "bg-[#0f172a] border-slate-800" : "bg-white border-slate-200"
+                      isDark ? "bg-[#161616] border-white/10" : "bg-white border-slate-200"
                     )}>
                       <SelectItem value="25" isDark={isDark}>25</SelectItem>
                       <SelectItem value="50" isDark={isDark}>50</SelectItem>
@@ -2902,7 +2922,7 @@ export default function SubmissionsClient({
                   disabled={currentPage === 1}
                   className={cn(
                     "h-9 w-9 rounded-md border shadow-none transition-colors",
-                    isDark ? "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-400" : "bg-white border-slate-200 hover:bg-slate-100 text-slate-600"
+                    isDark ? "border-white/10 bg-transparent text-white/75 hover:bg-white/10 hover:text-white" : "border-[#ececef] bg-white text-[#3a3a40] hover:bg-[#e6e6e8] hover:text-[#1a1a1a]"
                   )}
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -2922,15 +2942,17 @@ export default function SubmissionsClient({
                       return (
                         <Button
                           key={pageNum}
-                          variant={isActive ? "default" : "outline"}
+                          variant="outline"
                           onClick={() => setCurrentPage(pageNum)}
                           className={cn(
                             "h-9 w-9 rounded-md border text-[13px] font-bold shadow-none transition-all",
                             isActive
-                              ? "bg-[#4211a1] text-white border-[#4211a1] hover:bg-[#350d81]"
+                              ? isDark
+                                ? "border-white bg-white text-[#1a1a1a] hover:bg-white hover:text-[#1a1a1a]"
+                                : "border-[#1a1a1a] bg-[#1a1a1a] text-white hover:bg-black hover:text-white"
                               : isDark
-                                ? "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300"
-                                : "bg-white border-slate-200 hover:bg-slate-100 text-slate-600"
+                                ? "border-white/10 bg-transparent text-white/75 hover:bg-white/10 hover:text-white"
+                                : "border-[#ececef] bg-white text-[#3a3a40] hover:bg-[#e6e6e8] hover:text-[#1a1a1a]"
                           )}
                         >
                           {pageNum}
@@ -2950,7 +2972,7 @@ export default function SubmissionsClient({
                   disabled={currentPage === Math.ceil((viewMode === "contest" ? groupedContests.length : filteredSubmissions.length) / itemsPerPage)}
                   className={cn(
                     "h-9 w-9 rounded-md border shadow-none transition-colors",
-                    isDark ? "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-400" : "bg-white border-slate-200 hover:bg-slate-100 text-slate-600"
+                    isDark ? "border-white/10 bg-transparent text-white/75 hover:bg-white/10 hover:text-white" : "border-[#ececef] bg-white text-[#3a3a40] hover:bg-[#e6e6e8] hover:text-[#1a1a1a]"
                   )}
                 >
                   <ChevronRight className="h-4 w-4" />
@@ -2963,7 +2985,7 @@ export default function SubmissionsClient({
 
       {/* Contest Submissions Modal */}
       <Dialog open={!!selectedContestGroup} onOpenChange={(open) => !open && setSelectedContestGroup(null)} isdark={isDark}>
-        <DialogContent className={cn("w-[95vw] sm:max-w-2xl max-h-[85vh] overflow-y-auto scrollbar-thin rounded-[20px]", isDark ? "bg-[#0f172a] border-slate-800" : "bg-white border-slate-200")}>
+        <DialogContent className={cn("w-[95vw] sm:max-w-2xl max-h-[85vh] overflow-y-auto scrollbar-thin rounded-[20px]", isDark ? "bg-[#161616] border-white/10" : "bg-white border-slate-200")}>
           <DialogHeader>
             <DialogTitle
               className={cn("text-xl font-black break-words leading-tight", isDark ? "text-white" : "text-slate-900")}
@@ -3123,6 +3145,14 @@ export default function SubmissionsClient({
                 }
               }
 
+              const highestPlatformTagModal = creatorSubmissionPayoutTag(
+                getHighestPlatformSummary(submission),
+                submission,
+              );
+              if (earningsDisplay && highestPlatformTagModal && !highestPlatformTagModal.counted) {
+                earningsDisplay.color = isDark ? "text-slate-400" : "text-slate-500";
+              }
+
               const platformLowerModal = (submission.platform || "").toLowerCase();
               const isInstagram = platformLowerModal === "instagram";
               const isTiktok = platformLowerModal.includes("tiktok");
@@ -3134,11 +3164,11 @@ export default function SubmissionsClient({
                   key={submission.id}
                   className={cn(
                     "rounded-[14px] border overflow-hidden transition-all duration-300 group/item hover:shadow-lg min-w-0 w-full",
-                    isDark ? "bg-[#1e293b] border-slate-700 hover:border-indigo-500/50" : "bg-white border-slate-200 hover:border-[#4211a1]/30"
+                    isDark ? "bg-[#0e0e0e] border-white/10" : "bg-white border-neutral-200"
                   )}
                 >
                   {/* ── SECTION 1: Thumbnail banner ── */}
-                  <div className="relative w-full h-[160px] bg-slate-100 dark:bg-slate-900">
+                  <div className="relative w-full h-[160px] bg-slate-100 dark:bg-[#161616]">
                     {isInstagram && (!hasThumb || isBroken) ? (
                       <img src="/instagram-poster.svg" alt="Instagram content" className="absolute inset-0 w-full h-full object-cover" />
                     ) : isTiktok && (!hasThumb || isBroken) ? (
@@ -3155,7 +3185,7 @@ export default function SubmissionsClient({
                         onError={() => setBrokenThumbs((prev) => ({ ...prev, [submission.id]: true }))}
                       />
                     ) : (
-                      <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800/30">
+                      <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-white/5">
                         <Video className="h-12 w-12 text-slate-300 dark:text-slate-600" />
                       </div>
                     )}
@@ -3188,7 +3218,7 @@ export default function SubmissionsClient({
                   </div>
 
                   {/* ── SECTION 2: Title row ── */}
-                  <div className={cn("px-4 pt-3 pb-3 border-b max-w-full overflow-hidden min-w-0 flex-shrink-0", isDark ? "border-slate-700" : "border-slate-100")}>
+                  <div className={cn("px-4 pt-3 pb-3 border-b max-w-full overflow-hidden min-w-0 flex-shrink-0", isDark ? "border-white/10" : "border-slate-100")}>
                     <h4
                       className={cn(
                         "text-[15px] font-bold leading-snug transition-all duration-300 w-full truncate hover:whitespace-normal group-hover:whitespace-normal",
@@ -3212,14 +3242,14 @@ export default function SubmissionsClient({
                   </div>
 
                   {/* ── SECTION 3: Meta chips row ── */}
-                  <div className={cn("px-4 py-3 flex items-center gap-2 border-b whitespace-nowrap overflow-hidden flex-wrap", isDark ? "border-slate-700" : "border-slate-100")}>
-                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0", isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
+                  <div className={cn("px-4 py-3 flex items-center gap-2 border-b whitespace-nowrap overflow-hidden flex-wrap", isDark ? "border-white/10" : "border-slate-100")}>
+                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0", isDark ? "bg-white/10 text-white/80" : "bg-slate-100 text-slate-600")}>
                       <CalendarDays className="w-3 h-3 shrink-0" /> {submission.formatted_created_at?.split(',')[0]}
                     </span>
-                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0", isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
+                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0", isDark ? "bg-white/10 text-white/80" : "bg-slate-100 text-slate-600")}>
                       <Eye className="w-3 h-3 shrink-0" /> {views.toLocaleString()}
                     </span>
-                    <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider flex-shrink-0 border", isDark ? "bg-slate-800 text-slate-300 border-slate-600" : "bg-slate-100 text-slate-600 border-slate-200")}>
+                    <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider flex-shrink-0 border", isDark ? "bg-white/10 text-white/80 border-white/10" : "bg-slate-100 text-slate-600 border-slate-200")}>
                       {campaignTypeBadgeLabel(campaignTypeModal)}
                     </span>
                     {campaignTypeModal === "leaderboard" && null}
@@ -3237,9 +3267,9 @@ export default function SubmissionsClient({
                         : !showBonusRowModal
                           ? "grid-cols-1"
                           : "grid-cols-2",
-                    isDark ? "border-slate-700" : "border-slate-100"
+                    isDark ? "border-white/10" : "border-slate-100"
                   )}>
-                    <div className={cn("rounded-[10px] p-3", isDark ? "bg-slate-800/60" : "bg-slate-50")}>
+                    <div className={cn("rounded-[10px] p-3", isDark ? "bg-white/5" : "bg-slate-50")}>
                       <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isDark ? "text-slate-500" : "text-slate-400")}>
                         {earningsDisplay?.label || "Estimated Earnings"}
                       </p>
@@ -3253,6 +3283,11 @@ export default function SubmissionsClient({
                           "Not Eligible"
                         ) : `$${earningsDisplay?.amount || "0.00"} USD`}
                       </p>
+                      <HighestPlatformSubmissionTag
+                        tag={highestPlatformTagModal}
+                        isDark={isDark}
+                        className="mt-1"
+                      />
                       {campaignTypeModal === "milestone" &&
                         totalEarningsCents > 0 &&
                         milestoneMatchModal && (
@@ -3280,7 +3315,7 @@ export default function SubmissionsClient({
                     </div>
                     {/* Detailed helper text replaced by tooltip on the label */}
                     {!isRejectedModal && showBonusRowModal && (
-                      <div className={cn("rounded-[10px] p-3", isDark ? "bg-slate-800/60" : "bg-slate-50")}>
+                      <div className={cn("rounded-[10px] p-3", isDark ? "bg-white/5" : "bg-slate-50")}>
                         <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isDark ? "text-slate-500" : "text-slate-400")}>
                           {bonusLabelModal}
                         </p>
@@ -3306,7 +3341,7 @@ export default function SubmissionsClient({
                   {/* ── SECTION 5: Rejection block (only if rejected) ── */}
                   {
                     submission.status === "rejected" && rejectionDetails && (
-                      <div className={cn("px-4 py-3 border-b", isDark ? "border-slate-700" : "border-slate-100")}>
+                      <div className={cn("px-4 py-3 border-b", isDark ? "border-white/10" : "border-slate-100")}>
                         <div className="rounded-[10px] border-l-4 border-red-500 bg-red-500/5 px-3 py-2.5 flex flex-col gap-3">
                           <div className="min-w-0">
                             <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Rejection Reason</p>
@@ -3377,7 +3412,12 @@ export default function SubmissionsClient({
           <div className="flex justify-end mt-4">
             <Button
               variant="ghost"
-              className={cn("rounded-full font-bold", isDark ? "text-white hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100")}
+              className={cn(
+                "rounded-full font-bold",
+                isDark
+                  ? "border border-white/20 bg-transparent text-white hover:bg-white/10"
+                  : "text-slate-600 hover:bg-slate-100",
+              )}
               onClick={() => setSelectedContestGroup(null)}
             >
               Close

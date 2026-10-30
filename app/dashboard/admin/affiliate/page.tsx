@@ -251,7 +251,7 @@ export default function AffiliateLandingPage() {
       <Card
         className={cn(
           "shadow-md hover:shadow-lg transition-shadow duration-200 w-full",
-          isDark ? "bg-[#170337]" : "bg-white border-gray-200"
+          isDark ? "bg-[#161616]" : "bg-white border-gray-200"
         )}
       >
         <CardHeader>
@@ -279,7 +279,7 @@ export default function AffiliateLandingPage() {
                 className={cn(
                   "w-full",
                   isDark
-                    ? "bg-[#170337] border border-gray-600 text-white"
+                    ? "bg-[#161616] border border-gray-600 text-white"
                     : "bg-white text-black"
                 )}
               />
@@ -288,7 +288,7 @@ export default function AffiliateLandingPage() {
                   className={cn(
                     "absolute z-50 w-full mt-1 border rounded-md shadow-md max-h-[300px] overflow-y-auto",
                     isDark
-                      ? "bg-[#170337] border-gray-700"
+                      ? "bg-[#161616] border-gray-700"
                       : "bg-popover border-gray-200"
                   )}
                 >
@@ -384,7 +384,7 @@ export default function AffiliateLandingPage() {
         <Card
           className={cn(
             "shadow-md hover:shadow-lg transition-shadow duration-200 w-full",
-            isDark ? "bg-[#170337]" : "bg-white border-gray-200"
+            isDark ? "bg-[#161616]" : "bg-white border-gray-200"
           )}
         >
           <CardHeader>

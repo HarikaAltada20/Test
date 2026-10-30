@@ -317,21 +317,25 @@ export function ContestPaymentSelection({
     cn(
       "relative flex w-full cursor-pointer items-start gap-3 rounded-xl border p-4 text-left transition-all",
       selected
-        ? "border-[#7F39EC] bg-[#7F39EC]/5 ring-2 ring-[#7F39EC]/20"
+        ? isDark
+          ? "border-white bg-white/10 ring-1 ring-white/20"
+          : "border-[#1a1a1a] bg-[#f3f3f5] ring-1 ring-[#1a1a1a]/10"
         : isDark
-          ? "border-gray-700 hover:border-[#7F39EC]/40"
-          : "border-gray-200 hover:border-[#7F39EC]/40",
-      optionDisabled && "cursor-not-allowed opacity-50 hover:border-gray-700",
+          ? "border-white/15 hover:border-white/30"
+          : "border-[#e6e6ea] hover:border-[#1a1a1a]/40",
+      optionDisabled && "cursor-not-allowed opacity-50 hover:border-[#e6e6ea]",
     );
 
   const iconCircleClass = (selected: boolean) =>
     cn(
       "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
       selected
-        ? "bg-[#7F39EC]/15 text-[#7F39EC]"
+        ? isDark
+          ? "bg-white text-[#1a1a1a]"
+          : "bg-[#1a1a1a] text-white"
         : isDark
-          ? "bg-gray-800 text-gray-400"
-          : "bg-gray-100 text-gray-500",
+          ? "bg-white/10 text-gray-400"
+          : "bg-[#f3f3f5] text-[#6d6d75]",
     );
 
   return (
@@ -341,15 +345,15 @@ export function ContestPaymentSelection({
         className={cn(
           "rounded-xl border p-4",
           isDark
-            ? "border-[#2F2754] bg-[#120A30]/50"
-            : "border-purple-100 bg-purple-50/40",
+            ? "border-white/15 bg-white/5"
+            : "border-[#e6e6ea] bg-[#f6f6f7]",
         )}
       >
         <div className="mb-3">
           <p
             className={cn(
               "min-w-0 truncate text-sm font-medium",
-              isDark ? "text-gray-300" : "text-gray-600",
+              isDark ? "text-gray-300" : "text-[#3a3a42]",
             )}
           >
             {contestTitle}
@@ -358,13 +362,13 @@ export function ContestPaymentSelection({
 
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className={isDark ? "text-gray-400" : "text-gray-600"}>
+            <span className={isDark ? "text-gray-400" : "text-[#6d6d75]"}>
               {isIncrease ? "Prize pool increase" : "Prize pool"}
             </span>
             <span
               className={cn(
                 "font-medium tabular-nums",
-                isDark ? "text-white" : "text-gray-900",
+                isDark ? "text-white" : "text-[#1a1a1a]",
               )}
             >
               {formatCurrencyFromCents(prizePoolInCents)}
@@ -372,13 +376,13 @@ export function ContestPaymentSelection({
           </div>
           {bonusBudgetInCents > 0 && (
             <div className="flex justify-between">
-              <span className={isDark ? "text-gray-400" : "text-gray-600"}>
+              <span className={isDark ? "text-gray-400" : "text-[#6d6d75]"}>
                 Bonus budget
               </span>
               <span
                 className={cn(
                   "font-medium tabular-nums",
-                  isDark ? "text-white" : "text-gray-900",
+                  isDark ? "text-white" : "text-[#1a1a1a]",
                 )}
               >
                 {formatCurrencyFromCents(bonusBudgetInCents)}
@@ -386,13 +390,13 @@ export function ContestPaymentSelection({
             </div>
           )}
           <div className="flex justify-between">
-            <span className={isDark ? "text-gray-400" : "text-gray-600"}>
+            <span className={isDark ? "text-gray-400" : "text-[#6d6d75]"}>
               Platform commission ({commissionPercentage}%)
             </span>
             <span
               className={cn(
                 "font-medium tabular-nums",
-                isDark ? "text-white" : "text-gray-900",
+                isDark ? "text-white" : "text-[#1a1a1a]",
               )}
             >
               {formatCurrencyFromCents(commissionAmountInCents)}
@@ -402,8 +406,8 @@ export function ContestPaymentSelection({
 
         <div
           className={cn(
-            "my-4 border-t",
-            isDark ? "border-gray-700" : "border-purple-100",
+            "my-4 border-t border-dashed",
+            isDark ? "border-white/15" : "border-[#d5d5db]",
           )}
         />
 
@@ -411,7 +415,7 @@ export function ContestPaymentSelection({
           <span
             className={cn(
               "text-sm font-medium",
-              isDark ? "text-gray-400" : "text-gray-600",
+              isDark ? "text-gray-400" : "text-[#6d6d75]",
             )}
           >
             Total due
@@ -419,7 +423,7 @@ export function ContestPaymentSelection({
           <span
             className={cn(
               "text-2xl font-bold tabular-nums",
-              isDark ? "text-white" : "text-gray-900",
+              isDark ? "text-white" : "text-[#1a1a1a]",
             )}
           >
             {formatCurrencyFromCents(totalAmountInCents)}
@@ -541,7 +545,12 @@ export function ContestPaymentSelection({
               </p>
             </div>
             {paymentMethod === "wallet" && canUseWallet && (
-              <Check className="h-5 w-5 shrink-0 text-[#7F39EC]" />
+              <Check
+                className={cn(
+                  "h-5 w-5 shrink-0",
+                  isDark ? "text-white" : "text-[#1a1a1a]",
+                )}
+              />
             )}
           </label>
 
@@ -579,7 +588,12 @@ export function ContestPaymentSelection({
               </p>
             </div>
             {paymentMethod === "stripe" && (
-              <Check className="h-5 w-5 shrink-0 text-[#7F39EC]" />
+              <Check
+                className={cn(
+                  "h-5 w-5 shrink-0",
+                  isDark ? "text-white" : "text-[#1a1a1a]",
+                )}
+              />
             )}
           </label>
 
@@ -612,7 +626,12 @@ export function ContestPaymentSelection({
                   </span>
                   <Badge
                     variant="outline"
-                    className="h-5 border-[#7F39EC]/40 px-2 text-[10px] font-semibold uppercase tracking-wide text-[#7F39EC]"
+                    className={cn(
+                      "h-5 px-2 text-[10px] font-semibold uppercase tracking-wide",
+                      isDark
+                        ? "border-white/30 text-white"
+                        : "border-[#1a1a1a] text-[#1a1a1a]",
+                    )}
                   >
                     Recommended
                   </Badge>
@@ -665,7 +684,12 @@ export function ContestPaymentSelection({
                 )}
               </div>
               {paymentMethod === "split" && (
-                <Check className="h-5 w-5 shrink-0 text-[#7F39EC]" />
+                <Check
+                  className={cn(
+                    "h-5 w-5 shrink-0",
+                    isDark ? "text-white" : "text-[#1a1a1a]",
+                  )}
+                />
               )}
             </label>
           )}
@@ -679,28 +703,23 @@ export function ContestPaymentSelection({
           className={cn(
             "flex items-start gap-3 rounded-xl border p-3",
             isDark
-              ? "border-[#2F2754] bg-[#120A30]/80"
-              : "border-purple-100 bg-purple-50/60",
+              ? "border-white/15 bg-white/5"
+              : "border-[#e6e6ea] bg-[#f6f6f7]",
           )}
         >
           <div
             className={cn(
               "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-              isDark ? "bg-green-500/10" : "bg-green-50",
+              isDark ? "bg-white/10 text-white" : "bg-[#1a1a1a] text-white",
             )}
           >
-            <ShieldCheck
-              className={cn(
-                "h-4 w-4",
-                isDark ? "text-green-400" : "text-green-600",
-              )}
-            />
+            <ShieldCheck className="h-4 w-4" />
           </div>
           <div className="space-y-0.5">
             <p
               className={cn(
                 "text-sm font-medium",
-                isDark ? "text-white" : "text-gray-900",
+                isDark ? "text-white" : "text-[#1a1a1a]",
               )}
             >
               Secured by Stripe
@@ -708,7 +727,7 @@ export function ContestPaymentSelection({
             <p
               className={cn(
                 "text-xs leading-relaxed",
-                isDark ? "text-gray-400" : "text-gray-600",
+                isDark ? "text-gray-400" : "text-[#6d6d75]",
               )}
             >
               You&apos;ll pay on Stripe&apos;s secure checkout. Payment details
@@ -723,20 +742,20 @@ export function ContestPaymentSelection({
           className={cn(
             "flex items-start gap-3 rounded-xl border px-4 py-3",
             isDark
-              ? "border-[#7F39EC]/30 bg-[#7F39EC]/10"
-              : "border-[#7F39EC]/20 bg-gradient-to-r from-[#7F39EC]/5 to-purple-50",
+              ? "border-white/15 bg-white/5"
+              : "border-[#e6e6ea] bg-[#f3f3f5]",
           )}
         >
           <div
             className={cn(
               "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-              isDark ? "bg-[#7F39EC]/20" : "bg-[#7F39EC]/10",
+              isDark ? "bg-white/10" : "bg-[#1a1a1a]",
             )}
           >
             <Loader2
               className={cn(
                 "h-4 w-4 animate-spin",
-                isDark ? "text-[#C4A8FF]" : "text-[#7F39EC]",
+                isDark ? "text-white" : "text-white",
               )}
             />
           </div>
@@ -744,7 +763,7 @@ export function ContestPaymentSelection({
             <p
               className={cn(
                 "text-sm font-medium",
-                isDark ? "text-[#E8DEFF]" : "text-[#5B21B6]",
+                isDark ? "text-white" : "text-[#1a1a1a]",
               )}
             >
               Opening secure checkout
@@ -752,7 +771,7 @@ export function ContestPaymentSelection({
             <p
               className={cn(
                 "text-xs",
-                isDark ? "text-gray-400" : "text-gray-500",
+                isDark ? "text-gray-400" : "text-[#6d6d75]",
               )}
             >
               Redirecting you to Stripe to complete your payment safely.
@@ -773,7 +792,7 @@ export function ContestPaymentSelection({
             : "Opening secure checkout…"
         }
         className={cn(
-          "w-full rounded-full bg-[#7F39EC] py-6 text-base font-semibold text-white hover:bg-[#6929D1]",
+          "w-full rounded-full py-6 text-base font-semibold goc-btn-primary",
           (isRedirecting || isProcessingWallet) && "disabled:opacity-100",
         )}
         size="lg"

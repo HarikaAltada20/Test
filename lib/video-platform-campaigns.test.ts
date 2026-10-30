@@ -1222,6 +1222,23 @@ describe("buildFlushedPlatformCampaigns resources", () => {
     assert.equal((persisted as { brief_html?: unknown }).brief_html, undefined);
     assert.equal((persisted as { content_type?: unknown }).content_type, undefined);
   });
+
+  it("restores the shared content type on every platform from the content_type column", () => {
+    const persisted = {
+      youtube: persistedPlatformCampaignToSnapshot({ contest_type: "cpm" }),
+      tiktok: persistedPlatformCampaignToSnapshot({ contest_type: "cpm" }),
+    };
+    assert.equal(persisted.youtube.contentType, "");
+    const restored = applyPlatformContentColumnsToSnapshots(
+      ["youtube", "tiktok"],
+      { content_type: "clipping" },
+      persisted,
+    );
+    assert.equal(restored.youtube?.contentType, "clipping");
+    assert.equal(restored.tiktok?.contentType, "clipping");
+    const unknownType = applyPlatformContentColumnsToSnapshots(["youtube"], { content_type: "raid" }, persisted);
+    assert.equal(unknownType.youtube?.contentType, "");
+  });
 });
 
 describe("per-platform leaderboard prize and flat fee display", () => {

@@ -39,7 +39,7 @@ export function BulkActionBar({
       <div
         role="toolbar"
         aria-label="Bulk actions"
-        className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-[#140B3A] px-3 py-2 text-white shadow-2xl animate-in slide-in-from-bottom-4"
+        className="pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-[#1a1a1a] px-3 py-2 text-white shadow-2xl animate-in slide-in-from-bottom-4"
       >
         <div className="flex items-center gap-2 px-1 text-sm">
           <span className="font-semibold tabular-nums">
@@ -74,7 +74,7 @@ export function BulkActionBar({
           size="sm"
           disabled={noSkydo || busy}
           onClick={onMarkSent}
-          className="h-8 gap-1.5 bg-[#7F39EC] text-white hover:bg-[#6a2fd0]"
+          className="h-8 gap-1.5 bg-[#1a1a1a] text-white hover:bg-[#6a2fd0]"
         >
           <Send className="h-3.5 w-3.5" /> Mark email sent
         </Button>

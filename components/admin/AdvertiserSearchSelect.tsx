@@ -120,7 +120,7 @@ export function AdvertiserSearchSelect({
             if (!value && search.trim()) setOpen(true);
           }}
           className={cn(
-            "h-11 rounded-xl border-purple-200/80 shadow-sm focus-visible:ring-[#7F39EC]/30",
+            "h-11 rounded-xl border-[#e6e6e8]/80 shadow-sm focus-visible:ring-[#1a1a1a]/30",
             isDark && "bg-slate-900 border-slate-700 text-white",
           )}
         />
@@ -144,7 +144,7 @@ export function AdvertiserSearchSelect({
                       key={advertiser.id}
                       value={`${advertiser.id} ${displayLabel(advertiser)}`}
                       onSelect={() => handleSelect(advertiser)}
-                      className="cursor-pointer rounded-lg mx-1 my-0.5 aria-selected:bg-[#7F39EC]/10"
+                      className="cursor-pointer rounded-lg mx-1 my-0.5 aria-selected:bg-[#1a1a1a]/10"
                     >
                       <Check className="mr-2 h-4 w-4 shrink-0 opacity-0" />
                       <div className="flex flex-col gap-0.5 min-w-0">

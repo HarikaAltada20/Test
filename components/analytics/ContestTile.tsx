@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import {
   Eye,
   Heart,
@@ -12,10 +11,11 @@ import {
   TrendingUp,
   Target,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import { getContestPlatformIcons } from "@/lib/platform-icons";
 import { cn } from "@/lib/utils";
 import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
 
@@ -63,132 +63,46 @@ interface ContestTileProps {
   onViewDetails: (contestId: string) => void;
 }
 
-const PlatformIcon = ({
-  platform,
-  className,
-}: {
-  platform: string;
-  className?: string;
-}) => {
-  const iconClass = className || "w-4 h-4 sm:w-5 sm:h-5";
-  const gradientId = `instagram-gradient-${Math.random()
-    .toString(36)
-    .substr(2, 9)}`;
-
-  switch (platform?.toLowerCase()) {
-    case "youtube":
-      return (
-        <svg className={iconClass} viewBox="0 0 24 24" fill="#FF0000">
-          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-        </svg>
-      );
-    case "instagram":
-      return (
-        <svg
-          className={iconClass}
-          viewBox="0 0 24 24"
-          fill={`url(#${gradientId})`}
-        >
-          <defs>
-            <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#833AB4" />
-              <stop offset="50%" stopColor="#E1306C" />
-              <stop offset="100%" stopColor="#FD1D1D" />
-            </linearGradient>
-          </defs>
-          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
-        </svg>
-      );
-    case "twitter":
-    case "x":
-      return (
-        <svg className={iconClass} viewBox="0 0 24 24" fill="#1DA1F2">
-          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-        </svg>
-      );
-    case "tiktok":
-    case "tik_tok":
-    case "tik-tok":
-      return (
-        <svg className={iconClass} viewBox="0 0 24 24" fill="#000000">
-          <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
-        </svg>
-      );
-    default:
-      return <div className={`${iconClass} bg-gray-400 rounded`}></div>;
-  }
-};
-
 const getStatusColor = (status: string, isDark: boolean = false) => {
   if (isDark) {
     switch (status?.toLowerCase()) {
       case "active":
       case "published":
-        return "bg-gradient-to-r from-emerald-900/30 to-green-900/30 text-emerald-300 border-emerald-700 shadow-emerald-900/20 shadow-sm";
+        return "bg-emerald-500/15 text-emerald-300 border-transparent";
       case "draft":
-        return "bg-gradient-to-r from-slate-800/30 to-gray-800/30 text-slate-300 border-slate-600 shadow-slate-900/20 shadow-sm";
+        return "bg-white/10 text-white/80 border-transparent";
       case "pending":
-        return "bg-gradient-to-r from-amber-900/30 to-yellow-900/30 text-amber-300 border-amber-700 shadow-amber-900/20 shadow-sm";
+        return "bg-amber-500/15 text-amber-300 border-transparent";
       case "rejected":
-        return "bg-gradient-to-r from-rose-900/30 to-red-900/30 text-rose-300 border-rose-700 shadow-rose-900/20 shadow-sm";
+        return "bg-rose-500/15 text-rose-300 border-transparent";
       case "completed":
-        return "bg-gradient-to-r from-green-900/30 to-blue-900/30 text-green-300 border-green-700 shadow-green-900/20 shadow-sm";
+        return "bg-emerald-500/15 text-emerald-300 border-transparent";
       default:
-        return "bg-gradient-to-r from-slate-800/30 to-gray-800/30 text-slate-300 border-slate-600 shadow-slate-900/20 shadow-sm";
+        return "bg-white/10 text-white/80 border-transparent";
     }
   }
 
   switch (status?.toLowerCase()) {
     case "active":
     case "published":
-      return "bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-700 border-emerald-200 shadow-emerald-100/50 shadow-sm";
+      return "bg-[#E8F6EE] text-[#17803D] border-transparent";
     case "draft":
-      return "bg-gradient-to-r from-slate-50 to-gray-50 text-slate-700 border-slate-200 shadow-slate-100/50 shadow-sm";
+      return "bg-[#F4F4F5] text-[#52525B] border-transparent";
     case "pending":
-      return "bg-gradient-to-r from-amber-50 to-yellow-50 text-amber-700 border-amber-200 shadow-amber-100/50 shadow-sm";
+      return "bg-[#FEF6E7] text-[#B45309] border-transparent";
     case "rejected":
-      return "bg-gradient-to-r from-rose-50 to-red-50 text-rose-700 border-rose-200 shadow-rose-100/50 shadow-sm";
+      return "bg-[#FDECEC] text-[#B42318] border-transparent";
     case "completed":
-      return "bg-gradient-to-r from-green-50 to-blue-50 text-green-800 border-green-200 shadow-green-100/50 shadow-sm";
+      return "bg-[#E8F6EE] text-[#17803D] border-transparent";
     default:
-      return "bg-gradient-to-r from-slate-50 to-gray-50 text-slate-700 border-slate-200 shadow-slate-100/50 shadow-sm";
+      return "bg-[#F4F4F5] text-[#52525B] border-transparent";
   }
 };
 
-const getPlatformColor = (platform: string, isDark: boolean = false) => {
-  if (isDark) {
-    switch (platform?.toLowerCase()) {
-      case "youtube":
-        return "bg-red-900/30 text-red-300 border-red-700";
-      case "instagram":
-        return "bg-gradient-to-r from-purple-900/30 to-pink-900/30 text-purple-300 border-purple-700";
-      case "twitter":
-      case "x":
-        return "bg-blue-900/30 text-blue-300 border-blue-700";
-      case "tiktok":
-      case "tik_tok":
-      case "tik-tok":
-        return "bg-gray-900/30 text-gray-300 border-gray-700";
-      default:
-        return "bg-gray-800/30 text-gray-300 border-gray-600";
-    }
-  }
-
-  switch (platform?.toLowerCase()) {
-    case "youtube":
-      return "bg-red-50 text-red-700 border-red-200";
-    case "instagram":
-      return "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700 border-purple-200";
-    case "twitter":
-    case "x":
-      return "bg-blue-50 text-blue-700 border-blue-200";
-    case "tiktok":
-    case "tik_tok":
-    case "tik-tok":
-      return "bg-gray-100 text-gray-700 border-gray-300";
-    default:
-      return "bg-gray-100 text-gray-600 border-gray-200";
-  }
+const getPlatformColor = (_platform: string, isDark: boolean = false) => {
+  return isDark
+    ? "bg-white/10 text-white/80 border-transparent"
+    : "bg-[#F4F4F5] text-[#3F3F46] border-transparent";
 };
 
 const formatDate = (dateString: string) => {
@@ -214,7 +128,6 @@ export default function ContestTile({
   contest,
   onViewDetails,
 }: ContestTileProps) {
-  const [isHovered, setIsHovered] = useState(false);
   const { isDark, isInitialized } = useAnalyticsDarkMode();
 
   // Get initial theme from DOM to prevent flash
@@ -256,10 +169,10 @@ export default function ContestTile({
       <div className="animate-pulse">
         <div
           className={cn(
-            "rounded-xl border h-40 sm:h-48 lg:h-56 w-full",
+            "h-40 w-full rounded-2xl border sm:h-48 lg:h-56",
             isInitiallyDark
-              ? "bg-[#06021D] border-gray-600"
-              : "bg-gray-100 border-gray-200",
+              ? "border-white/10 bg-[#161616]"
+              : "border-neutral-200 bg-[#F6F6F7]",
           )}
         ></div>
       </div>
@@ -448,20 +361,14 @@ export default function ContestTile({
   return (
     <div
       className={cn(
-        "transition-all duration-300 rounded-xl hover:shadow-lg cursor-pointer group border hover:border-purple-300 w-full",
+        "group w-full cursor-pointer rounded-2xl border transition-shadow duration-300",
         isDark
-          ? `bg-[#06021D] ${
-              isHovered ? "shadow-lg border-purple-300" : "border-gray-600"
-            }`
-          : `bg-white ${
-              isHovered ? "shadow-lg border-purple-300" : "border-gray-400"
-            }`,
+          ? "border-white/10 bg-[#161616] text-white hover:shadow-lg"
+          : "border-neutral-200 bg-white text-[#171717] shadow-[0px_5px_20px_0px_#0000000D] hover:shadow-[0px_8px_24px_0px_#00000014]",
       )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       onClick={() => onViewDetails(contest.id)}
     >
-      <CardContent className="p-4 sm:p-5 lg:p-6">
+      <CardContent className="p-4 sm:p-5">
         <div className="flex flex-col lg:flex-row lg:items-center gap-4 sm:gap-5 lg:gap-6">
           {/* Contest Thumbnail */}
           <div className="flex-shrink-0 flex justify-center lg:justify-start w-full sm:w-auto">
@@ -480,8 +387,15 @@ export default function ContestTile({
                   }}
                 />
               ) : null}
-              <div className="hidden items-center justify-center w-full h-full">
-                <PlatformIcon platform={contest.platform} />
+              <div
+                className={cn(
+                  "items-center justify-center w-full h-full gap-1",
+                  contest.thumbnail_url && contest.thumbnail_url.trim() !== ""
+                    ? "hidden"
+                    : "flex",
+                )}
+              >
+                {getContestPlatformIcons(contest.platform, "sm")}
               </div>
             </div>
           </div>
@@ -493,28 +407,25 @@ export default function ContestTile({
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
                   <h3
                     className={cn(
-                      "text-base sm:text-lg lg:text-xl font-bold flex items-center gap-2 flex-wrap",
-                      isDark
-                        ? "text-white"
-                        : "text-gray-900 group-hover:text-purple-700 transition-colors",
+                      "flex flex-wrap items-center gap-2 text-base font-semibold tracking-tight sm:text-lg",
+                      isDark ? "text-white" : "text-[#171717]",
                     )}
                   >
                     <span className="break-words">{contest.title}</span>
-                    <PlatformIcon platform={contest.platform} />
+                    {getContestPlatformIcons(contest.platform, "sm")}
                   </h3>
                   <Badge
                     variant="outline"
                     className={cn(
-                      "text-xs sm:text-sm px-2 sm:px-3 py-1",
+                      "h-7 shrink-0 rounded-full px-2.5 text-xs font-medium",
                       getStatusColor(status, isDark),
-                      "font-medium shrink-0",
                     )}
                   >
                     {status}
                   </Badge>
                   <span
                     className={cn(
-                      "text-xs sm:text-sm px-2 sm:px-3 py-1 rounded-full border shrink-0",
+                      "inline-flex h-7 shrink-0 items-center rounded-full border px-2.5 text-xs font-medium",
                       getPlatformColor(contest.platform, isDark),
                     )}
                   >
@@ -523,13 +434,12 @@ export default function ContestTile({
                   {isActive && (
                     <span
                       className={cn(
-                        "text-xs sm:text-sm px-2 sm:px-3 py-1 rounded-full border shrink-0",
+                        "inline-flex h-7 shrink-0 items-center rounded-full px-2.5 text-xs font-medium",
                         isDark
-                          ? "text-purple-300 bg-purple-900/30 border-purple-700"
-                          : "text-gray-600 bg-purple-50 border-purple-200",
+                          ? "bg-white/10 text-white/80"
+                          : "bg-[#F4F4F5] text-[#3F3F46]",
                       )}
                     >
-                      ⏰{" "}
                       {daysRemaining > 0
                         ? `${daysRemaining} days left`
                         : "Ended"}
@@ -540,19 +450,14 @@ export default function ContestTile({
               <div className="text-left sm:text-right flex-shrink-0">
                 {showBudgetRatio ? (
                   <>
-                    <div
-                      className={cn(
-                        "text-lg sm:text-xl lg:text-2xl font-bold mb-1 flex flex-wrap items-baseline justify-start sm:justify-end gap-x-1",
-                        isDark ? "text-purple-400" : "text-purple-600",
-                      )}
-                    >
+                    <div className="mb-1 flex flex-wrap items-baseline justify-start gap-x-1 text-lg font-semibold tracking-tight text-[#7F39EC] sm:justify-end sm:text-xl">
                       <span>
                         {formatCurrencyFromCents(budgetTile!.numeratorCents)}
                       </span>
                       <span
                         className={cn(
-                          "text-sm sm:text-base font-semibold",
-                          isDark ? "text-gray-400" : "text-gray-500",
+                          "text-sm font-medium",
+                          isDark ? "text-white/40" : "text-[#A1A1AA]",
                         )}
                       >
                         /
@@ -563,8 +468,8 @@ export default function ContestTile({
                     </div>
                     <div
                       className={cn(
-                        "text-xs font-medium max-w-[12rem] sm:max-w-none",
-                        isDark ? "text-gray-400" : "text-gray-500",
+                        "max-w-[12rem] text-xs font-medium sm:max-w-none",
+                        isDark ? "text-white/50" : "text-[#737373]",
                       )}
                     >
                       {budgetTile!.label}
@@ -574,7 +479,7 @@ export default function ContestTile({
                   <div
                     className={cn(
                       "text-xs font-medium",
-                      isDark ? "text-gray-400" : "text-gray-500",
+                      isDark ? "text-white/50" : "text-[#737373]",
                     )}
                   >
                     —
@@ -591,36 +496,31 @@ export default function ContestTile({
                   <div
                     key={index}
                     className={cn(
-                      "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 sm:p-3 flex flex-col items-center text-center flex-1 min-w-[4.5rem] sm:min-w-[5rem]",
+                      "flex min-w-[4.5rem] flex-1 flex-col items-center rounded-xl border p-2 text-center sm:min-w-[5rem] sm:p-3",
                       isDark
-                        ? "bg-[#170337] text-white"
-                        : "bg-white text-black",
+                        ? "border-white/10 bg-white/5 text-white"
+                        : "border-black/5 bg-white text-[#171717] shadow-[0px_5px_20px_0px_#0000000D]",
                     )}
                   >
                     <div
                       className={cn(
-                        "w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded-full mb-1 sm:mb-2",
+                        "mb-1 flex h-6 w-6 items-center justify-center rounded-full sm:mb-2 sm:h-8 sm:w-8",
                         isDark
-                          ? "bg-[#FFFFFF36] text-white"
-                          : "bg-[#D8C3FF] text-[#4A00BE]",
+                          ? "bg-white/10 text-white"
+                          : "bg-[#F4F4F5] text-[#171717]",
                       )}
                     >
                       <Icon className="h-3 w-3 sm:h-4 sm:w-4" />
                     </div>
                     <span
                       className={cn(
-                        "text-[10px] sm:text-[12px] font-medium mb-1",
-                        isDark ? "text-gray-300" : "text-gray-700",
+                        "mb-1 text-[10px] font-medium sm:text-xs",
+                        isDark ? "text-white/60" : "text-[#737373]",
                       )}
                     >
                       {metric.label}
                     </span>
-                    <div
-                      className={cn(
-                        "text-sm sm:text-base lg:text-lg font-bold",
-                        isDark ? "text-white" : "text-gray-900",
-                      )}
-                    >
+                    <div className="text-sm font-semibold tracking-tight sm:text-base">
                       {metric.value}
                     </div>
                   </div>
@@ -631,29 +531,19 @@ export default function ContestTile({
             {/* Contest Dates */}
             <div
               className={cn(
-                "flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 lg:gap-6 text-xs sm:text-sm",
-                isDark ? "text-gray-300" : "text-gray-600",
+                "flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:gap-6 sm:text-sm",
+                isDark ? "text-white/70" : "text-[#52525B]",
               )}
             >
-              <div className="flex items-center gap-2 flex-wrap">
-                <Calendar
-                  className={cn(
-                    "w-3 h-3 sm:w-4 sm:h-4 shrink-0",
-                    isDark ? "text-purple-400" : "text-purple-600",
-                  )}
-                />
+              <div className="flex flex-wrap items-center gap-2">
+                <Calendar className="h-3.5 w-3.5 shrink-0 text-[#7F39EC] sm:h-4 sm:w-4" />
                 <span className="font-medium">Launch:</span>
                 <span className="break-words">
                   {formatDate(contest.start_date)}
                 </span>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Clock
-                  className={cn(
-                    "w-3 h-3 sm:w-4 sm:h-4 shrink-0",
-                    isDark ? "text-purple-400" : "text-purple-600",
-                  )}
-                />
+              <div className="flex flex-wrap items-center gap-2">
+                <Clock className="h-3.5 w-3.5 shrink-0 text-[#7F39EC] sm:h-4 sm:w-4" />
                 <span className="font-medium">End:</span>
                 <span className="break-words">
                   {formatDate(contest.end_date)}
@@ -668,10 +558,10 @@ export default function ContestTile({
               variant="outline"
               size="sm"
               className={cn(
-                "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all duration-300 w-full sm:w-auto",
+                "h-9 w-full rounded-full border-transparent px-4 text-sm font-medium shadow-none transition-all duration-300 sm:w-auto lg:opacity-0 lg:group-hover:opacity-100",
                 isDark
-                  ? "text-purple-400 border-purple-300"
-                  : "text-purple-600 border-purple-300 hover:bg-purple-50 hover:border-purple-400",
+                  ? "bg-white text-[#171717] hover:bg-white/90"
+                  : "bg-[#171717] text-white hover:bg-[#171717]/90",
               )}
             >
               <span className="hidden sm:inline">View Details →</span>

@@ -1,13 +1,7 @@
 "use client";
 
+import { Instagram, Youtube } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   ALL_PLATFORM_TAB,
   VIDEO_PLATFORM_LABELS,
@@ -26,6 +20,31 @@ type PlatformCampaignTabsProps = {
   completeByTab?: Partial<Record<PlatformTabValue, boolean>>;
 };
 
+function TikTokIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.3a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.73a8.19 8.19 0 0 0 4.76 1.52V6.84a4.84 4.84 0 0 1-1-.15z" />
+    </svg>
+  );
+}
+
+function PlatformIcon({
+  platform,
+  className,
+}: {
+  platform: VideoContestPlatform;
+  className?: string;
+}) {
+  if (platform === "youtube") return <Youtube className={className} />;
+  if (platform === "instagram") return <Instagram className={className} />;
+  return <TikTokIcon className={className} />;
+}
+
 export function PlatformCampaignTabs({
   platforms,
   active,
@@ -38,8 +57,6 @@ export function PlatformCampaignTabs({
 
   const scope: PlatformScope =
     active === ALL_PLATFORM_TAB ? "all" : "platforms";
-  const tabs: PlatformTabValue[] =
-    scope === "all" ? [ALL_PLATFORM_TAB] : [...platforms];
 
   const setScope = (nextScope: PlatformScope) => {
     if (nextScope === "all") {
@@ -51,72 +68,100 @@ export function PlatformCampaignTabs({
     }
   };
 
+  const pillBase =
+    "rounded-full px-3 py-1.5 text-sm font-medium transition-colors inline-flex items-center gap-1.5";
+  const pillActive = isDark
+    ? "border border-white/30 bg-white/15 text-white"
+    : "border border-[#1a1a1a] bg-white text-[#1a1a1a]";
+  const pillIdle = isDark
+    ? "border border-transparent text-gray-400 hover:text-gray-200"
+    : "border border-transparent text-[#6d6d75] hover:text-[#1a1a1a]";
+
   return (
     <div className="space-y-1.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Select
-          value={scope}
-          onValueChange={(value: PlatformScope) => setScope(value)}
+      <div
+        className={cn(
+          "inline-flex flex-wrap items-center gap-2 rounded-full border p-1 w-fit",
+          isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-white",
+        )}
+      >
+        <div
+          role="tablist"
+          aria-label="Platform content scope"
+          className={cn(
+            "inline-flex rounded-full p-0.5",
+            isDark ? "bg-white/10" : "bg-[#f3f3f5]",
+          )}
         >
-          <SelectTrigger
-            isDark={isDark}
-            className="h-8 w-[180px] min-w-[180px] px-3 py-1 text-xs rounded-md"
+          <button
+            type="button"
+            role="tab"
+            aria-selected={scope === "all"}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setScope("all");
+            }}
+            className={cn(pillBase, scope === "all" ? pillActive : pillIdle)}
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent isDark={isDark}>
-            <SelectItem isDark={isDark} value="all">
-              All
-            </SelectItem>
-            <SelectItem isDark={isDark} value="platforms">
-              Selected platforms
-            </SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="flex flex-wrap gap-1.5">
-          {tabs.map((tab) => {
-            const isActive = tab === active;
-            const label =
-              tab === ALL_PLATFORM_TAB ? "All" : VIDEO_PLATFORM_LABELS[tab];
-            const isComplete = completeByTab?.[tab];
-            return (
-              <button
-                key={tab}
-                type="button"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onChange(tab);
-                }}
-                className={cn(
-                  "px-2.5 py-1 rounded-md text-xs font-medium border transition-colors inline-flex items-center gap-1.5",
-                  isActive
-                    ? "bg-[#7F39EC] text-white border-[#7F39EC]"
-                    : isDark
-                      ? "border-gray-600 text-white hover:bg-[#D9C0FF26]"
-                      : "border-gray-300 hover:bg-[#D9C0FF26]",
-                )}
-              >
-                {label}
-                {typeof isComplete === "boolean" && (
-                  <span
-                    className={cn(
-                      "inline-block h-1.5 w-1.5 rounded-full",
-                      isComplete
-                        ? isActive
-                          ? "bg-white"
-                          : "bg-emerald-500"
-                        : isActive
-                          ? "bg-white/70"
-                          : "bg-amber-500",
-                    )}
-                    aria-label={isComplete ? "Filled" : "Needs content"}
-                  />
-                )}
-              </button>
-            );
-          })}
+            Same for all
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={scope === "platforms"}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setScope("platforms");
+            }}
+            className={cn(pillBase, scope === "platforms" ? pillActive : pillIdle)}
+          >
+            Per platform
+          </button>
         </div>
+
+        {scope === "platforms" && (
+          <div
+            role="tablist"
+            aria-label="Selected platforms"
+            className={cn(
+              "inline-flex flex-wrap items-center gap-0.5 rounded-full p-0.5",
+              isDark ? "bg-white/10" : "bg-[#f3f3f5]",
+            )}
+          >
+            {platforms.map((platform) => {
+              const isActive = platform === active;
+              const isComplete = completeByTab?.[platform];
+              return (
+                <button
+                  key={platform}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onChange(platform);
+                  }}
+                  className={cn(pillBase, isActive ? pillActive : pillIdle)}
+                >
+                  <PlatformIcon platform={platform} className="h-3.5 w-3.5" />
+                  {VIDEO_PLATFORM_LABELS[platform]}
+                  {typeof isComplete === "boolean" && (
+                    <span
+                      className={cn(
+                        "inline-block h-1.5 w-1.5 rounded-full",
+                        isComplete ? "bg-emerald-500" : "bg-[#b08a5a]",
+                      )}
+                      aria-label={isComplete ? "Filled" : "Needs content"}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
       {hint ? (
         <p

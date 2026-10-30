@@ -24,7 +24,7 @@ type Props = {
 const cardClass = (isDark?: boolean) =>
   cn(
     "rounded-xl border p-4 flex flex-col gap-3 min-h-[108px] shadow-sm",
-    isDark ? "border-white/10 bg-[#170337]" : "border-border/80 bg-white",
+    isDark ? "border-white/10 bg-[#161616]" : "border-border/80 bg-white",
   );
 
 function StatCard({
@@ -56,7 +56,7 @@ function StatCard({
             "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
             isDark
               ? "bg-[#FFFFFF24] text-purple-200"
-              : "bg-[#D8C3FF] text-[#4A00BE]",
+              : "bg-[#f3f3f5] text-[#1a1a1a]",
           )}
         >
           <Icon className="h-4 w-4" />

@@ -865,7 +865,7 @@ export function EmailLeadsView({ projects, isDark, isActive = true }: Props) {
           Import CSV/Excel
         </Button>
         <Button
-          className="h-11 bg-[#662EBD] hover:bg-[#5524a8]"
+          className="h-11 bg-[#1a1a1a] hover:bg-black"
           onClick={openCreateDialog}
         >
           <Plus className="h-4 w-4 mr-1" />
@@ -1038,7 +1038,7 @@ export function EmailLeadsView({ projects, isDark, isActive = true }: Props) {
                           <div className="flex items-center gap-3">
                             <button
                               type="button"
-                              className="text-[#662EBD] hover:underline text-sm font-medium"
+                              className="text-[#1a1a1a] hover:underline text-sm font-medium"
                               onClick={() => handleViewLeads(bundle)}
                             >
                               View Leads
@@ -1179,7 +1179,7 @@ export function EmailLeadsView({ projects, isDark, isActive = true }: Props) {
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            className="rounded-md p-1.5 text-[#662EBD] hover:bg-purple-50"
+                            className="rounded-md p-1.5 text-[#1a1a1a] hover:bg-[#f6f6f7]"
                             onClick={() => openEditMember(m)}
                             aria-label={`Edit ${m.email}`}
                           >
@@ -1385,7 +1385,7 @@ export function EmailLeadsView({ projects, isDark, isActive = true }: Props) {
               Cancel
             </Button>
             <Button
-              className="bg-[#662EBD] hover:bg-[#5524a8]"
+              className="bg-[#1a1a1a] hover:bg-black"
               disabled={
                 creating ||
                 !createProjectId ||
@@ -1511,7 +1511,7 @@ export function EmailLeadsView({ projects, isDark, isActive = true }: Props) {
                   <Button
                     type="button"
                     variant="link"
-                    className="h-auto p-0 text-[#662EBD] hover:text-[#5524a8]"
+                    className="h-auto p-0 text-[#1a1a1a] hover:text-black"
                     onClick={downloadImportTemplate}
                   >
                     <Download className="h-4 w-4 mr-1" />
@@ -1554,7 +1554,7 @@ export function EmailLeadsView({ projects, isDark, isActive = true }: Props) {
               Cancel
             </Button>
             <Button
-              className="bg-[#662EBD] hover:bg-[#5524a8]"
+              className="bg-[#1a1a1a] hover:bg-black"
               disabled={
                 importing ||
                 !importProjectId ||
@@ -1692,7 +1692,7 @@ export function EmailLeadsView({ projects, isDark, isActive = true }: Props) {
               Cancel
             </Button>
             <Button
-              className="bg-[#662EBD] hover:bg-[#5524a8]"
+              className="bg-[#1a1a1a] hover:bg-black"
               disabled={savingMember || !editEmail.trim()}
               onClick={() => void handleSaveMember()}
             >

@@ -59,7 +59,7 @@ export function EmailProjectCardsSkeleton({
           key={i}
           className={cn(
             "rounded-xl border p-5 space-y-4",
-            isDark ? "border-purple-900/40 bg-[#170337]" : "border-gray-200 bg-white",
+            isDark ? "border-purple-900/40 bg-[#161616]" : "border-gray-200 bg-white",
           )}
         >
           <div className="flex items-start justify-between gap-3">
@@ -139,7 +139,7 @@ export function EmailStatsRowSkeleton({
           key={i}
           className={cn(
             "rounded-xl border p-4 flex flex-col gap-3 min-h-[96px]",
-            isDark ? "border-purple-900/40 bg-[#170337]" : "border-gray-200 bg-white",
+            isDark ? "border-purple-900/40 bg-[#161616]" : "border-gray-200 bg-white",
           )}
         >
           <div className="flex items-start justify-between gap-2">
@@ -224,7 +224,7 @@ export function EmailWarmUpSkeleton({ isDark }: { isDark?: boolean }) {
       <div
         className={cn(
           "rounded-xl border overflow-hidden",
-          isDark ? "border-purple-900/40 bg-[#170337]" : "border-gray-200 bg-white",
+          isDark ? "border-purple-900/40 bg-[#161616]" : "border-gray-200 bg-white",
         )}
       >
         <EmailWarmUpTableSkeleton isDark={isDark} />
@@ -342,7 +342,7 @@ export function EmailFormPanelSkeleton({ isDark }: { isDark?: boolean }) {
       <div
         className={cn(
           "rounded-xl border p-5 space-y-4",
-          isDark ? "border-purple-900/40 bg-[#170337]" : "border-gray-200 bg-white",
+          isDark ? "border-purple-900/40 bg-[#161616]" : "border-gray-200 bg-white",
         )}
       >
         <Sk className="h-5 w-40" isDark={isDark} />
@@ -356,7 +356,7 @@ export function EmailFormPanelSkeleton({ isDark }: { isDark?: boolean }) {
       <div
         className={cn(
           "rounded-xl border p-5 space-y-3",
-          isDark ? "border-purple-900/40 bg-[#170337]" : "border-gray-200 bg-white",
+          isDark ? "border-purple-900/40 bg-[#161616]" : "border-gray-200 bg-white",
         )}
       >
         <Sk className="h-5 w-32" isDark={isDark} />
@@ -414,7 +414,7 @@ export function EmailAnalyticsSkeleton({ isDark }: { isDark?: boolean }) {
             key={i}
             className={cn(
               "rounded-xl border p-4 space-y-3",
-              isDark ? "border-purple-900/40 bg-[#170337]" : "border-gray-200 bg-white",
+              isDark ? "border-purple-900/40 bg-[#161616]" : "border-gray-200 bg-white",
             )}
           >
             <div className="flex justify-between">
@@ -428,7 +428,7 @@ export function EmailAnalyticsSkeleton({ isDark }: { isDark?: boolean }) {
       <div
         className={cn(
           "rounded-xl border p-5 space-y-4",
-          isDark ? "border-purple-900/40 bg-[#170337]" : "border-gray-200 bg-white",
+          isDark ? "border-purple-900/40 bg-[#161616]" : "border-gray-200 bg-white",
         )}
       >
         <Sk className="h-5 w-40" isDark={isDark} />

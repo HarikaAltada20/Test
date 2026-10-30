@@ -156,8 +156,8 @@ export function BulkVideoDownloadProgress({
               className={cn(
                 "rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums shrink-0",
                 isDark
-                  ? "bg-purple-500/20 text-purple-200"
-                  : "bg-purple-100 text-purple-700",
+                  ? "bg-white/10 text-white"
+                  : "bg-[#f3f3f5] text-[#1a1a1a]",
               )}
             >
               {overallPct}%
@@ -212,8 +212,8 @@ export function BulkVideoDownloadProgress({
                           className={cn(
                             "absolute inset-y-0 left-0 transition-all duration-300",
                             isDark
-                              ? "bg-purple-400 animate-pulse"
-                              : "bg-purple-500 animate-pulse",
+                              ? "bg-white animate-pulse"
+                              : "bg-[#1a1a1a] animate-pulse",
                           )}
                           style={{ width: `${Math.max(8, activeFillPct)}%` }}
                         />
@@ -309,8 +309,8 @@ function StatChip({
           : "border-red-200 bg-red-50"
         : tone === "accent"
           ? isDark
-            ? "border-purple-500/30 bg-purple-500/10"
-            : "border-purple-200 bg-purple-50"
+            ? "border-white/10 bg-white/5"
+            : "border-[#e5e5e5] bg-[#f6f6f7]"
           : isDark
             ? "border-slate-500/30 bg-white/5"
             : "border-slate-200 bg-white";
@@ -326,8 +326,8 @@ function StatChip({
           : "text-red-700/80"
         : tone === "accent"
           ? isDark
-            ? "text-purple-300/80"
-            : "text-purple-700/80"
+            ? "text-slate-400"
+            : "text-[#737373]"
           : isDark
             ? "text-slate-400"
             : "text-slate-500";
@@ -343,8 +343,8 @@ function StatChip({
           : "text-red-700"
         : tone === "accent"
           ? isDark
-            ? "text-purple-200"
-            : "text-purple-800"
+            ? "text-white"
+            : "text-[#1a1a1a]"
           : isDark
             ? "text-slate-100"
             : "text-slate-800";

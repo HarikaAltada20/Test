@@ -52,12 +52,19 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const Comp = asChild ? Slot : "button"
     const isDisabled = disabled || loading
 
-    const content = (
-      <>
-        {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-        {loading && loadingText ? loadingText : children}
-      </>
-    )
+    // asChild merges props onto the single child (e.g. Link). Do not wrap in an
+    // extra span — that breaks flex layout so label + icon stack vertically.
+    if (asChild) {
+      return (
+        <Comp
+          className={cn(buttonVariants({ variant, size, className }))}
+          ref={ref}
+          {...props}
+        >
+          {children}
+        </Comp>
+      )
+    }
 
     return (
       <Comp
@@ -66,13 +73,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={isDisabled}
         {...props}
       >
-        {asChild ? (
-          <span className="inline-flex items-center">
-            {content}
-          </span>
-        ) : (
-          content
-        )}
+        {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+        {loading && loadingText ? loadingText : children}
       </Comp>
     )
   }

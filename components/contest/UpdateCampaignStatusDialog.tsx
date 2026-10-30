@@ -26,7 +26,7 @@ import {
   statusTransitionRequiresViewSync,
   type PostContestStatusOption,
 } from "@/lib/post-contest-status-ui";
-import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2, SlidersHorizontal } from "lucide-react";
 
 type ViewsSyncSummary = {
   upserted_or_updated?: number;
@@ -136,46 +136,50 @@ function StatusOptionCard({
       onClick={onSelect}
       aria-pressed={selected}
       className={cn(
-        "w-full text-left rounded-xl border p-3 sm:p-3.5 transition-colors",
+        "w-full text-left rounded-xl border p-2.5 sm:p-3 transition-all",
         disabled && "opacity-60 cursor-not-allowed",
         selected
           ? isDark
-            ? "border-purple-400 bg-purple-500/10 ring-1 ring-purple-400/50"
-            : "border-purple-500 bg-purple-50 ring-1 ring-purple-300"
+            ? "border-white bg-white/10 ring-1 ring-white/30 shadow-xs"
+            : "border-neutral-900 bg-neutral-50 ring-1 ring-neutral-900 shadow-xs"
           : isDark
-            ? "border-white/10 hover:border-white/20 hover:bg-white/5"
-            : "border-gray-200 hover:border-gray-300 hover:bg-gray-50",
+            ? "border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.05]"
+            : "border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50/60",
       )}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2.5">
         <div
           className={cn(
-            "mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center",
+            "mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors",
             selected
-              ? "border-purple-500 bg-purple-500"
+              ? isDark
+                ? "border-white bg-white"
+                : "border-neutral-900 bg-neutral-900"
               : isDark
                 ? "border-white/30"
-                : "border-gray-300",
+                : "border-neutral-300",
           )}
           aria-hidden
         >
           {selected ? (
-            <span className="h-1.5 w-1.5 rounded-full bg-white" />
+            <span className={cn("h-1.5 w-1.5 rounded-full", isDark ? "bg-[#111113]" : "bg-white")} />
           ) : null}
         </div>
         <div className="min-w-0 flex-1">
           <p
             className={cn(
-              "font-medium text-sm leading-snug",
-              isDark ? "text-white" : "text-gray-900",
+              "font-semibold text-xs sm:text-sm leading-snug",
+              selected
+                ? isDark ? "text-white" : "text-neutral-900"
+                : isDark ? "text-neutral-200" : "text-neutral-800",
             )}
           >
             {option.label}
           </p>
           <p
             className={cn(
-              "text-xs mt-1 leading-relaxed",
-              isDark ? "text-gray-400" : "text-muted-foreground",
+              "text-[11px] sm:text-xs mt-0.5 leading-relaxed",
+              isDark ? "text-neutral-400" : "text-neutral-500",
             )}
           >
             {option.description}
@@ -200,16 +204,16 @@ function LoadingPanel({
   return (
     <div
       className={cn(
-        "rounded-xl border p-4 sm:p-5 space-y-3",
+        "rounded-xl border p-3 space-y-2",
         isDark
-          ? "border-purple-400/30 bg-purple-500/5"
-          : "border-purple-200 bg-purple-50/60",
+          ? "border-white/10 bg-white/5"
+          : "border-[#ececef] bg-[#f6f6f7]",
       )}
       aria-live="polite"
       aria-busy="true"
     >
       <div className="flex items-center gap-3">
-        <Loader2 className="h-5 w-5 shrink-0 animate-spin text-purple-500" />
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#1a1a1a] dark:text-white" />
         <p
           className={cn(
             "font-medium text-sm leading-snug",
@@ -273,6 +277,8 @@ export function UpdateCampaignStatusDialog({
   const [reason, setReason] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  /** Status change refused until the campaign is ready (e.g. platforms not refreshed after end). */
+  const [blockedMessage, setBlockedMessage] = useState("");
 
   const availableOptions = getAvailablePostContestTransitions({
     current: currentStatus,
@@ -288,6 +294,7 @@ export function UpdateCampaignStatusDialog({
     setSelectedStatus(recommended ?? "");
     setReason("");
     setElapsedSeconds(0);
+    setBlockedMessage("");
   }, [open, currentStatus, isAdmin]);
 
   useEffect(() => {
@@ -322,6 +329,7 @@ export function UpdateCampaignStatusDialog({
     }
 
     setIsUpdating(true);
+    setBlockedMessage("");
     try {
       const response = await fetch(`/api/contests/${contestId}/update-status`, {
         method: "POST",
@@ -333,6 +341,11 @@ export function UpdateCampaignStatusDialog({
       });
 
       const result = await response.json().catch(() => ({}));
+
+      if (response.status === 409 && typeof result.error === "string") {
+        setBlockedMessage(result.error);
+        return;
+      }
 
       if (!response.ok) {
         const details =
@@ -382,31 +395,38 @@ export function UpdateCampaignStatusDialog({
       <DialogContent
         hideCloseButton={isUpdating}
         className={cn(
-          "w-[calc(100vw-1.5rem)] max-w-[480px] gap-0 p-0 overflow-hidden",
-          "max-h-[min(92vh,720px)] flex flex-col",
+          "flex max-h-[90vh] w-[min(460px,calc(100vw-1.5rem))] max-w-[460px] flex-col gap-3 overflow-y-auto rounded-2xl border p-4 shadow-xl",
+          isDark
+            ? "border-white/10 bg-[#161616] text-white"
+            : "border-[#ececef] bg-white text-[#1a1a1a]",
         )}
       >
-        <div className="px-4 sm:px-6 pt-5 sm:pt-6 pb-6 overflow-y-auto flex-1 min-h-0">
-          <DialogHeader className="space-y-2 text-left pr-6">
-            <DialogTitle
-              className={cn(
-                "text-lg sm:text-xl font-semibold leading-tight",
-                isDark ? "text-white" : "text-gray-900",
-              )}
-            >
-              Update Campaign Status
-            </DialogTitle>
-            <DialogDescription
-              className={cn(
-                "text-sm leading-relaxed",
-                isDark ? "text-gray-400" : "text-muted-foreground",
-              )}
-            >
-              Move this ended campaign to the next post-contest phase.
-            </DialogDescription>
+        <div>
+          <DialogHeader className="flex flex-row items-center gap-3 text-left space-y-0 pr-6">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f3f3f5] text-[#1a1a1a] dark:bg-white/10 dark:text-white">
+              <SlidersHorizontal className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <DialogTitle
+                className={cn(
+                  "text-base sm:text-lg font-bold leading-tight",
+                  isDark ? "text-white" : "text-neutral-900",
+                )}
+              >
+                Update Campaign Status
+              </DialogTitle>
+              <DialogDescription
+                className={cn(
+                  "text-xs leading-normal mt-0.5",
+                  isDark ? "text-neutral-400" : "text-neutral-500",
+                )}
+              >
+                Move this ended campaign to the next post-contest phase.
+              </DialogDescription>
+            </div>
           </DialogHeader>
 
-          <div className="mt-4 space-y-4 sm:space-y-5">
+          <div className="mt-3 space-y-3">
             {isUpdating ? (
               <LoadingPanel
                 isDark={isDark}
@@ -418,26 +438,26 @@ export function UpdateCampaignStatusDialog({
               <>
                 <div
                   className={cn(
-                    "rounded-xl border px-3 py-3 sm:px-4 sm:py-3.5",
+                    "rounded-xl border px-3 py-2.5",
                     isDark
                       ? "border-white/10 bg-white/[0.03]"
-                      : "border-gray-200 bg-gray-50/80",
+                      : "border-neutral-200 bg-neutral-50/70",
                   )}
                 >
                   <p
                     className={cn(
-                      "text-xs font-medium uppercase tracking-wide mb-2.5",
-                      isDark ? "text-gray-500" : "text-gray-500",
+                      "text-[10px] font-bold uppercase tracking-wider mb-2",
+                      isDark ? "text-neutral-400" : "text-neutral-400",
                     )}
                   >
                     Status transition
                   </p>
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-center gap-2 sm:gap-3">
-                    <div className="flex flex-col items-center sm:items-end gap-1 min-w-0">
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="flex flex-col items-end gap-0.5 min-w-0">
                       <span
                         className={cn(
-                          "text-[11px] uppercase tracking-wide",
-                          isDark ? "text-gray-500" : "text-gray-400",
+                          "text-[10px] uppercase font-bold tracking-wider",
+                          isDark ? "text-neutral-400" : "text-neutral-400",
                         )}
                       >
                         Current
@@ -450,16 +470,15 @@ export function UpdateCampaignStatusDialog({
                     </div>
                     <ArrowRight
                       className={cn(
-                        "h-4 w-4 shrink-0 self-center rotate-90 sm:rotate-0",
-                        isDark ? "text-gray-500" : "text-gray-400",
+                        "h-4 w-4 shrink-0 text-neutral-400",
                       )}
                       aria-hidden
                     />
-                    <div className="flex flex-col items-center sm:items-start gap-1 min-w-0">
+                    <div className="flex flex-col items-start gap-0.5 min-w-0">
                       <span
                         className={cn(
-                          "text-[11px] uppercase tracking-wide",
-                          isDark ? "text-gray-500" : "text-gray-400",
+                          "text-[10px] uppercase font-bold tracking-wider",
+                          isDark ? "text-neutral-400" : "text-neutral-400",
                         )}
                       >
                         New
@@ -474,11 +493,11 @@ export function UpdateCampaignStatusDialog({
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <p
                     className={cn(
-                      "text-sm font-medium",
-                      isDark ? "text-white" : "text-gray-900",
+                      "text-xs font-semibold",
+                      isDark ? "text-white" : "text-neutral-900",
                     )}
                   >
                     Choose new status
@@ -486,8 +505,8 @@ export function UpdateCampaignStatusDialog({
                   {availableOptions.length === 0 ? (
                     <p
                       className={cn(
-                        "text-sm leading-relaxed",
-                        isDark ? "text-gray-400" : "text-muted-foreground",
+                        "text-xs leading-relaxed",
+                        isDark ? "text-neutral-400" : "text-neutral-500",
                       )}
                     >
                       No further status changes are available for this campaign.
@@ -501,7 +520,10 @@ export function UpdateCampaignStatusDialog({
                           selected={selectedStatus === option.value}
                           disabled={isUpdating}
                           isDark={isDark}
-                          onSelect={() => setSelectedStatus(option.value)}
+                          onSelect={() => {
+                            setSelectedStatus(option.value);
+                            setBlockedMessage("");
+                          }}
                         />
                       ))}
                     </div>
@@ -511,28 +533,28 @@ export function UpdateCampaignStatusDialog({
                 {showImpactAlert ? (
                   <Alert
                     className={cn(
-                      "items-start mb-1",
+                      "items-start rounded-xl border p-3",
                       isDark
-                        ? "border-sky-500/30 bg-sky-500/10 [&>svg]:text-sky-400"
-                        : "border-sky-200 bg-sky-50 [&>svg]:text-sky-600",
+                        ? "border-white/10 bg-white/5 [&>svg]:text-slate-300"
+                        : "border-[#ececef] bg-[#f6f6f7] [&>svg]:text-[#1a1a1a]",
                     )}
                   >
                     <AlertTriangle className="h-4 w-4 mt-0.5" />
                     <AlertTitle
                       className={cn(
-                        "text-sm font-semibold mb-1.5",
-                        isDark ? "text-sky-100" : "text-sky-900",
+                        "mb-1 text-xs font-semibold",
+                        isDark ? "text-white" : "text-[#1a1a1a]",
                       )}
                     >
                       {STATUS_TRANSITION_IMPACT_TITLE}
                     </AlertTitle>
                     <AlertDescription
                       className={cn(
-                        "text-sm leading-relaxed",
-                        isDark ? "text-sky-100/90" : "text-sky-900/90",
+                        "text-xs leading-relaxed",
+                        isDark ? "text-slate-300" : "text-[#737373]",
                       )}
                     >
-                      <ul className="space-y-1.5 list-none pl-0">
+                      <ul className="space-y-1 list-none pl-0">
                         {impactLines.map((line) => (
                           <li key={line}>{line}</li>
                         ))}
@@ -540,8 +562,8 @@ export function UpdateCampaignStatusDialog({
                       {showSyncWarning ? (
                         <p
                           className={cn(
-                            "mt-3 text-xs leading-relaxed",
-                            isDark ? "text-sky-200/70" : "text-sky-800/80",
+                            "mt-2 text-[11px] leading-relaxed",
+                            isDark ? "text-slate-400" : "text-[#737373]",
                           )}
                         >
                           If any step fails, the status will not change.
@@ -551,12 +573,33 @@ export function UpdateCampaignStatusDialog({
                   </Alert>
                 ) : null}
 
-                <div className="space-y-2">
+                {blockedMessage ? (
+                  <Alert
+                    className={cn(
+                      "items-start",
+                      isDark
+                        ? "border-amber-500/30 bg-amber-500/10 [&>svg]:text-amber-400"
+                        : "border-amber-200 bg-amber-50 [&>svg]:text-amber-600",
+                    )}
+                  >
+                    <AlertTriangle className="h-4 w-4 mt-0.5" />
+                    <AlertDescription
+                      className={cn(
+                        "text-sm leading-relaxed",
+                        isDark ? "text-amber-100" : "text-amber-900",
+                      )}
+                    >
+                      {blockedMessage}
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+
+                <div className="space-y-1.5">
                   <label
                     htmlFor="campaign-status-reason"
                     className={cn(
-                      "text-sm font-medium",
-                      isDark ? "text-white" : "text-gray-900",
+                      "text-xs font-semibold",
+                      isDark ? "text-white" : "text-neutral-900",
                     )}
                   >
                     Reason (optional)
@@ -568,10 +611,10 @@ export function UpdateCampaignStatusDialog({
                     onChange={(e) => setReason(e.target.value)}
                     disabled={isUpdating}
                     className={cn(
-                      "resize-none min-h-[72px] text-sm",
+                      "resize-none min-h-[64px] text-xs rounded-xl border transition-colors",
                       isDark
-                        ? "bg-white/5 border-white/10 text-white placeholder:text-gray-500"
-                        : undefined,
+                        ? "bg-white/5 border-white/10 text-white placeholder:text-neutral-500 focus-visible:ring-white/20"
+                        : "bg-white border-neutral-200 text-neutral-900 placeholder:text-neutral-400 focus-visible:ring-neutral-900/10",
                     )}
                   />
                 </div>
@@ -580,23 +623,17 @@ export function UpdateCampaignStatusDialog({
           </div>
         </div>
 
-        <DialogFooter
-          className={cn(
-            "shrink-0 flex flex-col gap-2 sm:flex-row sm:justify-end",
-            "px-4 sm:px-6 py-4 border-t",
-            isDark ? "border-white/10 bg-[#06021D]/95" : "border-gray-200 bg-gray-50/50",
-          )}
-        >
+        <DialogFooter className="flex-row justify-end gap-2 sm:space-x-0">
           <Button
             type="button"
             variant="outline"
             onClick={() => handleOpenChange(false)}
             disabled={isUpdating}
             className={cn(
-              "w-full sm:w-auto rounded-full order-2 sm:order-1",
+              "h-10 rounded-full px-4 text-sm font-medium shadow-none",
               isDark
-                ? "border-gray-600 text-gray-200 hover:bg-white/5"
-                : "border-gray-300",
+                ? "border-white/15 bg-transparent text-white hover:bg-white/10"
+                : "border-[#e5e5e5] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
             )}
           >
             Cancel
@@ -610,10 +647,10 @@ export function UpdateCampaignStatusDialog({
             loading={isUpdating}
             loadingText="Updating…"
             className={cn(
-              "w-full sm:w-auto min-w-[140px] rounded-full order-1 sm:order-2",
+              "h-10 rounded-full px-4 text-sm font-medium shadow-none",
               isDark
-                ? "bg-[#7F39EC] hover:bg-[#6B31C7] text-white"
-                : "bg-[#7F39EC] hover:bg-[#6B31C7] text-white",
+                ? "bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]"
+                : "bg-[#1a1a1a] text-white hover:bg-black",
             )}
           >
             Confirm update

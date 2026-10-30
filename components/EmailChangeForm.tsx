@@ -451,50 +451,42 @@ export function EmailChangeForm({
           <div className="flex justify-end">
             <div
               className={cn(
-                "inline-flex items-center gap-0.5 sm:gap-1 rounded-lg sm:rounded-xl p-0.5 overflow-x-auto whitespace-nowrap shadow-inner flex-shrink-0",
-                isDark
-                  ? "border border-gray-600 bg-transparent"
-                  : "border-2 border-gray-200 bg-white"
+                "inline-flex items-center gap-0.5 rounded-full p-1",
+                isDark ? "bg-white/10" : "bg-[#E4E4E4]",
               )}
             >
-              <Button
+              <button
                 type="button"
-                size="sm"
-                variant={
-                  verificationMethod === "password" ? "default" : "ghost"
-                }
-                className={
+                className={cn(
+                  "inline-flex h-9 items-center rounded-full px-4 text-sm font-medium leading-none outline-none ring-0 transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-0",
                   verificationMethod === "password"
-                    ? "shadow-lg hover:shadow-xl transition-all duration-300 font-bold bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-xs sm:text-sm px-1.5 sm:px-3 py-1 flex-shrink-0"
-                    : cn(
-                        "transition-all duration-300 font-semibold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1 flex-shrink-0",
-                        isDark
-                          ? "text-gray-200 hover:text-violet-300 hover:bg-violet-900/20"
-                          : "text-gray-600 hover:text-violet-600 hover:bg-violet-50/50"
-                      )
-                }
+                    ? isDark
+                      ? "bg-white/15 text-white shadow-sm"
+                      : "bg-white text-[#1a1a1a] shadow-sm"
+                    : isDark
+                      ? "text-white/75 hover:bg-white/10 hover:text-white"
+                      : "text-[#3f3f46] hover:bg-white/80 hover:text-[#1a1a1a]",
+                )}
                 onClick={() => setVerificationMethod("password")}
               >
                 Password
-              </Button>
-              <Button
+              </button>
+              <button
                 type="button"
-                size="sm"
-                variant={verificationMethod === "otp" ? "default" : "ghost"}
-                className={
+                className={cn(
+                  "inline-flex h-9 items-center rounded-full px-4 text-sm font-medium leading-none outline-none ring-0 transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-0",
                   verificationMethod === "otp"
-                    ? "bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-purple-700/30 font-bold text-xs sm:text-sm px-1.5 sm:px-3 py-1 flex-shrink-0"
-                    : cn(
-                        "transition-all duration-300 font-semibold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1 flex-shrink-0",
-                        isDark
-                          ? "text-pink-300 hover:text-pink-200 hover:bg-pink-900/20"
-                          : "text-pink-600 hover:text-pink-700 hover:bg-pink-50"
-                      )
-                }
+                    ? isDark
+                      ? "bg-white/15 text-white shadow-sm"
+                      : "bg-white text-[#1a1a1a] shadow-sm"
+                    : isDark
+                      ? "text-white/75 hover:bg-white/10 hover:text-white"
+                      : "text-[#3f3f46] hover:bg-white/80 hover:text-[#1a1a1a]",
+                )}
                 onClick={() => setVerificationMethod("otp")}
               >
                 OTP
-              </Button>
+              </button>
             </div>
           </div>
         </div>
@@ -510,10 +502,10 @@ export function EmailChangeForm({
               onChange={(e) => setEmailPassword(e.target.value)}
               placeholder="Enter current password"
               className={cn(
-                "pr-10",
+                "h-11 rounded-xl border pr-10 text-base shadow-none focus-visible:ring-1 focus-visible:ring-offset-0",
                 isDark
-                  ? "bg-[#06021d] border border-gray-600 text-white"
-                  : "bg-white text-black"
+                  ? "border-white/10 bg-[#0e0e0e] text-white focus-visible:ring-[#ff7a1a]"
+                  : "border-neutral-200 bg-white text-[#171717] focus-visible:ring-[#171717]"
               )}
               required
             />
@@ -538,7 +530,7 @@ export function EmailChangeForm({
               <div className="space-y-2">
                 <p
                   className={cn(
-                    "text-xs mb-2",
+                    "text-sm mb-2",
                     isDark ? "text-gray-400" : "text-gray-600"
                   )}
                 >
@@ -559,10 +551,10 @@ export function EmailChangeForm({
                     }}
                     placeholder="000000"
                     className={cn(
-                      "text-center text-xl tracking-widest flex-1",
+                      "h-11 flex-1 rounded-xl border text-center text-lg tracking-[0.3em] shadow-none focus-visible:ring-1 focus-visible:ring-offset-0",
                       isDark
-                        ? "bg-[#06021d] border border-gray-600 text-white"
-                        : "bg-white text-black"
+                        ? "border-white/10 bg-[#0e0e0e] text-white focus-visible:ring-[#ff7a1a]"
+                        : "border-neutral-200 bg-white text-[#171717] focus-visible:ring-[#171717]"
                     )}
                     required
                   />
@@ -573,10 +565,10 @@ export function EmailChangeForm({
                     variant="outline"
                     size="sm"
                     className={cn(
-                      "whitespace-nowrap",
+                      "h-10 rounded-full px-4 text-sm shadow-none",
                       isDark
-                        ? "bg-green-600 hover:bg-green-700 border-green-600 text-white"
-                        : "bg-green-600 hover:bg-green-700 border-green-600 text-white"
+                        ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                        : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
                     )}
                   >
                     {isSendingOtp ? (
@@ -598,12 +590,7 @@ export function EmailChangeForm({
                       currentEmailOtp.length !== 6
                     }
                     size="sm"
-                    className={cn(
-                      "text-xs sm:text-sm whitespace-nowrap",
-                      isDark
-                        ? "bg-[#7F39EC] hover:bg-[#6B2FC7] text-white"
-                        : "bg-[#7F39EC] hover:bg-[#6B2FC7] text-white"
-                    )}
+                    className="h-10 rounded-full px-4 text-sm goc-btn-primary"
                   >
                     {isSubmitting ? (
                       <>
@@ -617,7 +604,7 @@ export function EmailChangeForm({
                 </div>
                 <p
                   className={cn(
-                    "text-xs text-center mt-2",
+                    "text-sm text-center mt-2",
                     isDark ? "text-gray-400" : "text-gray-500"
                   )}
                 >
@@ -651,7 +638,7 @@ export function EmailChangeForm({
       <div className="space-y-2">
         <Label
           htmlFor="new-email"
-          className={cn(isDark ? "text-white" : "text-gray-900")}
+          className={cn("text-sm font-medium", isDark ? "text-white" : "text-[#171717]")}
         >
           New Email
         </Label>
@@ -664,9 +651,10 @@ export function EmailChangeForm({
           placeholder="example@email.com"
           disabled={verificationMethod === "otp" && !currentEmailOtpVerified}
           className={cn(
+            "h-11 rounded-xl border text-base shadow-none focus-visible:ring-1 focus-visible:ring-offset-0",
             isDark
-              ? "bg-[#06021d] border border-gray-600 text-white"
-              : "bg-white text-black"
+              ? "border-white/10 bg-[#0e0e0e] text-white focus-visible:ring-[#ff7a1a]"
+              : "border-neutral-200 bg-white text-[#171717] focus-visible:ring-[#171717]"
           )}
           required
         />
@@ -676,7 +664,7 @@ export function EmailChangeForm({
       <div className="space-y-2">
         <Label
           htmlFor="confirm-email"
-          className={cn(isDark ? "text-white" : "text-gray-900")}
+          className={cn("text-sm font-medium", isDark ? "text-white" : "text-[#171717]")}
         >
           Confirm Email
         </Label>
@@ -689,9 +677,10 @@ export function EmailChangeForm({
           placeholder="example@email.com"
           disabled={verificationMethod === "otp" && !currentEmailOtpVerified}
           className={cn(
+            "h-11 rounded-xl border text-base shadow-none focus-visible:ring-1 focus-visible:ring-offset-0",
             isDark
-              ? "bg-[#06021d] border border-gray-600 text-white"
-              : "bg-white text-black"
+              ? "border-white/10 bg-[#0e0e0e] text-white focus-visible:ring-[#ff7a1a]"
+              : "border-neutral-200 bg-white text-[#171717] focus-visible:ring-[#171717]"
           )}
           required
         />
@@ -713,7 +702,10 @@ export function EmailChangeForm({
             isSubmitting
           }
           className={cn(
-            isDark ? "border-gray-600 text-white hover:bg-[#2a0a5a]" : "text-black"
+            "h-10 rounded-full px-4 shadow-none",
+            isDark
+              ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+              : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
           )}
         >
           Cancel
@@ -726,11 +718,7 @@ export function EmailChangeForm({
             (verificationMethod === "password" && !emailPassword) ||
             (verificationMethod === "otp" && !currentEmailOtpVerified)
           }
-          className={cn(
-            isDark
-              ? "bg-[#7F39EC] hover:bg-[#6B2FC7] text-white"
-              : "bg-[#7F39EC] hover:bg-[#6B2FC7] text-white"
-          )}
+          className="h-10 rounded-full px-5 goc-btn-primary"
         >
           {isSendingNewEmailOtp ? (
             <>

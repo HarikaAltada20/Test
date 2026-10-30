@@ -102,7 +102,7 @@ export function EmailProjectCard({
     <div
       className={cn(
         "rounded-xl border overflow-hidden flex flex-col lg:flex-row",
-        isDark ? "bg-[#170337] border-purple-900/40" : "bg-white border-gray-200",
+        isDark ? "bg-[#161616] border-purple-900/40" : "bg-white border-gray-200",
       )}
     >
       <div className="flex-1 p-5 space-y-3 min-w-0">

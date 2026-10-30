@@ -177,8 +177,8 @@ export function UserSearchCombobox({
         className={cn(
           "flex items-center gap-2 rounded-md border px-1.5 py-1 transition-shadow focus-within:ring-2",
           isDark
-            ? "border-gray-700 bg-[#06021d] focus-within:border-[#7b4ae0] focus-within:ring-[#7b4ae0]/30"
-            : "border-gray-300 bg-white focus-within:border-[#4A00BE] focus-within:ring-[#4A00BE]/15"
+            ? "border-gray-700 bg-[#06021d] focus-within:border-white/30 focus-within:ring-[#1a1a1a]/30"
+            : "border-gray-300 bg-white focus-within:border-[#1a1a1a] focus-within:ring-[#1a1a1a]/15"
         )}
       >
         <DropdownMenu modal={false}>
@@ -189,8 +189,8 @@ export function UserSearchCombobox({
               className={cn(
                 "flex shrink-0 items-center gap-1 rounded px-2 py-1.5 text-xs font-semibold outline-none focus-visible:ring-2",
                 isDark
-                  ? "bg-[#2a1760] text-[#d6c6ff] focus-visible:ring-[#7b4ae0]"
-                  : "bg-[#efe8fb] text-[#4A00BE] focus-visible:ring-[#4A00BE]"
+                  ? "bg-white/10 text-white focus-visible:ring-[#1a1a1a]"
+                  : "bg-[#f3f3f5] text-[#1a1a1a] focus-visible:ring-[#1a1a1a]"
               )}
             >
               {scope === "all" ? (
@@ -215,7 +215,7 @@ export function UserSearchCombobox({
                 onSelect={() => changeScope(s.value)}
                 className={cn(
                   "flex justify-between gap-6 cursor-pointer",
-                  s.value === scope && (isDark ? "bg-[#2a1760]" : "bg-[#efe8fb]"),
+                  s.value === scope && (isDark ? "bg-white/10" : "bg-[#f3f3f5]"),
                   isDark ? "focus:bg-[#1b0f44] focus:text-white" : "focus:bg-gray-100"
                 )}
               >
@@ -288,8 +288,8 @@ export function UserSearchCombobox({
                 "rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
                 userType === t.value
                   ? isDark
-                    ? "border-[#7b4ae0] bg-[#2a1760] text-[#d6c6ff]"
-                    : "border-[#4A00BE] bg-[#efe8fb] text-[#4A00BE]"
+                    ? "border-white/30 bg-white/10 text-white"
+                    : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]"
                   : isDark
                     ? "border-gray-700 text-gray-400 hover:text-white"
                     : "border-gray-300 text-gray-600 hover:text-gray-900"

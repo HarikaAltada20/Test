@@ -1,26 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  CheckCircle,
-  AlertCircle,
-  FileText,
-  Trophy,
-  Video,
-  Building,
-  PlayCircle,
-  StopCircle,
-  Info,
-  DollarSign,
-  Users,
-  Eye,
-  XCircle,
-  Clock,
-  Youtube,
-  Instagram,
-  Twitter,
-} from "lucide-react";
+import { Info } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -28,7 +9,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
-import ContestTypeFilter from "@/components/admin/ContestTypeFilter";
 import { cn } from "@/lib/utils";
 import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
 
@@ -87,7 +67,7 @@ export default function BrandDetailedAnalytics({
   if (loading && !analyticsData) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#171717]"></div>
       </div>
     );
   }
@@ -100,7 +80,7 @@ export default function BrandDetailedAnalytics({
         </p>
         <button
           onClick={fetchAnalyticsData}
-          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+          className="px-4 py-2 h-10 rounded-full bg-[#171717] px-5 text-sm text-white hover:bg-[#171717]/90"
         >
           Retry
         </button>
@@ -108,7 +88,7 @@ export default function BrandDetailedAnalytics({
     );
   }
 
-  const { overview, platformStats = {}, twitterStats } = analyticsData;
+  const { overview } = analyticsData;
 
   // Fallback values to prevent errors when data is missing
   const safeOverview = {
@@ -165,1206 +145,282 @@ export default function BrandDetailedAnalytics({
     ...overview,
   };
 
+  const line = isDark ? "border-white/10" : "border-neutral-200";
+  const labelTone = isDark ? "text-white" : "text-[#171717]";
+  const captionTone = isDark ? "text-slate-200" : "text-[#44403c]";
+  const shell = isDark
+    ? "overflow-hidden rounded-2xl border border-white/10 bg-white/5 text-white"
+    : "overflow-hidden rounded-2xl border border-neutral-200 bg-white text-[#171717]";
+
+  const info = (text: string) => (
+    <TooltipProvider delayDuration={0}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label={text}
+            className={cn("inline-flex shrink-0 outline-none focus-visible:outline-none", captionTone)}
+          >
+            <Info className="h-3.5 w-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">{text}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+
+  const figure = (
+    item: { label: string; value: string; caption?: string; tooltip?: string },
+    className?: string,
+  ) => (
+    <div key={item.label} className={cn("px-5 py-4", line, className)}>
+      <p className={cn("flex items-center gap-1.5 text-sm font-medium", labelTone)}>
+        <span>{item.label}</span>
+        {item.tooltip ? info(item.tooltip) : null}
+      </p>
+      <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{item.value}</p>
+      {item.caption ? <p className={cn("mt-1 text-sm", captionTone)}>{item.caption}</p> : null}
+    </div>
+  );
+
+  const campaignStatus = [
+    {
+      label: "Draft Campaigns",
+      value: String(safeOverview.totalDraftContests),
+      caption: "Draft campaigns",
+      tooltip: "Campaigns currently in draft (not submitted for approval)",
+    },
+    {
+      label: "Pending Approval",
+      value: String(safeOverview.totalPendingContests),
+      caption: "Pending approval",
+      tooltip: "Campaigns submitted for approval",
+    },
+    {
+      label: "Approved",
+      value: String(safeOverview.totalApprovedContests),
+      caption: "Approved campaigns",
+      tooltip: "Campaigns approved and ready to publish",
+    },
+    {
+      label: "Published",
+      value: String(safeOverview.totalPublishedContests),
+      caption: "Published campaigns",
+      tooltip: 'Campaigns with moderation status set to "published"',
+    },
+    {
+      label: "Active (Live)",
+      value: String(safeOverview.totalActiveContests),
+      caption: "Currently live",
+      tooltip: "Published campaigns currently live",
+    },
+    {
+      label: "Completed",
+      value: String(safeOverview.totalCompletedContests),
+      caption: "Payouts processed",
+      tooltip: "Ended campaigns where payouts are processed (post_contest_status = payouts_processed)",
+    },
+    {
+      label: "Total Rejected",
+      value: String(safeOverview.totalRejectedContests),
+      caption: "Rejected campaigns",
+      tooltip: "Campaigns that were rejected and need changes",
+    },
+    {
+      label: "Upcoming",
+      value: String(safeOverview.totalUpcomingContests),
+      caption: "Scheduled campaigns",
+      tooltip: "Published campaigns with lifecycle status = upcoming",
+    },
+    {
+      label: "Ended",
+      value: String(safeOverview.totalEndedContests),
+      caption: "Published but ended",
+      tooltip: "Published campaigns that have ended but payouts are not yet processed",
+    },
+  ];
+
+  const submissions = [
+    { label: "Verified Submissions", value: safeOverview.verifiedSubmissions.toLocaleString(), caption: "Verified" },
+    { label: "Pending Submissions", value: safeOverview.pendingSubmissions.toLocaleString(), caption: "Pending" },
+    { label: "Rejected Submissions", value: safeOverview.rejectedSubmissions.toLocaleString(), caption: "Rejected" },
+    { label: "Paid Submissions", value: safeOverview.paidSubmissions.toLocaleString(), caption: "Paid" },
+    { label: "Total Submissions", value: safeOverview.totalSubmissions.toLocaleString(), caption: "All submissions" },
+  ];
+
+  const youtubeViews = safeOverview.viewsByStatusYoutubeInstagram ?? {};
+  const twitterViews = safeOverview.viewsByStatusTwitter ?? {};
+  const showViews = contentType === "video" || (contentType === "text_image" && twitterAnalytics);
+  const views = contentType === "video"
+    ? [
+        { label: "Expected Views", value: (youtubeViews.expected ?? 0).toLocaleString(), caption: "Pending + Verified + Paid", tooltip: "Pending + Verified + Paid views" },
+        { label: "Verified Views", value: (youtubeViews.verified ?? 0).toLocaleString(), caption: "Verified", tooltip: "Views from submissions marked as verified" },
+        { label: "Pending Views", value: (youtubeViews.pending ?? 0).toLocaleString(), caption: "Pending", tooltip: "Views from submissions marked as pending" },
+        { label: "Rejected Views", value: (youtubeViews.rejected ?? 0).toLocaleString(), caption: "From rejected entries", tooltip: "From rejected  entries" },
+        { label: "Paid Views", value: (youtubeViews.paid ?? 0).toLocaleString(), caption: "From paid entries", tooltip: "From paid entries" },
+        { label: "Total Views", value: (youtubeViews.total ?? 0).toLocaleString(), caption: "All views", tooltip: "All views across submissions" },
+      ]
+    : [
+        { label: "Expected Views", value: (twitterViews.expected ?? 0).toLocaleString(), caption: "Pending + Verified + Paid", tooltip: "Pending + Verified + Paid views (Twitter)" },
+        { label: "Verified Views", value: (twitterViews.verified ?? 0).toLocaleString(), caption: "Verified", tooltip: "Views from Twitter submissions marked as verified" },
+        { label: "Pending Views", value: (twitterViews.pending ?? 0).toLocaleString(), caption: "Pending", tooltip: "Views from Twitter submissions marked as pending" },
+        { label: "Rejected Views", value: (twitterViews.rejected ?? 0).toLocaleString(), caption: "From rejected entries", tooltip: "From rejected Twitter entries" },
+        { label: "Paid Views", value: (twitterViews.paid ?? 0).toLocaleString(), caption: "From paid entries", tooltip: "From paid Twitter entries" },
+        { label: "Total Views", value: (twitterViews.total ?? 0).toLocaleString(), caption: "All views", tooltip: "All Twitter views (impressions) across submissions" },
+      ];
+
+  const payments = safeOverview.paymentsBreakdown ?? { withCommission: 0, withoutCommission: 0, commission: 0 };
+  const moneyGroups = [
+    {
+      title: "Paid",
+      cells: [
+        {
+          label: "Money Paid (Published)",
+          value: formatCurrencyFromCents(safeOverview.totalMoneyPaid),
+          caption: "Completed payments for published campaigns",
+          tooltip: "Sum of completed payments for campaigns that are published",
+        },
+        {
+          label: "Money Paid (Unpublished)",
+          value: formatCurrencyFromCents(safeOverview.moneyPaidUnpublished),
+          caption: "Paid but not published",
+          tooltip: "Completed payments for campaigns not yet published (draft/approved)",
+        },
+        {
+          label: "Money Paid (Published + Unpublished)",
+          value: formatCurrencyFromCents(safeOverview.totalMoneyPaid + safeOverview.moneyPaidUnpublished),
+          caption: "All campaigns with completed payment",
+          tooltip: "Sum of completed payments across all campaigns (published and unpublished)",
+        },
+      ],
+    },
+    {
+      title: "Commission",
+      cells: [
+        {
+          label: "Total (Without Commission)",
+          value: formatCurrencyFromCents(payments.withoutCommission),
+          caption: "Total money paid excluding commission",
+          tooltip: "Sum of prize pool / CPM budget only (excludes commission)",
+        },
+        {
+          label: "Total Commission",
+          value: formatCurrencyFromCents(payments.commission),
+          caption: "Total commission paid",
+          tooltip: "Commission collected from completed payments",
+        },
+        {
+          label: "Total (With Commission)",
+          value: formatCurrencyFromCents(payments.withCommission),
+          caption: "Total money paid including commission",
+          tooltip: "Total payments received (includes commission)",
+        },
+      ],
+    },
+    {
+      title: "Projected",
+      cells: [
+        {
+          label: "Projected (Without Commission)",
+          value: formatCurrencyFromCents(safeOverview.totalProjectedSpent),
+          caption: "Budgets/prize pools set (paid + not-yet-paid)",
+          tooltip: "Projected prize pool / CPM budgets only (excludes commission)",
+        },
+        {
+          label: "Projected (With Commission)",
+          value: formatCurrencyFromCents(safeOverview.totalProjectedSpent + (payments.commission || 0)),
+          caption: "Includes payments made + budgets set on not-yet-paid campaigns",
+          tooltip: "Projected budgets plus estimated commission (based on payment details)",
+        },
+        {
+          label: "Total Money in Draft (Not Paid)",
+          value: formatCurrencyFromCents(safeOverview.moneyInDraftNotPaid),
+          caption: "Draft campaigns only (unpaid)",
+          tooltip: "Budgets/prize pools on campaigns still in draft and not yet paid",
+        },
+      ],
+    },
+  ];
+
   return (
-    <div className="space-y-8 ">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Brand Analytics</h2>
-          <p className="text-muted-foreground">
-            Detailed performance metrics for your campaigns
-          </p>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h2 className={cn("text-2xl font-semibold tracking-tight", isDark ? "text-white" : "text-[#171717]")}>
+          Brand Analytics
+        </h2>
+        <p className={cn("mt-1 text-base", captionTone)}>Detailed performance metrics for your campaigns</p>
       </div>
 
-      {/* Contest Type Filter */}
-      {/* <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Campaign Overview</h2>
-        <ContestTypeFilter
-          value={contestTypeFilter as any}
-          onChange={(value) =>
-            onContestTypeFilterChange(
-              value as "all" | "leaderboard" | "cpm",
-            )
-          }
-        />
-      </div> */}
-
-      {/* Contest Status Overview */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Campaign Status Overview</h2>
-      </div>
-
-      <div className="grid gap-3 sm:gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-9">
-        <div
-          className={cn(
-            "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
+      <section className={shell}>
+        <h3 className={cn("border-b px-5 py-4 text-base font-semibold", line)}>Campaign Status Overview</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3">
+          {campaignStatus.map((item, index) =>
+            figure(
+              item,
+              cn(
+                index > 0 && "border-t",
+                index % 3 !== 0 && "sm:border-l",
+                index < 3 && "sm:border-t-0",
+              ),
+            ),
           )}
-        >
-          <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div
-              className={cn(
-                "p-2 rounded-full",
-                isDark ? "bg-blue-900/50" : "bg-blue-50",
-              )}
-            >
-              <FileText className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-blue-500" />
-            </div>
-            <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle
-                className={cn(
-                  "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900",
-                )}
-              >
-                Draft Campaigns
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Campaigns currently in draft (not submitted for approval)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
-          <div className="text-center mt-2 sm:mt-3">
-            <div
-              className={cn(
-                "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900",
-              )}
-            >
-              {safeOverview.totalDraftContests}
-            </div>
-            <p
-              className={cn(
-                "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700",
-              )}
-            >
-              Draft campaigns
-            </p>
-          </div>
         </div>
+      </section>
 
-        <div
-          className={cn(
-            "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
+      <section className={shell}>
+        <h3 className={cn("border-b px-5 py-4 text-base font-semibold", line)}>Submissions</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5">
+          {submissions.map((item, index) =>
+            figure(
+              item,
+              cn(
+                index > 0 && "border-t",
+                index % 2 === 1 && "sm:border-l",
+                index < 2 && "sm:border-t-0",
+                index >= 2 && "sm:border-t",
+                index > 0 && "xl:border-l",
+                index === 0 && "xl:border-l-0",
+                "xl:border-t-0",
+                index === submissions.length - 1 && "sm:col-span-2 xl:col-span-1",
+              ),
+            ),
           )}
-        >
-          <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div
-              className={cn(
-                "p-2 rounded-full",
-                isDark ? "bg-yellow-900/50" : "bg-yellow-100",
-              )}
-            >
-              <AlertCircle className="h-6 w-6 sm:h-7 sm:w-7 text-yellow-500" />
-            </div>
-            <div className="flex items-center gap-1 sm:gap-1">
-              <CardTitle
-                className={cn(
-                  "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900",
-                )}
-              >
-                Pending Approval
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Campaigns submitted for approval
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
-          <div className="text-center mt-2 sm:mt-3">
-            <div
-              className={cn(
-                "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900",
-              )}
-            >
-              {safeOverview.totalPendingContests}
-            </div>
-            <p
-              className={cn(
-                "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700",
-              )}
-            >
-              Pending approval
-            </p>
-          </div>
         </div>
+      </section>
 
-        <div
-          className={cn(
-            "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
-          )}
-        >
-          <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div
-              className={cn(
-                "p-2 rounded-full",
-                isDark ? "bg-green-900/50" : "bg-green-100",
-              )}
-            >
-              <CheckCircle className="h-6 w-6 sm:h-7 sm:w-7 text-green-500" />
-            </div>
-            <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle
-                className={cn(
-                  "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900",
-                )}
-              >
-                Approved
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Campaigns approved and ready to publish
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
+      {showViews && (
+        <section className={shell}>
+          <h3 className={cn("border-b px-5 py-4 text-base font-semibold", line)}>Views</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3">
+            {views.map((item, index) =>
+              figure(
+                item,
+                cn(
+                  index > 0 && "border-t",
+                  index % 3 !== 0 && "md:border-l",
+                  index < 3 && "md:border-t-0",
+                ),
+              ),
+            )}
           </div>
-          <div className="text-center mt-2 sm:mt-3">
-            <div
-              className={cn(
-                "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900",
-              )}
-            >
-              {safeOverview.totalApprovedContests}
-            </div>
-            <p
-              className={cn(
-                "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700",
-              )}
-            >
-              Approved campaigns
-            </p>
-          </div>
-        </div>
-
-        <div
-          className={cn(
-            "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
-          )}
-        >
-          <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div
-              className={cn(
-                "p-2 rounded-full",
-                isDark ? "bg-purple-900/50" : "bg-purple-100",
-              )}
-            >
-              <PlayCircle className="h-6 w-6 sm:h-7 sm:w-7 text-purple-500" />
-            </div>
-            <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle
-                className={cn(
-                  "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900",
-                )}
-              >
-                Published
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Campaigns with moderation status set to "published"
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
-          <div className="text-center mt-2 sm:mt-3">
-            <div
-              className={cn(
-                "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900",
-              )}
-            >
-              {safeOverview.totalPublishedContests}
-            </div>
-            <p
-              className={cn(
-                "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700",
-              )}
-            >
-              Published campaigns
-            </p>
-          </div>
-        </div>
-
-        <div
-          className={cn(
-            "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
-          )}
-        >
-          <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div
-              className={cn(
-                "p-2 rounded-full",
-                isDark ? "bg-emerald-900/50" : "bg-emerald-100",
-              )}
-            >
-              <Eye className="h-6 w-6 sm:h-7 sm:w-7 text-emerald-500" />
-            </div>
-            <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle
-                className={cn(
-                  "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900",
-                )}
-              >
-                Active (Live)
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Published campaigns currently live
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
-          <div className="text-center mt-2 sm:mt-3">
-            <div
-              className={cn(
-                "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900",
-              )}
-            >
-              {safeOverview.totalActiveContests}
-            </div>
-            <p
-              className={cn(
-                "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700",
-              )}
-            >
-              Currently live
-            </p>
-          </div>
-        </div>
-
-        <div
-          className={cn(
-            "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
-          )}
-        >
-          <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div
-              className={cn(
-                "p-2 rounded-full",
-                isDark ? "bg-green-900/50" : "bg-green-100",
-              )}
-            >
-              <CheckCircle className="h-6 w-6 sm:h-7 sm:w-7 text-green-600" />
-            </div>
-            <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle
-                className={cn(
-                  "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900",
-                )}
-              >
-                Completed
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Ended campaigns where payouts are processed
-                    (post_contest_status = payouts_processed)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
-          <div className="text-center mt-2 sm:mt-3">
-            <div
-              className={cn(
-                "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900",
-              )}
-            >
-              {safeOverview.totalCompletedContests}
-            </div>
-            <p
-              className={cn(
-                "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700",
-              )}
-            >
-              Payouts processed
-            </p>
-          </div>
-        </div>
-
-        <div
-          className={cn(
-            "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
-          )}
-        >
-          <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div
-              className={cn(
-                "p-2 rounded-full",
-                isDark ? "bg-red-900/50" : "bg-red-100",
-              )}
-            >
-              <XCircle className="h-6 w-6 sm:h-7 sm:w-7 text-red-500" />
-            </div>
-            <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle
-                className={cn(
-                  "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900",
-                )}
-              >
-                Total Rejected
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Campaigns that were rejected and need changes
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
-          <div className="text-center mt-2 sm:mt-3">
-            <div
-              className={cn(
-                "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900",
-              )}
-            >
-              {safeOverview.totalRejectedContests}
-            </div>
-            <p
-              className={cn(
-                "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700",
-              )}
-            >
-              Rejected campaigns
-            </p>
-          </div>
-        </div>
-
-        <div
-          className={cn(
-            "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
-          )}
-        >
-          <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div
-              className={cn(
-                "p-2 rounded-full",
-                isDark ? "bg-orange-900/50" : "bg-orange-100",
-              )}
-            >
-              <Clock className="h-6 w-6 sm:h-7 sm:w-7  text-orange-500" />
-            </div>
-            <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle
-                className={cn(
-                  "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900",
-                )}
-              >
-                Upcoming
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Published campaigns with lifecycle status = upcoming
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
-          <div className="text-center mt-2 sm:mt-3">
-            <div
-              className={cn(
-                "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900",
-              )}
-            >
-              {safeOverview.totalUpcomingContests}
-            </div>
-            <p
-              className={cn(
-                "text-xs",
-                isDark ? "text-gray-300" : "text-muted-foreground",
-              )}
-            >
-              Scheduled campaigns
-            </p>
-          </div>
-        </div>
-
-        <div
-          className={cn(
-            "rounded-lg py-4",
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
-          )}
-        >
-          <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div
-              className={cn(
-                "p-2 rounded-full",
-                isDark ? "bg-gray-700" : "bg-gray-100",
-              )}
-            >
-              <StopCircle className="h-6 w-6 sm:h-7 sm:w-7 text-gray-500" />
-            </div>
-            <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle
-                className={cn(
-                  "text-xs sm:text-sm font-medium text-center",
-                  isDark ? "text-white" : "text-gray-900",
-                )}
-              >
-                Ended
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Published campaigns that have ended but payouts are not yet
-                    processed
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
-          <div className="text-center mt-2 sm:mt-3">
-            <div
-              className={cn(
-                "text-lg sm:text-xl lg:text-2xl font-bold",
-                isDark ? "text-white" : "text-gray-900",
-              )}
-            >
-              {safeOverview.totalEndedContests}
-            </div>
-            <p
-              className={cn(
-                "text-xs",
-                isDark ? "text-gray-300" : "text-gray-700",
-              )}
-            >
-              Published but ended
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Submissions Metrics */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-        <Card
-          className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Verified Submissions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {safeOverview.verifiedSubmissions.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">Verified</p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Pending Submissions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {safeOverview.pendingSubmissions.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">Pending</p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Rejected Submissions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {safeOverview.rejectedSubmissions.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">Rejected</p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Paid Submissions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {safeOverview.paidSubmissions.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">Paid</p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={cn(
-            isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Submissions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {safeOverview.totalSubmissions.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">All submissions</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Views by status: one section — YouTube & Instagram when video, Twitter only when Text/Image + Twitter selected */}
-      {(contentType === "video" ||
-        (contentType === "text_image" && twitterAnalytics)) && (
-        <>
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-            {(contentType === "video"
-              ? [
-                  {
-                    label: "Expected Views",
-                    sub: "Pending + Verified + Paid",
-                    tooltip: "Pending + Verified + Paid views",
-                    value:
-                      safeOverview.viewsByStatusYoutubeInstagram?.expected ?? 0,
-                    Icon: Eye,
-                  },
-                  {
-                    label: "Verified Views",
-                    sub: "Verified",
-                    tooltip: "Views from submissions marked as verified",
-                    value:
-                      safeOverview.viewsByStatusYoutubeInstagram?.verified ?? 0,
-                    Icon: CheckCircle,
-                  },
-                  {
-                    label: "Pending Views",
-                    sub: "Pending",
-                    tooltip: "Views from submissions marked as pending",
-                    value:
-                      safeOverview.viewsByStatusYoutubeInstagram?.pending ?? 0,
-                    Icon: Eye,
-                  },
-                  {
-                    label: "Rejected Views",
-                    sub: "From rejected entries",
-                    tooltip: "From rejected  entries",
-                    value:
-                      safeOverview.viewsByStatusYoutubeInstagram?.rejected ?? 0,
-                    Icon: AlertCircle,
-                  },
-                  {
-                    label: "Paid Views",
-                    sub: "From paid entries",
-                    tooltip: "From paid entries",
-                    value:
-                      safeOverview.viewsByStatusYoutubeInstagram?.paid ?? 0,
-                    Icon: DollarSign,
-                  },
-                  {
-                    label: "Total Views",
-                    sub: "All views",
-                    tooltip: "All views across submissions",
-                    value:
-                      safeOverview.viewsByStatusYoutubeInstagram?.total ?? 0,
-                    Icon: Video,
-                  },
-                ]
-              : [
-                  {
-                    label: "Expected Views",
-                    sub: "Pending + Verified + Paid",
-                    tooltip: "Pending + Verified + Paid views (Twitter)",
-                    value: safeOverview.viewsByStatusTwitter?.expected ?? 0,
-                    Icon: Eye,
-                  },
-                  {
-                    label: "Verified Views",
-                    sub: "Verified",
-                    tooltip:
-                      "Views from Twitter submissions marked as verified",
-                    value: safeOverview.viewsByStatusTwitter?.verified ?? 0,
-                    Icon: CheckCircle,
-                  },
-                  {
-                    label: "Pending Views",
-                    sub: "Pending",
-                    tooltip: "Views from Twitter submissions marked as pending",
-                    value: safeOverview.viewsByStatusTwitter?.pending ?? 0,
-                    Icon: Eye,
-                  },
-                  {
-                    label: "Rejected Views",
-                    sub: "From rejected entries",
-                    tooltip: "From rejected Twitter entries",
-                    value: safeOverview.viewsByStatusTwitter?.rejected ?? 0,
-                    Icon: AlertCircle,
-                  },
-                  {
-                    label: "Paid Views",
-                    sub: "From paid entries",
-                    tooltip: "From paid Twitter entries",
-                    value: safeOverview.viewsByStatusTwitter?.paid ?? 0,
-                    Icon: DollarSign,
-                  },
-                  {
-                    label: "Total Views",
-                    sub: "All views",
-                    tooltip:
-                      "All Twitter views (impressions) across submissions",
-                    value: safeOverview.viewsByStatusTwitter?.total ?? 0,
-                    Icon: Video,
-                  },
-                ]
-            ).map(({ label, sub, tooltip, value, Icon }) => (
-              <Card
-                key={label}
-                className={cn(
-                  isDark ? "bg-[#170337]" : "bg-white border border-gray-300",
-                )}
-              >
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-sm font-medium">
-                      {label}
-                    </CardTitle>
-                    <TooltipProvider delayDuration={0}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-4 w-4 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent>{tooltip}</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <div
-                    className={cn(
-                      "w-8 h-8 flex items-center justify-center rounded-full",
-                      isDark
-                        ? "bg-[#FFFFFF36] text-white"
-                        : "bg-[#D8C3FF] text-[#4A00BE]",
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {value.toLocaleString()}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{sub}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </>
+        </section>
       )}
 
-      {/* Financial Breakdown */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Financial Breakdown</h2>
-      </div>
-
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        <Card
-          className={cn(
-            isDark
-              ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300",
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">
-                Money Paid (Published)
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Sum of completed payments for campaigns that are published
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={cn(
-                "w-10 h-10 flex items-center justify-center rounded-full",
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]",
-              )}
-            >
-              <DollarSign className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(safeOverview.totalMoneyPaid)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Completed payments for published campaigns
+      <section className={shell}>
+        <h3 className={cn("border-b px-5 py-4 text-base font-semibold", line)}>Financial Breakdown</h3>
+        {moneyGroups.map((group) => (
+          <div key={group.title}>
+            <p className={cn("border-b px-5 py-2.5 text-sm font-semibold", line, isDark ? "bg-white/5 text-white" : "bg-[#F6F6F7] text-[#171717]")}>
+              {group.title}
             </p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={cn(
-            isDark
-              ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300",
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">
-                Money Paid (Unpublished)
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Completed payments for campaigns not yet published
-                    (draft/approved)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={cn(
-                "w-10 h-10 flex items-center justify-center rounded-full",
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]",
-              )}
-            >
-              <DollarSign className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(safeOverview.moneyPaidUnpublished)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Paid but not published
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={cn(
-            isDark
-              ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300",
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">
-                Money Paid (Published + Unpublished)
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Sum of completed payments across all campaigns (published and
-                    unpublished)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={cn(
-                "w-10 h-10 flex items-center justify-center rounded-full",
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]",
-              )}
-            >
-              <DollarSign className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(
-                safeOverview.totalMoneyPaid + safeOverview.moneyPaidUnpublished,
+            <div className="grid grid-cols-1 md:grid-cols-3">
+              {group.cells.map((item, index) =>
+                figure(item, cn(index > 0 && "border-t", index > 0 && "md:border-l md:border-t-0")),
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              All campaigns with completed payment
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Money Breakdown */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        <Card
-          className={cn(
-            isDark
-              ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300",
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">
-                Total (Without Commission)
-              </CardTitle>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Sum of prize pool / CPM budget only (excludes commission)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={cn(
-                "w-10 h-10 flex items-center justify-center rounded-full",
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]",
-              )}
-            >
-              <DollarSign className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(
-                safeOverview.paymentsBreakdown.withoutCommission,
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Total money paid excluding commission
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={cn(
-            isDark
-              ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300",
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">
-                Total Commission
-              </CardTitle>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Commission collected from completed payments
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={cn(
-                "w-10 h-10 flex items-center justify-center rounded-full",
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]",
-              )}
-            >
-              <DollarSign className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(
-                safeOverview.paymentsBreakdown.commission,
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Total commission paid
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={cn(
-            isDark
-              ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300",
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">
-                Total (With Commission)
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Total payments received (includes commission)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={cn(
-                "w-10 h-10 flex items-center justify-center rounded-full",
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]",
-              )}
-            >
-              <DollarSign className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(
-                safeOverview.paymentsBreakdown.withCommission,
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Total money paid including commission
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Projected Breakdown */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        <Card
-          className={cn(
-            isDark
-              ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300",
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">
-                Projected (Without Commission)
-              </CardTitle>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Projected prize pool / CPM budgets only (excludes
-                    commission)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={cn(
-                "w-10 h-10 flex items-center justify-center rounded-full",
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]",
-              )}
-            >
-              <DollarSign className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(safeOverview.totalProjectedSpent)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Budgets/prize pools set (paid + not-yet-paid)
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={cn(
-            isDark
-              ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300",
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">
-                Projected (With Commission)
-              </CardTitle>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Projected budgets plus estimated commission (based on
-                    payment details)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={cn(
-                "w-10 h-10 flex items-center justify-center rounded-full",
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]",
-              )}
-            >
-              <DollarSign className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(
-                safeOverview.totalProjectedSpent +
-                  (safeOverview.paymentsBreakdown.commission || 0),
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Includes payments made + budgets set on not-yet-paid campaigns
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={cn(
-            isDark
-              ? "bg-[#170337] border-[#170337]"
-              : "bg-white border border-gray-300",
-          )}
-        >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">
-                Total Money in Draft (Not Paid)
-              </CardTitle>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Budgets/prize pools on campaigns still in draft and not yet
-                    paid
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={cn(
-                "w-10 h-10 flex items-center justify-center rounded-full",
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]",
-              )}
-            >
-              <DollarSign className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(safeOverview.moneyInDraftNotPaid)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Draft campaigns only (unpaid)
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        ))}
+      </section>
     </div>
   );
 }

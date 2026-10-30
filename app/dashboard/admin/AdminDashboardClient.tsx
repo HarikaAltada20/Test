@@ -1,7 +1,16 @@
 ﻿"use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { WithdrawalFeeRevenueSection } from "./WithdrawalFeeRevenueSection";
+import {
+  AdminMetricCard,
+  AdminSectionTitle,
+  adminMutedClass,
+  adminOutlineButtonClass,
+  adminPanelClass,
+  adminPopoverClass,
+  adminSegmentClass,
+  adminSegmentItemClass,
+} from "@/components/admin/AdminMetricCard";
 import {
   Trophy,
   Video,
@@ -13,19 +22,12 @@ import {
   CheckCircle,
   XCircle,
   Eye,
-  Info,
   FileText,
   RefreshCw,
   Loader2,
   Users,
   ShieldCheck,
 } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   ChartContainer,
   ChartTooltip,
@@ -41,6 +43,7 @@ import {
   type SubmissionCreatorsByDay,
 } from "@/lib/admin-date-range";
 import { formatCurrencyFromCents, formatCompactCount } from "@/lib/currency-utils";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useEffect, useLayoutEffect, useMemo, useState, type ComponentType } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
@@ -377,7 +380,7 @@ const readIsDarkFromDom = () => {
 
 type SummaryMetricCardProps = {
   title: string;
-  value: number;
+  value: number | string;
   subtitle: string;
   tooltip?: string;
   icon: ComponentType<{ className?: string }>;
@@ -442,68 +445,8 @@ function sumCountGrowthPoints(points: CountGrowthPoint[]) {
   return points.reduce((sum, p) => sum + p.all, 0);
 }
 
-function SummaryMetricCard({
-  title,
-  value,
-  subtitle,
-  tooltip,
-  icon: Icon,
-  isDark,
-}: SummaryMetricCardProps) {
-  return (
-    <div
-      className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-        isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-      }`}
-    >
-      <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-        <div className="flex items-center gap-2">
-          <h1
-            className={`text-md font-medium ${
-              isDark ? "text-white" : "text-gray-900"
-            }`}
-          >
-            {title}
-          </h1>
-          {tooltip ? (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info
-                    className={`h-3.5 w-3.5 cursor-help ${
-                      isDark
-                        ? "text-gray-400 hover:text-gray-300"
-                        : "text-gray-400 hover:text-gray-600"
-                    }`}
-                  />
-                </TooltipTrigger>
-                <TooltipContent>{tooltip}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : null}
-        </div>
-        <div
-          className={`w-10 h-10 flex items-center justify-center rounded-full ${
-            isDark
-              ? "bg-[#FFFFFF36] text-white"
-              : "bg-[#D8C3FF] text-[#4A00BE]"
-          }`}
-        >
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-      <CardContent>
-        <div className="text-2xl font-bold">{value.toLocaleString()}</div>
-        <p
-          className={`text-sm mt-2 ${
-            isDark ? "text-gray-300" : "text-gray-600"
-          }`}
-        >
-          {subtitle}
-        </p>
-      </CardContent>
-    </div>
-  );
+function SummaryMetricCard(props: SummaryMetricCardProps) {
+  return <AdminMetricCard {...props} />;
 }
 
 export default function AdminDashboardClient({
@@ -804,15 +747,7 @@ export default function AdminDashboardClient({
       : metricConfig.cumulativeTitle;
 
   const growthTabButtonClass = (active: boolean) =>
-    `px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
-      active
-        ? isDark
-          ? "bg-[#4A00BE] text-white"
-          : "bg-primary text-primary-foreground"
-        : isDark
-          ? "text-gray-300 hover:bg-white/10"
-          : "text-muted-foreground hover:bg-muted"
-    }`;
+    adminSegmentItemClass(active, isDark);
 
   const isStatusSeriesVisible = (key: string) =>
     isStatusSeriesVisibleForFilter(key, activeStatusFilter);
@@ -861,17 +796,14 @@ export default function AdminDashboardClient({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2
-            className={`text-3xl font-bold tracking-tight ${
-              isDark ? "text-white" : "text-gray-900"
-            }`}
+            className={cn(
+              "text-2xl font-bold tracking-tight md:text-3xl",
+              isDark ? "text-white" : "text-[#1a1a1a]",
+            )}
           >
             Admin Dashboard
           </h2>
-          <p
-            className={`mt-1 ${
-              isDark ? "text-gray-400" : "text-muted-foreground"
-            }`}
-          >
+          <p className={cn("mt-1", adminMutedClass(isDark))}>
             Platform-wide statistics and management
           </p>
         </div>
@@ -884,17 +816,13 @@ export default function AdminDashboardClient({
           <AlertDialogTrigger asChild>
             <Button
               variant="outline"
-              className={
-                isDark
-                  ? "border-emerald-400/60 text-emerald-300 hover:bg-white/5"
-                  : "border-emerald-500/50 text-emerald-700 hover:bg-emerald-50"
-              }
+              className={adminOutlineButtonClass(isDark)}
             >
               <RefreshCw className="mr-2 h-4 w-4" />
               Sync All Creator Views
             </Button>
           </AlertDialogTrigger>
-          <AlertDialogContent className={isDark ? "bg-[#170337] text-white border-white/10" : ""}>
+          <AlertDialogContent className={adminPopoverClass(isDark)}>
             <AlertDialogHeader>
               <AlertDialogTitle>Sync all creator profile views?</AlertDialogTitle>
               <AlertDialogDescription
@@ -931,13 +859,7 @@ export default function AdminDashboardClient({
 
       {/* Platform Overview */}
       <div className="mt-8 space-y-4 w-full min-w-0">
-        <h2
-          className={`text-xl font-bold shrink-0 ${
-            isDark ? "text-white" : "text-gray-900"
-          }`}
-        >
-          Platform Overview
-        </h2>
+        <AdminSectionTitle isDark={isDark}>Platform Overview</AdminSectionTitle>
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {growthMetricTab === "users" ? (
             <>
@@ -1133,13 +1055,9 @@ export default function AdminDashboardClient({
       {/* Platform Growth Chart */}
       <div className="mt-8 space-y-4 w-full min-w-0 overflow-visible">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2
-            className={`text-xl font-bold shrink-0 ${
-              isDark ? "text-white" : "text-gray-900"
-            }`}
-          >
+          <AdminSectionTitle isDark={isDark} className="shrink-0">
             {sectionTitle}
-          </h2>
+          </AdminSectionTitle>
           <div className="flex flex-wrap items-center gap-3 min-w-0 flex-shrink">
             <div className="flex items-center shrink-0">
               <AdminDateRangePicker
@@ -1153,7 +1071,7 @@ export default function AdminDashboardClient({
               />
             </div>
             <div className="flex items-center shrink-0">
-              <div className="flex rounded-lg border border-border overflow-hidden">
+              <div className={adminSegmentClass(isDark)}>
                 {(
                   [
                     { value: "users" as const, label: "Users" },
@@ -1181,14 +1099,17 @@ export default function AdminDashboardClient({
                   ) => setUserTypeFilter(v)}
                 >
                   <SelectTrigger
-                    className={`min-w-[140px] h-9 text-sm ${
-                      isDark ? "border-white/20 bg-white/5 text-white" : ""
-                    }`}
+                    className={cn(
+                      "h-9 min-w-[140px] rounded-full text-sm",
+                      isDark
+                        ? "border-white/10 bg-[#161616] text-white"
+                        : "border-[#e6e6e8] bg-white text-[#1a1a1a]",
+                    )}
                   >
                     <SelectValue placeholder="User type" />
                   </SelectTrigger>
                   <SelectContent
-                    className={isDark ? "border-white/20 bg-[#170337]" : ""}
+                    className={adminPopoverClass(isDark)}
                   >
                     <SelectItem value="all">All Users</SelectItem>
                     <SelectItem value="creators">Creators</SelectItem>
@@ -1206,14 +1127,17 @@ export default function AdminDashboardClient({
                   }
                 >
                   <SelectTrigger
-                    className={`min-w-[160px] h-9 text-sm ${
-                      isDark ? "border-white/20 bg-white/5 text-white" : ""
-                    }`}
+                    className={cn(
+                      "h-9 min-w-[160px] rounded-full text-sm",
+                      isDark
+                        ? "border-white/10 bg-[#161616] text-white"
+                        : "border-[#e6e6e8] bg-white text-[#1a1a1a]",
+                    )}
                   >
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent
-                    className={isDark ? "border-white/20 bg-[#170337]" : ""}
+                    className={adminPopoverClass(isDark)}
                   >
                     <SelectItem value="all">
                       {metricConfig.allFilterLabel}
@@ -1233,7 +1157,7 @@ export default function AdminDashboardClient({
               )}
             </div>
             <div className="flex items-center shrink-0">
-              <div className="flex rounded-lg border border-border overflow-hidden">
+              <div className={adminSegmentClass(isDark)}>
                 {(
                   [
                     {
@@ -1260,9 +1184,10 @@ export default function AdminDashboardClient({
           </div>
         </div>
         <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4 w-full min-w-0 overflow-visible ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
+          className={cn(
+            adminPanelClass(isDark),
+            "w-full min-w-0 overflow-visible p-4",
+          )}
         >
           {growthMetricTab === "users" ? (
             <>
@@ -1541,513 +1466,88 @@ export default function AdminDashboardClient({
       </div>
 
       {/* Contest Overview */}
-      <div className="flex items-center justify-between mt-8 mb-4">
-        <h2
-          className={`text-xl font-bold ${
-            isDark ? "text-white" : "text-gray-900"
-          }`}
-        >
-          Campaign Overview
-        </h2>
+      <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <AdminSectionTitle isDark={isDark}>Campaign Overview</AdminSectionTitle>
         <ContestTypeFilter value={contestTypeFilter as any} />
       </div>
 
-      {/* Contest Metrics */}
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {/* Total Drafts */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Drafts
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Campaigns currently in draft (not submitted for approval)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <FileText className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalDraftContests}</div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Draft campaigns
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Total Pending */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Pending
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Campaigns submitted for approval
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Eye className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalPendingContests}</div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Pending approval
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Total Approved */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Approved
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Campaigns approved and ready to publish
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <CheckCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalApprovedContests}</div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Approved campaigns
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Total Rejected */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Rejected
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Campaigns that were rejected and need changes
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <XCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalRejectedContests}</div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Rejected campaigns
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Published
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Campaigns with moderation status set to "published"
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <PlayCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalPublishedContests}</div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Published campaigns
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Upcoming */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Upcoming
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Published campaigns with lifecycle status = upcoming
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <PlayCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalUpcomingContests}</div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Scheduled campaigns
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Live (Active) */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Live
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Published campaigns currently live
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Eye className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalActiveContests}</div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Currently live
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Ended
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Published campaigns with lifecycle status = ended
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <StopCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalEndedContests}</div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Published but ended
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Completed
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Ended campaigns where payouts are processed
-                    (post_contest_status = payouts_processed)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <CheckCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalCompletedContests}</div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Payouts processed
-            </p>
-          </CardContent>
-        </div>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <SummaryMetricCard
+          title="Total Drafts"
+          value={totalDraftContests}
+          subtitle="Draft campaigns"
+          tooltip="Campaigns currently in draft (not submitted for approval)"
+          icon={FileText}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Total Pending"
+          value={totalPendingContests}
+          subtitle="Pending approval"
+          tooltip="Campaigns submitted for approval"
+          icon={Eye}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Total Approved"
+          value={totalApprovedContests}
+          subtitle="Approved campaigns"
+          tooltip="Campaigns approved and ready to publish"
+          icon={CheckCircle}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Total Rejected"
+          value={totalRejectedContests}
+          subtitle="Rejected campaigns"
+          tooltip="Campaigns that were rejected and need changes"
+          icon={XCircle}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Total Published"
+          value={totalPublishedContests}
+          subtitle="Published campaigns"
+          tooltip='Campaigns with moderation status set to "published"'
+          icon={PlayCircle}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Upcoming"
+          value={totalUpcomingContests}
+          subtitle="Scheduled campaigns"
+          tooltip="Published campaigns with lifecycle status = upcoming"
+          icon={PlayCircle}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Live"
+          value={totalActiveContests}
+          subtitle="Currently live"
+          tooltip="Published campaigns currently live"
+          icon={Eye}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Ended"
+          value={totalEndedContests}
+          subtitle="Published but ended"
+          tooltip="Published campaigns with lifecycle status = ended"
+          icon={StopCircle}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Completed"
+          value={totalCompletedContests}
+          subtitle="Payouts processed"
+          tooltip="Ended campaigns where payouts are processed (post_contest_status = payouts_processed)"
+          icon={CheckCircle}
+          isDark={isDark}
+        />
       </div>
 
-      {/* Submissions Metrics */}
       <div className="mt-8 mb-4">
-        <h2
-          className={`text-xl font-bold mb-4 ${
-            isDark ? "text-white" : "text-gray-900"
-          }`}
-        >
-          Submissions Metrics
-        </h2>
+        <AdminSectionTitle isDark={isDark}>Submissions Metrics</AdminSectionTitle>
       </div>
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <SummaryMetricCard
@@ -2100,15 +1600,8 @@ export default function AdminDashboardClient({
         />
       </div>
 
-      {/* Views Metrics */}
       <div className="mt-8 mb-4">
-        <h2
-          className={`text-xl font-bold mb-4 ${
-            isDark ? "text-white" : "text-gray-900"
-          }`}
-        >
-          Views Metrics
-        </h2>
+        <AdminSectionTitle isDark={isDark}>Views Metrics</AdminSectionTitle>
       </div>
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <SummaryMetricCard
@@ -2161,557 +1654,96 @@ export default function AdminDashboardClient({
         />
       </div>
 
-      {/* Admin actions */}
-      <div className="flex items-center justify-between mt-8 mb-4">
-        <h2
-          className={`text-xl font-bold ${
-            isDark ? "text-white" : "text-gray-900"
-          }`}
-        >
-          Actions
-        </h2>
+      <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <AdminSectionTitle isDark={isDark}>Actions</AdminSectionTitle>
         <form action="/api/jobs/process-now" method="post">
-          <Button type="submit" variant="default" className="shadow-md">
+          <Button
+            type="submit"
+            className="h-10 rounded-full bg-[#1a1a1a] px-5 text-white hover:bg-black"
+          >
             Process Payout Queue Now
           </Button>
         </form>
       </div>
 
-      {/* Money Metrics */}
-      <div className="mt-8 mb-4">
-        {/* <h2
-          className={`text-xl font-bold mb-4 ${
-            isDark ? "text-white" : "text-gray-900"
-          }`}
-        >
-          Financial Metrics
-        </h2> */}
-      </div>
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Money Paid (Published)
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Sum of completed payments for campaigns that are published
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+      <div className="mt-8 space-y-4">
+        <AdminSectionTitle isDark={isDark}>Financial Metrics</AdminSectionTitle>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <SummaryMetricCard
+            title="Money Paid (Published)"
+            value={formatCurrencyFromCents(totalMoneyPaidByPublished)}
+            subtitle="Completed payments for published campaigns"
+            tooltip="Sum of completed payments for campaigns that are published"
+            icon={DollarSign}
+            isDark={isDark}
+          />
+          <SummaryMetricCard
+            title="Money Paid (Unpublished)"
+            value={formatCurrencyFromCents(moneyPaidUnpublished)}
+            subtitle="Paid but not published"
+            tooltip="Completed payments for campaigns not yet published (draft/approved)"
+            icon={DollarSign}
+            isDark={isDark}
+          />
+          <SummaryMetricCard
+            title="Money Paid (All)"
+            value={formatCurrencyFromCents(expectedMoneyPaidAll)}
+            subtitle="All campaigns with completed payment"
+            tooltip="Sum of completed payments across all campaigns (published and unpublished)"
+            icon={DollarSign}
+            isDark={isDark}
+          />
+          <SummaryMetricCard
+            title="Total (Without Commission)"
+            value={formatCurrencyFromCents(paymentsBreakdown.withoutCommission)}
+            subtitle="Total money paid excluding commission"
+            tooltip="Sum of prize pool / CPM budget only (excludes commission)"
+            icon={DollarSign}
+            isDark={isDark}
+          />
+          <SummaryMetricCard
+            title="Total Commission"
+            value={formatCurrencyFromCents(paymentsBreakdown.commission)}
+            subtitle="Total commission paid"
+            tooltip="Commission collected from completed payments"
+            icon={DollarSign}
+            isDark={isDark}
+          />
+          <SummaryMetricCard
+            title="Total (With Commission)"
+            value={formatCurrencyFromCents(paymentsBreakdown.withCommission)}
+            subtitle="Total money paid including commission"
+            tooltip="Total payments received (includes commission)"
+            icon={DollarSign}
+            isDark={isDark}
+          />
+          <SummaryMetricCard
+            title="Projected (Without Commission)"
+            value={formatCurrencyFromCents(projectedMoneySpent)}
+            subtitle="Budgets and prize pools set"
+            tooltip="Projected prize pool / CPM budgets only (excludes commission)"
+            icon={DollarSign}
+            isDark={isDark}
+          />
+          <SummaryMetricCard
+            title="Projected (With Commission)"
+            value={formatCurrencyFromCents(projectedWithCommission)}
+            subtitle="Payments made plus unpaid budgets"
+            tooltip="Projected budgets plus estimated commission (based on payment details)"
+            icon={DollarSign}
+            isDark={isDark}
+          />
+          <SummaryMetricCard
+            title="Draft Money (Not Paid)"
+            value={formatCurrencyFromCents(totalMoneyInDraftNotPaid)}
+            subtitle="Draft campaigns only (unpaid)"
+            tooltip="Budgets/prize pools on campaigns still in draft and not yet paid"
+            icon={DollarSign}
+            isDark={isDark}
+          />
             </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(totalMoneyPaidByPublished)}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Completed payments for published campaigns
-            </p>
-          </CardContent>
         </div>
 
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Money Paid (Unpublished)
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Completed payments for campaigns not yet published
-                    (draft/approved)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(moneyPaidUnpublished)}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Paid but not published
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Money Paid (Published + Unpublished)
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Sum of completed payments across all campaigns (published and
-                    unpublished)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(expectedMoneyPaidAll)}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              All campaigns with completed payment
-            </p>
-          </CardContent>
-        </div>
-      </div>
-
-      {/* Money Breakdown (Expected payments) */}
-      <div className="mt-8 mb-4">
-        {/* <h2
-          className={`text-xl font-bold mb-4 ${
-            isDark ? "text-white" : "text-gray-900"
-          }`}
-        >
-          Payment Breakdown
-        </h2> */}
-      </div>
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total (Without Commission)
-              </h1>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Sum of prize pool / CPM budget only (excludes commission)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(paymentsBreakdown.withoutCommission)}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Total money paid excluding commission
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Commission
-              </h1>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Commission collected from completed payments
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(paymentsBreakdown.commission)}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Total commission paid
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total (With Commission)
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Total payments received (includes commission)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(paymentsBreakdown.withCommission)}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Total money paid including commission
-            </p>
-          </CardContent>
-        </div>
-      </div>
-
-      {/* Projected Breakdown */}
-      <div className="mt-8 mb-4">
-        {/* <h2
-          className={`text-xl font-bold mb-4 ${
-            isDark ? "text-white" : "text-gray-900"
-          }`}
-        >
-          Projected Breakdown
-        </h2> */}
-      </div>
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Projected (Without Commission)
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Projected prize pool / CPM budgets only (excludes
-                    commission)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(projectedMoneySpent)}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Budgets/prize pools set (paid + not-yet-paid)
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Projected (With Commission)
-              </h1>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Projected budgets plus estimated commission (based on
-                    payment details)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(projectedWithCommission)}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Includes payments made + budgets set on not-yet-paid campaigns
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Money in Draft (Not Paid)
-              </h1>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Budgets/prize pools on campaigns still in draft and not yet
-                    paid
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(totalMoneyInDraftNotPaid)}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Draft campaigns only (unpaid)
-            </p>
-          </CardContent>
-        </div>
-      </div>
     </div>
   );
 }

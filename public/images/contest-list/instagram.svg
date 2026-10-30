@@ -1,0 +1,18 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="platform/instagram" clip-path="url(#clip0_0_4)">
+<path id="Vector" d="M9.33333 0.875H4.66667C2.57259 0.875 0.875 2.57259 0.875 4.66667V9.33333C0.875 11.4274 2.57259 13.125 4.66667 13.125H9.33333C11.4274 13.125 13.125 11.4274 13.125 9.33333V4.66667C13.125 2.57259 11.4274 0.875 9.33333 0.875Z" fill="url(#paint0_linear_0_4)"/>
+<path id="Vector_2" d="M5.6 3.5H8.4C9.5598 3.5 10.5 4.4402 10.5 5.6V8.4C10.5 9.5598 9.5598 10.5 8.4 10.5H5.6C4.4402 10.5 3.5 9.5598 3.5 8.4V5.6C3.5 4.4402 4.4402 3.5 5.6 3.5Z" stroke-width="0.991667" stroke="white"/>
+<path id="Vector_3" d="M8.63333 7C8.63333 7.90207 7.90207 8.63333 7 8.63333C6.09794 8.63333 5.36667 7.90207 5.36667 7C5.36667 6.09794 6.09794 5.36667 7 5.36667C7.90207 5.36667 8.63333 6.09794 8.63333 7Z" stroke-width="0.991667" stroke="white"/>
+<path id="Vector_4" d="M9.33333 5.19167C9.62328 5.19167 9.85833 4.95662 9.85833 4.66667C9.85833 4.37672 9.62328 4.14167 9.33333 4.14167C9.04338 4.14167 8.80833 4.37672 8.80833 4.66667C8.80833 4.95662 9.04338 5.19167 9.33333 5.19167Z" fill="white"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_4" x1="0.875" y1="13.125" x2="13.125" y2="0.875" gradientUnits="userSpaceOnUse">
+<stop stop-color="#F59E0B"/>
+<stop offset="0.5" stop-color="#DB2777"/>
+<stop offset="1" stop-color="#262626"/>
+</linearGradient>
+<clipPath id="clip0_0_4">
+<rect width="14" height="14" fill="white"/>
+</clipPath>
+</defs>
+</svg>

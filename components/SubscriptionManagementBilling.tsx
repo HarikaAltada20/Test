@@ -14,7 +14,6 @@ import {
   Star,
   Zap,
   Trophy,
-  Calendar,
   ExternalLink,
   CreditCard,
   Check,
@@ -27,8 +26,8 @@ import {
   Info,
   ArrowUp,
   ArrowDown,
-  CalendarDays,
-  DollarSign,
+  ArrowRight,
+  Gem,
   X,
 } from "lucide-react";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
@@ -515,18 +514,18 @@ export const SubscriptionManagementBilling = memo(
       return `${plan.trialDays}-day free trial`;
     };
 
-    const getPlanIcon = (planName: string) => {
+    const getPlanIcon = (planName: string, className = "h-6 w-6") => {
       switch (planName) {
         case "EXPLORER":
-          return <Gift className="h-6 w-6" />;
+          return <Gift className={className} />;
         case "STARTER":
-          return <Star className="h-6 w-6" />;
+          return <Star className={className} />;
         case "BUILDER":
-          return <Zap className="h-6 w-6" />;
+          return <Zap className={className} />;
         case "CHAMPION":
-          return <Crown className="h-6 w-6" />;
+          return <Crown className={className} />;
         default:
-          return <Trophy className="h-6 w-6" />;
+          return <Trophy className={className} />;
       }
     };
 
@@ -552,6 +551,55 @@ export const SubscriptionManagementBilling = memo(
       features.push(`Up to ${plan.features.maxWinnersPerContest} winners`);
       features.push(`${plan.features.analytics} analytics`);
       return features;
+    };
+
+    const getDetailedPlanFeatures = (plan: SubscriptionPlan) => {
+      const contestTypes = plan.features.contestTypes || [];
+      const contestTypeLabel =
+        contestTypes.includes("leaderboard") && contestTypes.includes("cpm")
+          ? "Leaderboard & CPM"
+          : contestTypes.includes("leaderboard")
+            ? "Leaderboard only"
+            : contestTypes.join(" & ") || "Contests";
+
+      const supportLabel =
+        plan.features.support === "premium"
+          ? "Premium support"
+          : plan.features.support === "priority"
+            ? "Priority support"
+            : "Standard support";
+
+      const campaigns =
+        plan.features.maxActiveContests === 1
+          ? "1 live campaign"
+          : `${plan.features.maxActiveContests} live campaigns`;
+
+      const minBudget = `$${Math.round(plan.features.minContestBudget / 100)}`;
+
+      return [
+        { label: campaigns, highlight: true },
+        { label: `Min. budget ${minBudget}` },
+        { label: `Up to ${plan.features.maxWinnersPerContest} winners` },
+        { label: `${plan.features.commissionPercentage}% commission` },
+        { label: contestTypeLabel },
+        { label: supportLabel },
+      ];
+    };
+
+    const getPlanActionLabel = (
+      plan: SubscriptionPlan,
+      isCurrentPlan: boolean,
+    ) => {
+      if (isCurrentPlan) return "Your active plan";
+      if (!currentPlan && !currentSubscription) {
+        if (plan.price === 0) return "Start Free";
+        if (isEligibleForTrial(plan)) return "Start Free Trial";
+        return "Subscribe";
+      }
+      if (isOnFreePlan() && isEligibleForTrial(plan)) return "Start Free Trial";
+      if (currentPlan && plan.price > currentPlan.price) return "Upgrade";
+      if (currentPlan && plan.price < currentPlan.price) return "Downgrade";
+      return "Select Plan";
     };
 
     const formatBillingPeriod = (startDate: string, endDate: string) => {
@@ -589,39 +637,38 @@ export const SubscriptionManagementBilling = memo(
     };
     const isDark = mode === "dark";
 
+    const statusBadgeClass =
+      "rounded-full border-0 px-2.5 py-0.5 text-sm font-medium shadow-none";
+
     const getStatusBadge = (subscription: UserSubscription) => {
       if (subscription.status === "active") {
         if (subscription.cancel_at_period_end) {
-          // Check if there are active scheduled changes to show upgrade/downgrade status
           const activeChanges = scheduledChanges.filter(
-            (change) => change.status !== "canceled"
+            (change) => change.status !== "canceled",
           );
           if (activeChanges.length > 0) {
-            const change = activeChanges[0]; // Get the first active scheduled change
+            const change = activeChanges[0];
             return (
               <Badge
-                className={
-                  change.type === "upgrade"
-                    ? isDark
-                      ? "border bg-[#7F39EC] rounded-lg px-4 py-1.5 text-md text-white hover:bg-[#4A00BE]"
-                      : "border bg-[#4A00BE] rounded-lg px-4 py-1.5 text-md text-white hover:bg-[#4A00BE]"
-                    : isDark
-                    ? "border bg-[#7F39EC] rounded-lg px-4 py-1.5 text-md text-white hover:bg-[#4A00BE]"
-                    : "border bg-[#4A00BE] rounded-lg px-4 py-1.5 text-md text-white hover:bg-[#4A00BE]"
-                }
+                className={cn(
+                  statusBadgeClass,
+                  isDark
+                    ? "bg-white/10 text-slate-200 hover:bg-white/10"
+                    : "bg-[#F7F7F8] text-[#55555F] hover:bg-[#F7F7F8]",
+                )}
               >
                 {change.type === "upgrade" ? "Upgrading" : "Downgrading"}
               </Badge>
             );
           }
-          // If all scheduled changes are canceled or no scheduled changes, show "Canceling" since subscription will end
           return (
             <Badge
-              className={
+              className={cn(
+                statusBadgeClass,
                 isDark
-                  ? "bg-red-900 text-red-200 hover:bg-red-900"
-                  : "bg-red-100 text-red-800 hover:bg-red-100"
-              }
+                  ? "bg-red-900/50 text-red-200 hover:bg-red-900/50"
+                  : "bg-red-50 text-red-700 hover:bg-red-50",
+              )}
             >
               Canceling
             </Badge>
@@ -629,11 +676,12 @@ export const SubscriptionManagementBilling = memo(
         }
         return (
           <Badge
-            className={
+            className={cn(
+              statusBadgeClass,
               isDark
-                ? "border bg-[#7F39EC] rounded-lg px-4 py-1.5 text-md text-white hover:bg-[#4A00BE]"
-                : "border bg-[#4A00BE] rounded-lg px-4 py-1.5 text-md text-white hover:bg-[#4A00BE]"
-            }
+                ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/15"
+                : "bg-[#57D3034F] text-[#2e7d32] hover:bg-[#57D3034F]",
+            )}
           >
             Active
           </Badge>
@@ -641,11 +689,12 @@ export const SubscriptionManagementBilling = memo(
       }
       return (
         <Badge
-          className={
+          className={cn(
+            statusBadgeClass,
             isDark
               ? "bg-red-900 text-red-200 hover:bg-red-900"
-              : "bg-red-100 text-red-800 hover:bg-red-100"
-          }
+              : "bg-red-100 text-red-800 hover:bg-red-100",
+          )}
         >
           {subscription.status}
         </Badge>
@@ -722,187 +771,209 @@ export const SubscriptionManagementBilling = memo(
       );
     }
 
+    const mutedLabel = isDark ? "text-white/50" : "text-[#66666F]";
+    const strongText = isDark ? "text-white" : "text-[#171717]";
+    const softCard = cn(
+      "rounded-2xl border",
+      isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white",
+    );
+    const divider = isDark ? "border-white/10" : "border-neutral-200";
+
     return (
       <div className="space-y-8">
+        {/* Section header */}
+        <div>
+          <h2
+            className={cn(
+              "text-[28px] font-semibold tracking-tight",
+              strongText,
+            )}
+          >
+            Subscription
+          </h2>
+          <p className={cn("mt-1.5 text-md", mutedLabel)}>
+            Manage your plan, billing cycle, and payment methods.
+          </p>
+        </div>
+
         {/* Current Subscription Status */}
         {currentSubscription && currentPlan && (
-          <div>
-            <div className="pl-1 mb-3">
-              <CardTitle className="flex items-center gap-2 text-2xl">
-                {/* <div className="border rounded-3xl p-2">
-              <Shield className="h-6 w-6 text-black" />
-              </div> */}
-                Current Subscription
-              </CardTitle>
-            </div>
-            <div className="p-1 space-y-6">
-              {/* Plan Details */}
-              <div className="border border-2 p-5 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div
-                    className={`p-4 rounded-xl bg-gradient-to-r ${getPlanColor(
-                      currentPlan.name
-                    )} text-white shadow-lg`}
-                  >
-                    {getPlanIcon(currentPlan.name)}
-                  </div>
-                  <div>
-                    <h3
-                      className={cn(
-                        "text-xl font-bold",
-                        isDark ? "text-white" : "text-black"
-                      )}
-                    >
-                      {currentPlan.displayName || currentPlan.name}
-                    </h3>
-                    <p
-                      className={cn(
-                        "text-lg font-medium",
-                        isDark ? "text-purple-400" : "text-black"
-                      )}
-                    >
+          <div className="mt-2 space-y-5">
+              <div className={cn("overflow-hidden", softCard)}>
+                {/* Header row */}
+                <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <h3
+                        className={cn(
+                          "text-2xl font-semibold tracking-tight sm:text-3xl",
+                          strongText,
+                        )}
+                      >
+                        {currentPlan.displayName || currentPlan.name}
+                      </h3>
+                      {getStatusBadge(currentSubscription)}
+                    </div>
+                    <p className={cn("mt-2 text-lg", mutedLabel)}>
                       {formatCurrencyFromCents(currentPlan.price)}
-                      {currentPlan.price > 0 ? "/month" : ""}
+                      {currentPlan.price > 0 ? "/mo" : ""}
+                      {billingDetails
+                        ? ``
+                        : currentPlan.price > 0
+                          ? " · billed monthly"
+                          : " · free forever"}
                     </p>
                   </div>
-                </div>
 
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  {getStatusBadge(currentSubscription)}
                   {currentPlan.price > 0 && (
                     <Button
+                      type="button"
                       variant="outline"
                       onClick={handleCustomerPortal}
                       disabled={isProcessing}
                       className={cn(
-                        "border text-md text-white transition-colors",
-                        isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]"
+                        "h-11 w-full shrink-0 rounded-full px-5 text-base font-medium shadow-none sm:w-auto",
+                        isDark
+                          ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                          : "border-neutral-300 bg-white text-[#171717] hover:bg-neutral-50",
                       )}
                     >
                       {isProcessing ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                       ) : (
-                        <ExternalLink className="h-4 w-4" />
+                        <ExternalLink className="mr-1.5 h-4 w-4" />
                       )}
                       Manage Billing
                     </Button>
                   )}
                 </div>
-              </div>
 
-              {/* Billing Period Information */}
-              {billingDetails && (
-                <div className="px-2 space-y-4">
-                  <div className="flex items-center gap-2">
-                    {/* <div className="border rounded-3xl p-2">
-                  <CalendarDays className="h-5 w-5 text-white " />
-                  </div> */}
-                    <span
-                      className={cn(
-                        "font-semibold  text-lg",
-                        isDark ? "text-white" : "text-black"
-                      )}
-                    >
-                      Billing Period
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div
-                      className={cn(
-                        "rounded-2xl p-4 shadow-sm border",
-                        isDark
-                          ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                          : "bg-[#D9C0FF26] border-[#7F39EC] text-black"
-                      )}
-                    >
-                      <p className="text-sm  mb-1">Current Period</p>
-                      <p className="font-semibold ">
+                {/* Billing meta */}
+                {billingDetails && (
+                  <div
+                    className={cn(
+                      "grid grid-cols-1 gap-4 border-t px-5 py-5 sm:grid-cols-3 sm:px-6",
+                      divider,
+                    )}
+                  >
+                    <div>
+                      <p className={cn("text-sm", mutedLabel)}>Current period</p>
+                      <p
+                        className={cn(
+                          "mt-1.5 text-base font-semibold leading-snug",
+                          strongText,
+                        )}
+                      >
                         {formatDateRange(
                           billingDetails.currentPeriodStart,
-                          billingDetails.currentPeriodEnd
+                          billingDetails.currentPeriodEnd,
                         )}
                       </p>
                     </div>
-                    <div
-                      className={cn(
-                        "rounded-2xl p-4 shadow-sm border",
-                        isDark
-                          ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                          : "bg-[#D9C0FF26] border-[#7F39EC] text-black"
-                      )}
-                    >
-                      <p className="text-sm  mb-1">Next Billing Date</p>
-                      <p className="font-semibold">
+                    <div>
+                      <p className={cn("text-sm", mutedLabel)}>Next billing</p>
+                      <p
+                        className={cn("mt-1.5 text-base font-semibold", strongText)}
+                      >
                         {formatDate(billingDetails.nextBillingDate)}
                       </p>
                     </div>
-                    <div
-                      className={cn(
-                        "rounded-2xl p-4 shadow-sm border",
-                        isDark
-                          ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                          : "bg-[#D9C0FF26] border-[#7F39EC] text-black"
-                      )}
-                    >
-                      <p className="text-sm  mb-1">Days Until Next Billing</p>
-                      <p className="font-semibold">
+                    <div>
+                      <p className={cn("text-sm", mutedLabel)}>
+                        Days remaining
+                      </p>
+                      <p
+                        className={cn(
+                          "mt-1.5 text-base font-semibold tabular-nums",
+                          strongText,
+                        )}
+                      >
                         {billingDetails.daysUntilNextBilling} days
                       </p>
                     </div>
                   </div>
+                )}
 
-                  {/* Plan Status Information */}
-                  {billingDetails.cancelAtPeriodEnd &&
-                    (scheduledChanges.length > 0 &&
-                    scheduledChanges.some(
-                      (change) => change.status !== "canceled"
-                    ) ? (
-                      // Show plan change information when there are active scheduled changes
-                      <Alert className="border-[#7F39EC] bg-[#D9C0FF26]">
-                        <Info className="h-4 w-4 text-black" />
-                        <AlertDescription>
-                          <strong>Plan Change Scheduled:</strong> Your current
-                          plan will end on{" "}
-                          {formatDate(billingDetails.nextBillingDate)} and
-                          you'll be{" "}
-                          {scheduledChanges.find(
-                            (change) => change.status !== "canceled"
-                          )?.type === "upgrade"
-                            ? "upgraded to a better plan"
-                            : "downgraded to a different plan"}
-                          . You'll continue to have access to all current
-                          features until then.
-                        </AlertDescription>
-                      </Alert>
-                    ) : (
-                      // Show cancellation warning when canceled but no active scheduled changes
-                      <Alert
-                        className={cn(
-                          "border",
-                          isDark
-                            ? "border-red-600/40 bg-red-900/30 text-red-100"
-                            : "border-red-200 bg-red-50 text-red-900"
-                        )}
-                      >
-                        <AlertTriangle
-                          className={cn(
-                            "h-4 w-4",
-                            isDark ? "text-red-300" : "text-red-600"
-                          )}
+                {/* Features */}
+                <div className={cn("border-t px-5 py-5 sm:px-6", divider)}>
+                  <p className={cn("mb-3.5 text-sm font-medium", mutedLabel)}>
+                    Included features
+                  </p>
+                  <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
+                    {getPlanFeatures(currentPlan).map((feature, index) => (
+                      <div key={index} className="flex items-center gap-2.5">
+                        <Check
+                          className="h-5 w-5 shrink-0 text-[#57D303]"
+                          strokeWidth={2.5}
                         />
-                        <AlertDescription
-                          className={cn(isDark ? "text-red-100" : "text-red-900")}
-                        >
-                          <strong>Subscription Ending:</strong> Your
-                          subscription will be canceled on{" "}
-                          {formatDate(billingDetails.nextBillingDate)}. You'll
-                          lose access to premium features after this date.
-                        </AlertDescription>
-                      </Alert>
+                        <span className={cn("text-base", strongText)}>
+                          {feature}
+                        </span>
+                      </div>
                     ))}
+                  </div>
                 </div>
-              )}
+              </div>
+
+              {/* Plan status alerts */}
+              {billingDetails?.cancelAtPeriodEnd &&
+                (scheduledChanges.length > 0 &&
+                scheduledChanges.some(
+                  (change) => change.status !== "canceled",
+                ) ? (
+                  <Alert
+                    className={cn(
+                      "rounded-2xl border",
+                      isDark
+                        ? "border-white/10 bg-[#161616] text-white"
+                        : "border-[#ECEDEF] bg-[#F7F7F8] text-[#171717]",
+                    )}
+                  >
+                    <Info
+                      className={cn(
+                        "h-4 w-4",
+                        isDark ? "text-slate-300" : "text-[#55555F]",
+                      )}
+                    />
+                    <AlertDescription>
+                      <strong>Plan Change Scheduled:</strong> Your current plan
+                      will end on{" "}
+                      {formatDate(billingDetails.nextBillingDate)} and you'll
+                      be{" "}
+                      {scheduledChanges.find(
+                        (change) => change.status !== "canceled",
+                      )?.type === "upgrade"
+                        ? "upgraded to a better plan"
+                        : "downgraded to a different plan"}
+                      . You'll continue to have access to all current features
+                      until then.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <Alert
+                    className={cn(
+                      "rounded-2xl border",
+                      isDark
+                        ? "border-red-600/40 bg-red-900/30 text-red-100"
+                        : "border-red-200 bg-red-50 text-red-900",
+                    )}
+                  >
+                    <AlertTriangle
+                      className={cn(
+                        "h-4 w-4",
+                        isDark ? "text-red-300" : "text-red-600",
+                      )}
+                    />
+                    <AlertDescription
+                      className={cn(isDark ? "text-red-100" : "text-red-900")}
+                    >
+                      <strong>Subscription Ending:</strong> Your subscription
+                      will be canceled on{" "}
+                      {formatDate(billingDetails.nextBillingDate)}. You'll lose
+                      access to premium features after this date.
+                    </AlertDescription>
+                  </Alert>
+                ))}
 
               {/* Scheduled Changes - Only show if there are actual changes */}
               {scheduledChanges.length > 0 &&
@@ -960,7 +1031,7 @@ export const SubscriptionManagementBilling = memo(
                               className={cn(
                                 "p-5 rounded-xl border",
                                 isDark
-                                  ? "bg-[linear-gradient(180deg,rgba(201,167,255,0.1225)_2%,rgba(201,167,255,0.03)_100%)] border-gray-700"
+                                  ? "border-white/10 bg-[#161616]"
                                   : "bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)] border-gray-300"
                               )}>
                                 <h4 className={cn(
@@ -1044,7 +1115,7 @@ export const SubscriptionManagementBilling = memo(
                               className={cn(
                                 "p-5 rounded-xl border",
                                 isDark
-                                  ? "bg-[linear-gradient(180deg,rgba(201,167,255,0.1225)_2%,rgba(201,167,255,0.03)_100%)] border-gray-700"
+                                  ? "border-white/10 bg-[#161616]"
                                   : "bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)] border-gray-300"
                               )}>
                                 <h4 className={cn(
@@ -1123,7 +1194,7 @@ export const SubscriptionManagementBilling = memo(
                               className={cn(
                                 "border rounded-lg py-5 px-4",
                                 isDark
-                                  ? "border-gray-600"
+                                  ? "border-white/10"
                                   : "border-gray-300"
                               )}>
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -1240,38 +1311,6 @@ export const SubscriptionManagementBilling = memo(
                   </div>
                 )}
 
-              {/* Plan Features */}
-              <div className="px-2 space-y-5">
-                <h4
-                  className={cn(
-                    "font-medium text-lg text-black",
-                    isDark ? "text-white" : "text-black"
-                  )}
-                >
-                  Current Plan Features
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {getPlanFeatures(currentPlan).map((feature, index) => (
-                    <div
-                      key={index}
-                      className={cn(
-                        "border rounded-full p-3 flex justify-center items-center gap-2",
-                        isDark
-                          ? "border-gray-600 text-white"
-                          : "border-gray-300 text-black"
-                      )}
-                    >
-                      <Check
-                        className="h-6 w-6 text-purple-500"
-                        strokeWidth={3}
-                      />
-
-                      <span className="text-lg">{feature}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               {/* Next Billing Cycle Info - Only show when plan actually continues (not canceled) */}
               {billingDetails?.cancelAtPeriodEnd &&
                 scheduledChanges.length > 0 &&
@@ -1295,7 +1334,7 @@ export const SubscriptionManagementBilling = memo(
                     className={cn(
                       "rounded-lg p-4 border",
                       isDark
-                        ? "border-gray-600"
+                        ? "border-white/10"
                         : "border-gray-300"
                     )}>
                       <div className="flex items-center gap-3">
@@ -1391,7 +1430,7 @@ export const SubscriptionManagementBilling = memo(
                     className={cn(
                       "border rounded-lg py-4 px-5",
                       isDark
-                        ? "border-gray-600"
+                        ? "border-white/10"
                         : "border-gray-400"
                     )}>
                       <div className="flex items-center gap-3">
@@ -1443,31 +1482,29 @@ export const SubscriptionManagementBilling = memo(
                     </div>
                   </div>
                 )}
-            </div>
           </div>
         )}
 
         {/* Available Plans */}
-        <div className="space-y-6">
-          {/* <h2 className="text-2xl font-bold mb-2">Available Plans</h2>
-          <p className="text-gray-600">
-            {!currentPlan && !currentSubscription
-              ? "Welcome! Start with our free plan or choose a paid plan that fits your needs"
-              : "Choose the plan that best fits your needs"}
-          </p> */}
-          <div className="pt-10 px-3">
+        <div
+          className={cn(
+            "space-y-6",
+            currentSubscription && currentPlan ? "mt-10" : "mt-8",
+          )}
+        >
+          <div>
             <h2
               className={cn(
-                "text-lg md:text-2xl font-semibold text-black transition-all duration-700 mb-1 ease-out transform",
-                isDark ? "text-white" : "text-black"
+                "mb-1 text-lg font-semibold md:text-xl",
+                isDark ? "text-white" : "text-[#171717]",
               )}
             >
-              Available Plans
+              Available plans
             </h2>
             <p
               className={cn(
-                "text-md md:text-lg text-black mb-10 leading-relaxed",
-                isDark ? "text-white" : "text-black"
+                "text-md leading-relaxed",
+                isDark ? "text-slate-200" : "text-[#66666F]",
               )}
             >
               {!currentPlan && !currentSubscription
@@ -1475,223 +1512,237 @@ export const SubscriptionManagementBilling = memo(
                 : "Choose the plan that best fits your needs"}
             </p>
           </div>
-          {/* New User Info */}
+
           {!currentPlan && !currentSubscription && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Info className="h-5 w-5 text-blue-600" />
-                <span className="font-semibold text-blue-900">
+            <div
+              className={cn(
+                "rounded-xl border p-4",
+                isDark
+                  ? "border-white/10 bg-[#0e0e0e]"
+                  : "border-neutral-200 bg-[#f8f8f9]",
+              )}
+            >
+              <div className="mb-2 flex items-center gap-2">
+                <Info
+                  className={cn(
+                    "h-5 w-5",
+                    isDark ? "text-slate-200" : "text-[#55555F]",
+                  )}
+                />
+                <span
+                  className={cn(
+                    "font-semibold",
+                    isDark ? "text-white" : "text-[#171717]",
+                  )}
+                >
                   Getting Started
                 </span>
               </div>
-              <p className="text-blue-800 text-sm">
+              <p
+                className={cn(
+                  "text-sm",
+                  isDark ? "text-slate-200" : "text-[#55555F]",
+                )}
+              >
                 New to our platform? Start with the{" "}
-                <strong>Explorer Plan (Free)</strong> to test our features, or
+                <strong>Explorer Plan ($0.00)</strong> to test our features, or
                 choose a paid plan to unlock more contests and better commission
                 rates.
               </p>
             </div>
           )}
 
-          <div className="px-2 pb-20 mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 justify-items-center">
+          <ul className="grid list-none grid-cols-1 gap-4 pt-[26px] sm:grid-cols-2 sm:gap-x-4 sm:gap-y-10 xl:grid-cols-4">
             {subscriptionPlans.map((plan) => {
               const isCurrentPlan = currentPlan?.id === plan.id;
               const isProcessingThisPlan = processingPlanId === plan.id;
-
+              const isMostPopular = plan.name === "BUILDER";
+              const actionLabel = getPlanActionLabel(plan, isCurrentPlan);
+              const detailedFeatures = getDetailedPlanFeatures(plan);
+              const leadFeature = detailedFeatures.find((f) => f.highlight);
+              const listFeatures = detailedFeatures.filter((f) => !f.highlight);
               return (
-                <div
+                <li
                   key={plan.id}
-                  className={`relative flex flex-col rounded-3xl w-full max-w-sm mx-auto p-6 hover:shadow-lg hover:scale-105 transition
-                                     ${
-                                       isCurrentPlan
-                                         ? isDark
-                                           ? "border-2 border-[#C9A7FF] shadow-xl"
-                                           : "border-2 border-purple-500 shadow-xl"
-                                         : isDark
-                                         ? "border border-[#838383] shadow-xl"
-                                         : "border border-[#838383] shadow-xl"
-                                     } ${
+                  className={cn(
+                    "relative flex w-full flex-col gap-[20px] rounded-[22px] border px-4 pb-4 pt-[22px]",
+                    isMostPopular
+                      ? "rounded-t-none border-2 border-[#8b5cf6]"
+                      : isCurrentPlan
+                        ? isDark
+                          ? "border-[#22c55e]/50"
+                          : "border-[rgb(74_222_128_/_0.35)]"
+                        : isDark
+                          ? "border-white/[0.08]"
+                          : "border-neutral-300",
                     isDark
-                      ? "bg-[linear-gradient(180deg,rgba(201,167,255,0.1225)_2%,rgba(201,167,255,0.03)_100%)]"
-                      : "bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)]"
-                  }`}
+                      ? isCurrentPlan && !isMostPopular
+                        ? "bg-[#141414] shadow-[inset_0_0_28px_rgba(34,197,94,0.12),inset_0_1px_0_rgba(255,255,255,0.06)]"
+                        : "bg-[#141414] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                      : "bg-[linear-gradient(0deg,#f3f4f6_0%,#ffffff_100%)] shadow-sm",
+                  )}
                 >
-                  {isCurrentPlan && (
-                    // <div className="absolute -top-3 right-4">
-                    //     <Badge className="bg-green-600 text-white">Current Plan</Badge>
-                    // </div>
-                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                      <Badge
-                        className={
-                          isDark
-                            ? "bg-purple-600 text-white"
-                            : "bg-purple-600 text-white"
-                        }
-                      >
-                        Current Plan
-                      </Badge>
-                    </div>
+                  {isMostPopular && (
+                    <span
+                      className={cn(
+                        "absolute -left-0.5 -right-0.5 bottom-full rounded-t-[14px] py-[5px] pb-1.5 text-center text-[11.5px] font-semibold uppercase tracking-[0.04em] text-white",
+                        "bg-[#7c3aed] shadow-[inset_2px_2px_5px_rgb(255_255_255_/_0.35),inset_-1px_-1px_1px_rgb(0_0_0_/_0.23)]",
+                      )}
+                    >
+                      Most popular
+                    </span>
                   )}
 
-                  <div className="text-center mt-6 space-y-3">
-                    <div
-                      className={`mx-auto p-3 rounded-xl bg-gradient-to-r ${getPlanColor(
-                        plan.name
-                      )} text-white w-fit`}
-                    >
-                      {getPlanIcon(plan.name)}
-                    </div>
-                    <CardTitle
+                  <div className="flex flex-col items-center gap-1.5 text-center">
+                    <h3
                       className={cn(
-                        "text-xl",
-                        isDark ? "text-white" : "text-black"
+                        "mb-1.5 rounded-full border px-3.5 py-[7px] text-[11.5px] font-semibold leading-snug",
+                        isDark
+                          ? "border-white/10 bg-[linear-gradient(90deg,#212121,#131313)] text-white shadow-[inset_0_-4px_8px_rgba(255,255,255,0.08)]"
+                          : "border-neutral-200 bg-[linear-gradient(90deg,#f4f4f5,#ffffff)] text-[#171717] shadow-[inset_0_-4px_8px_rgb(0_0_0_/_0.04)]",
                       )}
                     >
                       {plan.displayName || plan.name}
-                    </CardTitle>
-                    <div
+                    </h3>
+
+                    <p
                       className={cn(
-                        "text-3xl font-bold",
-                        isDark ? "text-white" : "text-black"
+                        "m-0 flex items-baseline justify-center gap-[3px] text-[26px] font-semibold leading-tight tracking-[-0.02em]",
+                        isDark ? "text-white" : "text-[#171717]",
                       )}
                     >
                       {formatCurrencyFromCents(plan.price)}
-                      <span
+                      <small
                         className={cn(
-                          "text-sm font-normal",
-                          isDark ? "text-gray-300" : "text-gray-600"
+                          "text-[13px] font-medium tracking-normal",
+                          isDark ? "text-white/50" : "text-[#737373]",
                         )}
                       >
-                        {plan.price > 0 ? "/month" : ""}
-                      </span>
-                    </div>
+                        /month
+                      </small>
+                    </p>
+
                     {getTrialDisplayText(plan) && (
-                      <div className={cn(
-                        "mt-2 px-3 py-1 rounded-full text-sm font-medium",
-                        isDark ? "bg-green-900 text-green-200" : "bg-green-100 text-green-800"
-                      )}>
+                      <p className="m-0 text-[12px] font-medium text-[#16a34a]">
                         {getTrialDisplayText(plan)}
-                      </div>
+                      </p>
                     )}
+
                     <p
                       className={cn(
-                        "text-md py-3 text-black",
-                        isDark ? "text-white" : "text-black"
+                        "m-0 max-w-[240px] text-[13px] leading-[1.65]",
+                        isDark ? "text-white/50" : "text-[#55555F]",
                       )}
                     >
                       {plan.features.description}
                     </p>
                   </div>
 
-                  <div className="flex-1 mt-4 flex flex-col">
-                    <div className="space-y-5 mb-6">
-                      {getPlanFeatures(plan).map((feature, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <Check
-                            className={cn(
-                              "h-4 w-4 ",
-                              isDark ? "text-purple-400" : "text-purple-500"
-                            )}
-                          />
-                          <span
-                            className={cn(
-                              "text-md",
-                              isDark ? "text-white" : "text-black"
-                            )}
-                          >
-                            {feature}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                  <div
+                    className={cn(
+                      "mx-[-16px] h-px",
+                      isDark
+                        ? "bg-white/10"
+                        : "bg-[linear-gradient(90deg,transparent,#d4d4d8_50%,transparent)]",
+                    )}
+                    aria-hidden="true"
+                  />
 
-                    <div className="pt-3 mt-auto">
-                      {isCurrentPlan ? (
-                        <Button
-                          variant="outline"
-                          className={`w-full w-full rounded-3xl mt-8 relative font-bold px-8 py-5 text-lg overflow-hidden ${
-                            isDark ? "text-white bg-[#7F39EC]" : "text-black"
-                          }`}
-                          disabled
-                        >
-                          Current Plan
-                        </Button>
-                      ) : (
-                        <Button
-                          onClick={() => handleUpgradeClick(plan)}
-                          disabled={isProcessing}
-                          className="w-full rounded-3xl mt-8 relative text-white text-white font-bold px-8 py-5 text-lg overflow-hidden"
-                          style={{
-                            background:
-                              "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-                          }}
-                          variant={
-                            !currentPlan &&
-                            !currentSubscription &&
-                            plan.price === 0
-                              ? "default"
-                              : "default"
-                          }
-                        >
-                          {isProcessingThisPlan ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Processing...
-                            </>
-                          ) : (
-                            <>
-                              {/* New users without subscription */}
-                              {!currentPlan && !currentSubscription ? (
-                                plan.price === 0 ? (
-                                  <>
-                                    <Check className="h-4 w-4 mr-2" />
-                                    Start Free
-                                  </>
-                                ) : isEligibleForTrial(plan) ? (
-                                  <>
-                                    <Gift className="h-4 w-4 mr-2" />
-                                    Start Free Trial
-                                  </>
-                                ) : (
-                                  <>
-                                    <CreditCard className="h-4 w-4 mr-2" />
-                                    Subscribe
-                                  </>
-                                )
-                              ) : isOnFreePlan() && isEligibleForTrial(plan) ? (
-                                // Users on free plans (including Explorer) eligible for trials
-                                <>
-                                  <Gift className="h-4 w-4 mr-2" />
-                                  Start Free Trial
-                                </>
-                              ) : currentPlan &&
-                                plan.price > currentPlan.price ? (
-                                <>
-                                  <TrendingUp className="h-4 w-4" />
-                                  Upgrade
-                                </>
-                              ) : currentPlan &&
-                                plan.price < currentPlan.price ? (
-                                <>
-                                  <ArrowDown className="h-4 w-4 mr-2" />
-                                  Downgrade
-                                </>
-                              ) : (
-                                <>
-                                  <Check className="h-4 w-4 mr-2" />
-                                  Select Plan
-                                </>
-                              )}
-                            </>
-                          )}
-                        </Button>
+                  {leadFeature && (
+                    <p
+                      className={cn(
+                        "m-0 inline-flex items-center gap-[9px] text-[16px] font-medium",
+                        isDark ? "text-white" : "text-[#171717]",
                       )}
-                    </div>
+                    >
+                      <Gem
+                        className={cn(
+                          "h-4 w-4 shrink-0",
+                          isDark ? "text-white" : "text-[#55555F]",
+                        )}
+                        strokeWidth={1.75}
+                        aria-hidden="true"
+                      />
+                      {leadFeature.label}
+                    </p>
+                  )}
+
+                  <ul
+                    className={cn(
+                      "m-0 flex flex-1 list-none flex-col gap-5 p-0 text-[14px]",
+                      isDark ? "text-white/70" : "text-[#55555F]",
+                    )}
+                  >
+                    {listFeatures.map((feature) => (
+                      <li
+                        key={feature.label}
+                        className="flex items-center gap-2"
+                      >
+                        <span
+                          className={cn(
+                            "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full",
+                            isDark
+                              ? "bg-[#22c55e] text-[#052e16]"
+                              : "bg-[rgb(34_197_94_/_0.15)] text-[#16a34a]",
+                          )}
+                          aria-hidden="true"
+                        >
+                          <Check className="h-[11px] w-[11px]" strokeWidth={3} />
+                        </span>
+                        {feature.label}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <div className="mt-auto flex flex-col gap-2">
+                    {isCurrentPlan ? (
+                      <span
+                        className={cn(
+                          "mt-1 inline-flex h-[42px] w-full items-center justify-center rounded-full text-sm font-semibold",
+                          isDark
+                            ? "bg-[#22c55e] text-[#052e16]"
+                            : "border border-[rgb(74_222_128_/_0.3)] bg-[rgb(34_197_94_/_0.12)] text-[#16a34a]",
+                        )}
+                      >
+                        Your active plan
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleUpgradeClick(plan)}
+                        disabled={isProcessing}
+                        className={cn(
+                          "group mt-1 inline-flex h-[42px] w-full items-center justify-center gap-1.5 rounded-full border text-sm font-semibold transition-[border-color,transform,background] duration-150 disabled:opacity-60 active:scale-[0.98]",
+                          isDark
+                            ? "border-white/10 bg-[linear-gradient(180deg,#2a2a2a_0%,#121212_100%)] text-white hover:brightness-110"
+                            : "border-neutral-300 bg-[linear-gradient(0deg,#f3f4f6,#ffffff)] text-[#171717] hover:bg-[linear-gradient(0deg,#ffffff,#f4f4f5)]",
+                        )}
+                        aria-label={`${actionLabel} to ${plan.displayName || plan.name}`}
+                      >
+                        {isProcessingThisPlan ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            {actionLabel}
+                            <ArrowRight
+                              className="h-3.5 w-3.5 transition-transform duration-150 group-hover:translate-x-0.5"
+                              strokeWidth={2}
+                              aria-hidden="true"
+                            />
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
-                </div>
+                </li>
               );
             })}
-          </div>
+          </ul>
+
+       
         </div>
 
         {/* Upgrade Modal */}

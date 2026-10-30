@@ -157,10 +157,10 @@ function Section({
   return (
     <div
       className={cn(
-        "rounded-lg border p-3 space-y-2",
+        "rounded-2xl border p-4 space-y-2",
         isDark
-          ? "border-gray-600 bg-[#170337]/60"
-          : "border-slate-200 bg-slate-50",
+          ? "border-white/10 bg-white/5"
+          : "border-[#ececef] bg-[#f6f6f7]",
         className,
       )}
     >
@@ -416,22 +416,33 @@ export function BulkVideoDownloadDialog({
       }}
       isdark={isDark}
     >
-      <DialogContent className="sm:max-w-[520px] z-[70] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className={cn(isDark ? "text-white" : "text-gray-900")}>
-            {title}
-          </DialogTitle>
-          <DialogDescription
-            className={cn(isDark ? "text-slate-400" : "text-slate-600")}
-          >
-            {description}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className={cn(
+        "flex max-h-[90vh] flex-col gap-4 overflow-y-auto rounded-2xl border p-6 shadow-xl sm:max-w-[520px]",
+        isDark
+          ? "border-white/10 bg-[#161616] text-white"
+          : "border-[#ececef] bg-white text-[#1a1a1a]",
+      )}>
+        <div className="flex items-start gap-4 mb-2">
+          <div className={cn(
+            "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl",
+            isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#1a1a1a]",
+          )}>
+            <FolderDown className="h-6 w-6" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <DialogTitle className="text-xl font-bold tracking-tight text-[#0a0a0a] dark:text-white">
+              {title}
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {description}
+            </DialogDescription>
+          </div>
+        </div>
 
         <div
           className={cn(
             "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-sm",
-            isDark ? "bg-purple-900/20 text-slate-100" : "bg-purple-50 text-slate-800",
+            isDark ? "bg-white/5 text-white" : "bg-[#f6f6f7] text-[#1a1a1a]",
           )}
         >
           <span className="font-semibold tabular-nums">
@@ -484,7 +495,7 @@ export function BulkVideoDownloadDialog({
                           rel="noopener noreferrer"
                           className={cn(
                             "underline font-medium",
-                            isDark ? "text-purple-300" : "text-purple-700",
+                            isDark ? "text-white" : "text-[#1a1a1a]",
                           )}
                         >
                           Game of Creators Downloader
@@ -511,7 +522,7 @@ export function BulkVideoDownloadDialog({
                     rel="noopener noreferrer"
                     className={cn(
                       "inline-flex items-center gap-1 text-xs font-medium underline",
-                      isDark ? "text-purple-300" : "text-purple-700",
+                      isDark ? "text-white" : "text-[#1a1a1a]",
                     )}
                   >
                     Get the desktop app
@@ -578,10 +589,10 @@ export function BulkVideoDownloadDialog({
             value={videosPerZipInput}
             onChange={(event) => setVideosPerZipInput(event.target.value)}
             className={cn(
-              "h-10",
+              "h-10 rounded-xl border bg-white text-[#1a1a1a]",
               isDark
-                ? "border-gray-600 bg-[#1a0a2e] text-white"
-                : "bg-white",
+                ? "border-white/10 bg-[#161616] text-white"
+                : "border-[#e5e5e5]",
             )}
           />
           <p
@@ -596,7 +607,7 @@ export function BulkVideoDownloadDialog({
             <p
               className={cn(
                 "text-sm font-medium tabular-nums",
-                isDark ? "text-purple-300" : "text-purple-700",
+                isDark ? "text-white" : "text-[#1a1a1a]",
               )}
             >
               {isMixed
@@ -638,7 +649,7 @@ export function BulkVideoDownloadDialog({
                     value={option}
                     className={cn(
                       "mt-0.5",
-                      isDark && "border-gray-500 text-[#4A00BE]",
+                      "border-[#d4d4d8] text-[#1a1a1a] dark:border-white/30 dark:text-white",
                     )}
                   />
                   <Label
@@ -662,7 +673,7 @@ export function BulkVideoDownloadDialog({
                     <span
                       className={cn(
                         "block text-xs font-mono font-normal truncate",
-                        isDark ? "text-purple-300" : "text-purple-700",
+                        isDark ? "text-white" : "text-[#1a1a1a]",
                       )}
                     >
                       {meta.example}
@@ -715,9 +726,10 @@ export function BulkVideoDownloadDialog({
             disabled={busy}
             onClick={() => onOpenChange(false)}
             className={cn(
+              "h-11 rounded-full px-5 font-semibold",
               isDark
-                ? "border-gray-600 text-slate-200 hover:bg-white/5"
-                : undefined,
+                ? "border-white/10 bg-transparent text-white hover:bg-white/10"
+                : "border-[#e5e5e5] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
             )}
           >
             {manifestReady ? "Done" : "Cancel"}
@@ -730,9 +742,10 @@ export function BulkVideoDownloadDialog({
               disabled={busy}
               onClick={openDesktopAppNonNavigating}
               className={cn(
+                "h-11 rounded-full px-5 font-semibold",
                 isDark
-                  ? "border-gray-600 text-slate-200 hover:bg-white/5"
-                  : undefined,
+                  ? "border-white/10 bg-transparent text-white hover:bg-white/10"
+                  : "border-[#e5e5e5] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
               )}
             >
               Open app
@@ -747,12 +760,12 @@ export function BulkVideoDownloadDialog({
             onClick={() => {
               void handlePrimary();
             }}
-            className="bg-purple-600 text-white hover:bg-purple-700"
+            className="h-11 rounded-full bg-[#1a1a1a] px-5 font-semibold text-white hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-[#f3f3f5]"
           >
             {desktopOnly || isMixed ? (
-              <FolderDown className="h-4 w-4 mr-1" />
+              <FolderDown className="h-4 w-4 mr-1.5" />
             ) : (
-              <Download className="h-4 w-4 mr-1" />
+              <Download className="h-4 w-4 mr-1.5" />
             )}
             {primaryLabel}
           </Button>

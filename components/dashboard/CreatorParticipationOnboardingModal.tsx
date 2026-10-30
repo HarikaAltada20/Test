@@ -194,7 +194,7 @@ function OnboardingVideo({
           tall
             ? "h-[min(50vh,400px)] sm:h-[min(58vh,520px)]"
             : "aspect-video",
-          isDark ? "border-[#7F39EC]/40 bg-black" : "border-[#E9D8FF] bg-black",
+          isDark ? "border-white/10 bg-black" : "border-[#e5e5e5] bg-black",
         )}
       >
         <iframe
@@ -335,10 +335,10 @@ export default function CreatorParticipationOnboardingModal({
             type="button"
             onClick={onComplete}
             className={cn(
-              "absolute top-3 right-3 sm:top-4 sm:right-8 z-10 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+              "absolute top-3 right-3 sm:top-4 sm:right-8 z-10 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
               isDark
-                ? "text-gray-400 hover:text-white hover:bg-white/10"
-                : "text-gray-500 hover:text-gray-800 hover:bg-gray-100",
+                ? "border-white/15 text-neutral-300 hover:bg-white/10 hover:text-white"
+                : "border-[#e5e5e5] bg-white text-[#404040] hover:bg-[#fafafa]",
             )}
             aria-label="Skip onboarding"
           >
@@ -353,7 +353,14 @@ export default function CreatorParticipationOnboardingModal({
             {isIntro ? (
               <div className="w-full px-4 sm:px-10 py-4 sm:py-6 flex flex-col items-center">
                 <div className="flex justify-center mb-6">
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 bg-[#7F39EC17] border border-[#7F39EC] text-[#7F39EC] rounded-full flex items-center justify-center">
+                  <div
+                    className={cn(
+                      "w-20 h-20 sm:w-24 sm:h-24 rounded-full border flex items-center justify-center",
+                      isDark
+                        ? "bg-white/10 border-white/15 text-white"
+                        : "bg-[#f5f5f5] border-[#e5e5e5] text-[#0a0a0a]",
+                    )}
+                  >
                     <Megaphone className="w-9 h-9 sm:w-10 sm:h-10" />
                   </div>
                 </div>
@@ -377,10 +384,10 @@ export default function CreatorParticipationOnboardingModal({
                 <button
                   type="button"
                   className={cn(
-                    "w-full max-w-md text-md rounded-full mt-8 py-3.5 sm:py-4 font-semibold",
+                    "w-full max-w-md rounded-xl mt-8 py-3.5 sm:py-4 text-base font-semibold",
                     isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-[#D9C0FF61] text-[#7F39EC]",
+                      ? "bg-white text-[#0a0a0a]"
+                      : "bg-[#0a0a0a] text-white",
                   )}
                   onClick={() => setStep(1)}
                 >
@@ -399,8 +406,8 @@ export default function CreatorParticipationOnboardingModal({
                     "flex flex-row md:flex-col items-center justify-center gap-1.5 py-4 md:py-8 px-2",
                     "overflow-x-auto md:overflow-visible",
                     isDark
-                      ? "bg-[#100A33]/40 border-[#7F39EC]/20"
-                      : "bg-gray-50 border-gray-100",
+                      ? "bg-white/[0.03] border-white/10"
+                      : "bg-[#fafafa] border-[#e5e5e5]",
                   )}
                 >
                   {steps.slice(1).map((sidebarStep, index) => {
@@ -420,12 +427,16 @@ export default function CreatorParticipationOnboardingModal({
                           className={cn(
                             "w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center font-semibold text-sm shrink-0 transition-all duration-300",
                             isActive
-                              ? "bg-[#7F39EC] text-white"
+                              ? isDark
+                                ? "bg-white text-[#0a0a0a]"
+                                : "bg-[#0a0a0a] text-white"
                               : isCompleted
-                                ? "bg-[#7F39EC]/20 text-[#7F39EC]"
+                                ? isDark
+                                  ? "bg-white/15 text-white border border-white/15"
+                                  : "bg-[#f5f5f5] text-[#404040] border border-[#e5e5e5]"
                                 : isDark
-                                  ? "bg-[#170337] text-gray-500"
-                                  : "bg-white text-gray-400 border border-gray-200",
+                                  ? "bg-white/5 text-neutral-500 border border-white/10"
+                                  : "bg-white text-[#a3a3a3] border border-[#e5e5e5]",
                           )}
                         >
                           {isCompleted ? (
@@ -438,8 +449,13 @@ export default function CreatorParticipationOnboardingModal({
                           <div
                             className={cn(
                               "hidden md:block w-0.5 h-10 rounded-full transition-colors duration-300",
-                              isCompleted ? "bg-[#7F39EC]/50" : "bg-gray-200",
-                              isDark && !isCompleted && "bg-gray-700",
+                              isCompleted
+                                ? isDark
+                                  ? "bg-white/40"
+                                  : "bg-[#404040]"
+                                : isDark
+                                  ? "bg-white/10"
+                                  : "bg-[#e5e5e5]",
                             )}
                           />
                         )}
@@ -447,8 +463,13 @@ export default function CreatorParticipationOnboardingModal({
                           <div
                             className={cn(
                               "md:hidden w-4 h-0.5 mx-0.5 rounded-full shrink-0",
-                              isCompleted ? "bg-[#7F39EC]/50" : "bg-gray-200",
-                              isDark && !isCompleted && "bg-gray-700",
+                              isCompleted
+                                ? isDark
+                                  ? "bg-white/40"
+                                  : "bg-[#404040]"
+                                : isDark
+                                  ? "bg-white/10"
+                                  : "bg-[#e5e5e5]",
                             )}
                           />
                         )}
@@ -515,12 +536,19 @@ export default function CreatorParticipationOnboardingModal({
                               className={cn(
                                 "rounded-xl border p-4 flex flex-col gap-3 h-full",
                                 isDark
-                                  ? "bg-[#170337] border-[#7F39EC]/25"
-                                  : "bg-white border-[#E9D8FF] shadow-sm",
+                                  ? "bg-white/[0.03] border-white/10"
+                                  : "bg-white border-[#e5e5e5] shadow-[0px_1px_3px_rgba(10,10,10,0.04)]",
                               )}
                             >
                               <div className="flex flex-col items-center text-center gap-2">
-                                <div className="w-10 h-10 rounded-full bg-[#D8C3FF] flex items-center justify-center text-[#4A00BE] font-bold text-sm">
+                                <div
+                                  className={cn(
+                                    "w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm",
+                                    isDark
+                                      ? "bg-white text-[#0a0a0a]"
+                                      : "bg-[#0a0a0a] text-white",
+                                  )}
+                                >
                                   {idx + 1}
                                 </div>
                                 <h3
@@ -553,7 +581,12 @@ export default function CreatorParticipationOnboardingModal({
                                           : "text-gray-600",
                                       )}
                                     >
-                                      <Lightbulb className="w-3.5 h-3.5 shrink-0 mt-0.5 text-[#7F39EC]" />
+                                      <Lightbulb
+                                        className={cn(
+                                          "w-3.5 h-3.5 shrink-0 mt-0.5",
+                                          isDark ? "text-neutral-300" : "text-[#737373]",
+                                        )}
+                                      />
                                       <span>{tip}</span>
                                     </li>
                                   ))}
@@ -581,13 +614,20 @@ export default function CreatorParticipationOnboardingModal({
                               className={cn(
                                 "rounded-2xl p-5 border flex flex-col h-full",
                                 isDark
-                                  ? "bg-[#170337] border-[#7F39EC]/30"
-                                  : "bg-white border-[#E9D8FF] shadow-md",
+                                  ? "bg-white/[0.03] border-white/10"
+                                  : "bg-white border-[#e5e5e5] shadow-[0px_1px_3px_rgba(10,10,10,0.04)]",
                               )}
                             >
                               <div className="flex items-start justify-between gap-2 mb-3">
                                 <div className="flex items-center gap-3">
-                                  <div className="w-11 h-11 bg-[#D8C3FF] rounded-full flex items-center justify-center text-[#4A00BE]">
+                                  <div
+                                    className={cn(
+                                      "w-11 h-11 rounded-full border flex items-center justify-center",
+                                      isDark
+                                        ? "bg-white/10 border-white/15 text-white"
+                                        : "bg-[#f5f5f5] border-[#e5e5e5] text-[#0a0a0a]",
+                                    )}
+                                  >
                                     {card.icon}
                                   </div>
                                   <div>
@@ -599,7 +639,12 @@ export default function CreatorParticipationOnboardingModal({
                                     >
                                       {card.title}
                                     </h3>
-                                    <span className="text-xs font-medium text-[#7F39EC]">
+                                    <span
+                                      className={cn(
+                                        "text-xs font-medium",
+                                        isDark ? "text-neutral-400" : "text-[#737373]",
+                                      )}
+                                    >
                                       {card.badge}
                                     </span>
                                   </div>
@@ -617,12 +662,17 @@ export default function CreatorParticipationOnboardingModal({
                                 className={cn(
                                   "rounded-lg p-3 text-sm mb-3 flex-1",
                                   isDark
-                                    ? "bg-[#22074A]/80 text-gray-300"
-                                    : "bg-[#F9F5FF] text-gray-700",
+                                    ? "bg-white/5 text-neutral-300"
+                                    : "bg-[#f5f5f5] text-[#404040]",
                                 )}
                               >
                                 <p>
-                                  <span className="font-semibold text-[#7F39EC]">
+                                  <span
+                                    className={cn(
+                                      "font-semibold",
+                                      isDark ? "text-white" : "text-[#0a0a0a]",
+                                    )}
+                                  >
                                     Example:{" "}
                                   </span>
                                   {card.example}
@@ -631,10 +681,10 @@ export default function CreatorParticipationOnboardingModal({
                               <button
                                 type="button"
                                 className={cn(
-                                  "w-full rounded-full py-2.5 px-3 text-xs font-semibold border transition-colors",
+                                  "w-full rounded-xl py-2.5 px-3 text-xs font-semibold border transition-colors",
                                   isDark
-                                    ? "border-[#7F39EC] text-[#D8C3FF] hover:bg-[#7F39EC33]"
-                                    : "border-[#7F39EC] text-[#7F39EC] hover:bg-[#D9C0FF61]",
+                                    ? "border-white/15 text-white hover:bg-white/10"
+                                    : "border-[#e5e5e5] text-[#0a0a0a] hover:bg-[#fafafa]",
                                 )}
                                 onClick={() =>
                                   onApplyContestTypeFilter?.(card.filterType)
@@ -663,10 +713,10 @@ export default function CreatorParticipationOnboardingModal({
                       <button
                         type="button"
                         className={cn(
-                          "w-full text-lg rounded-full py-3.5 font-semibold",
+                          "w-full rounded-xl py-3.5 text-base font-semibold",
                           isDark
-                            ? "bg-[#7F39EC] text-white"
-                            : "bg-[#D9C0FF61] text-[#7F39EC]",
+                            ? "bg-white text-[#0a0a0a]"
+                            : "bg-[#0a0a0a] text-white",
                         )}
                         onClick={
                           isLastStep ? onComplete : () => setStep((s) => s + 1)

@@ -3,9 +3,24 @@
 import {
   computeBudgetPaidCents,
   computeDualRewardsCpmMilestoneFilledByPlatform,
+  computeHighestPlatformDecisionsForBudget,
   getBudgetTileMode,
+  sumHighestPlatformExcludedCents,
   type BudgetTileSubmission,
 } from "@/lib/contest-budget-tile-metrics";
+import {
+  isCreatorPlatformCounted,
+  isSubmissionCountedForPayout,
+  maskExcludedCents,
+  type HighestPlatformDecisions,
+} from "@/lib/highest-platform-payout";
+import { highestPlatformNoteText } from "@/components/contest/HighestPlatformPayoutNote";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { getDualRewardsSubmissionPaidComponents } from "@/lib/dual-rewards-pool-budget";
 import {
   getPoolBudgetCentsFromDetails,
@@ -31,12 +46,13 @@ import {
   toFlatFeeBonusSubmissionInput,
 } from "@/lib/twitter-cpm-bonus-expected";
 import {
+  buildMilestoneMostVerifiedBonusByCreatorMapFromDetails,
   buildMilestoneSubmissionPayoutCentsMapFromDetails,
   collectMilestoneBonusConfigs,
-  computeMilestoneCreatorBonusExpectedCentsFromDetails,
 } from "@/lib/milestone-contest-expected-spend";
 import { getPlatformIcon } from "@/lib/platform-icons";
 import { cn } from "@/lib/utils";
+import { Info } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 interface Submission {
@@ -73,6 +89,11 @@ interface BudgetProgressProps {
   milestoneExpectedPayoutBySubmissionId?: Map<string, number> | null;
   /** When payouts_processed, show paid amounts instead of expected fill */
   postContestStatus?: string | null;
+  /**
+   * Highest-platform-only campaigns: decisions from the campaign's full
+   * submission list. When omitted, computed from `contest` + `submissions`.
+   */
+  highestPlatformDecisions?: HighestPlatformDecisions | null;
 }
 
 export function BudgetProgress({
@@ -85,8 +106,19 @@ export function BudgetProgress({
   milestoneCreatorBonusPaidCents = null,
   milestoneExpectedPayoutBySubmissionId = null,
   postContestStatus = null,
+  highestPlatformDecisions = null,
 }: BudgetProgressProps) {
   const [mode, setMode] = useState<"light" | "dark">("light");
+  // Highest-platform-only: each creator's losing platforms count $0 below.
+  const decisions = useMemo(
+    () =>
+      highestPlatformDecisions ??
+      computeHighestPlatformDecisionsForBudget(
+        contest,
+        submissions as BudgetTileSubmission[],
+      ),
+    [highestPlatformDecisions, contest, submissions],
+  );
   // Get contest config outside useMemo so it's available in the component
   const cpmConfig = isCpmContestType(contest.contest_type)
     ? (contest.contest_based_details as any)?.cpm_contest
@@ -264,11 +296,16 @@ export function BudgetProgress({
             }
           }
         } else {
-          spentCents = computeMilestoneCreatorBonusExpectedCentsFromDetails(
+          buildMilestoneMostVerifiedBonusByCreatorMapFromDetails(
             platformSubs.map(toBonusSubmission),
             detailsRecord,
             platform,
-          );
+          ).forEach((row, creatorId) => {
+            if (!isCreatorPlatformCounted(decisions, creatorId, platform)) {
+              return;
+            }
+            spentCents += row.viewsExpectedCents + row.expectedCents;
+          });
         }
         return {
           platform,
@@ -362,7 +399,7 @@ export function BudgetProgress({
         };
       }
 
-      const expectedBySubmissionMap =
+      const expectedBySubmissionMap = maskExcludedCents(
         milestoneExpectedPayoutBySubmissionId instanceof Map
           ? milestoneExpectedPayoutBySubmissionId
           : buildMilestoneSubmissionPayoutCentsMapFromDetails(
@@ -381,7 +418,9 @@ export function BudgetProgress({
               })),
               detailsRecord,
               contest.platform,
-            );
+            ),
+        decisions,
+      );
 
       // Paid-first model (pre payouts_processed):
       // - If a submission is paid and has stored earnings, use paid amount.
@@ -483,7 +522,9 @@ export function BudgetProgress({
         toFlatFeeBonusSubmissionInput(s as any),
       );
       return (
-        (status === "verified" || status === "paid") && !twitterExcluded(s)
+        (status === "verified" || status === "paid") &&
+        !twitterExcluded(s) &&
+        isSubmissionCountedForPayout(decisions, (s as any).id)
       );
     });
 
@@ -689,17 +730,21 @@ export function BudgetProgress({
       contest.platform,
       contest.contest_type,
     );
-    const expectedBonusMap = buildFlatFeeBonusExpectedCentsBySubmissionId(
-      {
-        contest_type: contest.contest_type,
-        platform: contest.platform,
-        contest_based_details:
-          contest.contest_based_details &&
-          typeof contest.contest_based_details === "object"
-            ? (contest.contest_based_details as Record<string, unknown>)
-            : null,
-      },
-      submissions.map((s) => toFlatFeeBonusSubmissionInput(s as any)),
+    // First-come slots over every row, then losing platforms → $0.
+    const expectedBonusMap = maskExcludedCents(
+      buildFlatFeeBonusExpectedCentsBySubmissionId(
+        {
+          contest_type: contest.contest_type,
+          platform: contest.platform,
+          contest_based_details:
+            contest.contest_based_details &&
+            typeof contest.contest_based_details === "object"
+              ? (contest.contest_based_details as Record<string, unknown>)
+              : null,
+        },
+        submissions.map((s) => toFlatFeeBonusSubmissionInput(s as any)),
+      ),
+      decisions,
     );
     if (
       contest.contest_type !== "dual_rewards" &&
@@ -760,6 +805,7 @@ export function BudgetProgress({
       const dualByPlatform = computeDualRewardsCpmMilestoneFilledByPlatform(
         dualContestInput,
         submissions as BudgetTileSubmission[],
+        decisions,
       );
       platformCpmCents.clear();
       let dualTotal = 0;
@@ -1017,6 +1063,7 @@ export function BudgetProgress({
     postContestStatus,
     contestFlatFeeBonusCents,
     hasFlatFeeBonus,
+    decisions,
   ]);
 
   const formatCurrency = (cents: number) => {
@@ -1034,6 +1081,13 @@ export function BudgetProgress({
 
   const remaining = Math.max(0, totalBudget - totalSpent);
   const isNearLimit = totalPercentage >= 80;
+  const highestPlatformExcludedCents = decisions.enabled
+    ? sumHighestPlatformExcludedCents(decisions)
+    : 0;
+  const highestPlatformNote = highestPlatformNoteText(
+    decisions.platforms,
+    "brand",
+  );
 
   // Only show for CPM, leaderboard, milestone, and dual rewards contests
   if (
@@ -1197,7 +1251,7 @@ export function BudgetProgress({
         <div className="relative w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
           <div
             className={`absolute h-full transition-all duration-300 ${
-              isNearLimit ? "bg-yellow-500" : "bg-blue-500"
+              isNearLimit ? "bg-yellow-500" : "bg-[#7C3AED]"
             }`}
             style={{ width: `${Math.min(totalPercentage, 100)}%` }}
           />
@@ -1240,7 +1294,7 @@ export function BudgetProgress({
         <div
           className={cn(
             "relative w-full h-4 rounded-full overflow-hidden",
-            isDark ? "bg-[#FFFFFF42]" : "bg-gray-200",
+            isDark ? "bg-white/10" : "bg-[#EDE9FE]",
           )}
         >
           <div
@@ -1312,7 +1366,7 @@ export function BudgetProgress({
       <div
         className={cn(
           "relative w-full h-4 rounded-full overflow-hidden",
-          isDark ? "bg-[#FFFFFF42]" : "bg-gray-200",
+          isDark ? "bg-white/10" : "bg-[#EDE9FE]",
         )}
         title={
           hasFlatFeeBonus && bonusPaid > 0
@@ -1368,7 +1422,7 @@ export function BudgetProgress({
       >
         {/* CPM/Leaderboard earnings portion */}
         <div
-          className="absolute h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300"
+          className="absolute h-full bg-[#7C3AED] transition-all duration-300"
           style={{ width: `${Math.min(cpmPercentage, 100)}%` }}
         />
         {/* Flat fee bonus (CPM) or creator bonus (milestone / dual) */}
@@ -1391,7 +1445,7 @@ export function BudgetProgress({
         <div className="space-y-3 text-sm">
           {renderLegendRow(
             <div className="flex items-start gap-1.5 min-w-0">
-              <div className="w-3 h-3 mt-0.5 shrink-0 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm" />
+              <div className="w-3 h-3 mt-0.5 shrink-0 bg-gradient-to-r from-[#7C3AED] to-[#6D28D9] rounded-sm" />
               <div className="min-w-0">
                 <p
                   className={cn(
@@ -1426,7 +1480,7 @@ export function BudgetProgress({
           }`}
         >
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm" />
+            <div className="w-3 h-3 bg-gradient-to-r from-[#7C3AED] to-[#6D28D9] rounded-sm" />
             <div className="flex-1">
               <p
                 className={cn(
@@ -1484,6 +1538,29 @@ export function BudgetProgress({
           )}
         </div>
       )}
+
+      {decisions.enabled ? (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p
+                className={cn(
+                  "flex items-center gap-1.5 text-xs",
+                  isDark ? "text-gray-300" : "text-gray-600",
+                )}
+              >
+                <Info className="h-3.5 w-3.5 shrink-0" />
+                Not counted by the best-platform rule:{" "}
+                {formatCurrency(highestPlatformExcludedCents)}
+              </p>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs text-xs">
+              <p className="font-semibold">{highestPlatformNote.title}</p>
+              <p className="mt-0.5">{highestPlatformNote.body}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : null}
 
       {/* Status message */}
       {isNearLimit ? (

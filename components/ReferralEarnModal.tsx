@@ -102,19 +102,24 @@ export function ReferralEarnModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose} isdark={isDark}>
-      <DialogContent className="sm:max-w-[550px] w-[95vw] max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className={cn(
+          "sm:max-w-[550px] w-[95vw] max-h-[90vh] overflow-y-auto rounded-2xl",
+          isDark ? "border-white/10 bg-[#161616] text-white" : "border-[#ececef] bg-white",
+        )}
+      >
         <DialogHeader>
           <DialogTitle
             className={cn(
               "flex items-center gap-2",
-              isDark ? "text-white" : "text-gray-900",
+              isDark ? "text-white" : "text-[#1a1a1a]",
             )}
           >
-            <Gift className="h-5 w-5 text-[#4A00BE]" />
+            <Gift className={cn("h-5 w-5", isDark ? "text-white" : "text-[#1a1a1a]")} />
             {title}
           </DialogTitle>
           <DialogDescription
-            className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+            className={cn(isDark ? "text-white/70" : "text-[#55555E]")}
           >
             {isCreatorAudience
               ? "Invite creators with your personal link and earn when they join and win."
@@ -138,16 +143,16 @@ export function ReferralEarnModal({
           <div className="space-y-5">
             <div
               className={cn(
-                "rounded-xl border p-4 space-y-3",
+                "rounded-2xl border p-4 space-y-3",
                 isDark
-                  ? "border-[#4A00BE]/40 bg-[#170337]/60"
-                  : "border-[#D1B7F9] bg-[#7F39EC14]",
+                  ? "border-white/10 bg-white/5"
+                  : "border-[#ececef] bg-[#fafafa]",
               )}
             >
               {isCreatorAudience ? (
                 <>
                   <div className="flex items-start gap-3">
-                    <Coins className="h-5 w-5 shrink-0 text-[#4A00BE] mt-0.5" />
+                    <Coins className={cn("mt-0.5 h-5 w-5 shrink-0", isDark ? "text-white" : "text-[#1a1a1a]")} />
                     <div>
                       <p
                         className={cn(
@@ -169,7 +174,7 @@ export function ReferralEarnModal({
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
-                    <Users className="h-5 w-5 shrink-0 text-[#4A00BE] mt-0.5" />
+                    <Users className={cn("mt-0.5 h-5 w-5 shrink-0", isDark ? "text-white" : "text-[#1a1a1a]")} />
                     <div>
                       <p
                         className={cn(
@@ -193,7 +198,7 @@ export function ReferralEarnModal({
               ) : (
                 <>
                   <div className="flex items-start gap-3">
-                    <Building2 className="h-5 w-5 shrink-0 text-[#4A00BE] mt-0.5" />
+                    <Building2 className={cn("mt-0.5 h-5 w-5 shrink-0", isDark ? "text-white" : "text-[#1a1a1a]")} />
                     <div>
                       <p
                         className={cn(
@@ -215,7 +220,7 @@ export function ReferralEarnModal({
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
-                    <Gift className="h-5 w-5 shrink-0 text-[#4A00BE] mt-0.5" />
+                    <Gift className={cn("mt-0.5 h-5 w-5 shrink-0", isDark ? "text-white" : "text-[#1a1a1a]")} />
                     <div>
                       <p
                         className={cn(
@@ -257,11 +262,15 @@ export function ReferralEarnModal({
                 />
                 <Button
                   type="button"
-                  variant="outline"
-                  className="bg-[#4A00BE] text-white shrink-0"
+                  className={cn(
+                    "h-10 shrink-0 rounded-full px-4",
+                    isDark
+                      ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+                      : "bg-[#1a1a1a] text-white hover:bg-black",
+                  )}
                   onClick={() => copyToClipboard(code, "Referral code")}
                 >
-                  <Copy className="h-4 w-4 mr-1" />
+                  <Copy className="mr-1 h-4 w-4" />
                   Copy
                 </Button>
               </div>
@@ -285,8 +294,12 @@ export function ReferralEarnModal({
                 />
                 <Button
                   type="button"
-                  variant="outline"
-                  className="bg-[#4A00BE] text-white shrink-0"
+                  className={cn(
+                    "h-10 shrink-0 rounded-full px-4",
+                    isDark
+                      ? "bg-white text-[#1a1a1a] hover:bg-white/90"
+                      : "bg-[#1a1a1a] text-white hover:bg-black",
+                  )}
                   onClick={() =>
                     copyToClipboard(
                       primaryLink,
@@ -294,7 +307,7 @@ export function ReferralEarnModal({
                     )
                   }
                 >
-                  <Copy className="h-4 w-4 mr-1" />
+                  <Copy className="mr-1 h-4 w-4" />
                   Copy
                 </Button>
               </div>

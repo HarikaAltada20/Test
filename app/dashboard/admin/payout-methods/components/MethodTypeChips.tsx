@@ -28,9 +28,9 @@ export function MethodTypeChips({
         onClick={() => onChange(key)}
         aria-pressed={active}
         className={cn(
-          "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]",
+          "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a1a1a]",
           active
-            ? "border-[#7F39EC] bg-[#7F39EC] text-white"
+            ? "border-[#1a1a1a] bg-[#1a1a1a] text-white"
             : cn(p.surface, p.hover)
         )}
       >

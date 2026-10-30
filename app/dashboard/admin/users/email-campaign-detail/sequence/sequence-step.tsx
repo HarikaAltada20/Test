@@ -198,7 +198,7 @@ export function SequenceStepComponent({
           <Button
             variant="outline"
             size="sm"
-            className="w-full h-8 text-xs text-[#8B5CF6] border-[#8B5CF6]/40 hover:bg-purple-50"
+            className="w-full h-8 text-xs text-[#8B5CF6] border-[#8B5CF6]/40 hover:bg-[#f6f6f7]"
             onClick={() => onAddVariant(step.id)}
             disabled={readOnly}
           >

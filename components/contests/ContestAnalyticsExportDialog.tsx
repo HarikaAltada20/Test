@@ -162,8 +162,8 @@ export function ContestAnalyticsExportDialog({
         className={cn(
           "sm:max-w-lg max-h-[90vh] overflow-y-auto",
           isDark
-            ? "border-gray-600 bg-[#06021D] text-slate-100"
-            : "border-slate-200 bg-white text-slate-900",
+            ? "border-white/10 bg-[#161616] text-white"
+            : "border-[#ececef] bg-white text-[#1a1a1a]",
         )}
       >
         <DialogHeader>
@@ -194,8 +194,8 @@ export function ContestAnalyticsExportDialog({
             className={cn(
               "rounded-lg border p-3",
               isDark
-                ? "border-gray-600 bg-[#170337]/60"
-                : "border-slate-200 bg-slate-50",
+                ? "border-white/10 bg-white/5"
+                : "border-[#ececef] bg-[#f6f6f7]",
             )}
           >
             <Label
@@ -228,7 +228,7 @@ export function ContestAnalyticsExportDialog({
                       id={id}
                       value={tab}
                       className={cn(
-                        isDark && "border-gray-500 text-[#4A00BE]",
+                        "border-[#d4d4d8] text-[#1a1a1a] dark:border-white/30 dark:text-white",
                       )}
                     />
                     <Label
@@ -258,8 +258,8 @@ export function ContestAnalyticsExportDialog({
             className={cn(
               "rounded-lg border p-3",
               isDark
-                ? "border-gray-600 bg-[#170337]/60"
-                : "border-slate-200 bg-slate-50",
+                ? "border-white/10 bg-white/5"
+                : "border-[#ececef] bg-[#f6f6f7]",
             )}
           >
             <Label
@@ -279,8 +279,8 @@ export function ContestAnalyticsExportDialog({
                 className={cn(
                   "h-10 text-sm font-medium",
                   isDark
-                    ? "border-gray-500 bg-[#07031D] text-white"
-                    : "border-slate-300 bg-white text-slate-900",
+                    ? "border-white/10 bg-[#161616] text-white"
+                    : "border-[#e5e5e5] bg-white text-[#1a1a1a]",
                 )}
               >
                 <SelectValue placeholder="Choose format">
@@ -319,8 +319,8 @@ export function ContestAnalyticsExportDialog({
             disabled={exporting}
             className={cn(
               isDark
-                ? "border-gray-600 text-slate-300 hover:bg-slate-800"
-                : "",
+                ? "rounded-full border-white/10 text-white hover:bg-white/10"
+                : "rounded-full border-[#e5e5e5] text-[#1a1a1a] hover:bg-[#f6f6f7]",
             )}
           >
             Cancel
@@ -329,7 +329,7 @@ export function ContestAnalyticsExportDialog({
             type="button"
             onClick={handleExport}
             disabled={exporting || !selectedTab}
-            className="gap-2 bg-[#4A00BE] hover:bg-[#4A00BE]/90 text-white"
+            className="gap-2 rounded-full bg-[#1a1a1a] text-white hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-[#f3f3f5]"
           >
             {exporting ? (
               <Loader2 className="h-4 w-4 animate-spin" />

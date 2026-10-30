@@ -29,7 +29,7 @@ export function CampaignUnderlineTabs({ activeTab, onTabChange }: Props) {
             className={cn(
               "pb-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors -mb-px",
               activeTab === tab.id
-                ? "border-[#662EBD] text-[#662EBD]"
+                ? "border-[#1a1a1a] text-[#1a1a1a]"
                 : "border-transparent text-gray-500 hover:text-gray-800",
             )}
           >

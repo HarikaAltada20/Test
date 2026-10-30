@@ -39,7 +39,8 @@ import {
   formatSenderRoleLabel,
   isSupportAdminMessage,
 } from "@/lib/support/sender-role";
-import { MessageSquare, Trash2, Loader2, Lock, RotateCcw } from "lucide-react";
+import { MessageSquare, Trash2, Lock, RotateCcw } from "lucide-react";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 type Contact = {
   id: string;
   created_at: string;
@@ -462,7 +463,7 @@ export default function SupportClient({
     <Card
       className={cn(
         "border shadow-sm",
-        isDark ? "bg-[#06021D] border-slate-700" : "bg-white border-slate-200",
+        isDark ? "bg-[#161616] border-slate-700" : "bg-white border-slate-200",
       )}
     >
       <CardContent className="p-6 space-y-4">
@@ -471,7 +472,7 @@ export default function SupportClient({
             placeholder="Search email, username, message..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className={cn("max-w-xs", isDark && "bg-[#06021D] border-slate-600")}
+            className={cn("max-w-xs", isDark && "bg-[#161616] border-slate-600")}
           />
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[130px]">
@@ -559,7 +560,7 @@ export default function SupportClient({
               {loading ? (
                 <tr>
                   <td colSpan={9} className="py-8 text-center">
-                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-purple-500" />
+                    <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
                   </td>
                 </tr>
               ) : threads.length === 0 ? (
@@ -669,7 +670,7 @@ export default function SupportClient({
     <Card
       className={cn(
         "border shadow-sm",
-        isDark ? "bg-[#06021D] border-slate-700" : "bg-white border-slate-200",
+        isDark ? "bg-[#161616] border-slate-700" : "bg-white border-slate-200",
       )}
     >
       <CardContent className="p-6">
@@ -750,7 +751,7 @@ export default function SupportClient({
           side="right"
           className={cn(
             "w-full sm:max-w-lg flex flex-col",
-            isDark && "bg-[#06021D] text-white border-slate-700",
+            isDark && "bg-[#161616] text-white border-slate-700",
           )}
         >
           <SheetHeader>
@@ -823,7 +824,7 @@ export default function SupportClient({
                 <textarea
                   className={cn(
                     "w-full border rounded px-3 py-2 text-sm h-24 resize-none",
-                    isDark && "bg-[#06021D] border-slate-600",
+                    isDark && "bg-[#161616] border-slate-600",
                   )}
                   placeholder="Type your reply..."
                   value={replyBody}
@@ -866,7 +867,7 @@ export default function SupportClient({
       </Sheet>
 
       <Dialog open={!!confirmDelete} onOpenChange={() => setConfirmDelete(null)}>
-        <DialogContent className={isDark ? "bg-[#06021D] text-white" : ""}>
+        <DialogContent className={isDark ? "bg-[#161616] text-white" : ""}>
           <DialogHeader>
             <DialogTitle>
               {confirmDelete === "bulk-close"

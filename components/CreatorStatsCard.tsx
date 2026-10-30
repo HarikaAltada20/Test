@@ -1,4 +1,5 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { ReactNode } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { TrustScoreMetrics } from "@/lib/trust-score";
 import type { CreatorQualityMetrics } from "@/lib/quality-score";
@@ -8,20 +9,6 @@ import {
   formatTrustScoreDisplay,
 } from "@/lib/creator-profile-stats";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
-import {
-  BarChart3,
-  CheckCircle2,
-  Clock3,
-  DollarSign,
-  Eye,
-  Hash,
-  Info,
-  ListChecks,
-  ShieldCheck,
-  Star,
-  XCircle,
-  type LucideIcon,
-} from "lucide-react";
 
 type CreatorStatsCardProps = {
   trustMetrics: TrustScoreMetrics | null;
@@ -39,244 +26,38 @@ function formatViews(views: number): string {
   return views.toLocaleString();
 }
 
-function getTrustTone(score: number) {
-  if (score >= 80) {
-    return {
-      text: "text-emerald-600",
-      bar: "bg-emerald-500",
-      ring: "stroke-emerald-500",
-      soft: "bg-emerald-500/10",
-      icon: "text-emerald-600",
-    };
-  }
-  if (score >= 50) {
-    return {
-      text: "text-amber-600",
-      bar: "bg-amber-500",
-      ring: "stroke-amber-500",
-      soft: "bg-amber-500/10",
-      icon: "text-amber-600",
-    };
-  }
-  return {
-    text: "text-red-600",
-    bar: "bg-red-500",
-    ring: "stroke-red-500",
-    soft: "bg-red-500/10",
-    icon: "text-red-600",
-  };
-}
-
-function SectionLabel({
-  children,
-  isDark,
-}: {
-  children: React.ReactNode;
-  isDark: boolean;
-}) {
-  return (
-    <p
-      className={cn(
-        "text-xs font-semibold uppercase tracking-wider",
-        isDark ? "text-[#D9C0FF]" : "text-[#7F39EC]",
-      )}
-    >
-      {children}
-    </p>
-  );
-}
-
-function StatTile({
+function Figure({
   label,
   value,
-  icon: Icon,
-  iconClass,
-  valueClass,
   isDark,
-  className,
 }: {
   label: string;
-  value: React.ReactNode;
-  icon: LucideIcon;
-  iconClass: string;
-  valueClass?: string;
+  value: ReactNode;
   isDark: boolean;
-  className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "rounded-xl border p-4 transition-colors",
-        isDark
-          ? "border-white/10 bg-[#1f0a46]/80 hover:border-[#7F39EC]/40"
-          : "border-slate-200/80 bg-slate-50/50 hover:border-[#7F39EC]/30 hover:bg-white",
-        className,
-      )}
-    >
-      <div className="flex items-center gap-2.5">
-        <div
-          className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-            isDark ? "bg-white/10" : "bg-white shadow-sm",
-          )}
-        >
-          <Icon className={cn("h-4 w-4", iconClass)} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p
-            className={cn(
-              "text-xs font-medium",
-              isDark ? "text-slate-400" : "text-muted-foreground",
-            )}
-          >
-            {label}
-          </p>
-          <p
-            className={cn(
-              "mt-0.5 truncate text-2xl font-bold leading-none",
-              valueClass ?? (isDark ? "text-white" : "text-foreground"),
-            )}
-          >
-            {value}
-          </p>
-        </div>
-      </div>
+    <div className="px-5 py-5">
+      <p className={cn("text-[28px] font-semibold leading-none tracking-tight", isDark ? "text-white" : "text-[#171717]")}>
+        {value}
+      </p>
+      <p className={cn("mt-2 text-base", isDark ? "text-slate-400" : "text-[#737373]")}>{label}</p>
     </div>
   );
 }
 
-function TrustScoreHero({
-  score,
-  trustNumber,
+function Line({
+  label,
+  value,
   isDark,
 }: {
-  score: number;
-  trustNumber: number;
+  label: string;
+  value: ReactNode;
   isDark: boolean;
 }) {
-  const rounded = Math.round(score);
-  const tone = getTrustTone(score);
-  const radius = 40;
-  const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference - (rounded / 100) * circumference;
-
   return (
-    <div
-      className={cn(
-        "rounded-2xl border p-5 sm:p-6",
-        isDark
-          ? "border-[#7F39EC]/30 bg-gradient-to-br from-[#1f0a46] to-[#180438]"
-          : "border-[#7F39EC]/20 bg-gradient-to-br from-[#F8F4FF] to-white",
-      )}
-    >
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-5">
-          <div className="relative h-24 w-24 shrink-0">
-            <svg className="h-24 w-24 -rotate-90" viewBox="0 0 96 96">
-              <circle
-                cx="48"
-                cy="48"
-                r={radius}
-                fill="none"
-                className={cn(isDark ? "stroke-white/10" : "stroke-slate-200")}
-                strokeWidth="8"
-              />
-              <circle
-                cx="48"
-                cy="48"
-                r={radius}
-                fill="none"
-                className={tone.ring}
-                strokeWidth="8"
-                strokeLinecap="round"
-                strokeDasharray={circumference}
-                strokeDashoffset={dashOffset}
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className={cn("text-xl font-bold leading-none", tone.text)}>
-                {rounded}
-              </span>
-              <span
-                className={cn(
-                  "text-[10px] font-medium",
-                  isDark ? "text-slate-400" : "text-muted-foreground",
-                )}
-              >
-                /100
-              </span>
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className={cn("h-4 w-4", tone.icon)} />
-              <p
-                className={cn(
-                  "text-sm font-semibold",
-                  isDark ? "text-white" : "text-foreground",
-                )}
-              >
-                Trust %
-              </p>
-            </div>
-            <p
-              className={cn(
-                "mt-1 text-2xl font-bold sm:text-3xl",
-                tone.text,
-              )}
-            >
-              {formatTrustScoreDisplay(score)}
-            </p>
-            <div
-              className={cn(
-                "mt-3 h-1.5 w-full max-w-[180px] overflow-hidden rounded-full",
-                isDark ? "bg-white/10" : "bg-slate-200",
-              )}
-            >
-              <div
-                className={cn("h-full rounded-full transition-all", tone.bar)}
-                style={{ width: `${Math.min(100, Math.max(0, rounded))}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div
-          className={cn(
-            "flex min-w-[140px] flex-col rounded-xl border px-4 py-3 sm:items-end sm:text-right",
-            isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-white/80",
-          )}
-        >
-          <div className="flex items-center gap-2 sm:justify-end">
-            <Hash className={cn("h-4 w-4", isDark ? "text-[#D9C0FF]" : "text-[#7F39EC]")} />
-            <p
-              className={cn(
-                "text-xs font-medium",
-                isDark ? "text-slate-400" : "text-muted-foreground",
-              )}
-            >
-              Trust Score
-            </p>
-          </div>
-          <p
-            className={cn(
-              "mt-1 text-3xl font-bold",
-              trustNumber >= 0 ? "text-emerald-600" : "text-red-600",
-            )}
-          >
-            {trustNumber >= 0 ? `+${trustNumber}` : trustNumber}
-          </p>
-          <p
-            className={cn(
-              "mt-1 text-xs",
-              isDark ? "text-slate-500" : "text-muted-foreground",
-            )}
-          >
-            Verified − rejected
-          </p>
-        </div>
-      </div>
+    <div className="flex items-baseline justify-between gap-4 py-2">
+      <span className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>{label}</span>
+      <span className={cn("text-base font-semibold tabular-nums", isDark ? "text-white" : "text-[#171717]")}>{value}</span>
     </div>
   );
 }
@@ -292,167 +73,79 @@ export function CreatorStatsCard({
 }: CreatorStatsCardProps) {
   const trustScore = trustMetrics?.trust_score ?? 100;
   const trustNumber = trustMetrics?.trust_number ?? 0;
+  const line = isDark ? "border-white/10" : "border-neutral-200";
+  const split = isDark ? "divide-white/10" : "divide-neutral-200";
+  const muted = isDark ? "text-slate-400" : "text-[#737373]";
+  const ink = isDark ? "text-white" : "text-[#171717]";
 
-  const reelStats = [
-    {
-      label: "Total reels",
-      value: trustMetrics?.total_reels ?? 0,
-      icon: ListChecks,
-      iconClass: "text-violet-600",
-    },
-    {
-      label: "Verified reels",
-      value: trustMetrics?.verified_reels ?? 0,
-      icon: CheckCircle2,
-      iconClass: "text-emerald-600",
-    },
-    {
-      label: "Rejected reels",
-      value: trustMetrics?.rejected_reels ?? 0,
-      icon: XCircle,
-      iconClass: "text-rose-600",
-    },
-    {
-      label: "Pending reels",
-      value: trustMetrics?.pending_reels ?? 0,
-      icon: Clock3,
-      iconClass: "text-amber-600",
-    },
+  const highlights = [
+    { label: "Trust %", value: formatTrustScoreDisplay(trustScore) },
+    { label: "Trust score", value: trustNumber > 0 ? `+${trustNumber}` : trustNumber },
+    { label: "Total earnings", value: formatCurrencyFromCents(totalEarningsCents) },
+    { label: "Verified views", value: formatViews(totalViews) },
   ];
 
   return (
-    <Card
-      className={cn(
-        "overflow-hidden shadow-sm",
-        isDark ? "border-[#7F39EC]/40 bg-[#180438]" : "border-[#7F39EC]/20 bg-white",
-        className,
-      )}
-    >
-      <CardHeader className="border-b pb-4">
-        <div className="flex items-center gap-2">
-          <div
-            className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-lg",
-              isDark ? "bg-[#7F39EC]/20" : "bg-[#7F39EC]/10",
-            )}
-          >
-            <BarChart3 className={cn("h-5 w-5", isDark ? "text-[#D9C0FF]" : "text-[#7F39EC]")} />
-          </div>
-          <div>
-            <CardTitle className="text-xl">Creator Stats</CardTitle>
-            <p
-              className={cn(
-                "text-sm",
-                isDark ? "text-slate-400" : "text-muted-foreground",
-              )}
-            >
-              Your platform totals for campaign eligibility
-            </p>
-          </div>
+    <Card className={cn("overflow-hidden rounded-2xl shadow-none", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white", className)}>
+      <CardContent className="p-0">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-5 pb-4 pt-5">
+          <h3 className={cn("text-base font-semibold", ink)}>Creator stats</h3>
+          <p className={cn("text-base", muted)}>Brands can set minimums on these to join a campaign.</p>
         </div>
-      </CardHeader>
 
-      <CardContent className="space-y-6 pt-6">
         {loading ? (
-          <div className="space-y-4">
-            <div className="h-32 animate-pulse rounded-2xl bg-muted" />
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-20 animate-pulse rounded-xl bg-muted" />
-              ))}
-            </div>
+          <div className="space-y-3 px-5 pb-5">
+            <div className="h-20 animate-pulse rounded-xl bg-muted" />
+            <div className="h-24 animate-pulse rounded-xl bg-muted" />
           </div>
         ) : (
           <>
-            <TrustScoreHero
-              score={trustScore}
-              trustNumber={trustNumber}
-              isDark={isDark}
-            />
+            <div className={cn("grid grid-cols-2 border-t sm:grid-cols-4", line)}>
+              {highlights.map((item, index) => (
+                <div
+                  key={item.label}
+                  className={cn(
+                    "border-b",
+                    line,
+                    index % 2 === 1 && "border-l",
+                    index > 0 && "sm:border-l",
+                  )}
+                >
+                  <Figure label={item.label} value={item.value} isDark={isDark} />
+                </div>
+              ))}
+            </div>
 
-            <div className="space-y-3">
-              <SectionLabel isDark={isDark}>Quality & performance</SectionLabel>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <StatTile
-                  label="Best Quality"
-                  value={formatQualityScoreDisplay(qualityMetrics?.best_quality_score)}
-                  icon={Star}
-                  iconClass="text-amber-500"
-                  isDark={isDark}
-                />
-                <StatTile
-                  label="Avg Quality"
-                  value={formatQualityScoreDisplay(qualityMetrics?.avg_quality_score)}
-                  icon={Star}
-                  iconClass="text-[#7F39EC]"
-                  isDark={isDark}
-                />
-                <StatTile
-                  label="Total Quality Score"
-                  value={formatQualitySumDisplay(qualityMetrics?.quality_score_sum)}
-                  icon={Star}
-                  iconClass="text-orange-500"
-                  isDark={isDark}
-                />
-                <StatTile
-                  label="Total Earnings"
-                  value={formatCurrencyFromCents(totalEarningsCents)}
-                  icon={DollarSign}
-                  iconClass="text-emerald-600"
-                  valueClass="text-xl sm:text-2xl"
-                  isDark={isDark}
-                />
-                <StatTile
-                  label="Total verified views"
-                  value={formatViews(totalViews)}
-                  icon={Eye}
-                  iconClass="text-blue-600"
-                  isDark={isDark}
-                />
+            <div className={cn("grid sm:grid-cols-2 sm:divide-x", split)}>
+              <div className="px-5 py-4">
+                <p className={cn("text-base font-semibold", ink)}>Quality</p>
+                <div className="mt-1">
+                  <Line label="Best" value={formatQualityScoreDisplay(qualityMetrics?.best_quality_score)} isDark={isDark} />
+                  <Line label="Average" value={formatQualityScoreDisplay(qualityMetrics?.avg_quality_score)} isDark={isDark} />
+                  <Line label="Total score" value={formatQualitySumDisplay(qualityMetrics?.quality_score_sum)} isDark={isDark} />
+                </div>
+              </div>
+              <div className={cn("border-t px-5 py-4 sm:border-t-0", line)}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className={cn("text-base font-semibold", ink)}>Submissions</p>
+                  <p className={cn("text-base", muted)}>
+                    {(trustMetrics?.total_reels ?? 0) > 0
+                      ? `${trustMetrics?.total_reels ?? 0} submitted`
+                      : "Nothing submitted yet"}
+                  </p>
+                </div>
+                <div className="mt-1">
+                  <Line label="Total reels" value={trustMetrics?.total_reels ?? 0} isDark={isDark} />
+                  <Line label="Verified" value={trustMetrics?.verified_reels ?? 0} isDark={isDark} />
+                  <Line label="Rejected" value={trustMetrics?.rejected_reels ?? 0} isDark={isDark} />
+                  <Line label="Pending" value={trustMetrics?.pending_reels ?? 0} isDark={isDark} />
+                </div>
               </div>
             </div>
 
-            <div className="space-y-3">
-              <SectionLabel isDark={isDark}>Submission breakdown</SectionLabel>
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                {reelStats.map((stat) => (
-                  <StatTile
-                    key={stat.label}
-                    label={stat.label}
-                    value={stat.value}
-                    icon={stat.icon}
-                    iconClass={stat.iconClass}
-                    isDark={isDark}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div
-              className={cn(
-                "flex gap-3 rounded-xl border px-4 py-3",
-                isDark
-                  ? "border-[#7F39EC]/25 bg-[#7F39EC]/10"
-                  : "border-[#7F39EC]/15 bg-[#F8F4FF]",
-              )}
-            >
-              <Info
-                className={cn(
-                  "mt-0.5 h-4 w-4 shrink-0",
-                  isDark ? "text-[#D9C0FF]" : "text-[#7F39EC]",
-                )}
-              />
-              <p
-                className={cn(
-                  "text-sm leading-relaxed",
-                  isDark ? "text-slate-300" : "text-muted-foreground",
-                )}
-              >
-                Brands set minimums per campaign for trust %, trust score, quality,
-                earnings, and views. You can submit when your stats meet every
-                requirement on a campaign.
-              </p>
-            </div>
+            <p className={cn("border-t px-5 py-4 text-base leading-relaxed", line, muted)}>
+              Brands set minimums per campaign for trust, quality, earnings, and views. You can submit when your stats meet every requirement on a campaign.
+            </p>
           </>
         )}
       </CardContent>

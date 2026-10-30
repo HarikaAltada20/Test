@@ -1401,7 +1401,7 @@ export default function HeroContent() {
                 className={cn(
                   "group flex h-[51px] w-full max-w-[300px] sm:w-[238px] items-center justify-center rounded-xl text-[15px] font-semibold transition",
                   isLight
-                    ? "bg-[#7c3aed] text-white shadow-[0_12px_30px_rgba(124,58,237,0.28)] hover:bg-[#6d28d9]"
+                    ? "goc-btn-primary"
                     : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-white/30 hover:bg-white/[0.08]",
                 )}
               >

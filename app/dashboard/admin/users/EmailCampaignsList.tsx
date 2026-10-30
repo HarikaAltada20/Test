@@ -319,7 +319,7 @@ export function EmailCampaignsList({
 
   const cardClass = cn(
     "rounded-xl border shadow-sm",
-    isDark ? "bg-[#170337] border-purple-900/40" : "bg-white border-gray-200",
+    isDark ? "bg-[#161616] border-purple-900/40" : "bg-white border-gray-200",
   );
 
   return (
@@ -399,7 +399,7 @@ export function EmailCampaignsList({
         </Select>
 
         <Button
-          className="h-11 bg-[#662EBD] hover:bg-[#5524a8] shrink-0"
+          className="h-11 bg-[#1a1a1a] hover:bg-black shrink-0"
           onClick={onAddNew}
         >
           <Plus className="h-4 w-4 mr-1" />

@@ -80,7 +80,7 @@ function GroupAction({
     return (
       <Button
         size="sm"
-        className="h-8 w-full gap-1.5 bg-[#7F39EC] text-white hover:bg-[#6a2fd0] md:w-auto"
+        className="h-8 w-full gap-1.5 bg-[#1a1a1a] text-white hover:bg-[#6a2fd0] md:w-auto"
         onClick={(e) => {
           e.stopPropagation();
           onMarkSent();
@@ -148,14 +148,14 @@ export function EmailGroupsList({
   const headClass = cn(
     "hidden px-4 py-2.5 text-xs font-medium uppercase tracking-wide md:grid",
     GRID,
-    isDark ? "bg-[#120A35] text-gray-400" : "bg-gray-50 text-gray-500"
+    isDark ? "bg-[#1a1a1a] text-gray-400" : "bg-gray-50 text-gray-500"
   );
 
   return (
     <div className={cn("relative overflow-hidden rounded-xl border", p.surface)}>
       {refreshing && !loading && (
         <div className="absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden">
-          <div className="h-full w-1/3 animate-[pulse_1s_ease-in-out_infinite] bg-[#7F39EC]" />
+          <div className="h-full w-1/3 animate-[pulse_1s_ease-in-out_infinite] bg-[#1a1a1a]" />
         </div>
       )}
       <div className={headClass} aria-hidden>
@@ -200,7 +200,7 @@ export function EmailGroupsList({
                     }
                   }}
                   className={cn(
-                    "cursor-pointer space-y-2 px-4 py-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#7F39EC] md:space-y-0",
+                    "cursor-pointer space-y-2 px-4 py-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a1a1a] md:space-y-0",
                     GRID,
                     p.hover,
                     group.known_count > 0 && (isDark ? "bg-emerald-950/10" : "bg-emerald-50/40")

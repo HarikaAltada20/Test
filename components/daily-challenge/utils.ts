@@ -83,7 +83,7 @@ export function number(v: number) {
 export function panelClassName(isDark: boolean) {
   return cn(
     "rounded-2xl border shadow-sm",
-    isDark ? "bg-[#14052c] border-white/10" : "bg-white border-gray-200/90",
+    isDark ? "bg-[#161616] border-white/10" : "bg-white border-gray-200/90",
   );
 }
 

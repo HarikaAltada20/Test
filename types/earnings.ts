@@ -5,6 +5,8 @@ export interface CreatorProfileData {
   /** Contest / opportunity cash prizes only (creator_profiles) */
   total_money_won: number;
   total_contests_won: number;
+  /** Campaigns the creator has joined. */
+  total_contests_participated: number;
   withdrawable_balance: number;
 }
 

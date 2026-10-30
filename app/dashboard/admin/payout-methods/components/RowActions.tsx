@@ -41,7 +41,7 @@ export function RowActions({
           aria-label="Row actions"
           onClick={(e) => e.stopPropagation()}
           className={cn(
-            "rounded-md p-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]",
+            "rounded-md p-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a1a1a]",
             isDark ? "hover:bg-white/10" : "hover:bg-gray-100"
           )}
         >
@@ -50,7 +50,7 @@ export function RowActions({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className={cn("w-56", isDark && "border-gray-700 bg-[#0B0629] text-white")}
+        className={cn("w-56", isDark && "border-gray-700 bg-[#161616] text-white")}
         onClick={(e) => e.stopPropagation()}
       >
         <DropdownMenuItem onSelect={onOpen}>

@@ -79,7 +79,7 @@ export function PaidPlanUpgradeModal({
       <DialogContent
         className={cn(
           "max-w-md w-[95vw]",
-          isDark ? "bg-[#06021D] border-gray-700 text-white" : "bg-white text-black"
+          isDark ? "bg-[#161616] border-white/10 text-white" : "bg-white text-black"
         )}
       >
         <DialogHeader>
@@ -157,10 +157,7 @@ export function PaidPlanUpgradeModal({
                 router.push("/pricing");
               }}
               className={cn(
-                "w-full py-5 rounded-xl text-base font-semibold flex items-center justify-center gap-2",
-                isDark
-                  ? "bg-[#7F39EC] hover:bg-[#6A29D9] text-white"
-                  : "bg-[#4A00BE] hover:bg-[#3900a0] text-white"
+                "w-full py-5 rounded-full text-base font-semibold flex items-center justify-center gap-2 goc-btn-primary",
               )}
             >
               <Zap className="h-4 w-4" />

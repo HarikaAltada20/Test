@@ -18,24 +18,27 @@ type Props = {
   disabled?: boolean;
   /** Extra line under the label, e.g. where to add more creators later. */
   note?: string;
+  accent?: "purple" | "ink";
 };
 
 const EXAMPLE =
   "Example: the campaign needs a trust score of 60. A creator you added with a score of 40 can still submit while this is on.";
 
 /** "Creators on the access list skip requirements" as a switch with an example tooltip. */
-export function SkipRequirementsSwitch({ checked, onCheckedChange, disabled, note }: Props) {
+export function SkipRequirementsSwitch({ checked, onCheckedChange, disabled, note, accent = "purple" }: Props) {
   const isDark = useDashboardDark();
+  const ink = accent === "ink";
   return (
     <div className={cn("flex items-start gap-3", isDark && "dark")}>
       <Switch
         id="accessListSkipsRequirements"
-        variant="theme-aware"
-        theme={isDark ? "dark" : "light"}
+        variant={ink ? undefined : "theme-aware"}
+        theme={ink ? undefined : isDark ? "dark" : "light"}
         checked={checked}
         disabled={disabled}
         onCheckedChange={onCheckedChange}
         aria-describedby="accessListSkipsRequirements-help"
+        className={ink ? "data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]" : undefined}
       />
       <div className="text-sm">
         <div className="flex items-center gap-1.5">
@@ -51,7 +54,10 @@ export function SkipRequirementsSwitch({ checked, onCheckedChange, disabled, not
                 <button
                   type="button"
                   aria-label="Example"
-                  className="rounded-full text-gray-400 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:hover:text-gray-200"
+                  className={cn(
+                    "rounded-full text-gray-400 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 dark:hover:text-gray-200",
+                    ink ? "focus-visible:ring-[#1a1a1a]" : "focus-visible:ring-[#7F39EC]",
+                  )}
                 >
                   <Info className="h-4 w-4" />
                 </button>

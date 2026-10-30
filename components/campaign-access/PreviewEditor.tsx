@@ -14,6 +14,7 @@ type Props = {
   applicationsOpen: boolean;
   onApplicationsOpenChange: (value: boolean) => void;
   disabled?: boolean;
+  accent?: "purple" | "ink";
 };
 
 const PLACEHOLDER = [
@@ -28,8 +29,10 @@ export function PreviewEditor({
   applicationsOpen,
   onApplicationsOpenChange,
   disabled,
+  accent = "purple",
 }: Props) {
   const isDark = useDashboardDark();
+  const ink = accent === "ink";
   const nearLimit = description.length >= MAX_PREVIEW_DESCRIPTION_LENGTH * 0.9;
   const empty = !description.trim();
 
@@ -59,7 +62,14 @@ export function PreviewEditor({
         />
         <div className="flex items-start justify-between gap-3">
           {empty ? (
-            <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300">
+            <p
+              className={cn(
+                "flex items-center gap-1.5 text-xs",
+                ink
+                  ? "text-[#1a1a1a] dark:text-gray-200"
+                  : "text-amber-700 dark:text-amber-300",
+              )}
+            >
               <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               Creators will only see the title and prize.
             </p>
@@ -70,7 +80,11 @@ export function PreviewEditor({
             id="restricted-preview-description-count"
             className={cn(
               "shrink-0 text-xs",
-              nearLimit ? "font-medium text-amber-600 dark:text-amber-400" : "text-gray-400 dark:text-gray-500",
+              nearLimit
+                ? ink
+                  ? "font-medium text-[#1a1a1a] dark:text-white"
+                  : "font-medium text-amber-600 dark:text-amber-400"
+                : "text-gray-400 dark:text-gray-500",
             )}
           >
             {description.length}/{MAX_PREVIEW_DESCRIPTION_LENGTH}
@@ -80,11 +94,12 @@ export function PreviewEditor({
 
       <label className="flex cursor-pointer items-start gap-3">
         <Switch
-          variant="theme-aware"
-          theme={isDark ? "dark" : "light"}
+          variant={ink ? undefined : "theme-aware"}
+          theme={ink ? undefined : isDark ? "dark" : "light"}
           checked={applicationsOpen}
           disabled={disabled}
           onCheckedChange={onApplicationsOpenChange}
+          className={ink ? "data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]" : undefined}
         />
         <span className="text-sm text-gray-900 dark:text-gray-100">
           <span className="font-medium">Accepting applications</span>

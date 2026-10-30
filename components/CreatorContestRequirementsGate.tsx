@@ -40,18 +40,23 @@ export function CreatorContestRequirementsGate({
 
   const failing = items.filter((item) => !item.passed);
 
+  const shellClass = cn(
+    "mb-4 rounded-2xl border shadow-none",
+    isDark
+      ? "border-white/10 bg-[#161616] text-white"
+      : "border-[#e5e5e5] bg-white text-[#1a1a1a]",
+  );
+
   if (loading) {
     return (
-      <Alert
-        className={cn(
-          "mb-4 rounded-xl border border-[#7F39EC] bg-[#D9C0FF26]",
-          className,
-        )}
-      >
-        <Loader2 className="h-4 w-4 animate-spin text-[#4A00BE]" />
-        <AlertDescription
-          className={cn(isDark ? "text-gray-200" : "text-[#4A00BE]")}
-        >
+      <Alert className={cn(shellClass, className)}>
+        <Loader2
+          className={cn(
+            "h-4 w-4 animate-spin",
+            isDark ? "text-white" : "text-[#1a1a1a]",
+          )}
+        />
+        <AlertDescription className={isDark ? "text-slate-300" : "text-[#737373]"}>
           Checking campaign requirements…
         </AlertDescription>
       </Alert>
@@ -61,28 +66,26 @@ export function CreatorContestRequirementsGate({
   if (failing.length === 0) return null;
 
   return (
-    <Alert
-      className={cn(
-        "mb-4 rounded-xl shadow-sm border border-[#7F39EC] bg-[#D9C0FF26]",
-        className,
-      )}
-    >
-      <AlertCircle className="h-4 w-4 text-[#4A00BE]" />
-      <AlertTitle
-        className={cn(isDark ? "text-[#D9C0FF]" : "text-[#4A00BE]")}
-      >
+    <Alert className={cn(shellClass, className)}>
+      <AlertCircle className={cn("h-4 w-4", isDark ? "text-white" : "text-[#1a1a1a]")} />
+      <AlertTitle className={cn("font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
         {`You don't meet campaign requirement${failing.length === 1 ? "" : "s"}`}
       </AlertTitle>
       <AlertDescription>
         <ul className="mt-3 space-y-3">
           {failing.map((item) => (
             <li key={item.code} className="flex items-start gap-2.5 text-sm">
-              <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#7F39EC]" />
+              <XCircle
+                className={cn(
+                  "mt-0.5 h-4 w-4 shrink-0",
+                  isDark ? "text-red-400" : "text-[#dc2626]",
+                )}
+              />
               <div className="min-w-0">
                 <p
                   className={cn(
                     "font-medium",
-                    isDark ? "text-[#D9C0FF]" : "text-[#4A00BE]",
+                    isDark ? "text-white" : "text-[#1a1a1a]",
                   )}
                 >
                   {item.label}
@@ -90,7 +93,7 @@ export function CreatorContestRequirementsGate({
                 <p
                   className={cn(
                     "text-xs leading-relaxed",
-                    isDark ? "text-gray-300" : "text-[#4A00BE]/80",
+                    isDark ? "text-slate-400" : "text-[#737373]",
                   )}
                 >
                   Required: {item.requiredLabel} · Yours: {item.yoursLabel}

@@ -185,19 +185,22 @@ export function BulkVideoDownloadStatusDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} isdark={isDark}>
-      <DialogContent className="sm:max-w-[980px] w-[min(980px,96vw)] z-[80] max-h-[92vh] overflow-y-auto">
+      <DialogContent
+        className={cn(
+          "z-[80] flex max-h-[92vh] w-[min(980px,96vw)] flex-col gap-4 overflow-y-auto rounded-2xl border p-6 sm:max-w-[980px]",
+          isDark
+            ? "border-white/10 bg-[#161616] text-white"
+            : "border-[#ececef] bg-white text-[#1a1a1a]",
+        )}
+      >
         <DialogHeader className="space-y-2 pb-1">
           <div className="flex items-start gap-3">
             <div
               className={cn(
                 "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
-                finished
-                  ? isDark
-                    ? "bg-emerald-500/20 text-emerald-300"
-                    : "bg-emerald-100 text-emerald-700"
-                  : isDark
-                    ? "bg-purple-500/20 text-purple-200"
-                    : "bg-purple-100 text-purple-700",
+                isDark
+                  ? "bg-white/10 text-white"
+                  : "bg-[#f3f3f5] text-[#1a1a1a]",
               )}
             >
               <Download className="h-4 w-4" />
@@ -234,7 +237,12 @@ export function BulkVideoDownloadStatusDialog({
 
         {showJobList ? (
           <div className="space-y-3">
-            <div className="flex w-full flex-nowrap items-stretch gap-2 overflow-x-auto">
+            <div
+              className={cn(
+                "flex w-full flex-nowrap items-center gap-0.5 overflow-x-auto rounded-xl p-1",
+                isDark ? "bg-white/[0.06]" : "bg-[#f5f5f5]",
+              )}
+            >
               {DOWNLOAD_SUMMARY_STATUS_TABS.map((tab) => {
                 const selected = listStatusTab === tab.id;
                 return (
@@ -246,27 +254,18 @@ export function BulkVideoDownloadStatusDialog({
                       setJobPage(1);
                     }}
                     className={cn(
-                      "inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors",
+                      "inline-flex min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-[9px] px-2.5 py-1.5 text-[13px] transition-colors",
                       selected
-                        ? "border-transparent bg-[#6C43D0] text-white"
+                        ? isDark
+                          ? "bg-white/10 font-semibold text-white shadow-[0px_1px_6px_0px_rgba(10,10,10,0.1)]"
+                          : "bg-white font-semibold text-[#0a0a0a] shadow-[0px_1px_6px_0px_rgba(10,10,10,0.1)]"
                         : isDark
-                          ? "border-purple-500/50 bg-purple-950/30 text-purple-100 hover:bg-purple-900/40"
-                          : "border-[#7F39EC] bg-white text-[#7F39EC] hover:bg-purple-50",
+                          ? "font-medium text-slate-400 hover:text-white"
+                          : "font-medium text-[#737373] hover:text-[#0a0a0a]",
                     )}
                   >
-                    {tab.label}
-                    <span
-                      className={cn(
-                        "rounded-full px-1.5 py-0.5 text-xs tabular-nums",
-                        selected
-                          ? "bg-white/20"
-                          : isDark
-                            ? "bg-white/10"
-                            : "bg-purple-100",
-                      )}
-                    >
-                      {jobStatusCounts[tab.id]}
-                    </span>
+                    <span className="truncate">{tab.label}</span>
+                    <span className="tabular-nums">{jobStatusCounts[tab.id]}</span>
                   </button>
                 );
               })}
@@ -306,10 +305,10 @@ export function BulkVideoDownloadStatusDialog({
                         }
                       }}
                       className={cn(
-                        "flex w-full items-center gap-3 rounded-lg border px-3 py-6 text-left transition-colors",
+                        "flex w-full items-center gap-3 rounded-2xl border px-4 py-4 text-left transition-colors",
                         isDark
-                          ? "border-purple-500/40 bg-purple-950/20 hover:bg-purple-900/40"
-                          : "border-purple-200 bg-purple-50/60 hover:bg-purple-100",
+                          ? "border-white/10 bg-[#111113] hover:bg-white/5"
+                          : "border-[#ececef] bg-white hover:bg-[#fafafa]",
                       )}
                     >
                       <div className="min-w-0 flex-1">
@@ -333,8 +332,8 @@ export function BulkVideoDownloadStatusDialog({
                               className={cn(
                                 "ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
                                 isDark
-                                  ? "bg-sky-500/20 text-sky-300"
-                                  : "bg-sky-100 text-sky-800",
+                                  ? "bg-white/10 text-white"
+                                  : "bg-[#f3f3f5] text-[#1a1a1a]",
                               )}
                             >
                               Desktop
@@ -383,7 +382,7 @@ export function BulkVideoDownloadStatusDialog({
                           {job.source === "desktop" ? (
                             <span
                               className={
-                                isDark ? "text-sky-300" : "text-sky-700"
+                                isDark ? "text-slate-300" : "text-[#737373]"
                               }
                             >
                               {job.totalCount} YouTube link
@@ -420,10 +419,10 @@ export function BulkVideoDownloadStatusDialog({
                           openJobSummary(job.id);
                         }}
                         className={cn(
-                          "h-7 shrink-0 px-3 text-sm",
+                          "h-8 shrink-0 rounded-full px-3.5 text-sm font-medium shadow-none",
                           isDark
-                            ? "border-purple-400/50 bg-purple-950/40 text-purple-100 hover:bg-purple-900/60"
-                            : "border-[#7F39EC] bg-white text-[#7F39EC] hover:bg-purple-50",
+                            ? "border-white/10 bg-transparent text-white hover:bg-white/10"
+                            : "border-[#e5e5e5] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
                         )}
                       >
                         View
@@ -461,8 +460,8 @@ export function BulkVideoDownloadStatusDialog({
             className={cn(
               "inline-flex items-center gap-1.5 text-xs font-medium",
               isDark
-                ? "text-purple-200 hover:text-white"
-                : "text-purple-700 hover:text-purple-900",
+                ? "text-slate-300 hover:text-white"
+                : "text-[#1a1a1a] hover:text-black",
             )}
           >
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -474,8 +473,8 @@ export function BulkVideoDownloadStatusDialog({
           className={cn(
             "rounded-xl border p-3 sm:p-4 space-y-3",
             isDark
-              ? "border-gray-600 bg-gradient-to-b from-[#1a0a2e] to-[#120624]"
-              : "border-slate-200 bg-gradient-to-b from-white to-slate-50",
+              ? "border-white/10 bg-white/5"
+              : "border-[#ececef] bg-[#f6f6f7]",
           )}
         >
           {loading ? (
@@ -498,15 +497,15 @@ export function BulkVideoDownloadStatusDialog({
               className={cn(
                 "space-y-3 rounded-lg border p-3",
                 isDark
-                  ? "border-sky-500/30 bg-sky-950/20"
-                  : "border-sky-200 bg-sky-50",
+                  ? "border-white/10 bg-white/5"
+                  : "border-[#ececef] bg-white",
               )}
             >
               <div className="flex items-start gap-2.5">
                 <Monitor
                   className={cn(
                     "mt-0.5 h-4 w-4 shrink-0",
-                    isDark ? "text-sky-300" : "text-sky-700",
+                    isDark ? "text-slate-300" : "text-[#1a1a1a]",
                   )}
                 />
                 <div className="min-w-0 space-y-1">
@@ -552,8 +551,8 @@ export function BulkVideoDownloadStatusDialog({
                     className={cn(
                       "h-8 gap-1.5 text-xs font-medium",
                       isDark
-                        ? "border-white/20 bg-white/10 text-sky-300 hover:bg-white/15"
-                        : "border-sky-200 bg-white text-sky-800 hover:bg-sky-100",
+                        ? "rounded-full border-white/10 bg-transparent text-white hover:bg-white/10"
+                        : "rounded-full border-[#e5e5e5] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
                     )}
                   >
                     <a href={installUrl} target="_blank" rel="noopener noreferrer">
@@ -570,8 +569,8 @@ export function BulkVideoDownloadStatusDialog({
                   className={cn(
                     "h-8 gap-1.5 text-xs font-medium",
                     isDark
-                      ? "border-white/20 bg-white/10 text-sky-300 hover:bg-white/15"
-                      : "border-sky-200 bg-white text-sky-800 hover:bg-sky-100",
+                      ? "rounded-full border-white/10 bg-transparent text-white hover:bg-white/10"
+                      : "rounded-full border-[#e5e5e5] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
                   )}
                 >
                   <a href={deepLinkUrl}>
@@ -599,8 +598,8 @@ export function BulkVideoDownloadStatusDialog({
               className={cn(
                 "rounded-lg border px-3 py-2.5",
                 isDark
-                  ? "border-gray-600 bg-white/[0.03]"
-                  : "border-slate-200 bg-white",
+                  ? "border-white/10 bg-white/5"
+                  : "border-[#ececef] bg-white",
               )}
             >
               <p
@@ -622,7 +621,7 @@ export function BulkVideoDownloadStatusDialog({
               <p
                 className={cn(
                   "mt-0.5 text-xs font-mono truncate",
-                  isDark ? "text-purple-300" : "text-purple-700",
+                  isDark ? "text-slate-400" : "text-[#737373]",
                 )}
                 title={patternMeta.example}
               >
@@ -645,8 +644,8 @@ export function BulkVideoDownloadStatusDialog({
                 className={cn(
                   "rounded-lg border divide-y",
                   isDark
-                    ? "border-gray-600 divide-white/10"
-                    : "border-slate-200 divide-slate-200",
+                    ? "border-white/10 divide-white/10"
+                    : "border-[#ececef] divide-[#ececef]",
                 )}
               >
                 {currentZipParts.map((part) => {
@@ -670,7 +669,7 @@ export function BulkVideoDownloadStatusDialog({
                         <FolderArchive
                           className={cn(
                             "mt-0.5 h-4 w-4 shrink-0",
-                            isDark ? "text-purple-300" : "text-purple-600",
+                            isDark ? "text-slate-300" : "text-[#1a1a1a]",
                           )}
                         />
                         <div className="min-w-0">
@@ -733,8 +732,8 @@ export function BulkVideoDownloadStatusDialog({
                         className={cn(
                           "h-8 gap-1.5 text-xs font-medium",
                           isDark
-                            ? "border-white/20 bg-white/10 text-sky-300 hover:bg-white/15 hover:text-sky-200"
-                            : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100",
+                            ? "rounded-full border-white/10 bg-transparent text-white hover:bg-white/10"
+                            : "rounded-full border-[#e5e5e5] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
                         )}
                       >
                         <ExternalLink className="h-3 w-3 opacity-80" />
@@ -820,8 +819,8 @@ export function BulkVideoDownloadStatusButton({
       onClick={onClick}
       className={cn(
         isDark
-          ? "border-purple-500/50 bg-purple-950/40 text-purple-200 hover:bg-purple-900/50"
-          : "border-purple-300 bg-purple-50 text-purple-800 hover:bg-purple-100",
+          ? "rounded-full border-white/10 bg-[#161616] text-white hover:bg-white/10"
+          : "rounded-full border-[#e5e5e5] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
         floating && "fixed bottom-4 right-4 z-[75] h-10 shadow-lg px-3",
       )}
     >

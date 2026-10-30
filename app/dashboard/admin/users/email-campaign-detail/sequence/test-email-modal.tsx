@@ -111,7 +111,7 @@ export function TestEmailModal({
             Cancel
           </Button>
           <Button
-            className="bg-[#662EBD] hover:bg-[#5524a8]"
+            className="bg-[#1a1a1a] hover:bg-black"
             onClick={handleSend}
             disabled={sending || !emails.trim()}
           >

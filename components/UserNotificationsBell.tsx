@@ -12,11 +12,14 @@ import {
   ChevronRight,
   CircleCheck,
   CircleX,
+  Clapperboard,
   Inbox,
   KeyRound,
   Loader2,
   MessageCircle,
+  MessageSquareText,
   Megaphone,
+  PencilLine,
 } from "lucide-react";
 import {
   Dialog,
@@ -26,6 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   Sheet,
   SheetContent,
@@ -38,6 +42,10 @@ import {
 } from "@/lib/user-notifications/support-sender-display";
 import { cn } from "@/lib/utils";
 import { isCampaignAccessNotificationType } from "@/lib/campaign-access";
+import {
+  draftNotificationHref,
+  isContentDraftNotificationType,
+} from "@/lib/content-drafts";
 import {
   NOTIFICATIONS_CHANGED_EVENT,
   dispatchNotificationsChanged,
@@ -104,13 +112,17 @@ function opensContest(n: NotificationRow): boolean {
   return (
     !!n.contest_id &&
     (isPublicAnnouncement(n.notification_type) ||
-      isCampaignAccessNotificationType(n.notification_type))
+      isCampaignAccessNotificationType(n.notification_type) ||
+      isContentDraftNotificationType(n.notification_type))
   );
 }
 
 /** Campaign page for a notification, opening the right tab or welcome banner. */
 function notificationHref(n: NotificationRow, userType: string): string {
   const base = getContestDashboardPath(n.contest_id!, userType);
+  if (isContentDraftNotificationType(n.notification_type)) {
+    return draftNotificationHref(n.contest_id!, userType, base);
+  }
   if (n.notification_type === "campaign_application_received") return `${base}?tab=applications`;
   if (
     n.notification_type === "campaign_application_approved" ||
@@ -123,13 +135,18 @@ function notificationHref(n: NotificationRow, userType: string): string {
 
 type NotificationGroup = { lead: NotificationRow; more: NotificationRow[] };
 
-/** Groups campaign-access updates about the same campaign under the newest one. */
+/** Groups campaign-access (and draft review) updates about the same campaign under the newest one. */
 function groupNotifications(rows: NotificationRow[]): NotificationGroup[] {
   const groups: NotificationGroup[] = [];
   const byContest = new Map<string, NotificationGroup>();
   for (const n of rows) {
-    const key =
-      n.contest_id && isCampaignAccessNotificationType(n.notification_type) ? n.contest_id : null;
+    const key = !n.contest_id
+      ? null
+      : isCampaignAccessNotificationType(n.notification_type)
+        ? n.contest_id
+        : isContentDraftNotificationType(n.notification_type)
+          ? `drafts:${n.contest_id}`
+          : null;
     const existing = key ? byContest.get(key) : undefined;
     if (existing) {
       existing.more.push(n);
@@ -184,8 +201,8 @@ function NotificationLead({
           className={cn(
             "text-sm font-semibold",
             isDark
-              ? "bg-purple-500/20 text-purple-200"
-              : "bg-purple-100 text-purple-700",
+              ? "bg-white/10 text-white"
+              : "bg-[#f5f5f5] text-[#0a0a0a]",
           )}
         >
           {avatarInitial(displayName)}
@@ -218,8 +235,8 @@ function NotificationIcon({
     },
     campaign_application_received: {
       icon: Inbox,
-      light: "bg-purple-100 text-purple-600",
-      dark: "bg-purple-500/20 text-purple-300",
+      light: "bg-[#f5f5f5] text-[#404040]",
+      dark: "bg-white/10 text-white",
     },
     campaign_access_granted: {
       icon: KeyRound,
@@ -231,6 +248,31 @@ function NotificationIcon({
       light: "bg-sky-100 text-sky-700",
       dark: "bg-sky-500/20 text-sky-300",
     },
+    content_draft_submitted: {
+      icon: Clapperboard,
+      light: "bg-purple-100 text-purple-600",
+      dark: "bg-purple-500/20 text-purple-300",
+    },
+    content_draft_approved: {
+      icon: CircleCheck,
+      light: "bg-emerald-100 text-emerald-600",
+      dark: "bg-emerald-500/20 text-emerald-300",
+    },
+    content_draft_revision_requested: {
+      icon: PencilLine,
+      light: "bg-amber-100 text-amber-700",
+      dark: "bg-amber-500/20 text-amber-300",
+    },
+    content_draft_rejected: {
+      icon: CircleX,
+      light: "bg-red-100 text-red-600",
+      dark: "bg-red-500/20 text-red-300",
+    },
+    content_draft_comment: {
+      icon: MessageSquareText,
+      light: "bg-sky-100 text-sky-700",
+      dark: "bg-sky-500/20 text-sky-300",
+    },
   };
   const accessStyle = access[type];
   const Icon = accessStyle?.icon ?? (isSupport ? MessageCircle : Megaphone);
@@ -239,13 +281,9 @@ function NotificationIcon({
     <div
       className={cn(
         "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-        accessStyle ? (isDark ? accessStyle.dark : accessStyle.light) : isSupport
-          ? isDark
-            ? "bg-purple-500/20 text-purple-300"
-            : "bg-purple-100 text-purple-600"
-          : isDark
-            ? "bg-slate-800 text-slate-300"
-            : "bg-slate-100 text-slate-600",
+        accessStyle ? (isDark ? accessStyle.dark : accessStyle.light) : isDark
+          ? "bg-white/10 text-white"
+          : "bg-[#f5f5f5] text-[#404040]",
       )}
     >
       <Icon className="h-5 w-5" aria-hidden="true" />
@@ -278,14 +316,14 @@ function NotificationCard({
       onClick={onClick}
       className={cn(
         "group w-full rounded-xl border p-4 text-left transition-all",
-        "hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/40",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a]/15",
         isDark
-          ? "border-slate-700/80 bg-slate-900/40 hover:border-purple-500/30 hover:bg-slate-800/60"
-          : "border-slate-200 bg-white hover:border-purple-200 hover:bg-purple-50/30",
+          ? "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/5"
+          : "border-[#e5e5e5] bg-white hover:border-[#d4d4d4] hover:bg-[#fafafa]",
         !n.is_read &&
           (isDark
-            ? "border-purple-500/40 bg-purple-500/5"
-            : "border-purple-200 bg-purple-50/50"),
+            ? "border-white/40 bg-white/5"
+            : "border-[#0a0a0a]"),
       )}
     >
       <div className="flex gap-3">
@@ -300,7 +338,10 @@ function NotificationCard({
                 </span>
                 {!n.is_read && (
                   <span
-                    className="h-2 w-2 shrink-0 rounded-full bg-purple-600"
+                    className={cn(
+                      "h-2 w-2 shrink-0 rounded-full",
+                      isDark ? "bg-white" : "bg-[#0a0a0a]",
+                    )}
                     aria-label="Unread"
                   />
                 )}
@@ -350,13 +391,17 @@ function NotificationCard({
               className={cn(
                 "mt-2.5 flex items-center gap-0.5 text-xs font-medium transition-colors",
                 isDark
-                  ? "text-purple-400 group-hover:text-purple-300"
-                  : "text-purple-600 group-hover:text-purple-700",
+                  ? "text-white group-hover:text-neutral-300"
+                  : "text-[#0a0a0a] group-hover:text-[#404040]",
               )}
             >
               {n.notification_type === "campaign_application_received"
                 ? "Review applications"
-                : "View campaign"}
+                : n.notification_type === "content_draft_submitted"
+                  ? "Review drafts"
+                  : isContentDraftNotificationType(n.notification_type)
+                    ? "View drafts"
+                    : "View campaign"}
               <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
             </p>
           )}
@@ -365,8 +410,8 @@ function NotificationCard({
               className={cn(
                 "mt-2.5 flex items-center gap-0.5 text-xs font-medium transition-colors",
                 isDark
-                  ? "text-purple-400 group-hover:text-purple-300"
-                  : "text-purple-600 group-hover:text-purple-700",
+                  ? "text-white group-hover:text-neutral-300"
+                  : "text-[#0a0a0a] group-hover:text-[#404040]",
               )}
             >
               {isAdminSupportMessage ? "Open in support" : "View conversation"}
@@ -516,7 +561,7 @@ export function UserNotificationsBell({
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-purple-600 px-1 text-[10px] font-bold text-white">
+          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#0a0a0a] px-1 text-[10px] font-bold text-white">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
@@ -527,7 +572,7 @@ export function UserNotificationsBell({
           side="right"
           className={cn(
             "w-full sm:max-w-lg flex flex-col p-0 gap-0",
-            isDark && "bg-[#06021D] text-white border-slate-700",
+            isDark && "bg-[#0e0e0e] text-white border-white/10",
           )}
         >
           <SheetHeader
@@ -553,8 +598,8 @@ export function UserNotificationsBell({
                   className={cn(
                     "h-7 px-2 text-xs",
                     isDark
-                      ? "text-purple-300 hover:bg-white/10"
-                      : "text-purple-700 hover:bg-purple-50",
+                      ? "text-white hover:bg-white/10"
+                      : "text-[#404040] hover:bg-[#f5f5f5]",
                   )}
                   disabled={markingAll}
                   onClick={markAllRead}
@@ -572,8 +617,8 @@ export function UserNotificationsBell({
 
           <div className="flex-1 overflow-y-auto min-h-0">
             {loading && notifications.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
-                <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+              <div className="flex flex-col items-center justify-center gap-2 py-8 text-muted-foreground">
+                <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
                 <p className="text-sm">Loading notifications…</p>
               </div>
             ) : notifications.length === 0 ? (
@@ -627,7 +672,7 @@ export function UserNotificationsBell({
                               })
                             }
                             className={cn(
-                              "ml-4 flex items-center gap-1 rounded-sm text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/40",
+                              "ml-4 flex items-center gap-1 rounded-sm text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a0a0a]/15",
                               isDark ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-700",
                             )}
                           >
@@ -638,7 +683,7 @@ export function UserNotificationsBell({
                             )}
                             {expanded ? "Hide" : "Show"} {more.length} more about this campaign
                             {more.some((m) => !m.is_read) && !expanded && (
-                              <span className="ml-1 h-1.5 w-1.5 rounded-full bg-purple-600" aria-label="Unread" />
+                              <span className={cn("ml-1 h-1.5 w-1.5 rounded-full", isDark ? "bg-white" : "bg-[#0a0a0a]")} aria-label="Unread" />
                             )}
                           </button>
                           {expanded && (

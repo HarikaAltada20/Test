@@ -5,6 +5,7 @@ import {
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
 import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
+import { isHighestPlatformPayoutOnly } from "@/lib/highest-platform-payout";
 import {
   isKeyedMaxEarningsMap,
   resolveMaxEarningsCentsForSubmission,
@@ -105,6 +106,12 @@ export async function processQueuedPayouts(
       if (isTwitterTextImageLeaderboardContest(contest)) {
         throw new Error(
           "Twitter text/image leaderboard contests must be paid via the Twitter creator payout APIs, not queued payout jobs.",
+        );
+      }
+
+      if (isHighestPlatformPayoutOnly(contest)) {
+        throw new Error(
+          "Campaigns that pay only each creator's highest-earning platform must be paid via bulk payment or verify-submission, not queued payout jobs.",
         );
       }
 

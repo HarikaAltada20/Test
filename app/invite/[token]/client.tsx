@@ -9,6 +9,7 @@ import {
   CalendarX,
   CheckCircle2,
   Clock,
+  Crown,
   Link2Off,
   Loader2,
   Lock,
@@ -45,6 +46,8 @@ export type InvitePreview = {
   /** Total prize pool; null when unknown or zero. */
   prizeCents?: number | null;
   platforms?: string[];
+  /** "Best platform paid" campaign (derived on the server). */
+  bestPlatformOnly?: boolean;
   startDate?: string | null;
   endDate?: string | null;
 };
@@ -81,6 +84,9 @@ function InviteFacts({ preview }: { preview: InvitePreview }) {
   }
   if (platforms.length > 0) {
     facts.push({ icon: Sparkles, label: platforms.length > 1 ? "Platforms" : "Platform", value: platforms.join(", ") });
+  }
+  if (preview.bestPlatformOnly) {
+    facts.push({ icon: Crown, label: "Payout", value: "Paid for your best platform only" });
   }
   if (facts.length === 0) return null;
   return (

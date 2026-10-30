@@ -27,7 +27,6 @@ import {
   Shield,
   FileText,
   Search,
-  ChevronRight,
   Star,
   Zap,
   Crown,
@@ -37,7 +36,6 @@ import {
   X,
   ArrowRight,
   CheckCircle2,
-  Users,
 } from "lucide-react";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
@@ -79,6 +77,8 @@ import Link from "next/link";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { formatDate } from "@/lib/date-utils";
 import { getSubscriptionPlanById } from "@/lib/subscription-utils-client";
+import BrandSettings from "@/components/dashboard/brand-settings";
+import { ConnectStage, connectLine } from "@/components/dashboard/settings/ConnectStage";
 dayjs.extend(isSameOrAfter);
 
 interface SocialAccount {
@@ -123,6 +123,10 @@ interface AdvertiserProfile {
   company_name: string;
   website_url: string;
   subscription_info: any;
+  total_contests_run?: number | null;
+  total_money_spent?: number | null;
+  withdrawable_balance?: number | null;
+  available_deposit_balance?: number | null;
 }
 
 export default function SettingsPage({
@@ -178,6 +182,17 @@ export default function SettingsPage({
   const [storedReferralCode, setStoredReferralCode] = useState<string | null>(
     null,
   );
+  const [referralStats, setReferralStats] = useState<{
+    coins: number;
+    creatorsReferred: number;
+    brandsReferred: number;
+    referredBy: string | null;
+  }>({
+    coins: 0,
+    creatorsReferred: 0,
+    brandsReferred: 0,
+    referredBy: null,
+  });
   const [pageLoading, setPageLoading] = useState(true);
   const [hasPassword, setHasPassword] = useState(true); // Track if user has a password
   const supabase = createClient();
@@ -213,6 +228,9 @@ export default function SettingsPage({
   const [isSurveyCompleted, setIsSurveyCompleted] = useState(false);
   const [isSurveyLoading, setIsSurveyLoading] = useState(true);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  const [creatorTab, setCreatorTab] = useState<
+    "social" | "account" | "security" | "referrals" | "community" | "legal"
+  >("social");
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isReferralModalOpen, setIsReferralModalOpen] = useState(false);
   const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
@@ -607,7 +625,9 @@ export default function SettingsPage({
         } else if (userData.user_type === "advertiser") {
           const { data, error } = await supabase
             .from("advertiser_profiles")
-            .select("company_name, website_url, subscription_info")
+            .select(
+              "company_name, website_url, subscription_info, total_contests_run, total_money_spent, withdrawable_balance, available_deposit_balance",
+            )
             .eq("id", user!.id)
             .single();
 
@@ -734,13 +754,32 @@ export default function SettingsPage({
       if (!user?.id) return;
       const { data, error } = await supabase
         .from("users")
-        .select("username, user_type, referral_code")
+        .select(
+          "username, user_type, referral_code, coins, creators_referred, advertisers_referred, referred_by",
+        )
         .eq("id", user.id)
         .maybeSingle();
       if (!error && data) {
         setUsername(data.username || null);
         setStoredReferralCode(data.referral_code || null);
         setUserType((data.user_type as any) || null);
+
+        let referredByName: string | null = null;
+        if (data.referred_by) {
+          const { data: referrerData } = await supabase
+            .from("users")
+            .select("username")
+            .eq("referral_code", data.referred_by)
+            .maybeSingle();
+          referredByName = referrerData?.username || null;
+        }
+
+        setReferralStats({
+          coins: data.coins ?? 0,
+          creatorsReferred: data.creators_referred ?? 0,
+          brandsReferred: data.advertisers_referred ?? 0,
+          referredBy: referredByName,
+        });
       }
     };
     load();
@@ -824,12 +863,15 @@ export default function SettingsPage({
     return code ? buildReferralLinks(code, origin) : null;
   };
 
-  const copyToClipboard = async (text: string) => {
+  const copyToClipboard = async (
+    text: string,
+    description = "Referral link copied to clipboard.",
+  ) => {
     try {
       await navigator.clipboard.writeText(text);
       toast({
         title: "Copied",
-        description: "Referral link copied to clipboard.",
+        description,
       });
     } catch (e) {
       toast({
@@ -1319,6 +1361,30 @@ export default function SettingsPage({
   }
 
   const isDark = mode === "dark";
+  const outlinePill = cn(
+    "h-9 rounded-full border px-4 text-sm font-medium shadow-none",
+    isDark
+      ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+      : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
+  );
+  const connectPill = cn(
+    "h-9 rounded-full border-0 px-4 text-sm font-medium shadow-none",
+    isDark
+      ? "bg-white/10 text-white hover:bg-white/15"
+      : "bg-[#E6E6E8] text-[#171717] hover:bg-[#DCDCE0]",
+  );
+  const disconnectPill =
+    "h-9 rounded-full bg-[#C90808] px-4 text-sm font-medium text-white shadow-none hover:bg-[#a50707]";
+  const darkDialogCta = "rounded-full goc-btn-primary";
+  const connectedPlatforms = (
+    [
+      youtubeConnected ? "youtube" : null,
+      instagramConnected ? "instagram" : null,
+      tiktokConnected ? "tiktok" : null,
+      twitterConnected ? "x" : null,
+    ] as const
+  ).filter((platform): platform is "youtube" | "instagram" | "tiktok" | "x" => platform !== null);
+  const stageLine = connectLine(connectedPlatforms);
 
   const handleSignOut = async () => {
     try {
@@ -1588,6 +1654,52 @@ export default function SettingsPage({
     return getProfileCompletionPercentage() < 100;
   };
 
+  const getMissingProfileLabels = () => {
+    if (!creatorProfileData || userType !== "creator") return [];
+    const fields = [
+      { label: "phone number", filled: Boolean(creatorProfileData.phone_number?.trim()) },
+      { label: "date of birth", filled: Boolean(creatorProfileData.date_of_birth?.trim()) },
+      { label: "gender", filled: Boolean(creatorProfileData.gender?.trim()) },
+      { label: "country", filled: Boolean(creatorProfileData.country?.trim()) },
+      { label: "state", filled: Boolean(creatorProfileData.state?.trim()) },
+      { label: "city", filled: Boolean(creatorProfileData.city?.trim()) },
+      { label: "address", filled: Boolean(creatorProfileData.address?.trim()) },
+      {
+        label: "languages",
+        filled:
+          Array.isArray(creatorProfileData.languages) &&
+          creatorProfileData.languages.length > 0,
+      },
+      {
+        label: "categories",
+        filled: Boolean(
+          creatorProfileData.categories &&
+            ((Array.isArray(creatorProfileData.categories) &&
+              creatorProfileData.categories.length > 0) ||
+              (typeof creatorProfileData.categories === "object" &&
+                Object.keys(creatorProfileData.categories).length > 0)),
+        ),
+      },
+      {
+        label: "subcategories",
+        filled: Boolean(
+          creatorProfileData.subcategories &&
+            ((Array.isArray(creatorProfileData.subcategories) &&
+              creatorProfileData.subcategories.length > 0) ||
+              (typeof creatorProfileData.subcategories === "object" &&
+                Object.keys(creatorProfileData.subcategories).length > 0)),
+        ),
+      },
+      {
+        label: "interests",
+        filled:
+          Array.isArray(creatorProfileData.interests) &&
+          creatorProfileData.interests.length > 0,
+      },
+    ];
+    return fields.filter((field) => !field.filled).map((field) => field.label);
+  };
+
   const settingsItems = [
     {
       id: "profile",
@@ -1647,22 +1759,115 @@ export default function SettingsPage({
   ];
 
   return (
-    <div className="space-y-6 bg-background text-foreground transition-colors duration-300 max-w-[1200px] mx-auto">
+    <div
+      className={cn(
+        "w-full space-y-6 bg-background text-foreground transition-colors duration-300",
+        userType === "advertiser" ? "mx-auto max-w-[1200px]" : "max-w-[820px]",
+      )}
+    >
+      {userType === "advertiser" && (
+        <BrandSettings
+          user={user}
+          companyName={
+            (profile as AdvertiserProfile | null)?.company_name || null
+          }
+          websiteUrl={(profile as AdvertiserProfile | null)?.website_url || null}
+          productId={
+            (profile as AdvertiserProfile | null)?.subscription_info
+              ?.product_id || ""
+          }
+          priceId={
+            (profile as AdvertiserProfile | null)?.subscription_info?.price_id ||
+            ""
+          }
+          campaignsRun={
+            (profile as AdvertiserProfile | null)?.total_contests_run ?? 0
+          }
+          totalMoneySpentCents={
+            (profile as AdvertiserProfile | null)?.total_money_spent ?? 0
+          }
+          withdrawableBalanceCents={
+            (profile as AdvertiserProfile | null)?.withdrawable_balance ?? 0
+          }
+          availableDepositBalanceCents={
+            (profile as AdvertiserProfile | null)?.available_deposit_balance ?? 0
+          }
+          username={username}
+          referralCode={getShareReferralCode()}
+          referralLinks={getShareReferralLinks()}
+          coins={referralStats.coins}
+          creatorsReferred={referralStats.creatorsReferred}
+          brandsReferred={referralStats.brandsReferred}
+          referredBy={referralStats.referredBy}
+          hasPassword={hasPassword}
+          providers={
+            (user.app_metadata?.providers as string[] | undefined) || []
+          }
+          billingData={billingData}
+          billingLoading={billingLoading}
+          isDark={isDark}
+          onChangePassword={() => setIsPasswordModalOpen(true)}
+          onSignOut={handleSignOut}
+          onManagePlan={() =>
+            router.push("/dashboard/billing?tab=subscription")
+          }
+          onCopy={copyToClipboard}
+          onOpenLegal={(href) => router.push(href)}
+          onLoadBilling={fetchBillingDetails}
+        />
+      )}
+
       {/* Page Header */}
-      <div className="space-y-3 text-center">
+      {userType !== "advertiser" && (
+      <>
+      <div className="space-y-1">
         <h1
           className={cn(
-            "text-4xl font-bold",
-            isDark ? "text-white" : "text-gray-900",
+            "text-3xl font-bold tracking-tight",
+            isDark ? "text-white" : "text-[#171717]",
           )}
         >
           Settings
         </h1>
         <p
-          className={cn("text-lg", isDark ? "text-gray-400" : "text-gray-600")}
+          className={cn(
+            "text-md",
+            isDark ? "text-slate-300" : "text-[#44403c]",
+          )}
         >
-          Manage your account settings and preferences
+          Your accounts, sign-in and referrals. Payout methods are in the Wallet.
         </p>
+      </div>
+
+      <div className={cn("flex gap-6 overflow-x-auto border-b", isDark ? "border-white/10" : "border-neutral-200")}>
+        {(
+          [
+            ["social", "Social accounts"],
+            ["account", "Account"],
+            ["security", "Sign-in & security"],
+            ["referrals", "Referrals"],
+            ["community", "Community"],
+            ["legal", "Legal"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setCreatorTab(id)}
+            className={cn(
+              "shrink-0 border-b-2 pb-3 text-md font-semibold",
+              creatorTab === id
+                ? isDark
+                  ? "border-white text-white"
+                  : "border-[#171717] text-[#171717]"
+                : isDark
+                  ? "border-transparent text-slate-400 hover:text-white"
+                  : "border-transparent text-[#44403c] hover:text-[#171717]",
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* Connection Error Alert */}
@@ -1755,7 +1960,7 @@ export default function SettingsPage({
                         </div>
                         <p
                           className={cn(
-                            "text-xs",
+                            "text-sm",
                             isDark ? "text-[#FF5353]" : "text-red-600",
                           )}
                         >
@@ -1765,7 +1970,7 @@ export default function SettingsPage({
                         </p>
                         <div
                           className={cn(
-                            "text-xs",
+                            "text-sm",
                             isDark ? "text-[#FF5353]" : "text-red-600",
                           )}
                         >
@@ -1795,42 +2000,36 @@ export default function SettingsPage({
       )}
 
       {/* Connected Accounts - Only for Creators */}
-      {userType === "creator" && (
-        <div>
-          <div
-            className={cn(
-              "rounded-t-2xl border-b px-6 py-4 shadow-md",
-              isDark ? "bg-[#180438]" : "bg-white",
-            )}
-          >
-            <CardTitle
-              className={cn(
-                "text-2xl",
-                isDark ? "text-white" : "text-[#7F39EC]",
-              )}
-            >
-              Manage Your Account
-            </CardTitle>
-          </div>
-          <div
-            className={cn(
-              "rounded-b-2xl pb-4 shadow-md",
-              isDark ? "bg-[#180438]" : "bg-white",
-            )}
-          >
-            <CardHeader>
-              <CardTitle className="text-lg">Social Accounts</CardTitle>
-              <CardDescription>
-                Connect your social media accounts to participate in campaigns.
+      {userType === "creator" && creatorTab === "social" && (
+        <div
+          className={cn(
+            "rounded-2xl border",
+            isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white",
+          )}
+        >
+          <div className="px-5 py-5 sm:px-6">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <CardTitle className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>
+                Social accounts
+              </CardTitle>
+              <CardDescription className={cn("text-sm", isDark ? "text-slate-300" : "text-[#44403c]")}>
+                We only read views to verify submissions. We never post.
               </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
+            </div>
+            <ConnectStage className="mt-2" connected={connectedPlatforms} />
+            <p className={cn("mx-auto max-w-md text-center text-sm leading-relaxed", isDark ? "text-slate-300" : "text-[#44403c]")}>
+              <span className={cn("font-semibold", isDark ? "text-white" : "text-[#171717]")}>{stageLine.lead}</span>{" "}
+              {stageLine.rest} Connect your social media accounts to participate in campaigns.
+            </p>
+          </div>
+          <div className={cn("border-t px-5 py-2 sm:px-6", isDark ? "border-white/10" : "border-neutral-200")}>
+            <CardContent className="space-y-4 px-0">
               {/* YouTube Connection */}
-              <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex flex-col gap-3 border-b py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center space-x-3">
                   <SiYoutube className="text-2xl text-red-600" />
                   <div>
-                    <h3 className="font-medium">YouTube</h3>
+                    <h3 className="text-base font-semibold">YouTube</h3>
                     {youtubeConnected ? (
                       <div>
                         <p className="text-sm text-muted-foreground">
@@ -1838,11 +2037,11 @@ export default function SettingsPage({
                           {youtubeAccount?.channel_title ||
                             "your YouTube account"}
                           {youtubeAccount?.needs_reconnect ? (
-                            <span className="ml-2 text-amber-600 text-xs">
+                            <span className="ml-2 text-amber-600 text-sm">
                               Needs reconnect
                             </span>
                           ) : (
-                            <span className="ml-2 text-green-600 text-xs">
+                            <span className="ml-2 text-green-600 text-sm">
                               ✓ Active
                             </span>
                           )}
@@ -1859,7 +2058,7 @@ export default function SettingsPage({
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                       <Button
-                        className="bg-[#C90808] text-white"
+                        className={disconnectPill}
                         onClick={handleYouTubeDisconnect}
                         disabled={isLoadingYouTubeDisconnect}
                       >
@@ -1872,7 +2071,8 @@ export default function SettingsPage({
                         <Button
                           onClick={handleYouTubeConnect}
                           disabled={isLoadingYouTube}
-                          variant="default"
+                          variant="outline"
+                          className={outlinePill}
                         >
                           {isLoadingYouTube && (
                             <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
@@ -1886,6 +2086,8 @@ export default function SettingsPage({
                   <Button
                     onClick={handleYouTubeConnect}
                     disabled={isLoadingYouTube}
+                    variant="outline"
+                    className={connectPill}
                   >
                     {isLoadingYouTube && (
                       <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
@@ -1913,7 +2115,7 @@ export default function SettingsPage({
               {!youtubeConnected && (
                 <Alert
                   variant="default"
-                  className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]"
+                  className={cn("mt-2 border", isDark ? "border-white/15 bg-white/5" : "border-neutral-200 bg-[#F6F6F7]")}
                 >
                   <Bell className="h-4 w-4" />
                   <AlertDescription className="text-sm leading-relaxed">
@@ -1932,11 +2134,11 @@ export default function SettingsPage({
               )}
 
               {/* Instagram Connection */}
-              <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex flex-col gap-3 border-b py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center space-x-3">
                   <SiInstagram className="text-2xl text-pink-600" />
                   <div>
-                    <h3 className="font-medium">Instagram</h3>
+                    <h3 className="text-base font-semibold">Instagram</h3>
                     {instagramConnected ? (
                       <div>
                         <p className="text-sm text-muted-foreground">
@@ -1951,11 +2153,11 @@ export default function SettingsPage({
                           )}
                           )
                           {instagramAccount?.needs_reconnect ? (
-                            <span className="ml-2 text-amber-600 text-xs">
+                            <span className="ml-2 text-amber-600 text-sm">
                               Needs reconnect
                             </span>
                           ) : (
-                            <span className="ml-2 text-green-600 text-xs">
+                            <span className="ml-2 text-green-600 text-sm">
                               ✓ Active
                             </span>
                           )}
@@ -1972,7 +2174,7 @@ export default function SettingsPage({
                   <>
                     <Button
                       variant="outline"
-                      className="bg-[#C90808] text-white"
+                      className={disconnectPill}
                       onClick={handleInstagramDisconnect}
                       disabled={isLoading}
                     >
@@ -1985,8 +2187,8 @@ export default function SettingsPage({
                       <Button
                         onClick={handleInstagramConnect}
                         disabled={isLoading}
-                        variant="default"
-                        className="ml-2"
+                        variant="outline"
+                        className={outlinePill}
                       >
                         {isLoading && (
                           <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
@@ -1996,7 +2198,7 @@ export default function SettingsPage({
                     )}
                   </>
                 ) : (
-                  <Button onClick={handleInstagramConnect} disabled={isLoading}>
+                  <Button onClick={handleInstagramConnect} disabled={isLoading} variant="outline" className={connectPill}>
                     {isLoading && (
                       <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                     )}
@@ -2026,7 +2228,7 @@ export default function SettingsPage({
               {!instagramConnected && (
                 <Alert
                   variant="default"
-                  className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]"
+                  className={cn("mt-2 border", isDark ? "border-white/15 bg-white/5" : "border-neutral-200 bg-[#F6F6F7]")}
                 >
                   <Bell className="h-4 w-4" />
                   <AlertDescription className="text-sm leading-relaxed">
@@ -2090,11 +2292,11 @@ export default function SettingsPage({
               )}
 
               {/* TikTok Connection */}
-              <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex flex-col gap-3 border-b py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center space-x-3">
                   <SiTiktok className="text-2xl" />
                   <div>
-                    <h3 className="font-medium">TikTok</h3>
+                    <h3 className="text-base font-semibold">TikTok</h3>
                     {tiktokConnected ? (
                       <div>
                         <p className="text-sm text-muted-foreground">
@@ -2111,11 +2313,11 @@ export default function SettingsPage({
                             </>
                           )}
                           {tiktokAccount?.needs_reconnect ? (
-                            <span className="ml-2 text-amber-600 text-xs">
+                            <span className="ml-2 text-amber-600 text-sm">
                               Needs reconnect
                             </span>
                           ) : (
-                            <span className="ml-2 text-green-600 text-xs">
+                            <span className="ml-2 text-green-600 text-sm">
                               Connected
                             </span>
                           )}
@@ -2134,7 +2336,7 @@ export default function SettingsPage({
                     <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
-                      className="bg-[#C90808] text-white"
+                      className={disconnectPill}
                       onClick={handleTiktokDisconnect}
                       disabled={isLoadingTiktokDisconnect}
                     >
@@ -2147,7 +2349,8 @@ export default function SettingsPage({
                       <Button
                         onClick={handleTiktokConnect}
                         disabled={isLoadingTiktok}
-                        variant="default"
+                        variant="outline"
+                        className={outlinePill}
                       >
                         {isLoadingTiktok && (
                           <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
@@ -2163,11 +2366,13 @@ export default function SettingsPage({
                   <Button
                     onClick={handleTiktokConnect}
                     disabled={isLoadingTiktok}
+                    variant="outline"
+                    className={connectPill}
                   >
                     {isLoadingTiktok && (
                       <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                     )}
-                    Connect
+                    Connect TikTok
                   </Button>
                 )}
               </div>
@@ -2193,7 +2398,7 @@ export default function SettingsPage({
               {!tiktokConnected && (
                 <Alert
                   variant="default"
-                  className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]"
+                  className={cn("mt-2 border", isDark ? "border-white/15 bg-white/5" : "border-neutral-200 bg-[#F6F6F7]")}
                 >
                   <Bell className="h-4 w-4" />
                   <AlertDescription className="text-sm leading-relaxed">
@@ -2227,7 +2432,7 @@ export default function SettingsPage({
               )}
 
               {/* Twitter Connection */}
-              <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex flex-col gap-3 border-b py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center space-x-3">
                   <FaXTwitter
                     className={cn(
@@ -2236,7 +2441,7 @@ export default function SettingsPage({
                     )}
                   />
                   <div>
-                    <h3 className="font-medium">Twitter (X)</h3>
+                    <h3 className="text-base font-semibold">Twitter (X)</h3>
                     {twitterConnected && twitterAccount ? (
                       <div className="flex items-center gap-2">
                         <p className="text-sm text-muted-foreground">
@@ -2244,7 +2449,7 @@ export default function SettingsPage({
                           {twitterAccount.name ||
                             twitterAccount.username ||
                             "your X account"}
-                          <span className="ml-2 text-green-600 text-xs">
+                          <span className="ml-2 text-green-600 text-sm">
                             ✓ Active
                           </span>
                         </p>
@@ -2276,7 +2481,7 @@ export default function SettingsPage({
                 {/* onClick={handleTwitterConnect} */}
                 {twitterConnected ? (
                   <Button
-                    className="bg-[#C90808] text-white"
+                    className={disconnectPill}
                     onClick={handleTwitterDisconnect}
                     disabled={isLoadingTwitterDisconnect}
                   >
@@ -2287,6 +2492,8 @@ export default function SettingsPage({
                   </Button>
                 ) : (
                   <Button
+                    variant="outline"
+                    className={connectPill}
                     onClick={() => {
                       setIsTwitterModalOpen(true);
                       setTwitterFetchState("idle");
@@ -2303,7 +2510,7 @@ export default function SettingsPage({
               {!twitterConnected && (
                 <Alert
                   variant="default"
-                  className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]"
+                  className={cn("mt-2 border", isDark ? "border-white/15 bg-white/5" : "border-neutral-200 bg-[#F6F6F7]")}
                 >
                   <Bell className="h-4 w-4" />
                   <AlertDescription className="text-sm leading-relaxed">
@@ -2375,12 +2582,102 @@ export default function SettingsPage({
         </CardContent>
       </Card> */}
 
+      {userType === "creator" && creatorTab === "account" && (
+        <div className="space-y-4">
+          {showProfileNotification && isProfileIncomplete() && (
+            <div className={cn(
+              "rounded-2xl border px-5 py-4",
+              isDark
+                ? "border-[#c4a574]/40 bg-[linear-gradient(90deg,rgba(196,161,90,0.18)_0%,rgba(14,14,14,0.4)_55%,#161616_100%)]"
+                : "border-[#ffd7b8] bg-[#fff7f0]",
+            )}>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>
+                    Complete your profile to earn $0.50
+                  </p>
+                  <p className={cn("mt-1 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>
+                    {11 - getMissingProfileLabels().length} of 11 done
+                    {getMissingProfileLabels().length > 0
+                      ? ` · missing ${getMissingProfileLabels().join(", ")}`
+                      : ""}
+                    . Complete your profile now and claim your $0.50 reward!
+                  </p>
+                  <div className={cn("mt-3 h-1.5 w-full max-w-md overflow-hidden rounded-full", isDark ? "bg-white/10" : "bg-[#f3e6da]")}>
+                    <div
+                      className="h-full rounded-full bg-[var(--accent-btn-base)]"
+                      style={{ width: `${getProfileCompletionPercentage()}%` }}
+                    />
+                  </div>
+                </div>
+                <Link href="/dashboard/profile">
+                  <Button
+                    className="h-10 rounded-full goc-btn-primary px-5 text-sm font-semibold"
+                    onClick={() => {
+                      setProfileCompletionLoading(true);
+                      setTimeout(() => {
+                        window.location.href = "/dashboard/profile";
+                      }, 100);
+                    }}
+                    disabled={profileCompletionLoading}
+                  >
+                    Complete profile
+                    {profileCompletionLoading ? <ButtonLoadingSpinner /> : null}
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          )}
+          {showProfileNotification &&
+            creatorProfileData?.has_claimed_profile_reward &&
+            getProfileCompletionPercentage() === 100 && (
+              <div className={cn("rounded-2xl border px-5 py-4", isDark ? "border-emerald-800 bg-emerald-950/40" : "border-emerald-200 bg-emerald-50")}>
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+                  <div>
+                    <p className={cn("text-base font-semibold", isDark ? "text-emerald-300" : "text-emerald-700")}>
+                      Profile Completed & Bonus Claimed!
+                    </p>
+                    <p className={cn("mt-1 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>
+                      Congratulations! Your profile has been completed and you&apos;ve successfully claimed your $0.50 reward. Your profile is now locked and cannot be edited.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
+            <div className="px-5 py-4">
+              <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Profile</h2>
+            </div>
+            <div className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-white/10" : "border-neutral-200")}>
+              <p className={cn("w-40 shrink-0 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>Profile information</p>
+              <p className={cn("min-w-0 flex-1 text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>
+                {(user?.user_metadata?.full_name as string | undefined) ||
+                  (user?.user_metadata?.name as string | undefined) ||
+                  username ||
+                  "Your profile"}
+                {username ? ` · @${username}` : ""}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className={outlinePill}
+                disabled={navigatingProfile}
+                onClick={() => handleNavigation("profile", "/dashboard/profile")}
+              >
+                {navigatingProfile ? <ButtonLoadingSpinner /> : "Open profile"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Survey Section - Only for Creators who have completed the survey */}
-      {userType === "creator" && isSurveyCompleted && !isSurveyLoading && (
+      {userType === "creator" && creatorTab === "account" && isSurveyCompleted && !isSurveyLoading && (
         <div
           className={cn(
-            "rounded-xl shadow-lg overflow-hidden w-full p-6 md:p-0 md:pr-4 md:pt-5",
-            isDark ? "bg-[#180438]" : "bg-white border border-purple-100",
+            "rounded-2xl border px-5 py-4",
+            isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white",
           )}
         >
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between">
@@ -2407,7 +2704,7 @@ export default function SettingsPage({
                   </h3>
                   <p
                     className={cn(
-                      "text-xs sm:text-[12.5px] leading-relaxed",
+                      "text-base leading-relaxed",
                       isDark ? "text-gray-300" : "text-gray-600",
                     )}
                   >
@@ -2422,579 +2719,233 @@ export default function SettingsPage({
         </div>
       )}
 
-      <div className="space-y-3">
-        {settingsItems
-          .filter((item) => {
-            // Only show billing for advertisers
-            if (item.id === "billing" && userType !== "advertiser") {
-              return false;
-            }
-            // Only show switch account for creators
-            if (item.id === "switch-account" && userType !== "creator") {
-              return false;
-            }
-            return true;
-          })
-          .map((item) => {
-            const Icon = item.icon ?? FileText;
-            if (item.isLink && item.href) {
-              return (
-                <div
-                  key={item.id}
-                  className={cn(
-                    "rounded-xl transition-all duration-200",
-                    isDark
-                      ? "bg-[#180438] hover:border-purple-500"
-                      : "bg-white border border-gray-300 hover:border-purple-300",
-                  )}
-                >
-                  <div
-                    onClick={() => handleNavigation(item.id, item.href)}
-                    className={cn(
-                      "flex items-center justify-between w-full px-4 py-4 rounded-t-xl transition-all duration-200 cursor-pointer",
-                      item.id === "profile" &&
-                        showProfileNotification &&
-                        isProfileIncomplete()
-                        ? "rounded-b-none"
-                        : "rounded-b-xl",
-                      (item.id === "profile" && navigatingProfile) ||
-                        (item.id === "terms" && navigatingTerms) ||
-                        (item.id === "privacy" && navigatingPrivacy)
-                        ? "opacity-70"
-                        : "",
-                    )}
-                  >
-                    <div className="flex items-center gap-4 flex-1">
-                      <div
-                        className={cn(
-                          "p-2 rounded-lg",
-                          isDark ? "bg-purple-900/30" : "bg-purple-100",
-                        )}
-                      >
-                        <Icon
-                          className={cn(
-                            "h-5 w-5",
-                            isDark ? "text-purple-400" : "text-purple-600",
-                          )}
-                        />
-                      </div>
-                      <div className="flex flex-col flex-1">
-                        <span
-                          className={cn(
-                            "font-medium",
-                            isDark ? "text-white" : "text-gray-900",
-                          )}
-                        >
-                          {item.title}
-                        </span>
-                        {/* {item.id === "profile" && (
-                          <p
-                            className={cn(
-                              "text-xs mt-1",
-                              isDark ? "text-purple-300" : "text-purple-600"
-                            )}
-                          >
-                            💰 When you fill your complete profile, we give you
-                            a $0.50 bonus!
-                          </p>
-                        )} */}
-                      </div>
-                    </div>
-                    {(item.id === "profile" && navigatingProfile) ||
-                    (item.id === "terms" && navigatingTerms) ||
-                    (item.id === "privacy" && navigatingPrivacy) ? (
-                      <ButtonLoadingSpinner />
-                    ) : (
-                      <ChevronRight
-                        className={cn(
-                          "h-5 w-5",
-                          isDark ? "text-gray-400" : "text-gray-500",
-                        )}
-                      />
-                    )}
-                  </div>
-                  {/* Profile Completion Notification */}
-                  {item.id === "profile" &&
-                    showProfileNotification &&
-                    isProfileIncomplete() && (
-                      <div
-                        className={cn(
-                          "relative p-4 border lg:max-w-[1200px] rounded-lg lg:mx-4 mb-4",
-                          isDark
-                            ? "bg-purple-900/30 border-purple-500"
-                            : "bg-purple-50 border-purple-300",
-                        )}
-                      >
-                        {/* <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setShowProfileNotification(false);
-                          }}
-                          className={cn(
-                            "absolute top-2 right-2 p-1 rounded-full hover:bg-black/10 transition-colors",
-                            isDark
-                              ? "text-gray-300 hover:text-white"
-                              : "text-gray-700 hover:text-gray-900"
-                          )}
-                          aria-label="Close notification"
-                        >
-                          <X className="h-4 w-4" />
-                        </button> */}
-                        <div className="pr-6">
-                          <div className="mb-3">
-                            <div className="flex items-center justify-between gap-3 mb-2">
-                              <span
-                                className={cn(
-                                  "text-sm font-medium whitespace-nowrap",
-                                  isDark ? "text-gray-300" : "text-gray-700",
-                                )}
-                              >
-                                Profile Completion
-                              </span>
-                              <div className="flex items-center gap-3">
-                                <div
-                                  className={cn(
-                                    "relative h-2 w-32 overflow-hidden rounded-full",
-                                    isDark
-                                      ? "bg-purple-900/50"
-                                      : "bg-purple-100",
-                                  )}
-                                >
-                                  <div
-                                    className={cn(
-                                      "h-full rounded-full transition-all duration-300",
-                                      isDark
-                                        ? "bg-gradient-to-r from-purple-600 to-purple-500"
-                                        : "bg-gradient-to-r from-purple-500 to-purple-400",
-                                    )}
-                                    style={{
-                                      width: `${getProfileCompletionPercentage()}%`,
-                                    }}
-                                  />
-                                </div>
-                                <span
-                                  className={cn(
-                                    "text-sm font-bold whitespace-nowrap",
-                                    isDark
-                                      ? "text-purple-400"
-                                      : "text-purple-600",
-                                  )}
-                                >
-                                  {getProfileCompletionPercentage()}%
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                          <p
-                            className={cn(
-                              "text-sm mb-3",
-                              isDark ? "text-gray-300" : "text-gray-600",
-                            )}
-                          >
-                            Complete your profile now and claim your $0.50
-                            reward!
-                          </p>
-                          <Link href="/dashboard/profile">
-                            <Button
-                              className={cn(
-                                "w-full sm:w-auto bg-purple-500 hover:bg-purple-600 text-white font-bold py-2.5 px-6 rounded-full flex items-center justify-center gap-2 transition-colors",
-                                isDark && "bg-purple-600 hover:bg-purple-700",
-                              )}
-                              onClick={() => {
-                                setProfileCompletionLoading(true);
-                                setTimeout(() => {
-                                  window.location.href = "/dashboard/profile";
-                                }, 100);
-                              }}
-                              disabled={profileCompletionLoading}
-                            >
-                              COMPLETE PROFILE
-                              {profileCompletionLoading ? (
-                                <ButtonLoadingSpinner />
-                              ) : (
-                                <ArrowRight className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </Link>
-                        </div>
-                      </div>
-                    )}
-                  {/* Profile Completion Success Notification */}
-                  {item.id === "profile" &&
-                    showProfileNotification &&
-                    creatorProfileData?.has_claimed_profile_reward &&
-                    getProfileCompletionPercentage() === 100 && (
-                      <div
-                        className={cn(
-                          "relative p-4 border lg:max-w-[1200px] rounded-lg lg:mx-4 mb-4",
-                          isDark
-                            ? "bg-green-900/30 border-green-500"
-                            : "bg-green-50 border-green-300",
-                        )}
-                      >
-                        <div className="pr-6">
-                          <div className="flex items-start gap-3">
-                            <CheckCircle2
-                              className={cn(
-                                "h-5 w-5 flex-shrink-0 mt-0.5",
-                                isDark ? "text-green-400" : "text-green-600",
-                              )}
-                            />
-                            <div className="flex-1">
-                              <div className="mb-2">
-                                <span
-                                  className={cn(
-                                    "text-sm font-semibold",
-                                    isDark
-                                      ? "text-green-300"
-                                      : "text-green-700",
-                                  )}
-                                >
-                                  Profile Completed & Bonus Claimed!
-                                </span>
-                              </div>
-                              <p
-                                className={cn(
-                                  "text-sm",
-                                  isDark ? "text-gray-300" : "text-gray-600",
-                                )}
-                              >
-                                Congratulations! Your profile has been completed
-                                and you've successfully claimed your $0.50
-                                reward. Your profile is now locked and cannot be
-                                edited.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                </div>
-              );
-            } else if (item.expandable) {
-              const isExpanded = expandedSection === item.id;
-              return (
-                <div key={item.id}>
-                  <button
-                    onClick={() => toggleSection(item.id)}
-                    className={cn(
-                      "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200",
-                      isDark
-                        ? "bg-[#180438] hover:border-purple-500"
-                        : "bg-white border border-gray-300 hover:border-purple-300",
-                    )}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={cn(
-                          "p-2 rounded-lg",
-                          isDark ? "bg-purple-900/30" : "bg-purple-100",
-                        )}
-                      >
-                        <Icon
-                          className={cn(
-                            "h-5 w-5",
-                            isDark ? "text-purple-400" : "text-purple-600",
-                          )}
-                        />
-                      </div>
-                      <span
-                        className={cn(
-                          "font-medium",
-                          isDark ? "text-white" : "text-gray-900",
-                        )}
-                      >
-                        {item.title}
-                      </span>
-                    </div>
-                    <ChevronRight
-                      className={cn(
-                        "h-5 w-5 transition-transform",
-                        isExpanded ? "rotate-90" : "",
-                        isDark ? "text-gray-400" : "text-gray-500",
-                      )}
-                    />
-                  </button>
-                </div>
-              );
-            } else if (item.isModal) {
-              return (
-                <div key={item.id}>
-                  <button
-                    onClick={() => {
-                      if (item.id === "password") {
-                        setIsPasswordModalOpen(true);
-                      } else if (item.id === "referral") {
-                        setIsReferralModalOpen(true);
-                      } else if (item.id === "billing") {
-                        setIsBillingModalOpen(true);
-                        fetchBillingDetails();
-                      } else if (item.id === "switch-account") {
-                        // Trigger the AccountSwitcher modal by programmatically clicking its button
-                        const switchButton = accountSwitcherRef.current?.querySelector('button');
-                        if (switchButton) {
-                          switchButton.click();
-                        }
-                      }
-                    }}
-                    className={cn(
-                      "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200",
-                      isDark
-                        ? "bg-[#180438] hover:border-purple-500"
-                        : "bg-white border border-gray-300 hover:border-purple-300",
-                    )}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={cn(
-                          "p-2 rounded-lg",
-                          isDark ? "bg-purple-900/30" : "bg-purple-100",
-                        )}
-                      >
-                        <Icon
-                          className={cn(
-                            "h-5 w-5",
-                            isDark ? "text-purple-400" : "text-purple-600",
-                          )}
-                        />
-                      </div>
-                      <span
-                        className={cn(
-                          "font-medium",
-                          isDark ? "text-white" : "text-gray-900",
-                        )}
-                      >
-                        {item.title}
-                      </span>
-                    </div>
-                    <ChevronRight
-                      className={cn(
-                        "h-5 w-5",
-                        isDark ? "text-gray-400" : "text-gray-500",
-                      )}
-                    />
-                  </button>
-                </div>
-              );
-            }
-            return null;
-          })}
-      </div>
-
-      {/* Follow Us & Join Communities Section */}
-      <div
-        className={cn(
-          "rounded-xl shadow-lg overflow-hidden",
-          isDark ? "bg-[#180438]" : "bg-white border border-gray-300",
-        )}
-      >
-        <div
-          className={cn(
-            "rounded-t-xl px-6 py-4 border-b",
-            isDark
-              ? "bg-[#180438] border-gray-700"
-              : "bg-white border-gray-200",
-          )}
-        >
-          <CardTitle
-            className={cn("text-2xl", isDark ? "text-white" : "text-[#7F39EC]")}
-          >
-            Follow Us & Join Communities
-          </CardTitle>
-          <CardDescription className="mt-2">
-            Stay connected with us on social media and join our creator
-            communities for updates, support, and exclusive opportunities.
-          </CardDescription>
-        </div>
-        <CardContent className="p-6">
-          <div className="space-y-4">
-            {/* Social Media Links */}
-            <div>
-              <h3
-                className={cn(
-                  "text-lg font-semibold mb-4",
-                  isDark ? "text-white" : "text-gray-900",
-                )}
-              >
-                Social Media
-              </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <a
-                  href={SOCIAL_LINKS.twitter}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
-                    isDark
-                      ? "bg-[#1a0a2e] border-gray-700 hover:border-blue-500 hover:bg-[#1a0a2e]/80"
-                      : "bg-white border-gray-300 hover:border-blue-400 hover:bg-blue-50",
-                  )}
-                >
-                  <FaXTwitter
-                    className={cn(
-                      "h-5 w-5",
-                      isDark ? "text-white" : "text-black",
-                    )}
-                  />
-                  <span
-                    className={cn(
-                      "font-medium",
-                      isDark ? "text-white" : "text-gray-900",
-                    )}
-                  >
-                    Twitter (X)
-                  </span>
-                  <ExternalLink className="h-4 w-4 ml-auto text-gray-400" />
-                </a>
-                <a
-                  href={SOCIAL_LINKS.instagram}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
-                    isDark
-                      ? "bg-[#1a0a2e] border-gray-700 hover:border-pink-500 hover:bg-[#1a0a2e]/80"
-                      : "bg-white border-gray-300 hover:border-pink-400 hover:bg-pink-50",
-                  )}
-                >
-                  <SiInstagram className="h-5 w-5 text-pink-600" />
-                  <span
-                    className={cn(
-                      "font-medium",
-                      isDark ? "text-white" : "text-gray-900",
-                    )}
-                  >
-                    Instagram
-                  </span>
-                  <ExternalLink className="h-4 w-4 ml-auto text-gray-400" />
-                </a>
-                <a
-                  href={SOCIAL_LINKS.youtube}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
-                    isDark
-                      ? "bg-[#1a0a2e] border-gray-700 hover:border-red-500 hover:bg-[#1a0a2e]/80"
-                      : "bg-white border-gray-300 hover:border-red-400 hover:bg-red-50",
-                  )}
-                >
-                  <SiYoutube className="h-5 w-5 text-red-600" />
-                  <span
-                    className={cn(
-                      "font-medium",
-                      isDark ? "text-white" : "text-gray-900",
-                    )}
-                  >
-                    YouTube
-                  </span>
-                  <ExternalLink className="h-4 w-4 ml-auto text-gray-400" />
-                </a>
-                <a
-                  href={SOCIAL_LINKS.linkedin}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
-                    isDark
-                      ? "bg-[#1a0a2e] border-gray-700 hover:border-blue-500 hover:bg-[#1a0a2e]/80"
-                      : "bg-white border-gray-300 hover:border-blue-400 hover:bg-blue-50",
-                  )}
-                >
-                  <FaLinkedin className="h-5 w-5 text-blue-600" />
-                  <span
-                    className={cn(
-                      "font-medium",
-                      isDark ? "text-white" : "text-gray-900",
-                    )}
-                  >
-                    LinkedIn
-                  </span>
-                  <ExternalLink className="h-4 w-4 ml-auto text-gray-400" />
-                </a>
+      {userType === "creator" && creatorTab === "account" && (
+        <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
+          <div className="px-5 py-4">
+            <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>
+              Switch account
+              <span className={cn("ml-2 text-base font-normal", isDark ? "text-slate-400" : "text-[#737373]")}>
+                Link up to 5, no signing out between them.
+              </span>
+            </h2>
+          </div>
+          <div className={cn("flex flex-col gap-4 border-t px-5 py-4", isDark ? "border-white/10" : "border-neutral-200")}>
+            <div className="flex flex-wrap items-center gap-3">
+              <div>
+                <p className={cn("text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>
+                  {(user?.user_metadata?.full_name as string | undefined) ||
+                    (user?.user_metadata?.name as string | undefined) ||
+                    username ||
+                    "Your account"}
+                </p>
+                <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>
+                  {user?.email || "Signed in"}
+                </p>
               </div>
+              <span className={cn("rounded-full px-2.5 py-1 text-base font-medium", isDark ? "bg-emerald-500/15 text-emerald-400" : "bg-emerald-50 text-emerald-700")}>
+                Active now
+              </span>
             </div>
-
-            {/* Community Links */}
-            <div className="mt-6">
-              <h3
-                className={cn(
-                  "text-lg font-semibold mb-4",
-                  isDark ? "text-white" : "text-gray-900",
-                )}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className={outlinePill}
+                onClick={() => (accountSwitcherRef.current?.querySelector("button") as HTMLButtonElement | null)?.click()}
               >
-                Join Our Communities
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <a
-                  href={SOCIAL_LINKS.discord}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
-                    isDark
-                      ? "bg-[#5865F2]/10 border-[#5865F2]/30 hover:border-[#5865F2] hover:bg-[#5865F2]/20"
-                      : "bg-purple-50 border-purple-200 hover:border-[#5865F2] hover:bg-purple-100",
-                  )}
-                >
-                  <FaDiscord className="h-6 w-6 text-[#5865F2]" />
-                  <div className="flex-1">
-                    <span
-                      className={cn(
-                        "font-semibold block",
-                        isDark ? "text-white" : "text-gray-900",
-                      )}
-                    >
-                      Discord Community
-                    </span>
-                    <span
-                      className={cn(
-                        "text-sm",
-                        isDark ? "text-gray-400" : "text-gray-600",
-                      )}
-                    >
-                      Get updates, support, and bonus codes
-                    </span>
-                  </div>
-                  <ExternalLink className="h-4 w-4 text-gray-400" />
-                </a>
-                <a
-                  href={SOCIAL_LINKS.whatsapp}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
-                    isDark
-                      ? "bg-[#25D366]/10 border-[#25D366]/30 hover:border-[#25D366] hover:bg-[#25D366]/20"
-                      : "bg-green-50 border-green-200 hover:border-[#25D366] hover:bg-green-100",
-                  )}
-                >
-                  <FaWhatsapp className="h-6 w-6 text-[#25D366]" />
-                  <div className="flex-1">
-                    <span
-                      className={cn(
-                        "font-semibold block",
-                        isDark ? "text-white" : "text-gray-900",
-                      )}
-                    >
-                      WhatsApp Community
-                    </span>
-                    <span
-                      className={cn(
-                        "text-sm",
-                        isDark ? "text-gray-400" : "text-gray-600",
-                      )}
-                    >
-                      Connect with creators and get support
-                    </span>
-                  </div>
-                  <ExternalLink className="h-4 w-4 text-gray-400" />
-                </a>
-              </div>
+                Switch account
+              </Button>
             </div>
           </div>
-        </CardContent>
-      </div>
+        </div>
+      )}
+
+      {creatorTab === "security" && (
+        <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
+          <div className="px-5 py-4">
+            <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Sign in</h2>
+          </div>
+          <div className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-white/10" : "border-neutral-200")}>
+            <p className={cn("w-40 shrink-0 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>Password</p>
+            <p className={cn("min-w-0 flex-1 text-base tracking-widest", isDark ? "text-white" : "text-[#171717]")}>
+              {hasPassword ? "••••••••" : "No password set"}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className={outlinePill}
+              onClick={() => setIsPasswordModalOpen(true)}
+            >
+              {hasPassword ? "Change password" : "Set password"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {creatorTab === "referrals" && (
+        <div className="space-y-4">
+          <div className={cn("rounded-2xl border px-5 py-4", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
+            <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>
+              Refer and earn up to $100
+            </h2>
+            <p className={cn("mt-2 text-base leading-relaxed", isDark ? "text-slate-300" : "text-[#44403c]")}>
+              You get 100 coins for every sign-up, and 10% of a referred creator&apos;s campaign winnings, up to $100, as affiliate earnings. Invite others with your referral link. Choose the right landing page.
+            </p>
+          </div>
+          <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
+            <h2 className={cn("px-5 pb-2 pt-5 text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>
+            Referral Information  
+            </h2>
+            <div className="grid grid-cols-2 lg:grid-cols-4">
+              {(
+                [
+                  ["Creators referred", String(referralStats.creatorsReferred)],
+                  ["Brands referred", String(referralStats.brandsReferred)],
+                  ["Available coins", String(referralStats.coins)],
+                  ["Referred by", referralStats.referredBy || "—"],
+                ] as const
+              ).map(([label, value], index) => (
+                <div
+                  key={label}
+                  className={cn(
+                    "px-5 py-4",
+                    index > 0 && "lg:border-l",
+                    index >= 2 && "border-t lg:border-t-0",
+                    index % 2 === 1 && "border-l lg:border-l",
+                    isDark ? "border-white/10" : "border-neutral-200",
+                  )}
+                >
+                  <p className={cn("text-sm", isDark ? "text-slate-400" : "text-[#737373]")}>{label}</p>
+                  <p className={cn("mt-1 text-xl font-semibold", isDark ? "text-white" : "text-[#171717]")}>{value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
+            <div className="px-5 py-4">
+              <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Your links</h2>
+            </div>
+            {getShareReferralCode() && getShareReferralLinks() ? (
+              <div>
+                {(
+                  [
+                    ["Referral code", getShareReferralCode() || ""],
+                    ["General link", getShareReferralLinks()?.general || ""],
+                    ["Creators link", getShareReferralLinks()?.creators || ""],
+                    ["Brands link", getShareReferralLinks()?.brands || ""],
+                  ] as const
+                ).map(([label, value]) => (
+                  <div
+                    key={label}
+                    className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-white/10" : "border-neutral-200")}
+                  >
+                    <p className={cn("w-36 shrink-0 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>{label}</p>
+                    <div className={cn("min-w-0 flex-1 truncate rounded-full px-4 py-2 text-base", isDark ? "bg-white/5 text-slate-200" : "bg-[#F4F4F5] text-[#171717]")}>
+                      {value}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={outlinePill}
+                      onClick={() => copyToClipboard(value, `${label} copied to clipboard.`)}
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copy
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="border-t border-neutral-200 px-5 py-4">
+                <Alert className="border-yellow-200 bg-yellow-50">
+                  <AlertDescription className="text-yellow-800">
+                    <strong>Note:</strong> You need to set up a username to generate referral links. Please set up your username first.
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {creatorTab === "community" && (
+        <div className="space-y-4">
+          <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
+            <div className="px-5 py-4">
+              <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Communities</h2>
+            </div>
+            {[
+              { name: "Discord", detail: "Updates, support and bonus codes", href: SOCIAL_LINKS.discord },
+              { name: "WhatsApp", detail: "Connect with creators and get support", href: SOCIAL_LINKS.whatsapp },
+            ].map((item) => (
+              <div key={item.name} className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-white/10" : "border-neutral-200")}>
+                <p className={cn("w-36 shrink-0 text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>{item.name}</p>
+                <p className={cn("min-w-0 flex-1 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>{item.detail}</p>
+                <a href={item.href} target="_blank" rel="noopener noreferrer" className={outlinePill + " inline-flex items-center gap-1"}>
+                  Join <ArrowRight className="h-3.5 w-3.5" />
+                </a>
+              </div>
+            ))}
+          </div>
+          <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
+            <div className="px-5 py-4">
+              <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Follow us</h2>
+            </div>
+            {[
+              { name: "X", href: SOCIAL_LINKS.twitter },
+              { name: "Instagram", href: SOCIAL_LINKS.instagram },
+              { name: "YouTube", href: SOCIAL_LINKS.youtube },
+              { name: "LinkedIn", href: SOCIAL_LINKS.linkedin },
+            ].map((item) => (
+              <div key={item.name} className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-white/10" : "border-neutral-200")}>
+                <p className={cn("w-36 shrink-0 text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>{item.name}</p>
+                <p className={cn("min-w-0 flex-1 truncate text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>
+                  {item.href.replace(/^https?:\/\//, "")}
+                </p>
+                <a href={item.href} target="_blank" rel="noopener noreferrer" className={outlinePill + " inline-flex items-center gap-1"}>
+                  Follow <ArrowRight className="h-3.5 w-3.5" />
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {creatorTab === "legal" && (
+        <div className={cn("rounded-2xl border", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
+          <div className="px-5 py-4">
+            <h2 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Terms and policies</h2>
+          </div>
+          <div className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-white/10" : "border-neutral-200")}>
+            <p className={cn("w-40 shrink-0 text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>Terms of Use</p>
+            <p className={cn("min-w-0 flex-1 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>The rules for using Game of Creators.</p>
+            <Button
+              type="button"
+              variant="outline"
+              className={outlinePill}
+              disabled={navigatingTerms}
+              onClick={() => handleNavigation("terms", "/terms-of-service")}
+            >
+              {navigatingTerms ? <ButtonLoadingSpinner /> : "Read"}
+            </Button>
+          </div>
+          <div className={cn("flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center", isDark ? "border-white/10" : "border-neutral-200")}>
+            <p className={cn("w-40 shrink-0 text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>Privacy Policy</p>
+            <p className={cn("min-w-0 flex-1 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>What we collect, why, and how it is protected.</p>
+            <Button
+              type="button"
+              variant="outline"
+              className={outlinePill}
+              disabled={navigatingPrivacy}
+              onClick={() => handleNavigation("privacy", "/privacy-policy")}
+            >
+              {navigatingPrivacy ? <ButtonLoadingSpinner /> : "Read"}
+            </Button>
+          </div>
+        </div>
+      )}
+      </>
+      )}
 
       {/* Connect Twitter Modal */}
       <Dialog
@@ -3007,7 +2958,10 @@ export default function SettingsPage({
         }}
         isdark={isDark}
       >
-        <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto">
+        <DialogContent className={cn(
+          "sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto",
+          isDark && "border-white/10 bg-[#161616]",
+        )}>
           <DialogHeader>
             <DialogTitle
               className={cn(isDark ? "text-white" : "text-gray-900")}
@@ -3027,7 +2981,7 @@ export default function SettingsPage({
               className={cn(
                 "list-none space-y-3 text-sm rounded-lg border p-4",
                 isDark
-                  ? "border-[#7F39EC]/50 bg-[#D9C0FF]/10"
+                  ? "border-white/10 bg-[#0e0e0e]"
                   : "border-[#7F39EC]/30 bg-[#D9C0FF26]"
               )}
             >
@@ -3035,7 +2989,7 @@ export default function SettingsPage({
                 <span
                   className={cn(
                     "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                    isDark ? "bg-[#7F39EC] text-white" : "bg-[#6C43D0] text-white"
+                    "bg-[var(--accent-btn-base)] text-white"
                   )}
                 >
                   1
@@ -3063,7 +3017,7 @@ export default function SettingsPage({
                       className={cn(
                         "flex min-w-0 flex-1 items-center rounded-md border px-3 py-2 font-mono text-sm",
                         isDark
-                          ? "border-gray-600 bg-[#06021d] text-white"
+                          ? "border-white/10 bg-[#0e0e0e] text-white"
                           : "border-gray-200 bg-white text-gray-900"
                       )}
                     >
@@ -3088,7 +3042,7 @@ export default function SettingsPage({
                 <span
                   className={cn(
                     "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                    isDark ? "bg-[#7F39EC] text-white" : "bg-[#6C43D0] text-white"
+                    "bg-[var(--accent-btn-base)] text-white"
                   )}
                 >
                   2
@@ -3131,7 +3085,7 @@ export default function SettingsPage({
                     onChange={(e) => setTwitterUsername(e.target.value)}
                     className={cn(
                       isDark
-                        ? "bg-[#06021d] border border-gray-600 text-white"
+                        ? "border-white/10 bg-[#0e0e0e] text-white placeholder:text-white/40"
                         : "bg-white text-gray-900",
                     )}
                   />
@@ -3140,7 +3094,7 @@ export default function SettingsPage({
                 <div className="flex flex-col items-stretch gap-2 pt-1">
                   <Button
                     type="button"
-                    className="w-full bg-[#6C43D0] text-white"
+                    className="w-full rounded-full goc-btn-primary"
                     disabled={
                       !twitterUsername.trim() || twitterFetchState === "loading"
                     }
@@ -3218,7 +3172,7 @@ export default function SettingsPage({
                     className={cn(
                       "flex items-start gap-3 rounded-lg border p-3",
                       isDark
-                        ? "border-gray-700 bg-[#06021d]"
+                        ? "border-white/10 bg-[#0e0e0e]"
                         : "border-gray-200 bg-white",
                     )}
                   >
@@ -3266,7 +3220,10 @@ export default function SettingsPage({
                       {!isUsernameInBio(twitterProfile.desc) && (
                         <Button
                           type="button"
-                          className="bg-[#4A00BE] text-white"
+                          className={cn(
+                            "text-white",
+                            isDark ? darkDialogCta : "bg-[#4A00BE]",
+                          )}
                           onClick={async () => {
                             if (!twitterUsername.trim()) return;
                             try {
@@ -3327,7 +3284,7 @@ export default function SettingsPage({
                       )}
                       <Button
                         type="button"
-                        className="bg-[#4A00BE] text-white"
+                        className="rounded-full goc-btn-primary"
                         disabled={
                           !isUsernameInBio(twitterProfile.desc) ||
                           isSavingTwitter
@@ -3498,7 +3455,10 @@ export default function SettingsPage({
         onOpenChange={setIsPasswordModalOpen}
         isdark={isDark}
       >
-        <DialogContent className="sm:max-w-[550px] w-[95vw] max-h-[90vh] overflow-y-auto">
+        <DialogContent className={cn(
+          "sm:max-w-[480px] w-[95vw] max-h-[90vh] overflow-y-auto rounded-2xl p-5 sm:p-5",
+          isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200",
+        )}>
           <DialogHeader>
             <DialogTitle
               className={cn(isDark ? "text-white" : "text-gray-900")}
@@ -3512,8 +3472,29 @@ export default function SettingsPage({
             </DialogDescription>
           </DialogHeader>
           {hasPassword && (
-            <Alert className="mb-4 bg-[#D9C0FF26] border-[#7F39EC]">
-              <AlertDescription>
+            <Alert
+              className={cn(
+                "mb-4",
+                userType === "advertiser"
+                  ? isDark
+                    ? "border-white/15 bg-white/10 text-white"
+                    : "border-[#e6e6e8] bg-[#f3f3f5] text-[#1a1a1a]"
+                  : isDark
+                    ? "border-white/15 bg-white/5 text-white"
+                    : "border-neutral-200 bg-[#F6F6F7] text-[#171717]",
+              )}
+            >
+              <AlertDescription
+                className={
+                  userType === "advertiser"
+                    ? isDark
+                      ? "text-white"
+                      : "text-[#1a1a1a]"
+                    : isDark
+                      ? "text-white"
+                      : "text-[#171717]"
+                }
+              >
                 <strong>Multiple Sign-in Methods:</strong> You can sign in with
                 both Google and email/password.
               </AlertDescription>
@@ -3551,8 +3532,11 @@ export default function SettingsPage({
                     className={cn(
                       "pr-10",
                       isDark
-                        ? "bg-[#06021d] border border-gray-600 text-white"
+                        ? "border-white/10 bg-[#0e0e0e] text-white placeholder:text-white/40"
                         : "bg-white text-gray-900",
+                      userType === "advertiser"
+                        ? "focus-visible:ring-black focus-visible:ring-offset-0"
+                        : "rounded-xl border-neutral-200 focus-visible:ring-[#171717] focus-visible:ring-offset-0",
                     )}
                     required
                   />
@@ -3589,8 +3573,11 @@ export default function SettingsPage({
                   className={cn(
                     "pr-10",
                     isDark
-                      ? "bg-[#06021d] border border-gray-600 text-white"
+                      ? "border-white/10 bg-[#0e0e0e] text-white placeholder:text-white/40"
                       : "bg-white text-gray-900",
+                    userType === "advertiser"
+                      ? "focus-visible:ring-black focus-visible:ring-offset-0"
+                      : "rounded-xl border-neutral-200 focus-visible:ring-[#171717] focus-visible:ring-offset-0",
                   )}
                   required
                 />
@@ -3611,6 +3598,7 @@ export default function SettingsPage({
                 password={newPassword}
                 className="mt-3"
                 showRequirements={true}
+                variant="brand"
               />
             </div>
 
@@ -3632,8 +3620,11 @@ export default function SettingsPage({
                   className={cn(
                     "pr-10",
                     isDark
-                      ? "bg-[#06021d] border border-gray-600 text-white"
+                      ? "border-white/10 bg-[#0e0e0e] text-white placeholder:text-white/40"
                       : "bg-white text-gray-900",
+                    userType === "advertiser"
+                      ? "focus-visible:ring-black focus-visible:ring-offset-0"
+                      : "rounded-xl border-neutral-200 focus-visible:ring-[#171717] focus-visible:ring-offset-0",
                   )}
                   required
                 />
@@ -3657,15 +3648,24 @@ export default function SettingsPage({
                 variant="outline"
                 onClick={() => setIsPasswordModalOpen(false)}
                 className={cn(
-                  "flex-1 bg-white border border-red-500 text-red-500",
-                  isDark ? "bg-[#06021d]" : "bg-white",
+                  "flex-1",
+                  userType === "advertiser"
+                    ? isDark
+                      ? "border border-white/20 bg-transparent text-white hover:bg-white/5"
+                      : "border border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]"
+                    : cn(
+                        "h-10 rounded-full border shadow-none",
+                        isDark
+                          ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                          : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
+                      ),
                 )}
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                className="flex-1 bg-[#6C43D0] text-white"
+                className="flex-1 h-10 rounded-full goc-btn-primary"
                 disabled={
                   passwordChangeLoading || !newPassword || !confirmPassword
                 }
@@ -3684,7 +3684,10 @@ export default function SettingsPage({
         isdark={isDark}
       >
         <DialogContent
-          className="sm:max-w-[550px] w-[95vw] max-h-[90vh] overflow-y-auto"
+          className={cn(
+            "sm:max-w-[550px] w-[95vw] max-h-[90vh] overflow-y-auto",
+            isDark && "border-white/10 bg-[#161616]",
+          )}
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <DialogHeader>
@@ -3719,7 +3722,7 @@ export default function SettingsPage({
                           value={links.general}
                           className={cn(
                             isDark
-                              ? "bg-[#06021d] border border-gray-600 text-white"
+                              ? "border-white/10 bg-[#0e0e0e] text-white placeholder:text-white/40"
                               : "bg-white text-gray-900",
                           )}
                           onFocus={(e) =>
@@ -3731,7 +3734,10 @@ export default function SettingsPage({
                         />
                         <Button
                           type="button"
-                          className="bg-[#4A00BE] text-white"
+                          className={cn(
+                            "text-white",
+                            isDark ? darkDialogCta : "bg-[#4A00BE]",
+                          )}
                           variant="outline"
                           onClick={() => copyToClipboard(links.general)}
                         >
@@ -3752,14 +3758,17 @@ export default function SettingsPage({
                           value={links.creators}
                           className={cn(
                             isDark
-                              ? "bg-[#06021d] border border-gray-600 text-white"
+                              ? "border-white/10 bg-[#0e0e0e] text-white placeholder:text-white/40"
                               : "bg-white text-gray-900",
                           )}
                         />
                         <Button
                           type="button"
                           variant="outline"
-                          className="bg-[#4A00BE] text-white"
+                          className={cn(
+                            "text-white",
+                            isDark ? darkDialogCta : "bg-[#4A00BE]",
+                          )}
                           onClick={() => copyToClipboard(links.creators)}
                         >
                           <Copy className="h-4 w-4 mr-1" />
@@ -3779,14 +3788,17 @@ export default function SettingsPage({
                           value={links.brands}
                           className={cn(
                             isDark
-                              ? "bg-[#06021d] border border-gray-600 text-white"
+                              ? "border-white/10 bg-[#0e0e0e] text-white placeholder:text-white/40"
                               : "bg-white text-gray-900",
                           )}
                         />
                         <Button
                           type="button"
                           variant="outline"
-                          className="bg-[#4A00BE] text-white"
+                          className={cn(
+                            "text-white",
+                            isDark ? darkDialogCta : "bg-[#4A00BE]",
+                          )}
                           onClick={() => copyToClipboard(links.brands)}
                         >
                           <Copy className="h-4 w-4 mr-1" />
@@ -3799,8 +3811,12 @@ export default function SettingsPage({
               })()}
             </div>
           ) : (
-            <Alert className="bg-yellow-50 border-yellow-200">
-              <AlertDescription className="text-yellow-800">
+            <Alert className={cn(
+              isDark
+                ? "border-amber-500/30 bg-amber-500/10"
+                : "border-yellow-200 bg-yellow-50",
+            )}>
+              <AlertDescription className={cn(isDark ? "text-amber-100" : "text-yellow-800")}>
                 <strong>Note:</strong> You need to set up a username to generate
                 referral links. Please set up your username first.
               </AlertDescription>
@@ -3824,7 +3840,10 @@ export default function SettingsPage({
         onOpenChange={handleBillingModalOpen}
         isdark={isDark}
       >
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className={cn(
+          "max-w-3xl max-h-[90vh] overflow-y-auto",
+          isDark && "border-white/10 bg-[#161616]",
+        )}>
           <DialogHeader>
             <DialogTitle
               className={cn(isDark ? "text-white" : "text-gray-900")}
@@ -3861,7 +3880,7 @@ export default function SettingsPage({
                       className={cn(
                         "border rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4",
                         isDark
-                          ? "border-gray-700 bg-[#06021d]"
+                          ? "border-white/10 bg-[#0e0e0e]"
                           : "border-gray-400 bg-white",
                       )}
                     >
@@ -3913,7 +3932,7 @@ export default function SettingsPage({
                               className={cn(
                                 "px-4 py-2",
                                 isDark
-                                  ? "border-purple-500 text-purple-400 hover:bg-purple-900/30"
+                                  ? "border-white/20 text-white hover:bg-white/10"
                                   : "border-purple-500 text-purple-600 hover:bg-purple-50",
                               )}
                             >
@@ -3930,7 +3949,12 @@ export default function SettingsPage({
                               );
                               setIsBillingModalOpen(false);
                             }}
-                            className="bg-[#6C43D0] text-white hover:bg-[#5A36B8] px-6 py-2"
+                            className={cn(
+                              "px-6 py-2 text-white",
+                              isDark
+                                ? darkDialogCta
+                                : "bg-[#6C43D0] hover:bg-[#5A36B8]",
+                            )}
                           >
                             Subscribe
                           </Button>
@@ -3962,7 +3986,7 @@ export default function SettingsPage({
                           className={cn(
                             "rounded-2xl p-4 shadow-sm border",
                             isDark
-                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                              ? "border-white/10 bg-[#0e0e0e] text-white"
                               : "bg-[#D9C0FF26] border-[#7F39EC] text-black",
                           )}
                         >
@@ -3978,7 +4002,7 @@ export default function SettingsPage({
                           className={cn(
                             "rounded-2xl p-4 shadow-sm border",
                             isDark
-                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                              ? "border-white/10 bg-[#0e0e0e] text-white"
                               : "bg-[#D9C0FF26] border-[#7F39EC] text-black",
                           )}
                         >
@@ -3993,7 +4017,7 @@ export default function SettingsPage({
                           className={cn(
                             "rounded-2xl p-4 shadow-sm border",
                             isDark
-                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                              ? "border-white/10 bg-[#0e0e0e] text-white"
                               : "bg-[#D9C0FF26] border-[#7F39EC] text-black",
                           )}
                         >
@@ -4053,7 +4077,7 @@ export default function SettingsPage({
                           className={cn(
                             "rounded-xl p-4 border",
                             isDark
-                              ? "bg-[#180438] border-gray-700"
+                              ? "border-white/10 bg-[#0e0e0e]"
                               : "border-gray-300",
                           )}
                         >
@@ -4138,7 +4162,12 @@ export default function SettingsPage({
                           router.push("/dashboard/billing");
                           setIsBillingModalOpen(false);
                         }}
-                        className="bg-[#6C43D0] text-white hover:bg-[#5A36B8] px-6 py-2"
+                        className={cn(
+                          "px-6 py-2 text-white",
+                          isDark
+                            ? darkDialogCta
+                            : "bg-[#6C43D0] hover:bg-[#5A36B8]",
+                        )}
                       >
                         Subscribe
                       </Button>
@@ -4162,44 +4191,9 @@ export default function SettingsPage({
         </DialogContent>
       </Dialog>
 
-      {/* Log out button */}
-      <div
-        className={cn(
-          "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200",
-          isDark ? "bg-[#180438]" : "bg-white border border-gray-300",
-        )}
-      >
-        <div className="flex items-center gap-4">
-          <div
-            className={cn(
-              "p-2 rounded-lg",
-              isDark ? "bg-red-900/30" : "bg-red-100",
-            )}
-          >
-            <LogOut
-              className={cn(
-                "h-5 w-5",
-                isDark ? "text-red-400" : "text-red-600",
-              )}
-            />
-          </div>
-          <span
-            className={cn(
-              "font-medium",
-              isDark ? "text-white" : "text-gray-900",
-            )}
-          >
-            Log out
-          </span>
-        </div>
-        <Button
-          onClick={handleSignOut}
-          variant="destructive"
-          className="bg-red-600 hover:bg-red-700 text-white"
-        >
-          Logout
-        </Button>
-      </div>
+      {userType === "creator" && creatorTab === "security" && (
+        <DeviceSessionsPanel isDark={isDark} onLogOut={handleSignOut} />
+      )}
 
       {/* Danger Zone */}
       {/* <Card>
@@ -4217,11 +4211,6 @@ export default function SettingsPage({
         </CardContent>
       </Card> */}
  
-      {userType === "creator" && (
-        <div className="mb-6">
-          <DeviceSessionsPanel isDark={isDark} />
-        </div>
-      )}
 
       {/* Account Switcher Component - Hidden but functional - Only for Creators */}
       {userType === "creator" && (

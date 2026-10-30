@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ArrowLeft,
@@ -35,7 +36,11 @@ import {
   AlertTriangle,
   ExternalLink,
   GitGraphIcon,
+  Link2,
+  ChevronDown,
+  Check,
 } from "lucide-react";
+import { getPlatformIcon } from "@/lib/platform-icons";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
@@ -97,7 +102,15 @@ import {
   type VideoContentType,
 } from "@/lib/video-platform-campaigns";
 import { VideoPlatformMultiSelect } from "@/components/contest/VideoPlatformMultiSelect";
+import { CampaignRewardPicker } from "@/components/dashboard/campaign-reward-picker";
 import { PlatformCampaignTabs } from "@/components/contest/PlatformCampaignTabs";
+import { HighestPlatformPayoutSwitch } from "@/components/contest/HighestPlatformPayoutSwitch";
+import {
+  HIGHEST_PLATFORM_PAYOUT_KEY,
+  canUseHighestPlatformPayout,
+  readHighestPlatformPayoutFlag,
+} from "@/lib/highest-platform-payout";
+import { withHighestPlatformPayoutFlag } from "@/lib/highest-platform-payout-config";
 import { toast } from "@/hooks/use-toast"; // Added import
 import { AccessModeSelector } from "@/components/campaign-access/AccessModeSelector";
 import {
@@ -110,12 +123,22 @@ import {
 } from "@/components/campaign-access/AllowlistPicker";
 import { PreviewEditor } from "@/components/campaign-access/PreviewEditor";
 import { AccessStep } from "@/components/campaign-access/AccessStep";
+import { ReviewBeforePostingSettings } from "@/components/content-drafts/ReviewBeforePostingSettings";
+import {
+  DEFAULT_DRAFT_REVIEW_SETTINGS,
+  normalizeDraftReviewSettings,
+  type DraftReviewSettings,
+} from "@/lib/content-drafts";
 import {
   ApplicantVisibilityEditor,
   DEFAULT_APPLICANT_VISIBILITY,
 } from "@/components/campaign-access/ApplicantVisibilityEditor";
 import { applicantVisibilityApi } from "@/components/campaign-access/api";
-import type { ApplicantVisibility } from "@/lib/campaign-applicant-profile";
+import {
+  parseApplicantVisibility,
+  type ApplicantVisibility,
+} from "@/lib/campaign-applicant-profile";
+import { CopiedFromBanner, CopiedInvitesNote } from "@/components/campaign-duplicate/WizardCopyNotes";
 import { RestrictedPreviewDialog } from "@/components/campaign-access/RestrictedPreviewDialog";
 import { SkipRequirementsSwitch } from "@/components/campaign-access/SkipRequirementsSwitch";
 import { ApplicationQuestionsEditor } from "@/components/campaign-access/ApplicationQuestionsEditor";
@@ -171,18 +194,11 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { formatName } from "@/lib/name-utils";
 import { RotateCcw } from "lucide-react";
 import {
   CONTENT_TYPE_CATEGORIES,
   INTEREST_CATEGORIES,
-  INTERESTS,
 } from "@/constants/contentCategories";
 
 // Define types for subscription plan features
@@ -205,11 +221,12 @@ type SubscriptionPlan = {
   features: PlanFeatures;
 };
 
-type Step = "basics" | "brief" | "resources" | "prize" | "payment";
+type Step = "basics" | "audience" | "brief" | "resources" | "prize" | "payment";
 
 const STEP_PROGRESS: Record<Step, number> = {
   basics: 8,
-  brief: 35,
+  audience: 22,
+  brief: 40,
   resources: 70,
   prize: 100,
   payment: 100,
@@ -431,6 +448,10 @@ export default function CreateContestPage({
   const [contestType, setContestType] = useState<
     "leaderboard" | "cpm" | "milestone" | "dual_rewards"
   >("leaderboard");
+  const [showRewardPicker, setShowRewardPicker] = useState<boolean | null>(
+    null,
+  );
+  const draftLoadedRef = useRef(false);
   const [cpmRate, setCpmRate] = useState<number | string>("");
   const [minViews, setMinViews] = useState<number | string>("");
   const [maxViews, setMaxViews] = useState<number | string>("");
@@ -529,9 +550,17 @@ export default function CreateContestPage({
     useState(false);
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
     useState<number>(1);
+  // contest_based_details.highest_platform_payout_only (multi-platform video).
+  const [highestPlatformPayoutOnly, setHighestPlatformPayoutOnly] =
+    useState(false);
   const [accessMode, setAccessMode] = useState<AccessMode>("public");
   const [accessListSkipsRequirements, setAccessListSkipsRequirements] =
     useState(false);
+  const [draftReview, setDraftReview] = useState<DraftReviewSettings>(
+    DEFAULT_DRAFT_REVIEW_SETTINGS,
+  );
+  // True once the saved row may have review on, so turning it off is saved too.
+  const draftReviewSavedOn = useRef(false);
   const [allowlistSelection, setAllowlistSelection] =
     useState<AllowlistSelection>(EMPTY_ALLOWLIST_SELECTION);
   const [previewDescription, setPreviewDescription] = useState("");
@@ -544,6 +573,13 @@ export default function CreateContestPage({
   const [applicantVisibility, setApplicantVisibility] = useState<ApplicantVisibility>(
     DEFAULT_APPLICANT_VISIBILITY,
   );
+  // The draft already hid something (e.g. copied from another campaign), so
+  // saving must also send "everything visible" if the admin turns them back on.
+  const draftHadHiddenApplicantFieldsRef = useRef(false);
+  // Set when this draft was made with "Copy an existing campaign".
+  const [copiedFrom, setCopiedFrom] = useState<{ id: string; title: string } | null>(null);
+  // Creators already on this draft's access list (copied from the original).
+  const [existingInviteCount, setExistingInviteCount] = useState(0);
   const hasCreatorRequirement =
     trustScoreEnabled ||
     trustNumberEnabled ||
@@ -578,6 +614,8 @@ export default function CreateContestPage({
   });
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
   const [flatFeeBonusCap, setFlatFeeBonusCap] = useState<number | string>(""); // In dollars - for CPM campaigns only
+  const [flatFeeBonusEnabled, setFlatFeeBonusEnabled] = useState(false);
+  const [maxEarningsEnabled, setMaxEarningsEnabled] = useState(false);
 
   // Checkboxes to show/hide engagement multiplier sections
   const [showCommentMultipliers, setShowCommentMultipliers] = useState(false);
@@ -1006,6 +1044,12 @@ export default function CreateContestPage({
     setTotalPrizePool(snapshot.totalPrizePool);
     setFlatFeeBonus(snapshot.flatFeeBonus);
     setFlatFeeBonusCap(snapshot.flatFeeBonusCap);
+    setFlatFeeBonusEnabled(
+      Boolean(
+        snapshot.flatFeeBonus &&
+          parseFloat(snapshot.flatFeeBonus.toString()) > 0,
+      ),
+    );
     setCpmRate(snapshot.cpmRate);
     setMinViews(snapshot.minViews);
     setMaxViews(snapshot.maxViews);
@@ -1024,6 +1068,12 @@ export default function CreateContestPage({
     setMilestoneBonusTopReelsMinViews(snapshot.milestoneBonusTopReelsMinViews);
     setMilestoneBonusTopReelsPayout(snapshot.milestoneBonusTopReelsPayout);
     setMaxEarningsPerCreator(snapshot.maxEarningsPerCreator);
+    setMaxEarningsEnabled(
+      Boolean(
+        snapshot.maxEarningsPerCreator &&
+          parseFloat(snapshot.maxEarningsPerCreator.toString()) > 0,
+      ),
+    );
     setBonusEnabled(snapshot.bonusEnabled);
     setBonusHtml(snapshot.bonusHtml || "");
     setBonusJson(snapshot.bonusJson ?? null);
@@ -1113,8 +1163,20 @@ export default function CreateContestPage({
       case "earnings":
         setFlatFeeBonus(snapshot.flatFeeBonus);
         setFlatFeeBonusCap(snapshot.flatFeeBonusCap);
+        setFlatFeeBonusEnabled(
+          Boolean(
+            snapshot.flatFeeBonus &&
+              parseFloat(snapshot.flatFeeBonus.toString()) > 0,
+          ),
+        );
         setTotalBudget(snapshot.totalBudget);
         setMaxEarningsPerCreator(snapshot.maxEarningsPerCreator ?? "");
+        setMaxEarningsEnabled(
+          Boolean(
+            snapshot.maxEarningsPerCreator &&
+              parseFloat(snapshot.maxEarningsPerCreator.toString()) > 0,
+          ),
+        );
         setBonusEnabled(Boolean(snapshot.bonusEnabled));
         setBonusHtml(snapshot.bonusHtml || "");
         setBonusJson(snapshot.bonusJson ?? null);
@@ -1218,7 +1280,11 @@ export default function CreateContestPage({
   };
 
   const handleVideoPlatformsChange = (next: VideoContestPlatform[]) => {
-    if (next.length === 0) return;
+    if (next.length === 0) {
+      setSelectedPlatforms([]);
+      setPlatform("");
+      return;
+    }
     const current = captureCurrentPlatformSnapshot();
     const flushedCurrent = buildFlushedPlatformCampaigns(
       selectedPlatforms,
@@ -1236,17 +1302,13 @@ export default function CreateContestPage({
         nextLive[key] = next.length > 1;
       }
     }
-    // Multi-platform: default per-platform sections to the first platform so
-    // users fill each one explicitly instead of silently broadcasting via All.
+    // Multi-platform: default sections to Same for all so one set of values
+    // applies across every selected platform until the user opts into Per platform.
     if (next.length > 1 && selectedPlatforms.length < 2) {
-      for (const key of PER_PLATFORM_SECTION_KEYS) {
-        nextTabs[key] = next[0];
-        nextLive[key] = false;
+      for (const key of PLATFORM_SECTION_KEYS) {
+        nextTabs[key] = ALL_PLATFORM_TAB;
+        nextLive[key] = true;
       }
-      nextTabs.campaignType = ALL_PLATFORM_TAB;
-      nextTabs.contentType = ALL_PLATFORM_TAB;
-      nextLive.campaignType = true;
-      nextLive.contentType = true;
     }
     const nextMap = buildFlushedPlatformCampaigns(
       next,
@@ -1276,6 +1338,37 @@ export default function CreateContestPage({
     setActivePlatform(next[0]);
     setSectionPlatforms(nextTabs);
     setAllSectionLive(nextLive);
+  };
+
+  const handleContentTypeChange = (
+    value: "ugc" | "clipping" | "other" | "raid" | "awareness" | "",
+  ) => {
+    setContentType(value);
+    if (sectionPlatforms.contentType === ALL_PLATFORM_TAB) {
+      setAllSectionLive((prev) => ({
+        ...prev,
+        contentType: true,
+      }));
+    }
+    const videoContentType: VideoContentType =
+      value === "ugc" || value === "clipping" || value === "other" ? value : "";
+    const current = {
+      ...captureCurrentPlatformSnapshot(),
+      contentType: videoContentType,
+    };
+    setPlatformCampaigns((prev) => {
+      const next = { ...prev };
+      for (const p of platformsForTab(
+        sectionPlatforms.contentType === ALL_PLATFORM_TAB
+          ? ALL_PLATFORM_TAB
+          : sectionPlatforms.contentType,
+        selectedPlatforms,
+      )) {
+        const existing = next[p] ?? createDefaultPlatformCampaignSnapshot();
+        next[p] = patchSnapshotSection(existing, "contentType", current);
+      }
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -4122,14 +4215,20 @@ export default function CreateContestPage({
             flushedCampaigns[primary] ??
             createDefaultPlatformCampaignSnapshot();
           const twitterCampaign = contestBasedDetails.twitter_campaign;
-          contestBasedDetails = attachPlatformCampaignsToDetails(
-            {
-              ...(twitterCampaign
-                ? { twitter_campaign: twitterCampaign }
-                : {}),
-            },
-            platformsForSave,
-            flushedCampaigns,
+          contestBasedDetails = withHighestPlatformPayoutFlag(
+            attachPlatformCampaignsToDetails(
+              {
+                ...(twitterCampaign
+                  ? { twitter_campaign: twitterCampaign }
+                  : {}),
+              },
+              platformsForSave,
+              flushedCampaigns,
+            ),
+            highestPlatformPayoutOnly,
+            primarySnap.contestType,
+            platformsForSave.length,
+            contestFormat,
           );
           const contentColumns = buildPlatformContentColumns(
             platformsForSave,
@@ -4259,6 +4358,15 @@ export default function CreateContestPage({
           : {}),
         ...(accessMode === "public" && listOnlyToEligible
           ? { list_only_to_eligible: true }
+          : {}),
+        // Review before posting (video campaigns). Same rule: only sent when used.
+        ...(draftReview.review_before_posting || draftReviewSavedOn.current
+          ? {
+              ...draftReview,
+              review_before_posting:
+                isVideoContestFormat(contestFormat) &&
+                draftReview.review_before_posting,
+            }
           : {}),
         trust_score:
           isVideoContestFormat(contestFormat) &&
@@ -4413,6 +4521,8 @@ export default function CreateContestPage({
       }
 
       if (responseError) throw responseError;
+      draftReviewSavedOn.current =
+        isVideoContestFormat(contestFormat) && draftReview.review_before_posting;
 
       // Brand writes bypass mutation APIs — bump list gens so dashboards see the change.
       if (!isAdmin) {
@@ -4476,7 +4586,11 @@ export default function CreateContestPage({
             if ("error" in parsed) throw new Error(parsed.error);
             const saved = await questionsApi.save(newContestId, parsed.questions);
             setApplicationQuestions(saved.questions);
-            if (isAdmin && Object.values(applicantVisibility).some((v) => !v)) {
+            if (
+              isAdmin &&
+              (Object.values(applicantVisibility).some((v) => !v) ||
+                draftHadHiddenApplicantFieldsRef.current)
+            ) {
               // A failure here doesn't block the campaign; it can be changed later on the edit page.
               await applicantVisibilityApi
                 .save(newContestId, applicantVisibility)
@@ -5328,6 +5442,13 @@ export default function CreateContestPage({
           basicsData.resources = contentColumns.resources;
           basicsData.inspiration_links = contentColumns.inspiration_links;
         }
+        basicsData.contest_based_details = withHighestPlatformPayoutFlag(
+          basicsData.contest_based_details,
+          highestPlatformPayoutOnly,
+          basicsData.contest_type,
+          selectedPlatforms.length,
+          contestFormat,
+        );
       } else if (contestFormat === "video") {
         basicsData.contest_based_details = clearPlatformCampaignKeys({
           ...(basicsData.contest_based_details || {}),
@@ -5422,6 +5543,10 @@ export default function CreateContestPage({
             if (!Object.prototype.hasOwnProperty.call(incoming, p)) {
               delete mergedDetails[p];
             }
+          }
+          // The payout switch is written on every save; never keep a stale one.
+          if (incoming[HIGHEST_PLATFORM_PAYOUT_KEY] !== true) {
+            delete mergedDetails[HIGHEST_PLATFORM_PAYOUT_KEY];
           }
           basicsData.contest_based_details = mergedDetails;
         }
@@ -5729,9 +5854,6 @@ export default function CreateContestPage({
         // Collect all missing required fields
         const missingFields: string[] = [];
 
-        if (!title || !title.trim()) {
-          missingFields.push("Campaign Title");
-        }
         if (!platform || platform.trim() === "") {
           missingFields.push("Platform");
         }
@@ -5743,6 +5865,9 @@ export default function CreateContestPage({
         }
         if (!category || category.trim() === "") {
           missingFields.push("Category");
+        }
+        if (!title || !title.trim()) {
+          missingFields.push("Campaign Title");
         }
         if (!thumbnail && !thumbnailPreview) {
           missingFields.push("Thumbnail");
@@ -5782,10 +5907,23 @@ export default function CreateContestPage({
           return;
         }
 
-        // Auto-save basics as draft before moving to next step
+        await saveBasicsAsDraft();
+        setStep("audience");
+      } else if (step === "audience") {
         await saveBasicsAsDraft();
         setStep("brief");
       } else if (step === "brief") {
+        const missingFields: string[] = [];
+        if (!title || !title.trim()) missingFields.push("Campaign Title");
+        if (!thumbnail && !thumbnailPreview) missingFields.push("Thumbnail");
+        if (missingFields.length > 0) {
+          setToastError(
+            `Please fill in the following required field${missingFields.length > 1 ? "s" : ""}: ${missingFields.join(", ")}`,
+          );
+          setIsLoading(false);
+          return;
+        }
+        await saveBasicsAsDraft();
         // Small delay to ensure state is updated from editor
         await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -5893,18 +6031,28 @@ export default function CreateContestPage({
     setFormFeedbackType(null);
     if (step === "prize") setStep("resources");
     else if (step === "resources") setStep("brief");
-    else if (step === "brief") setStep("basics");
+    else if (step === "brief") setStep("audience");
+    else if (step === "audience") setStep("basics");
   };
 
   const isNextDisabled = () => {
-    if (step === "basics") return !title || (!thumbnail && !thumbnailPreview); // Updated to match nextStep validation
+    if (step === "basics") {
+      return (
+        (contestFormat === "video" && selectedPlatforms.length === 0) ||
+        !title.trim() ||
+        (!thumbnail && !thumbnailPreview)
+      );
+    }
+    if (step === "audience") return false;
     if (step === "brief") {
-      // Check if both brief and rules content are empty using current state
-      return isQuillEmpty(briefHtml) || isQuillEmpty(rulesHtml);
+      return (
+        isQuillEmpty(briefHtml) ||
+        isQuillEmpty(rulesHtml)
+      );
     }
     // For the "resources" step, no specific blocking validation for the entire step is defined for isNextDisabled
     // Individual resource additions handle their own feedback internally.
-    // If you wanted to block "Next" if no resources are added, you'd check Object.keys(resources).length === 0 here.
+    // If you wanted to block Continue if no resources are added, you'd check Object.keys(resources).length === 0 here.
     return false;
   };
 
@@ -6182,6 +6330,7 @@ export default function CreateContestPage({
 
   // Helper function to populate form with draft data
   const populateDraftData = (draft: any) => {
+    draftLoadedRef.current = true;
     console.log("=== populateDraftData called ===");
     console.log("Full draft object:", JSON.stringify(draft, null, 2));
     console.log("Draft ID:", draft.id);
@@ -6197,6 +6346,34 @@ export default function CreateContestPage({
     // Set draft/contest IDs first
     setDraftId(draft.id);
     setContestId(draft.id);
+
+    // Drafts made with "Copy an existing campaign": banner + copied invites.
+    if (draft.duplicated_from_contest_id && draft.moderation_status === "draft") {
+      const sourceId = String(draft.duplicated_from_contest_id);
+      // Brands only see the banner for a copy of their own campaign; an admin
+      // copy from another brand never shows that brand's campaign to them.
+      let sourceQuery = supabase.from("contests").select("title").eq("id", sourceId);
+      if (!isAdmin) sourceQuery = sourceQuery.eq("advertiser_id", draft.advertiser_id);
+      sourceQuery.maybeSingle().then(({ data }) =>
+        setCopiedFrom(data ? { id: sourceId, title: data.title || "Untitled campaign" } : null),
+      );
+    } else {
+      setCopiedFrom(null);
+    }
+    if (draft.id && draft.access_mode && draft.access_mode !== "public") {
+      supabase
+        .from("contest_access_list")
+        .select("user_id", { count: "exact", head: true })
+        .eq("contest_id", draft.id)
+        .then(({ count }) => setExistingInviteCount(count ?? 0));
+    } else {
+      setExistingInviteCount(0);
+    }
+    if (isAdmin && draft.applicant_visibility) {
+      const visibility = parseApplicantVisibility(draft.applicant_visibility);
+      draftHadHiddenApplicantFieldsRef.current = Object.values(visibility).some((v) => !v);
+      setApplicantVisibility(visibility);
+    }
 
     // Basic contest fields
     setTitle(draft.title || "");
@@ -6226,6 +6403,9 @@ export default function CreateContestPage({
       setSelectedPlatforms(["youtube"]);
       setActivePlatform("youtube");
     }
+    setHighestPlatformPayoutOnly(
+      readHighestPlatformPayoutFlag(draft.contest_based_details),
+    );
 
     setCategory(draft.category || "technology");
 
@@ -6252,9 +6432,42 @@ export default function CreateContestPage({
       setAccessMode(draft.access_mode);
     }
     setAccessListSkipsRequirements(!!draft.access_list_skips_requirements);
+    setDraftReview(normalizeDraftReviewSettings(draft));
+    draftReviewSavedOn.current = draft.review_before_posting === true;
     setPreviewDescription(draft.preview_description ?? "");
     setApplicationsOpen(draft.applications_open !== false);
     setListOnlyToEligible(!!draft.list_only_to_eligible);
+
+    // Per-creator limits and creator requirements (same as the edit page).
+    setMultipleSubmissionsEnabled(draft.multiple_submissions_enabled === true);
+    setMaxSubmissionsPerCreator(
+      draft.multiple_submissions_enabled === true &&
+        Number(draft.max_submissions_per_creator) > 0
+        ? Number(draft.max_submissions_per_creator)
+        : 1,
+    );
+    const storedNumber = (value: unknown): number | null => {
+      if (value === null || value === undefined || value === "") return null;
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    };
+    const requirements: Array<
+      [unknown, (on: boolean) => void, (v: number | "") => void, number?]
+    > = [
+      [draft.trust_score, setTrustScoreEnabled, setContestTrustScore],
+      [draft.trust_number, setTrustNumberEnabled, setContestTrustNumber],
+      [draft.min_best_quality_score, setBestQualityEnabled, setContestMinBestQuality],
+      [draft.min_avg_quality_score, setAvgQualityEnabled, setContestMinAvgQuality],
+      [draft.min_quality_score, setMinQualityEnabled, setContestMinQuality],
+      // Stored in cents, shown in dollars.
+      [draft.min_platform_earnings, setMinEarningsEnabled, setContestMinEarnings, 100],
+      [draft.min_platform_views, setMinViewsEnabled, setContestMinViews],
+    ];
+    for (const [value, setEnabled, setValue, divisor] of requirements) {
+      const n = storedNumber(value);
+      setEnabled(n !== null);
+      setValue(n === null ? "" : divisor ? n / divisor : n);
+    }
     if (draft.access_mode === "restricted" && draft.id) {
       questionsApi
         .get(draft.id)
@@ -6461,6 +6674,7 @@ export default function CreateContestPage({
       setMaxEarningsPerCreator(
         (draft.max_earnings_per_creator / 100).toString(),
       );
+      setMaxEarningsEnabled(true);
     }
 
     // Tracking links
@@ -6530,6 +6744,7 @@ export default function CreateContestPage({
         lc.flat_fee_bonus > 0
       ) {
         setFlatFeeBonus((lc.flat_fee_bonus / 100).toString());
+        setFlatFeeBonusEnabled(true);
       }
 
       // Restore total budget for bonuses (stored in cents as total_budget)
@@ -6839,6 +7054,7 @@ export default function CreateContestPage({
         cc.flat_fee_bonus > 0
       ) {
         setFlatFeeBonus((cc.flat_fee_bonus / 100).toString());
+        setFlatFeeBonusEnabled(true);
       }
 
       // Restore flat fee bonus cap (stored in cents)
@@ -6953,6 +7169,7 @@ export default function CreateContestPage({
         applyPlatformContentColumnsToSnapshots(
           draftVideoPlatforms,
           {
+            content_type: draft.content_type,
             brief_html: draft.brief_html,
             brief_json: draft.brief_json,
             rules_html: draft.rules_html,
@@ -7037,8 +7254,21 @@ export default function CreateContestPage({
         await checkStorageAvailability();
         await getUserPlan(); // getUserPlan might depend on loaded plans if defaults change
         await loadDraftData();
+        const params = new URLSearchParams(window.location.search);
+        const type = (params.get("contestType") || params.get("type") || "")
+          .trim()
+          .toLowerCase();
+        const resume =
+          params.get("draft") ||
+          params.get("contest_id") ||
+          params.get("step") === "prize" ||
+          params.get("contest_payment");
+        setShowRewardPicker(
+          !(draftLoadedRef.current || Boolean(type) || Boolean(resume)),
+        );
       } catch (error) {
         console.error("Error initializing data:", error);
+        setShowRewardPicker(false);
         // Continue with the application even if there are errors
         // as most functionality will still work without storage
       }
@@ -7278,7 +7508,7 @@ export default function CreateContestPage({
           //     : currentPlan &&
           //       currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
           //     ? "bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 border-orange-200"
-          //     : "bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border-blue-200/50"
+          //     : "bg-gradient-to-br from-blue-50 via-indigo-50 to-[#f6f6f7] border-blue-200/50"
           // }`}
           >
             {/* Background decorative elements */}
@@ -7289,7 +7519,7 @@ export default function CreateContestPage({
                   : currentPlan &&
                     currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
                   ? "bg-gradient-to-br from-orange-300/20 to-amber-400/20" 
-                  : "bg-gradient-to-br from-blue-400/20 to-purple-400/20" 
+                  : "bg-gradient-to-br from-blue-400/20 to-[#ffffff14]" 
               }`}
             ></div>
             <div
@@ -7310,883 +7540,391 @@ export default function CreateContestPage({
                 className={cn(
                   "px-6 pt-6 pb-5 border-b rounded-tl-xl rounded-tr-xl shadow-xl space-y-6",
                   isDark
-                    ? "bg-[#180438] border-gray-600 text-white"
-                    : " border-[#D0D0D0] bg-white text-purple-600",
+                    ? "bg-[#161616] border-gray-600 text-white"
+                    : " border-[#D0D0D0] bg-white text-[#1a1a1a]",
                 )}
               >
-                <h2 className="font-semibold text-xl">Rewards & Timeline</h2>
+                <h2
+                  className={cn(
+                    "font-semibold text-2xl",
+                    isDark ? "text-white" : "text-[#1a1a1a]",
+                  )}
+                >
+                  Reward
+                </h2>
               </div>
               <div
                 className={cn(
-                  "max-w-[1100px] mx-auto shadow-md px-6 pt-3",
+                  "rounded-b-xl px-6 pt-6 pb-8 shadow-lg space-y-8",
                   isDark
-                    ? "bg-[#180438] text-white"
-                    : "bg-white text-purple-600",
+                    ? "bg-[#161616] text-white"
+                    : "bg-white text-[#1a1a1a]",
                 )}
               >
-                <h3 className="text-lg font-bold mb-4">Your Plan Details</h3>
-                <div className="flex items-start justify-between ">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "rounded-full p-3.5",
-                        isDark
-                          ? "bg-[#FFFFFF36] text-white"
-                          : "text-[#4A00BE] bg-[#D8C3FF]",
-                      )}
-                    >
-                      <Trophy className="h-8 w-8" />
-                    </div>
-                    <div>
-                      <h3
+                {currentPlan ? (
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-4">
+                      <div
                         className={cn(
-                          "text-xl md:text-2xl font-bold ",
-                          isDark ? "text-white" : "text-gray-900",
+                          "rounded-full p-3.5 shrink-0",
+                          isDark
+                            ? "bg-[#FFFFFF36] text-white"
+                            : "text-[#1a1a1a] bg-[#e6e6e8]",
                         )}
                       >
-                        Your Current Subscription Plan
-                      </h3>
-                      <p
-                        className={cn(
-                          "text-gray-600 text-md leading-relaxed",
-                          isDark ? "text-white" : "text-gray-600",
-                        )}
-                      >
-                        {currentPlan && currentPlan.price === 0 ? (
-                          <>
-                            Get started with basic features.{" "}
-                            <span className="font-medium text-orange-600">
-                              Upgrade for better rates and more flexibility!
-                            </span>
-                          </>
-                        ) : currentPlan &&
-                          currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER ? (
-                          <>
-                            Good for small campaigns.{" "}
-                            <span className="font-medium text-blue-600">
-                              Higher plans offer better commission rates!
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            Your plan determines campaign limits, commission
-                            rates, and available features. Higher plans offer
-                            better rates and more flexibility for your marketing
-                            campaigns.
-                          </>
-                        )}
-                      </p>
+                        <Trophy className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <h4
+                          className={cn(
+                            "text-xl font-bold",
+                            isDark ? "text-white" : "text-[#1a1a1a]",
+                          )}
+                        >
+                          {currentPlan.name || "FREE"} Plan
+                        </h4>
+                        <p
+                          className={cn(
+                            "text-sm font-medium",
+                            isDark ? "text-gray-300" : "text-[#6b6b72]",
+                          )}
+                        >
+                          {currentPlan.price === 0
+                            ? "Get started for free, then upgrade!"
+                            : "Your current plan benefits"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              </div>
-              {currentPlan ? (
-                <div className="space-y-12">
-                  <div
-                    className={cn(
-                      "rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg",
-                      isDark ? "bg-[#180438]" : "bg-white",
-                    )}
-                    // className={`backdrop-blur-sm rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg ${
-                    //   currentPlan.price === 0
-                    //     ? "bg-white/90 border-gray-200" // Free plan
-                    //     : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                    //     ? "bg-white/90 border-gray-200" // Bronze plan
-                    //     : "bg-white/90 border-gray-200" // Higher plans
-                    // }`}
-                  >
+
                     <div
                       className={cn(
-                        "flex flex-col  lg:flex-row items-start lg:items-center border rounded-xl p-4 sm:p-6 justify-between gap-6",
-                        isDark ? "border-gray-500" : "border-gray-300",
+                        "border py-4 px-2 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-2",
+                        isDark ? "border-gray-600" : "border-gray-300",
                       )}
                     >
-                      <div className="flex items-center gap-4 sm:gap-6">
+                      <div className="flex items-start gap-3 px-2 py-1">
+                        <div className="w-3 h-3 mt-2 flex-shrink-0" />
+                        <span className="text-md font-medium">
+                          Launch up to{" "}
+                          {planFeatures.maxActiveContests === Infinity
+                            ? "unlimited"
+                            : planFeatures.maxActiveContests}{" "}
+                          simultaneous campaigns
+                        </span>
+                      </div>
+
+                      {contestType === "leaderboard" && (
+                        <div className="flex items-start gap-3 px-2 py-1">
+                          <div className="w-3 h-3 mt-2 flex-shrink-0" />
+                          <div>
+                            <span className="text-md font-medium">
+                              Reward up to{" "}
+                              {planFeatures.maxWinnersPerContest === Infinity
+                                ? "unlimited"
+                                : planFeatures.maxWinnersPerContest}{" "}
+                              creators per contest
+                            </span>
+                            <span
+                              className={cn(
+                                "text-xs block",
+                                isDark ? "text-gray-400" : "text-[#9a9aa1]",
+                              )}
+                            >
+                              (Leaderboard)
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {(contestType === "cpm" ||
+                        contestType === "dual_rewards") && (
+                        <div className="flex items-start gap-3 px-2 py-1">
+                          <div className="w-3 h-3 mt-2 flex-shrink-0" />
+                          <div>
+                            <span className="text-md font-medium">
+                              Performance-based rewards
+                            </span>
+                            <span
+                              className={cn(
+                                "text-xs block",
+                                isDark ? "text-gray-400" : "text-[#9a9aa1]",
+                              )}
+                            >
+                              (No winner limits — CPM)
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {(contestType === "milestone" ||
+                        contestType === "dual_rewards") && (
+                        <div className="flex items-start gap-3 px-2 py-1">
+                          <div className="w-3 h-3 mt-2 flex-shrink-0" />
+                          <div>
+                            <span className="text-md font-medium">
+                              View-tier rewards with optional winner caps
+                            </span>
+                            <span
+                              className={cn(
+                                "text-xs block",
+                                isDark ? "text-gray-400" : "text-[#9a9aa1]",
+                              )}
+                            >
+                              (Milestone — video only)
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-start gap-3 px-2 py-1">
+                        <div className="w-3 h-3 mt-2 flex-shrink-0" />
+                        <span className="text-md font-medium">
+                          Start campaigns from just{" "}
+                          {formatCurrencyFromCents(planFeatures.minContestBudget)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-start gap-3 px-2 py-1">
+                        <div className="w-3 h-3 mt-2 flex-shrink-0" />
+                        <div>
+                          <span className="text-md font-medium">
+                            Only {planFeatures.commissionPercentage}% platform
+                            fee
+                          </span>
+                          <span
+                            className={cn(
+                              "text-xs block",
+                              isDark ? "text-gray-400" : "text-[#9a9aa1]",
+                            )}
+                          >
+                            on your budget
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {!isAdmin &&
+                      (currentPlan.price === 0 ||
+                        planFeatures.commissionPercentage >= 20) && (
                         <div
                           className={cn(
-                            "rounded-full p-3",
-                            isDark
-                              ? "bg-[#FFFFFF36] text-white"
-                              : "text-[#4A00BE] bg-[#D8C3FF]",
+                            "rounded-2xl py-5 px-4 border",
+                            isDark ? "border-gray-600" : "border-gray-300",
                           )}
-                          // className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                          //   userPlan === subscriptionPlans[0].id
-                          //     ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
-                          //     : userPlan === subscriptionPlans[1].id
-                          //     ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
-                          //     : userPlan === subscriptionPlans[2].id
-                          //     ? "bg-gradient-to-br from-gray-400 to-slate-500 text-white"
-                          //     : userPlan === subscriptionPlans[3].id
-                          //     ? "bg-gradient-to-br from-yellow-400 to-orange-500 text-white"
-                          //     : userPlan === subscriptionPlans[4].id
-                          //     ? "bg-gradient-to-br from-purple-500 to-indigo-600 text-white"
-                          //     : userPlan === subscriptionPlans[5].id
-                          //     ? "bg-gradient-to-br from-blue-500 to-cyan-600 text-white"
-                          //     : "bg-gradient-to-br from-gray-500 to-gray-600 text-white"
-                          // }`}
                         >
-                          <Trophy className="h-6 w-6 sm:h-8 sm:w-8" />
-                        </div>
-                        <div>
-                          <h4
-                            className={cn(
-                              "text-lg sm:text-xl font-bold mb-1",
-                              isDark ? "text-white" : "text-gray-900",
-                            )}
-                          >
-                            {currentPlan.name || "FREE"} Plan
-                          </h4>
-                          <div className="flex items-center gap-2">
-                            <span
-                              // className={`text-3xl font-bold ${
-                              //   currentPlan.price === 0
-                              //     ? "text-gray-600"
-                              //     : "text-blue-600"
-                              // }`}
-                              className="text-3xl font-bold text-[#7F39EC]"
-                            >
-                              {formatCurrencyFromCents(currentPlan.price)}
-                            </span>
-                            <span className="text-3xl text-[#7F39EC]">
-                              /month
-                            </span>
-                            {currentPlan.price === 0 && (
-                              <span className="ml-2 px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full font-medium">
-                                Limited Features
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-start md:items-end gap-2">
-                        {currentPlan.price > 0 ? (
-                          <>
-                            <div
-                              className={cn(
-                                "px-5 py-2.5 rounded-xl bg-[#4A00BE] text-white text-sm md:text-[13px] ",
-                                isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
-                              )}
-                            >
-                              Active Subscription
-                            </div>
-                            <p
-                              className={cn(
-                                "text-xs",
-                                isDark ? "text-white" : "text-gray-500",
-                              )}
-                            >
-                              Billed monthly
-                            </p>
-                          </>
-                        ) : (
-                          <>
-                            <div className="px-5 py-2 rounded-xl bg-[#4A00BE] text-white text-sm md:text-[13px]">
-                              Free Plan
-                            </div>
-                            <p className="text-xs text-orange-600 font-medium">
-                              Consider upgrading
-                            </p>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  {/* Plan Features with Descriptions */}
-                  <div>
-                    <div
-                      className={cn(
-                        "px-6 pt-6 pb-4 border-b rounded-t-xl shadow-xl space-y-6",
-                        isDark
-                          ? "bg-[#180438] text-white border-gray-600"
-                          : "bg-white border-[#D0D0D0] text-black",
-                      )}
-                    >
-                      <h2 className="font-semibold text-2xl">Plan Features</h2>
-                    </div>
-                    <div
-                      className={cn(
-                        "max-w-[1100px] mx-auto rounded-b-xl shadow-lg roundex-xl px-6 pt-6 pb-8",
-                        isDark ? "bg-[#180438]" : "bg-white",
-                      )}
-                    >
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Max Winners Feature - Only show for Leaderboard campaigns */}
-                        {contestType === "leaderboard" && (
-                          <div
-                            className={cn(
-                              "border rounded-xl p-4 flex flex-col justify-between shadow-sm",
-                              isDark ? "border-gray-500" : "border-gray-300",
-                            )}
-                            // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
-                            //   planFeatures.maxWinnersPerContest <= 3
-                            //     ? "bg-orange-50/80 border-orange-200"
-                            //     : "bg-white/80 border-gray-200/50"
-                            // }`}
-                          >
-                            <div className="flex items-start gap-4">
-                              {/* <div
-                            className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
-                              planFeatures.maxWinnersPerContest <= 3
-                                ? "bg-gradient-to-br from-orange-500 to-orange-600"
-                                : "bg-gradient-to-br from-blue-500 to-blue-600" 
-                            }`}
-                          >
-                            <span className="text-white font-bold text-lg">
-                              W
-                            </span>
-                          </div> */}
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between mb-2">
-                                  <h5
-                                    className={cn(
-                                      "text-lg font-semibold mb-2",
-                                      isDark ? "text-white" : "text-gray-900",
-                                    )}
-                                  >
-                                    Maximum Winners
-                                  </h5>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xl font-bold text-green-600 border border-green-600 rounded-full px-6">
-                                      {planFeatures.maxWinnersPerContest ===
-                                      Infinity
-                                        ? "∞"
-                                        : planFeatures.maxWinnersPerContest}
-                                    </span>
-                                    {planFeatures.maxWinnersPerContest <= 3 && (
-                                      <span className="text-orange-500 text-sm">
-                                        ⚠️
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                <p
-                                  className={cn(
-                                    "text-sm leading-relaxed mb-4",
-                                    isDark ? "text-white" : "text-gray-600",
-                                  )}
-                                >
-                                  The maximum number of creators you can reward
-                                  in a single leaderboard contest. More winners
-                                  means broader reach and engagement for your
-                                  brand.
-                                </p>
-                                <div
-                                  className={cn(
-                                    "rounded-lg px-3 py-2 text-center border text-sm font-medium",
-                                    isDark
-                                      ? "border-gray-600"
-                                      : "bg-[#F0E7FD] border-purple-500 text-purple-600",
-                                  )}
-                                  // className={`mt-3 text-sm font-medium ${
-                                  //   planFeatures.maxWinnersPerContest <= 3
-                                  //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                  //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                  // }`}
-                                >
-                                  {planFeatures.maxWinnersPerContest <= 3
-                                    ? "Upgrade for more winner slots!"
-                                    : "Tip: More winners = higher participation rates"}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* CPM Rate Info - CPM and dual rewards */}
-                        {(contestType === "cpm" ||
-                          contestType === "dual_rewards") && (
-                          <div
-                            className={cn(
-                              "border rounded-xl p-4 flex flex-col justify-between shadow-sm",
-                              isDark ? "border-gray-500" : "border-gray-300",
-                            )}
-                          >
-                            <div className="flex items-start gap-4">
-                              {/* <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg bg-gradient-to-br from-purple-500 to-purple-600">
-                                <span className="text-white font-bold text-lg">
-                                  <GitGraphIcon />
-                                </span>
-                              </div> */}
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between mb-3">
-                                  <h5
-                                    className={cn(
-                                      "text-lg font-semibold",
-                                      isDark ? "text-white" : "text-gray-900",
-                                    )}
-                                  >
-                                    Total Winners
-                                  </h5>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xl font-bold text-green-600 border border-green-600 rounded-full px-6">
-                                      ∞
-                                    </span>
-                                  </div>
-                                </div>
-                                <p
-                                  className={cn(
-                                    "text-sm leading-relaxed",
-                                    isDark ? "text-white" : "text-gray-600",
-                                  )}
-                                >
-                                  In CPM campaigns, there's no limit on winners.
-                                  All participating creators get paid based on
-                                  their content's performance (views) &
-                                  eligibility.
-                                </p>
-                                <div
-                                  className={cn(
-                                    "mt-5 text-sm font-medium border text-center rounded-lg px-3 py-2",
-                                    isDark
-                                      ? "border-gray-600"
-                                      : "bg-[#F0E7FD] border-purple-500 text-purple-600",
-                                  )}
-                                >
-                                  Pay for performance - reward creators based on
-                                  actual results
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {(contestType === "milestone" ||
-                          contestType === "dual_rewards") && (
-                          <div
-                            className={cn(
-                              "border rounded-xl p-4 flex flex-col justify-between shadow-sm",
-                              isDark ? "border-gray-500" : "border-gray-300",
-                            )}
-                          >
-                            <div className="flex-1">
-                              <h5
-                                className={cn(
-                                  "text-lg font-semibold mb-2",
-                                  isDark ? "text-white" : "text-gray-900",
-                                )}
-                              >
-                                Milestone rewards
+                          <div className="flex items-start justify-between gap-6">
+                            <div className="flex-1 min-w-0">
+                              <h5 className="text-base font-bold">
+                                {currentPlan.price === 0
+                                  ? "Ready to unlock more potential?"
+                                  : "Want better rates and more features?"}
                               </h5>
                               <p
                                 className={cn(
-                                  "text-sm leading-relaxed mb-3",
-                                  isDark ? "text-white" : "text-gray-600",
-                                )}
-                              >
-                                Define view thresholds and payouts. You set an
-                                overall campaign budget upfront; optional caps
-                                per tier limit how many creators can earn each
-                                reward.
-                              </p>
-                              <div
-                                className={cn(
-                                  "text-sm font-medium border text-center rounded-lg px-3 py-2",
-                                  isDark
-                                    ? "border-gray-600"
-                                    : "bg-[#F0E7FD] border-purple-500 text-purple-600",
-                                )}
-                              >
-                                Video campaigns only — rewards are based on
-                                verified views
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Min Budget Feature */}
-                        <div
-                          className={cn(
-                            "backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300",
-                            isDark ? "border-gray-500" : "border-gray-300",
-                          )}
-
-                          // className={`backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300 ${
-                          //   planFeatures.minContestBudget >=
-                          //   HIGH_MIN_BUDGET_THRESHOLD
-                          //     ? "bg-white"
-                          //     : "bg-white/80 border-gray-200/50"
-                          // }`}
-                        >
-                          <div className="flex items-start gap-4">
-                            {/* <div
-                          className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
-                            planFeatures.minContestBudget >=
-                            HIGH_MIN_BUDGET_THRESHOLD
-                              ? "bg-gradient-to-br from-orange-500 to-red-600"
-                              : "bg-gradient-to-br from-green-500 to-emerald-600"
-                          }`}
-                        >
-                          <span className="text-white font-bold text-lg">
-                            $
-                          </span>
-                        </div> */}
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between mb-2">
-                                <h5
-                                  className={cn(
-                                    "text-lg font-semibold",
-                                    isDark ? "text-white" : "text-gray-900",
-                                  )}
-                                >
-                                  Minimum Budget
-                                </h5>
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className={`text-xl font-bold ${
-                                      planFeatures.minContestBudget >=
-                                      HIGH_MIN_BUDGET_THRESHOLD
-                                        ? "text-green-600 border border-green-600 rounded-full px-6"
-                                        : "text-green-600 border border-green-600 rounded-full px-6"
-                                    }`}
-                                  >
-                                    {formatCurrencyFromCents(
-                                      planFeatures.minContestBudget,
-                                    )}
-                                  </span>
-                                  {planFeatures.minContestBudget >=
-                                    HIGH_MIN_BUDGET_THRESHOLD && (
-                                    <span className="text-orange-500 text-sm">
-                                      ⚠️
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <p
-                                className={cn(
                                   "text-sm leading-relaxed",
-                                  isDark ? "text-white" : "text-gray-600",
+                                  isDark ? "text-gray-300" : "text-[#6b6b72]",
                                 )}
                               >
-                                The minimum total prize pool required to create
-                                a campaign. Lower minimums give you more
-                                flexibility for smaller campaigns.
+                                {currentPlan.price === 0
+                                  ? "Upgrade to reduce commission and get more winners"
+                                  : "Higher plans offer lower commission rates and more flexibility"}
                               </p>
-                              <div
-                                className={cn(
-                                  "mt-4 rounded-lg px-3 py-2 text-center border text-sm font-medium",
-                                  isDark
-                                    ? "border-gray-600"
-                                    : "bg-[#F0E7FD] border-purple-500 text-purple-600",
-                                )}
-                                // className={`mt-4 text-sm font-medium ${
-                                //   planFeatures.minContestBudget >=
-                                //   HIGH_MIN_BUDGET_THRESHOLD
-                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                // }`}
-                              >
-                                {planFeatures.minContestBudget >=
-                                HIGH_MIN_BUDGET_THRESHOLD
-                                  ? "Upgrade for lower minimum budgets!"
-                                  : "Tip: Start with smaller budgets to test campaigns"}
-                              </div>
                             </div>
+                            {userPlan !== PRODUCT_IDS.CHAMPION && (
+                              <button
+                                type="button"
+                                className="shrink-0 px-5 py-2 rounded-xl bg-[#1a1a1a] text-white"
+                                onClick={() => setShowUpgradeModal(true)}
+                              >
+                                Upgrade Plan
+                              </button>
+                            )}
                           </div>
                         </div>
-
-                        {/* Active Campaigns Feature */}
-                        <div
-                          className={cn(
-                            "backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300",
-                            isDark ? "border-gray-500" : "border-gray-300",
-                          )}
-
-                          // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
-                          //   planFeatures.maxActiveContests <= 1
-                          //     ? "bg-white"
-                          //     : planFeatures.maxActiveContests <= 5
-                          //     ? "bg-orange-50/80 border-orange-200"
-                          //     : "bg-white/80 border-gray-200/50"
-                          // }`}
-                        >
-                          <div className="flex items-start gap-4">
-                            {/* <div
-                          className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
-                            planFeatures.maxActiveContests <= 1
-                              ? "bg-gradient-to-br from-red-500 to-red-600" 
-                              : planFeatures.maxActiveContests <= 5
-                              ? "bg-gradient-to-br from-orange-500 to-orange-600" 
-                              : "bg-gradient-to-br from-purple-500 to-indigo-600" 
-                          }`}
-                        >
-                          <span className="text-white font-bold text-lg">
-                            C
-                          </span>
-                        </div> */}
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between mb-2">
-                                <h5
-                                  className={cn(
-                                    "text-lg font-semibold",
-                                    isDark ? "text-white" : "text-gray-900",
-                                  )}
-                                >
-                                  Active Campaigns
-                                </h5>
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className={`text-xl font-bold ${
-                                      planFeatures.maxActiveContests <= 1
-                                        ? "text-green-600 border border-green-600 rounded-full px-6"
-                                        : planFeatures.maxActiveContests <= 5
-                                          ? "text-green-600 border border-green-600 rounded-full px-6"
-                                          : "text-green-600 border border-green-600 rounded-full px-6"
-                                    }`}
-                                  >
-                                    {planFeatures.maxActiveContests === Infinity
-                                      ? "∞"
-                                      : planFeatures.maxActiveContests}
-                                  </span>
-                                  {planFeatures.maxActiveContests <= 5 && (
-                                    <span
-                                      className={`text-sm ${
-                                        planFeatures.maxActiveContests <= 1
-                                          ? "text-red-500"
-                                          : "text-orange-500"
-                                      }`}
-                                    >
-                                      ⚠️
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <p
-                                className={cn(
-                                  "text-sm leading-relaxed",
-                                  isDark ? "text-white" : "text-gray-900",
-                                )}
-                              >
-                                How many campaigns you can run simultaneously.
-                                Run multiple campaigns to maximize your brand's
-                                exposure across different audiences.
-                              </p>
-                              <div
-                                className={cn(
-                                  "mt-4 rounded-lg px-3 py-2 text-center border text-sm font-medium",
-                                  isDark
-                                    ? "border-gray-600"
-                                    : "bg-[#F0E7FD] border-purple-500 text-purple-600",
-                                )}
-                                // className={`mt-4 text-sm font-medium ${
-                                //   planFeatures.maxActiveContests <= 1
-                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                //     : planFeatures.maxActiveContests <= 5
-                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                //     : "mt-4 border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                // }`}
-                              >
-                                {planFeatures.maxActiveContests <= 1
-                                  ? "Only 1 campaign allowed - upgrade now!"
-                                  : planFeatures.maxActiveContests <= 5
-                                    ? "Upgrade for more simultaneous campaigns!"
-                                    : "Tip: Run parallel campaigns for different products"}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Commission Feature */}
-                        <div
-                          className={cn(
-                            "backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300",
-                            isDark ? "border-gray-500" : "border-gray-300",
-                          )}
-
-                          // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
-                          //   planFeatures.commissionPercentage >= 40
-                          //     ? "bg-red-50/80 border-red-200"
-                          //     : planFeatures.commissionPercentage >= 20
-                          //     ? "bg-orange-50/80 border-orange-200"
-                          //     : "bg-white/80 border-gray-200/50"
-                          // }`}
-                        >
-                          <div className="flex items-start gap-4">
-                            {/* <div
-                          className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
-                            planFeatures.commissionPercentage >= 40
-                              ? "bg-gradient-to-br from-red-500 to-red-600" 
-                              : planFeatures.commissionPercentage >= 20
-                              ? "bg-gradient-to-br from-orange-500 to-red-600"
-                              : "bg-gradient-to-br from-green-500 to-emerald-600" 
-                          }`}
-                        >
-                          <span className="text-white font-bold text-lg">
-                            %
-                          </span>
-                        </div> */}
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between mb-2">
-                                <h5
-                                  className={cn(
-                                    "text-lg font-semibold",
-                                    isDark ? "text-white" : "text-gray-900",
-                                  )}
-                                >
-                                  Platform Commission
-                                </h5>
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className={`text-xl font-bold ${
-                                      planFeatures.commissionPercentage >= 40
-                                        ? "text-green-600 border border-green-600 rounded-full px-6"
-                                        : planFeatures.commissionPercentage >=
-                                            20
-                                          ? "text-green-600 border border-green-600 rounded-full px-6"
-                                          : "text-green-600 border border-green-600 rounded-full px-6"
-                                    }`}
-                                  >
-                                    {planFeatures.commissionPercentage}%
-                                  </span>
-                                  {planFeatures.commissionPercentage >= 20 && (
-                                    <span
-                                      className={`text-sm ${
-                                        planFeatures.commissionPercentage >= 40
-                                          ? "text-red-500"
-                                          : "text-orange-500"
-                                      }`}
-                                    >
-                                      ⚠️
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <p
-                                className={cn(
-                                  "text-sm leading-relaxed",
-                                  isDark ? "text-white" : "text-gray-600 ",
-                                )}
-                              >
-                                Our service fee taken from your total prize
-                                pool. Higher-tier plans have lower commission
-                                rates, saving you money on larger campaigns.
-                              </p>
-                              <div
-                                className={cn(
-                                  "mt-4 rounded-lg px-3 py-2 text-center border text-sm font-medium",
-                                  isDark
-                                    ? "border-gray-600"
-                                    : "bg-[#F0E7FD] border-purple-500 text-purple-600",
-                                )}
-                                // className={`mt-4 text-sm font-medium ${
-                                //   planFeatures.commissionPercentage >= 40
-                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                //     : planFeatures.commissionPercentage >= 20
-                                //     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                // }`}
-                              >
-                                {planFeatures.maxActiveContests <= 1
-                                  ? "Only 1 campaign allowed - upgrade now!"
-                                  : planFeatures.maxActiveContests <= 5
-                                    ? "Upgrade for more simultaneous campaigns!"
-                                    : "Tip: Run parallel campaigns for different products"}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                      )}
                   </div>
-                  {/* Enhanced Plan Benefits Summary */}
-                  <div
-                    className={cn(
-                      "rounded-xl p-8 text-black shadow-lg relative overflow-hidden",
-                      isDark
-                        ? "bg-[#180438] text-white"
-                        : "bg-white text-black",
-                    )}
-                    // className={`rounded-xl p-8 text-black shadow-lg relative overflow-hidden ${
-                    //   currentPlan.price === 0
-                    //     ? "bg-white" // Free plan - modern slate
-                    //     : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                    //     ? "bg-white" // Bronze plan - warm
-                    //     : "bg-white" // Higher plans - premium
-                    // }`}
-                  >
-                    {/* Background Pattern */}
-                    {/* <div className="absolute inset-0 opacity-10">
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full -translate-y-16 translate-x-16"></div>
-                      <div className="absolute bottom-0 left-0 w-24 h-24 bg-white rounded-full translate-y-12 -translate-x-12"></div>
-                    </div> */}
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 bg-[#e6e6e8] rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Trophy className="h-8 w-8 text-[#1a1a1a]" />
+                    </div>
+                    <h4
+                      className={cn(
+                        "text-xl font-bold mb-2",
+                        isDark ? "text-white" : "text-gray-900",
+                      )}
+                    >
+                      No Active Subscription Plan
+                    </h4>
+                    <p
+                      className={cn(
+                        "mb-4 max-w-md mx-auto text-sm",
+                        isDark ? "text-gray-300" : "text-gray-600",
+                      )}
+                    >
+                      You need an active subscription plan to create campaigns.
+                    </p>
+                    <Button
+                      asChild
+                      className="bg-[#1a1a1a] text-white hover:bg-[#1a1a1a]/90"
+                    >
+                      <Link href="/pricing">View Pricing Plans →</Link>
+                    </Button>
+                  </div>
+                )}
 
-                    <div className="relative z-10">
-                      {/* Header */}
-                      <div className="flex items-center gap-4 mb-6">
-                        <div
-                          className={cn(
-                            "rounded-full p-3.5",
-                            isDark
-                              ? "bg-[#FFFFFF36] text-white"
-                              : "text-[#4A00BE] bg-[#D8C3FF]",
-                          )}
-                        >
-                          <Trophy className="h-6 w-6" />
-                        </div>
-                        <div>
-                          <h4 className="text-xl font-bold">
-                            {currentPlan.price === 0
-                              ? `${currentPlan.name} Plan`
-                              : `${currentPlan.name} Plan`}
-                          </h4>
-                          <p className="text-sm opacity-90 font-medium">
-                            {currentPlan.price === 0
-                              ? "Get started for free, then upgrade!"
-                              : "Your current plan benefits"}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Features Grid */}
-                      <div
-                        className={cn(
-                          "border py-4 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-2 mb-2",
-                          isDark ? "border-gray-600" : "border-gray-300",
-                        )}
+                <div
+                  className={cn(
+                    "space-y-4 rounded-2xl border p-5",
+                    isDark ? "border-gray-600" : "border-[#e6e6ea]",
+                  )}
+                >
+                  <div>
+                    <h3
+                      className={cn(
+                        "text-base font-semibold",
+                        isDark ? "text-white" : "text-[#1a1a1a]",
+                      )}
+                    >
+                      Dates
+                    </h3>
+                    <p
+                      className={cn(
+                        "text-sm",
+                        isDark ? "text-gray-400" : "text-[#6d6d75]",
+                      )}
+                    >
+                      When the campaign runs.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="start-date"
+                        className={cn(isDark ? "text-white" : "text-[#1a1a1a]")}
                       >
-                        <div className="flex items-start gap-3 group">
-                          <div className="w-3 h-3 mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
-                          <div>
-                            <span className="text-md font-medium">
-                              Launch up to{" "}
-                              {planFeatures.maxActiveContests === Infinity
-                                ? "unlimited"
-                                : planFeatures.maxActiveContests}{" "}
-                              simultaneous campaigns
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Only show winner limit for leaderboard campaigns */}
-                        {contestType === "leaderboard" && (
-                          <div className="flex items-start gap-3 group">
-                            <div className="w-3 h-3  mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
-                            <div>
-                              <span className="text-md font-medium">
-                                Reward up to{" "}
-                                {planFeatures.maxWinnersPerContest === Infinity
-                                  ? "unlimited"
-                                  : planFeatures.maxWinnersPerContest}{" "}
-                                creators per contest
-                              </span>
-                              <span className="text-xs opacity-75 block">
-                                (Leaderboard)
-                              </span>
-                            </div>
-                          </div>
+                        Start Date
+                      </Label>
+                      <Input
+                        id="start-date"
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => {
+                          setStartDate(e.target.value);
+                        }}
+                        min={getMinDateTime().date}
+                        className={cn(
+                          "w-full",
+                          isDark
+                            ? "bg-[#0e0e0e] border border-white/10 [&::-webkit-calendar-picker-indicator]:invert"
+                            : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                         )}
-
-                        {/* Show CPM info for CPM campaigns */}
-                        {(contestType === "cpm" ||
-                          contestType === "dual_rewards") && (
-                          <div className="flex items-start gap-3 group">
-                            <div className="w-3 h-3 mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
-                            <div>
-                              <span className="text-md font-medium">
-                                Performance-based rewards
-                              </span>
-                              <span className="text-xs opacity-75 block">
-                                (No winner limits — CPM)
-                              </span>
-                            </div>
-                          </div>
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="start-time"
+                        className={cn(isDark ? "text-white" : "text-[#1a1a1a]")}
+                      >
+                        Start Time
+                      </Label>
+                      <Input
+                        id="start-time"
+                        type="time"
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        className={cn(
+                          "w-full",
+                          isDark
+                            ? "bg-[#0e0e0e] border border-white/10 [&::-webkit-calendar-picker-indicator]:invert"
+                            : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                         )}
-
-                        {(contestType === "milestone" ||
-                          contestType === "dual_rewards") && (
-                          <div className="flex items-start gap-3 group">
-                            <div className="w-3 h-3 mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
-                            <div>
-                              <span className="text-md font-medium">
-                                View-tier rewards with optional winner caps
-                              </span>
-                              <span className="text-xs opacity-75 block">
-                                (Milestone — video only)
-                              </span>
-                            </div>
-                          </div>
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="end-date"
+                        className={cn(isDark ? "text-white" : "text-[#1a1a1a]")}
+                      >
+                        End Date
+                      </Label>
+                      <Input
+                        id="end-date"
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => {
+                          setEndDate(e.target.value);
+                          const minEndTime = getMinEndTime();
+                          if (endTime < minEndTime) {
+                            setEndTime(minEndTime);
+                          }
+                        }}
+                        min={getMinEndDate()}
+                        className={cn(
+                          "w-full",
+                          isDark
+                            ? "bg-[#0e0e0e] border border-white/10 [&::-webkit-calendar-picker-indicator]:invert"
+                            : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                         )}
-
-                        <div className="flex items-start gap-3 group">
-                          <div className="w-3 h-3  mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
-                          <div>
-                            <span className="text-md font-medium">
-                              Start campaigns from just{" "}
-                              {formatCurrencyFromCents(
-                                planFeatures.minContestBudget,
-                              )}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-start gap-3 group">
-                          <div className="w-3 h-3 mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
-                          <div>
-                            <span className="text-md font-medium">
-                              Only {planFeatures.commissionPercentage}% platform
-                              fee
-                            </span>
-                            <span className="text-xs opacity-75 block">
-                              on your budget
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Enhanced Upgrade CTA for lower tier plans */}
-                      {!isAdmin &&
-                        (currentPlan.price === 0 ||
-                          planFeatures.commissionPercentage >= 20) && (
-                          <div className="rounded-2xl py-6 px-4 mt-4 border border-gray-300">
-                            <div className="flex items-start justify-between gap-6">
-                              <div className="flex-1 min-w-0">
-                                <h5 className="text-base font-bold">
-                                  {currentPlan.price === 0
-                                    ? "Ready to unlock more potential?"
-                                    : "Want better rates and more features?"}
-                                </h5>
-                                <p className="text-sm opacity-90 leading-relaxed pr-4">
-                                  {currentPlan.price === 0
-                                    ? "Upgrade to reduce commission and get more winners"
-                                    : "Higher plans offer lower commission rates and more flexibility"}
-                                </p>
-                              </div>
-                              {userPlan !== PRODUCT_IDS.CHAMPION && (
-                                <div className="flex-shrink-0">
-                                  <button
-                                    className="px-5 py-2 rounded-xl bg-[#4A00BE] text-white"
-                                    onClick={() => setShowUpgradeModal(true)}
-                                  >
-                                    Upgrade Plan
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                        disabled={!startDate || !startTime}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="end-time"
+                        className={cn(isDark ? "text-white" : "text-[#1a1a1a]")}
+                      >
+                        End Time
+                      </Label>
+                      <Input
+                        id="end-time"
+                        type="time"
+                        value={endTime}
+                        onChange={(e) => setEndTime(e.target.value)}
+                        min={
+                          endDate === getMinEndDate()
+                            ? getMinEndTime()
+                            : undefined
+                        }
+                        className={cn(
+                          "w-full",
+                          isDark
+                            ? "bg-[#0e0e0e] border border-white/10 [&::-webkit-calendar-picker-indicator]:invert"
+                            : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                         )}
+                        disabled={!startDate || !startTime || !endDate}
+                      />
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <div className="w-20 h-20 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
-                    <Trophy className="h-10 w-10 text-white" />
-                  </div>
-                  <h4 className="text-2xl font-bold text-gray-900 mb-3">
-                    No Active Subscription Plan
-                  </h4>
-                  <p className="text-gray-600 mb-6 max-w-md mx-auto leading-relaxed">
-                    You need an active subscription plan to create campaigns and
-                    start your marketing campaigns. Choose a plan that fits your
-                    marketing needs and budget.
-                  </p>
-                  <Button
-                    asChild
-                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-3 text-lg font-semibold shadow-xl hover:shadow-2xl transition-all duration-300"
+                  {getContestDuration() && (
+                    <Alert
+                      className={cn(
+                        "mt-2 border",
+                        isDark
+                          ? "bg-[#ffffff14] border border-[#d5d5db]"
+                          : "bg-green-50 border-green-200 text-green-700",
+                      )}
+                    >
+                      <AlertDescription>{getContestDuration()}</AlertDescription>
+                    </Alert>
+                  )}
+                  <p
+                    className={cn(
+                      "text-sm mt-1",
+                      isDark ? "text-white" : "text-gray-600",
+                    )}
                   >
-                    <Link href="/pricing">View Pricing Plans →</Link>
-                  </Button>
+                    <strong>Start Date Rule:</strong> Campaign must start at
+                    least {MIN_DAYS_UNTIL_START} days from today.{" "}
+                    {getStartDateRuleExample()}
+                    <br />
+                    <strong>Duration:</strong> Campaign must run between{" "}
+                    {MIN_CONTEST_DURATION_DAYS} and {MAX_CONTEST_DURATION_DAYS}{" "}
+                    days. The end date will automatically adjust to maintain
+                    minimum duration.
+                  </p>
                 </div>
-              )}
+              </div>
             </div>
           </div>
 
@@ -8195,120 +7933,28 @@ export default function CreateContestPage({
           <div
             className={cn(
               "space-y-6 max-w-[1100px] mx-auto bg-white shadow-xl p-6 rounded-xl",
-              isDark ? "bg-[#180438] text-white" : "bg-white text-black",
+              isDark ? "bg-[#161616] text-white" : "bg-white text-black",
             )}
           >
-            <h3 className="text-xl font-semibold">Campaign Duration</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="start-date">Start Date</Label>
-                <Input
-                  id="start-date"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => {
-                    setStartDate(e.target.value);
-                  }}
-                  min={getMinDateTime().date}
-                  className={cn(
-                    "w-full",
-                    isDark
-                      ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
-                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
-                  )}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="start-time">Start Time</Label>
-                <Input
-                  id="start-time"
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className={cn(
-                    "w-full",
-                    isDark
-                      ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
-                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
-                  )}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="end-date">End Date</Label>
-                <Input
-                  id="end-date"
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => {
-                    setEndDate(e.target.value);
-                    const minEndTime = getMinEndTime();
-                    if (endTime < minEndTime) {
-                      setEndTime(minEndTime);
-                    }
-                  }}
-                  min={getMinEndDate()}
-                  className={cn(
-                    "w-full",
-                    isDark
-                      ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
-                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
-                  )}
-                  disabled={!startDate || !startTime}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="end-time">End Time</Label>
-                <Input
-                  id="end-time"
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  min={
-                    endDate === getMinEndDate() ? getMinEndTime() : undefined
-                  }
-                  className={cn(
-                    "w-full",
-                    isDark
-                      ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
-                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
-                  )}
-                  disabled={!startDate || !startTime || !endDate}
-                />
-              </div>
-            </div>
-            {getContestDuration() && (
-              <Alert
-                className={cn(
-                  "mt-2 border",
-                  isDark
-                    ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
-                    : "bg-green-50 border-green-200 text-green-700",
-                )}
-              >
-                <AlertDescription>{getContestDuration()}</AlertDescription>
-              </Alert>
-            )}
-            <p
-              className={cn(
-                "text-sm mt-1",
-                isDark ? "text-white" : "text-gray-600",
-              )}
-            >
-              <strong>Start Date Rule:</strong> Campaign must start at least{" "}
-              {MIN_DAYS_UNTIL_START} days from today.{" "}
-              {getStartDateRuleExample()}
-              <br />
-              <strong>Duration:</strong> Campaign must run between{" "}
-              {MIN_CONTEST_DURATION_DAYS} and {MAX_CONTEST_DURATION_DAYS} days.
-              The end date will automatically adjust to maintain minimum
-              duration.
-            </p>
             {/* <Separator className="my-6" /> */}
 
             {/* Conditional UI based on contestType */}
 
             {contestFormat === "video" && (
               <div className="border-t-2 border-dashed pt-6">
+                {canUseHighestPlatformPayout(
+                  contestType,
+                  selectedPlatforms.length,
+                ) && (
+                  <HighestPlatformPayoutSwitch
+                    checked={highestPlatformPayoutOnly}
+                    onCheckedChange={setHighestPlatformPayoutOnly}
+                    platforms={selectedPlatforms}
+                    multipleSubmissionsEnabled={multipleSubmissionsEnabled}
+                    isDark={isDark}
+                    className="mb-4"
+                  />
+                )}
                 <PlatformCampaignTabs {...videoSectionTabProps("prize")} />
               </div>
             )}
@@ -8323,7 +7969,7 @@ export default function CreateContestPage({
                       className={cn(
                         "flex items-center gap-2  px-4 py-2 rounded-full",
                         isDark
-                          ? "bg-[#180438] text-purple-400"
+                          ? "bg-[#161616] text-gray-300"
                           : "bg-gray-100 text-black",
                       )}
                     >
@@ -8338,7 +7984,7 @@ export default function CreateContestPage({
                   <div
                     className={cn(
                       isDark
-                        ? "bg-[#180438]p-2 sm:p-4"
+                        ? "bg-[#161616]p-2 sm:p-4"
                         : "bg-gray-50 p-2 sm:p-4 rounded-lg",
                     )}
                   >
@@ -8412,7 +8058,7 @@ export default function CreateContestPage({
                             className={cn(
                               "w-full sm:w-40 md:w-48",
                               isDark
-                                ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
+                                ? "bg-[#0e0e0e] border border-white/10 [&::-webkit-calendar-picker-indicator]:invert"
                                 : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                             )}
                           />
@@ -8437,8 +8083,8 @@ export default function CreateContestPage({
                     className={cn(
                       "mt-2",
                       isDark
-                        ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                        : "bg-[#D9C0FF26] border-[#7F39EC] text-gray-900",
+                        ? "bg-[#ffffff14] border-[#d5d5db] text-white"
+                        : "bg-[#f3f3f5] border-[#1a1a1a] text-gray-900",
                     )}
                   >
                     <AlertDescription>
@@ -8455,28 +8101,29 @@ export default function CreateContestPage({
                 {(contestType === "milestone" ||
                   contestType === "dual_rewards") && (
                   <>
-                    <div className="space-y-6 py-4 px-1">
-                      <h3 className="text-lg font-medium">
-                        Milestone campaign configuration
-                      </h3>
-                      <Alert
-                        className={cn(
-                          "border",
-                          isDark
-                            ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                            : "bg-[#F0E7FD] border-[#4A00BE] text-purple-800",
-                        )}
-                      >
-                        <AlertDescription>
-                          <strong>Non-cumulative payouts:</strong> each creator
-                          receives only the reward for the{" "}
-                          <strong>highest</strong> milestone they reach (not the
-                          sum of all tiers below it). Each tier payout must be
-                          at least{" "}
+                    <div className="space-y-5">
+                      <div>
+                        <h3
+                          className={cn(
+                            "text-lg font-semibold",
+                            isDark ? "text-white" : "text-[#1a1a1a]",
+                          )}
+                        >
+                          Milestone campaign configuration
+                        </h3>
+                        <p
+                          className={cn(
+                            "mt-1 max-w-2xl text-sm",
+                            isDark ? "text-gray-400" : "text-[#6d6d75]",
+                          )}
+                        >
+                          Creators earn only the highest milestone they reach.
+                          Minimum payout per tier:{" "}
                           {formatCurrencyFromCents(MIN_MILESTONE_PAYOUT_CENTS)}.
-                        </AlertDescription>
-                      </Alert>
-                      <div className="space-y-4">
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
                         {milestoneRows.map((row, idx) => {
                           const winnerLimitValue =
                             row.winner_limit === ""
@@ -8499,134 +8146,23 @@ export default function CreateContestPage({
                             <div
                               key={row.id}
                               className={cn(
-                                "grid gap-3 md:grid-cols-12 md:items-end p-4 border rounded-lg",
-                                isDark ? "border-gray-600" : "border-gray-300",
+                                "rounded-xl border p-4",
+                                isDark
+                                  ? "border-white/15 bg-white/5"
+                                  : "border-[#e6e6ea] bg-white",
                               )}
                             >
-                              <div className="md:col-span-12">
-                                <h4 className="text-sm font-semibold">
+                              <div className="mb-4 flex items-center justify-between">
+                                <p
+                                  className={cn(
+                                    "text-sm font-semibold",
+                                    isDark ? "text-white" : "text-[#1a1a1a]",
+                                  )}
+                                >
                                   Milestone {idx + 1}
-                                </h4>
-                              </div>
-                              <div className="md:col-span-3 space-y-2">
-                                <Label>Target views</Label>
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  value={row.target_views}
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    const updatedRows = milestoneRows.map(
-                                      (r) =>
-                                        r.id === row.id
-                                          ? {
-                                              ...r,
-                                              target_views: v === "" ? "" : v,
-                                            }
-                                          : r,
-                                    );
-                                    setMilestoneRows(updatedRows);
-                                    updateMilestoneRowsWithValidation(
-                                      updatedRows,
-                                    );
-                                  }}
-                                  className={cn(
-                                    isDark
-                                      ? "bg-[#180438] border border-gray-600"
-                                      : "",
-                                  )}
-                                  placeholder="e.g. 1000"
-                                />
-                              </div>
-                              <div className="md:col-span-3 space-y-2">
-                                <Label>Payout (USD)</Label>
-                                <Input
-                                  type="number"
-                                  min={MIN_MILESTONE_PAYOUT_CENTS / 100}
-                                  step="0.01"
-                                  value={row.payout_dollars}
-                                  onChange={(e) => {
-                                    const updatedRows = milestoneRows.map(
-                                      (r) =>
-                                        r.id === row.id
-                                          ? {
-                                              ...r,
-                                              payout_dollars: e.target.value,
-                                            }
-                                          : r,
-                                    );
-                                    setMilestoneRows(updatedRows);
-                                    updateMilestoneRowsWithValidation(
-                                      updatedRows,
-                                    );
-                                  }}
-                                  className={cn(
-                                    isDark
-                                      ? "bg-[#180438] border border-gray-600"
-                                      : "",
-                                  )}
-                                  placeholder="e.g. 5.00"
-                                />
-                              </div>
-                              <div className="md:col-span-3 space-y-2">
-                                <p className="text-xs">
-                                  <span className="font-medium">
-                                    Winner cap (optional):
-                                  </span>{" "}
-                                  <span className="text-muted-foreground">
-                                    First N creators to reach this tier, or
-                                    leave blank for everyone who qualifies.
-                                  </span>
                                 </p>
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  value={row.winner_limit}
-                                  onChange={(e) =>
-                                    setMilestoneRows((prev) =>
-                                      prev.map((r) =>
-                                        r.id === row.id
-                                          ? {
-                                              ...r,
-                                              winner_limit: e.target.value,
-                                            }
-                                          : r,
-                                      ),
-                                    )
-                                  }
-                                  className={cn(
-                                    isDark
-                                      ? "bg-[#180438] border border-gray-600"
-                                      : "",
-                                  )}
-                                  placeholder="0"
-                                />
-                              </div>
-                              <div className="md:col-span-2 space-y-2">
-                                {estimatedPayoutCents !== null && (
-                                  <>
-                                    <Label>Estimated payout</Label>
-                                    <div
-                                      className={cn(
-                                        "h-10 rounded-md border px-3 flex items-center text-sm",
-                                        isDark
-                                          ? "bg-[#180438] border-gray-600 text-white"
-                                          : "bg-muted/40 border-input",
-                                      )}
-                                    >
-                                      {formatCurrencyFromCents(
-                                        estimatedPayoutCents,
-                                      )}
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                              <div className="md:col-span-1 flex md:justify-end">
-                                <Button
+                                <button
                                   type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  className="shrink-0"
                                   disabled={milestoneRows.length <= 1}
                                   onClick={() => {
                                     const updatedRows = milestoneRows.filter(
@@ -8638,13 +8174,154 @@ export default function CreateContestPage({
                                     );
                                   }}
                                   aria-label={`Remove milestone ${idx + 1}`}
+                                  className={cn(
+                                    "rounded-md p-1.5 transition-colors disabled:opacity-40",
+                                    isDark
+                                      ? "text-gray-400 hover:bg-white/10 hover:text-white"
+                                      : "text-[#8d8d95] hover:bg-[#f3f3f5] hover:text-[#1a1a1a]",
+                                  )}
                                 >
                                   <Trash className="h-4 w-4" />
-                                </Button>
+                                </button>
                               </div>
+
+                              <div className="grid gap-4 sm:grid-cols-3">
+                                <div className="space-y-1.5">
+                                  <Label
+                                    className={cn(
+                                      "text-sm",
+                                      isDark ? "text-gray-300" : "text-[#3a3a42]",
+                                    )}
+                                  >
+                                    Target views
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={row.target_views}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      const updatedRows = milestoneRows.map(
+                                        (r) =>
+                                          r.id === row.id
+                                            ? {
+                                                ...r,
+                                                target_views: v === "" ? "" : v,
+                                              }
+                                            : r,
+                                      );
+                                      setMilestoneRows(updatedRows);
+                                      updateMilestoneRowsWithValidation(
+                                        updatedRows,
+                                      );
+                                    }}
+                                    className={cn(
+                                      "h-10",
+                                      isDark
+                                        ? "border-white/20 bg-[#161616] text-white"
+                                        : "border-[#e6e6ea] bg-white text-[#1a1a1a]",
+                                    )}
+                                    placeholder="1000"
+                                  />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label
+                                    className={cn(
+                                      "text-sm",
+                                      isDark ? "text-gray-300" : "text-[#3a3a42]",
+                                    )}
+                                  >
+                                    Payout (USD)
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    min={MIN_MILESTONE_PAYOUT_CENTS / 100}
+                                    step="0.01"
+                                    value={row.payout_dollars}
+                                    onChange={(e) => {
+                                      const updatedRows = milestoneRows.map(
+                                        (r) =>
+                                          r.id === row.id
+                                            ? {
+                                                ...r,
+                                                payout_dollars: e.target.value,
+                                              }
+                                            : r,
+                                      );
+                                      setMilestoneRows(updatedRows);
+                                      updateMilestoneRowsWithValidation(
+                                        updatedRows,
+                                      );
+                                    }}
+                                    className={cn(
+                                      "h-10",
+                                      isDark
+                                        ? "border-white/20 bg-[#161616] text-white"
+                                        : "border-[#e6e6ea] bg-white text-[#1a1a1a]",
+                                    )}
+                                    placeholder="5.00"
+                                  />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label
+                                    className={cn(
+                                      "text-sm",
+                                      isDark ? "text-gray-300" : "text-[#3a3a42]",
+                                    )}
+                                  >
+                                    Winner cap
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={row.winner_limit}
+                                    onChange={(e) =>
+                                      setMilestoneRows((prev) =>
+                                        prev.map((r) =>
+                                          r.id === row.id
+                                            ? {
+                                                ...r,
+                                                winner_limit: e.target.value,
+                                              }
+                                            : r,
+                                        ),
+                                      )
+                                    }
+                                    className={cn(
+                                      "h-10",
+                                      isDark
+                                        ? "border-white/20 bg-[#161616] text-white"
+                                        : "border-[#e6e6ea] bg-white text-[#1a1a1a]",
+                                    )}
+                                    placeholder="Optional"
+                                  />
+                                </div>
+                              </div>
+
+                              {estimatedPayoutCents !== null && (
+                                <p
+                                  className={cn(
+                                    "mt-3 text-sm",
+                                    isDark ? "text-gray-300" : "text-[#3a3a42]",
+                                  )}
+                                >
+                                  Estimated payout for this tier:{" "}
+                                  <span
+                                    className={cn(
+                                      "font-semibold",
+                                      isDark ? "text-white" : "text-[#1a1a1a]",
+                                    )}
+                                  >
+                                    {formatCurrencyFromCents(
+                                      estimatedPayoutCents,
+                                    )}
+                                  </span>
+                                </p>
+                              )}
                             </div>
                           );
                         })}
+
                         {milestoneSequenceError && (
                           <Alert variant="destructive">
                             <AlertDescription>
@@ -8652,21 +8329,30 @@ export default function CreateContestPage({
                             </AlertDescription>
                           </Alert>
                         )}
-                        <Button
+
+                        <button
                           type="button"
-                          variant="outline"
-                          size="sm"
                           disabled={!canAddNextMilestone(milestoneRows)}
                           onClick={handleAddMilestoneRow}
+                          className={cn(
+                            "text-sm font-medium underline-offset-4 border border-gray-600 p-2 rounded-full disabled:opacity-40 disabled:no-underline",
+                            isDark ? "text-white" : "text-[#1a1a1a]",
+                          )}
                         >
-                          Add milestone
-                        </Button>
+                          + Add milestone
+                        </button>
                       </div>
+
                       {contestType !== "dual_rewards" && (
-                        <div className="space-y-2">
-                          <Label htmlFor="milestoneTotalBudget">
-                            Total campaign budget (USD){" "}
-                            <span className="text-red-500">*</span>
+                        <div className="space-y-1.5 pt-1">
+                          <Label
+                            htmlFor="milestoneTotalBudget"
+                            className={cn(
+                              "text-sm font-semibold",
+                              isDark ? "text-white" : "text-[#1a1a1a]",
+                            )}
+                          >
+                            Total campaign budget (USD) *
                           </Label>
                           <Input
                             id="milestoneTotalBudget"
@@ -8676,183 +8362,24 @@ export default function CreateContestPage({
                             min="1"
                             step="0.01"
                             className={cn(
+                              "h-10 max-w-sm",
                               isDark
-                                ? "bg-[#180438] border border-gray-600 text-white"
-                                : "bg-white",
+                                ? "border-white/20 bg-[#161616] text-white"
+                                : "border-[#e6e6ea] bg-white text-[#1a1a1a]",
                             )}
-                            placeholder="Maximum amount reserved for this campaign"
+                            placeholder="e.g. 500"
                           />
-                          <p className="text-xs text-muted-foreground">
-                            This is the pool you fund upfront (similar to a CPM
-                            budget). Payouts are drawn from it as creators hit
-                            milestones.
+                          <p
+                            className={cn(
+                              "text-sm",
+                              isDark ? "text-gray-400" : "text-[#6d6d75]",
+                            )}
+                          >
+                            Funded upfront. Payouts come from this pool as
+                            creators hit milestones.
                           </p>
                         </div>
                       )}
-                      <div
-                        className={cn(
-                          "space-y-4 p-4 border rounded-lg",
-                          isDark ? "border-gray-600" : "border-gray-300",
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            id="milestoneBonusToggle"
-                            checked={milestoneBonusEnabled}
-                            onCheckedChange={(c) =>
-                              setMilestoneBonusEnabled(c === true)
-                            }
-                          />
-                          <Label
-                            htmlFor="milestoneBonusToggle"
-                            className="cursor-pointer text-md font-medium"
-                          >
-                            Creator Bonus (verified creators)
-                          </Label>
-                        </div>
-                        {milestoneBonusEnabled && (
-                          <div className="space-y-4 pl-1">
-                            <p className="text-sm text-muted-foreground">
-                              Optional extras for top performers. Configure at
-                              least one category when bonus is enabled.
-                            </p>
-                            <h4 className="text-sm font-semibold">
-                              Most Verified Views
-                            </h4>
-                            <div className="grid gap-3 md:grid-cols-3">
-                              <div className="space-y-2">
-                                <Label>Minimum total verified views</Label>
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  value={milestoneBonusTopViewsMin}
-                                  onChange={(e) =>
-                                    setMilestoneBonusTopViewsMin(
-                                      e.target.value === ""
-                                        ? ""
-                                        : parseInt(e.target.value, 10),
-                                    )
-                                  }
-                                  className={cn(
-                                    isDark
-                                      ? "bg-[#180438] border border-gray-600"
-                                      : "",
-                                  )}
-                                  placeholder="e.g. 200000"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Minimum verified reels</Label>
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  value={milestoneBonusTopViewsMinReels}
-                                  onChange={(e) =>
-                                    setMilestoneBonusTopViewsMinReels(
-                                      e.target.value === ""
-                                        ? ""
-                                        : parseInt(e.target.value, 10),
-                                    )
-                                  }
-                                  className={cn(
-                                    isDark
-                                      ? "bg-[#180438] border border-gray-600"
-                                      : "",
-                                  )}
-                                  placeholder="e.g. 5"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Winner bonus (USD)</Label>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  min={MIN_MILESTONE_PAYOUT_CENTS / 100}
-                                  value={milestoneBonusTopViewsPayout}
-                                  onChange={(e) =>
-                                    setMilestoneBonusTopViewsPayout(
-                                      e.target.value,
-                                    )
-                                  }
-                                  className={cn(
-                                    isDark
-                                      ? "bg-[#180438] border border-gray-600"
-                                      : "",
-                                  )}
-                                  placeholder="e.g. 100"
-                                />
-                              </div>
-                            </div>
-                            <h4 className="text-sm font-semibold">
-                              Most Verified Reels
-                            </h4>
-                            <div className="grid gap-3 md:grid-cols-3">
-                              <div className="space-y-2">
-                                <Label>Minimum total verified views</Label>
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  value={milestoneBonusTopReelsMinViews}
-                                  onChange={(e) =>
-                                    setMilestoneBonusTopReelsMinViews(
-                                      e.target.value === ""
-                                        ? ""
-                                        : parseInt(e.target.value, 10),
-                                    )
-                                  }
-                                  className={cn(
-                                    isDark
-                                      ? "bg-[#180438] border border-gray-600"
-                                      : "",
-                                  )}
-                                  placeholder="e.g. 200000"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Minimum verified reels</Label>
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  value={milestoneBonusTopReelsMin}
-                                  onChange={(e) =>
-                                    setMilestoneBonusTopReelsMin(
-                                      e.target.value === ""
-                                        ? ""
-                                        : parseInt(e.target.value, 10),
-                                    )
-                                  }
-                                  className={cn(
-                                    isDark
-                                      ? "bg-[#180438] border border-gray-600"
-                                      : "",
-                                  )}
-                                  placeholder="e.g. 5"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Winner bonus (USD)</Label>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  min={MIN_MILESTONE_PAYOUT_CENTS / 100}
-                                  value={milestoneBonusTopReelsPayout}
-                                  onChange={(e) =>
-                                    setMilestoneBonusTopReelsPayout(
-                                      e.target.value,
-                                    )
-                                  }
-                                  className={cn(
-                                    isDark
-                                      ? "bg-[#180438] border border-gray-600"
-                                      : "",
-                                  )}
-                                  placeholder="e.g. 50"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
                     </div>
                     {parseFloat(totalBudget.toString() || "0") * 100 <
                       planFeatures.minContestBudget &&
@@ -8861,8 +8388,8 @@ export default function CreateContestPage({
                           className={cn(
                             "border",
                             isDark
-                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                              : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700",
+                              ? "bg-[#ffffff14] border-[#d5d5db] text-white"
+                              : "bg-[#f3f3f5] border-[#1a1a1a] text-[#1a1a1a]",
                           )}
                         >
                           <AlertDescription>
@@ -8931,7 +8458,7 @@ export default function CreateContestPage({
                           }
                           className={cn(
                             isDark
-                              ? "bg-[#180438] border border-gray-600 text-white"
+                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                               : "bg-white",
                           )}
                           min={MIN_CPM_RATE}
@@ -8978,7 +8505,7 @@ export default function CreateContestPage({
                                       placeholder="e.g., 1"
                                       className={cn(
                                         isDark
-                                          ? "bg-[#180438] border border-gray-600 text-white"
+                                          ? "bg-[#0e0e0e] border border-white/10 text-white"
                                           : "bg-white",
                                       )}
                                     />
@@ -9008,7 +8535,7 @@ export default function CreateContestPage({
                                       placeholder="e.g., 1"
                                       className={cn(
                                         isDark
-                                          ? "bg-[#180438] border border-gray-600 text-white"
+                                          ? "bg-[#0e0e0e] border border-white/10 text-white"
                                           : "bg-white",
                                       )}
                                     />
@@ -9061,7 +8588,7 @@ export default function CreateContestPage({
                                           }
                                           className={cn(
                                             isDark
-                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                                               : "bg-white",
                                           )}
                                         />
@@ -9087,7 +8614,7 @@ export default function CreateContestPage({
                                           }
                                           className={cn(
                                             isDark
-                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                                               : "bg-white",
                                           )}
                                         />
@@ -9113,7 +8640,7 @@ export default function CreateContestPage({
                                           }
                                           className={cn(
                                             isDark
-                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                                               : "bg-white",
                                           )}
                                         />
@@ -9139,7 +8666,7 @@ export default function CreateContestPage({
                                           }
                                           className={cn(
                                             isDark
-                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                                               : "bg-white",
                                           )}
                                         />
@@ -9165,7 +8692,7 @@ export default function CreateContestPage({
                                           }
                                           className={cn(
                                             isDark
-                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                                               : "bg-white",
                                           )}
                                         />
@@ -9197,7 +8724,7 @@ export default function CreateContestPage({
                                       placeholder="e.g., 5"
                                       className={cn(
                                         isDark
-                                          ? "bg-[#180438] border border-gray-600 text-white"
+                                          ? "bg-[#0e0e0e] border border-white/10 text-white"
                                           : "bg-white",
                                       )}
                                     />
@@ -9250,7 +8777,7 @@ export default function CreateContestPage({
                                           }
                                           className={cn(
                                             isDark
-                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                                               : "bg-white",
                                           )}
                                         />
@@ -9276,7 +8803,7 @@ export default function CreateContestPage({
                                           }
                                           className={cn(
                                             isDark
-                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                                               : "bg-white",
                                           )}
                                         />
@@ -9302,7 +8829,7 @@ export default function CreateContestPage({
                                           }
                                           className={cn(
                                             isDark
-                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                                               : "bg-white",
                                           )}
                                         />
@@ -9328,7 +8855,7 @@ export default function CreateContestPage({
                                           }
                                           className={cn(
                                             isDark
-                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                                               : "bg-white",
                                           )}
                                         />
@@ -9354,7 +8881,7 @@ export default function CreateContestPage({
                                           }
                                           className={cn(
                                             isDark
-                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                                               : "bg-white",
                                           )}
                                         />
@@ -9387,7 +8914,7 @@ export default function CreateContestPage({
                                       placeholder="e.g., 10"
                                       className={cn(
                                         isDark
-                                          ? "bg-[#180438] border border-gray-600 text-white"
+                                          ? "bg-[#0e0e0e] border border-white/10 text-white"
                                           : "bg-white",
                                       )}
                                     />
@@ -9440,7 +8967,7 @@ export default function CreateContestPage({
                                           }
                                           className={cn(
                                             isDark
-                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                                               : "bg-white",
                                           )}
                                         />
@@ -9466,7 +8993,7 @@ export default function CreateContestPage({
                                           }
                                           className={cn(
                                             isDark
-                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                                               : "bg-white",
                                           )}
                                         />
@@ -9492,7 +9019,7 @@ export default function CreateContestPage({
                                           }
                                           className={cn(
                                             isDark
-                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                                               : "bg-white",
                                           )}
                                         />
@@ -9518,7 +9045,7 @@ export default function CreateContestPage({
                                           }
                                           className={cn(
                                             isDark
-                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                                               : "bg-white",
                                           )}
                                         />
@@ -9544,7 +9071,7 @@ export default function CreateContestPage({
                                           }
                                           className={cn(
                                             isDark
-                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                                               : "bg-white",
                                           )}
                                         />
@@ -9576,7 +9103,7 @@ export default function CreateContestPage({
                                       placeholder="e.g., 0.001"
                                       className={cn(
                                         isDark
-                                          ? "bg-[#180438] border border-gray-600 text-white"
+                                          ? "bg-[#0e0e0e] border border-white/10 text-white"
                                           : "bg-white",
                                       )}
                                     />
@@ -9592,8 +9119,8 @@ export default function CreateContestPage({
                           className={cn(
                             "border",
                             isDark
-                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                              : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700",
+                              ? "bg-[#ffffff14] border-[#d5d5db] text-white"
+                              : "bg-[#f3f3f5] border-[#1a1a1a] text-[#1a1a1a]",
                           )}
                         >
                           <AlertDescription>
@@ -9614,7 +9141,7 @@ export default function CreateContestPage({
                               type="number"
                               className={cn(
                                 isDark
-                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  ? "bg-[#0e0e0e] border border-white/10 text-white"
                                   : "bg-white",
                               )}
                               value={minViews}
@@ -9663,7 +9190,7 @@ export default function CreateContestPage({
                               value={maxViews}
                               className={cn(
                                 isDark
-                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  ? "bg-[#0e0e0e] border border-white/10 text-white"
                                   : "bg-white",
                               )}
                               onChange={(e) => {
@@ -9713,7 +9240,7 @@ export default function CreateContestPage({
                           required
                           className={cn(
                             isDark
-                              ? "bg-[#180438] border border-gray-600 text-white"
+                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                               : "bg-white",
                           )}
                           value={totalBudget} // This is a string from state, input type handles conversion
@@ -9740,7 +9267,7 @@ export default function CreateContestPage({
                           onChange={(e) => setTermsConditions(e.target.value)}
                           className={cn(
                             isDark
-                              ? "bg-[#180438] border border-gray-600 text-white"
+                              ? "bg-[#0e0e0e] border border-white/10 text-white"
                               : "bg-white",
                           )}
                           placeholder="Enter or paste your campaign terms and conditions for CPM participants. This will be shown to them before they can submit."
@@ -9760,8 +9287,8 @@ export default function CreateContestPage({
                           className={cn(
                             "border",
                             isDark
-                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                              : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700",
+                              ? "bg-[#ffffff14] border-[#d5d5db] text-white"
+                              : "bg-[#f3f3f5] border-[#1a1a1a] text-[#1a1a1a]",
                           )}
                         >
                           <AlertDescription>
@@ -9781,386 +9308,550 @@ export default function CreateContestPage({
 
             {/* Creator earning opportunities */}
             {true && (
-              <div className="space-y-6 py-6 px-0 sm:px-2 border-t-2 border-dashed mt-6">
+              <div
+                className={cn(
+                  "space-y-3 rounded-2xl border p-5 mt-6",
+                  isDark ? "border-white/10 bg-[#161616]" : "border-[#e6e6ea] bg-white",
+                )}
+              >
                 <div>
-                  <h3
-                    className={cn(
-                      "text-xl font-semibold mb-4",
-                      isDark ? "text-white" : "text-purple-600",
-                    )}
-                  >
-                    💰 Creator Earning Opportunities
+                  <h3 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                    Creator earning opportunities
                   </h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Motivate creators with additional earning opportunities
-                    beyond the main prize pool or CPM rate.
+                  <p className={cn("mt-1 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                    Optional. Motivate creators with bonuses beyond the main prize pool or CPM rate.
                   </p>
                   {contestFormat === "video" && (
-                    <PlatformCampaignTabs
-                      {...videoSectionTabProps("earnings")}
-                    />
+                    <div className="pt-3">
+                      <PlatformCampaignTabs
+                        {...videoSectionTabProps("earnings")}
+                      />
+                    </div>
                   )}
                 </div>
 
-                {contestType !== "milestone" && (
-                  <>
-                    {/* Flat Fee Bonus — hidden for dual rewards (CPM + milestone pools only) */}
-                    {contestType !== "dual_rewards" && (
-                      <div
-                        className={`space-y-3 p-4 border rounded-lg ${
-                          isDark
-                            ? "bg-green-950/40 border-green-800"
-                            : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-2xl">🎁</span>
+                {contestType !== "milestone" && contestType !== "dual_rewards" && (
+                  <div
+                    className={cn(
+                      "space-y-3 rounded-xl border px-4 py-3",
+                      isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <Label
+                          htmlFor="flatFeeBonusToggle"
+                          className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}
+                        >
+                          Flat fee bonus
+                        </Label>
+                        <p className={cn("mt-0.5 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                          Guaranteed payment per verified submission, paid after the campaign ends.
+                        </p>
+                      </div>
+                      <Switch
+                        id="flatFeeBonusToggle"
+                        checked={flatFeeBonusEnabled}
+                        onCheckedChange={(checked) => {
+                          const on = Boolean(checked);
+                          setFlatFeeBonusEnabled(on);
+                          if (!on) {
+                            setFlatFeeBonus("");
+                            setFlatFeeBonusCap("");
+                            if (contestType === "leaderboard") {
+                              setTotalBudget("");
+                            }
+                          }
+                        }}
+                        className="mt-0.5 data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]"
+                      />
+                    </div>
+
+                    {flatFeeBonusEnabled && (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
                           <Label
                             htmlFor="flatFeeBonus"
-                            className="text-base font-semibold"
+                            className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}
                           >
-                            Flat Fee Bonus (Per Verified Submission)
+                            Amount per verified submission
                           </Label>
-                        </div>
-                        <Input
-                          id="flatFeeBonus"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={flatFeeBonus}
-                          onChange={(e) => setFlatFeeBonus(e.target.value)}
-                          placeholder="e.g., 10 for $10 per submission"
-                          className={cn(
-                            isDark
-                              ? "bg-green-950/40 border border-gray-600 text-white"
-                              : "bg-white",
+                          <Input
+                            id="flatFeeBonus"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={flatFeeBonus}
+                            onChange={(e) => setFlatFeeBonus(e.target.value)}
+                            placeholder="e.g., 10 for $10"
+                            className={cn(
+                              "h-11",
+                              isDark
+                                ? "border-white/40 bg-[#161616] text-white"
+                                : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
+                            )}
+                          />
+                          {flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0 && (
+                            <p className={cn("text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                              Creators will earn $
+                              {parseFloat(flatFeeBonus.toString()).toFixed(2)} for each verified
+                              submission.
+                            </p>
                           )}
-                        />
-                        <p className="text-sm text-muted-foreground">
-                          Optional: Give creators a guaranteed payment for each
-                          verified submission, regardless of views or ranking.
-                          This bonus is paid after the campaign ends. Great for
-                          encouraging participation!
-                        </p>
-                        {flatFeeBonus &&
+                        </div>
+
+                        {isCpmContestType(contestType) &&
+                          flatFeeBonus &&
                           parseFloat(flatFeeBonus.toString()) > 0 && (
-                            <Alert
-                              className={cn(
-                                "border",
-                                isDark
-                                  ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                                  : "bg-[#F0E7FD] border-[#4A00BE] text-green-800",
-                              )}
-                            >
-                              <AlertDescription>
-                                ✓ Creators will earn{" "}
-                                <strong>
-                                  $
-                                  {parseFloat(flatFeeBonus.toString()).toFixed(
-                                    2,
-                                  )}
-                                </strong>{" "}
-                                for each verified submission!
-                              </AlertDescription>
-                            </Alert>
+                            <div className="space-y-2">
+                              <Label
+                                htmlFor="flatFeeBonusCap"
+                                className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}
+                              >
+                                Flat fee bonus cap{" "}
+                                <span className={cn("font-bold", isDark ? "text-white" : "text-[#1a1a1a]")}>*</span>
+                              </Label>
+                              <Input
+                                id="flatFeeBonusCap"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                required
+                                value={flatFeeBonusCap}
+                                onChange={(e) => setFlatFeeBonusCap(e.target.value)}
+                                placeholder="e.g., 20 for $20 total cap"
+                                className={cn(
+                                  "h-11",
+                                  isDark
+                                    ? "border-white/40 bg-[#161616] text-white"
+                                    : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
+                                )}
+                              />
+                              <p className={cn("text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                                Maximum total flat fee to distribute. Must not exceed total budget.
+                              </p>
+                            </div>
+                          )}
+
+                        {contestType === "leaderboard" &&
+                          flatFeeBonus &&
+                          parseFloat(flatFeeBonus.toString()) > 0 && (
+                            <div className="space-y-2">
+                              <Label
+                                htmlFor="totalBudget"
+                                className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}
+                              >
+                                Total budget for bonuses{" "}
+                                <span className={cn("font-bold", isDark ? "text-white" : "text-[#1a1a1a]")}>*</span>
+                              </Label>
+                              <Input
+                                id="totalBudget"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                required
+                                value={totalBudget}
+                                onChange={(e) => setTotalBudget(e.target.value)}
+                                placeholder="e.g., 500 for $500 total budget"
+                                className={cn(
+                                  "h-11",
+                                  isDark
+                                    ? "border-white/40 bg-[#161616] text-white"
+                                    : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
+                                )}
+                              />
+                              <p className={cn("text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                                Prize pool:{" "}
+                                {formatCurrencyFromCents(
+                                  prizePoolCentsForPlatformScope({
+                                    scopeTab: sectionPlatforms.earnings,
+                                    prizeTab: sectionPlatforms.prize,
+                                    selected: selectedPlatforms,
+                                    snapshots: platformCampaigns,
+                                    livePrizePoolCents: totalPrizePool,
+                                  }),
+                                )}{" "}
+                                (rankings). Total budget:{" "}
+                                {totalBudget
+                                  ? `$${parseFloat(totalBudget.toString()).toFixed(2)}`
+                                  : "No limit"}{" "}
+                                (bonuses).
+                              </p>
+                            </div>
                           )}
                       </div>
                     )}
-
-                    {/* Flat Fee Bonus Cap (Only for CPM campaigns with flat fee bonus) */}
-                    {isCpmContestType(contestType) &&
-                      contestType !== "dual_rewards" &&
-                      flatFeeBonus &&
-                      parseFloat(flatFeeBonus.toString()) > 0 && (
-                        <div
-                          className={cn(
-                            "space-y-3 p-4 border rounded-lg",
-                            isDark
-                              ? "bg-purple-950/40 border-purple-800"
-                              : "bg-gradient-to-r from-purple-50 to-violet-50 border-purple-200",
-                          )}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-2xl">💰</span>
-                            <Label
-                              htmlFor="flatFeeBonusCap"
-                              className="text-base font-semibold"
-                            >
-                              Flat Fee Bonus Cap{" "}
-                              <span className="text-red-500">*</span>
-                            </Label>
-                          </div>
-                          <Input
-                            id="flatFeeBonusCap"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            required
-                            value={flatFeeBonusCap}
-                            onChange={(e) => setFlatFeeBonusCap(e.target.value)}
-                            placeholder="e.g., 20 for $20 total cap"
-                            className={cn(
-                              isDark
-                                ? "bg-[#180438] border border-gray-600 text-white"
-                                : "bg-white text-black",
-                            )}
-                          />
-                          <p className="text-sm text-muted-foreground">
-                            Required: Maximum total flat fee bonus to distribute
-                            across all creators. Once this cap is reached, no
-                            more flat fee bonuses will be given. Must not exceed
-                            Total Budget.
-                          </p>
-                          {flatFeeBonusCap &&
-                            parseFloat(flatFeeBonusCap.toString()) > 0 && (
-                              <Alert
-                                className={cn(
-                                  isDark
-                                    ? "bg-purple-900/30 border-purple-900"
-                                    : "bg-purple-100 border-purple-300",
-                                )}
-                              >
-                                <AlertDescription>
-                                  ✓ Maximum flat fee bonus cap set to{" "}
-                                  <strong>
-                                    $
-                                    {parseFloat(
-                                      flatFeeBonusCap.toString(),
-                                    ).toFixed(2)}
-                                  </strong>
-                                  . Once this amount is distributed, no more
-                                  flat fee bonuses will be given.
-                                </AlertDescription>
-                              </Alert>
-                            )}
-                        </div>
-                      )}
-
-                    {/* Total Budget for Bonuses (Only for Leaderboard campaigns with flat fee bonus) */}
-                    {contestType === "leaderboard" &&
-                      flatFeeBonus &&
-                      parseFloat(flatFeeBonus.toString()) > 0 && (
-                        <div
-                          className={cn(
-                            "space-y-3 p-4 border rounded-lg",
-                            isDark
-                              ? "bg-blue-950/50 border-blue-800"
-                              : "bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200",
-                          )}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-2xl">💰</span>
-                            <Label
-                              htmlFor="totalBudget"
-                              className="text-base font-semibold"
-                            >
-                              Total Budget for Bonuses{" "}
-                              <span className="text-red-500">*</span>
-                            </Label>
-                          </div>
-                          <Input
-                            id="totalBudget"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            required
-                            value={totalBudget}
-                            onChange={(e) => setTotalBudget(e.target.value)}
-                            placeholder="e.g., 500 for $500 total budget"
-                            className={cn(
-                              isDark
-                                ? "bg-[#180438] border border-gray-600 text-white"
-                                : "bg-white text-black",
-                            )}
-                          />
-                          <p className="text-sm text-muted-foreground">
-                            Required: Set a budget limit for flat fee bonuses.
-                            This budget is required when Flat Fee Bonus is
-                            enabled.
-                            <br />
-                            <strong>Prize Pool:</strong>{" "}
-                            {formatCurrencyFromCents(
-                              prizePoolCentsForPlatformScope({
-                                scopeTab: sectionPlatforms.earnings,
-                                prizeTab: sectionPlatforms.prize,
-                                selected: selectedPlatforms,
-                                snapshots: platformCampaigns,
-                                livePrizePoolCents: totalPrizePool,
-                              }),
-                            )}{" "}
-                            (for rankings)
-                            <br />
-                            <strong>Total Budget:</strong>{" "}
-                            {totalBudget
-                              ? `$${parseFloat(totalBudget.toString()).toFixed(2)}`
-                              : "No limit"}{" "}
-                            (for bonuses & extras)
-                          </p>
-                          {totalBudget &&
-                            parseFloat(totalBudget.toString()) > 0 && (
-                              <Alert
-                                className={cn(
-                                  isDark
-                                    ? "bg-blue-900/30 border-blue-900"
-                                    : "bg-blue-100 border-blue-300",
-                                )}
-                              >
-                                <AlertDescription
-                                  className={cn(
-                                    isDark ? "text-blue-200" : "text-blue-800",
-                                  )}
-                                >
-                                  ✓ Budget set to{" "}
-                                  <strong>
-                                    $
-                                    {parseFloat(totalBudget.toString()).toFixed(
-                                      2,
-                                    )}
-                                  </strong>{" "}
-                                  for bonuses and extras!
-                                </AlertDescription>
-                              </Alert>
-                            )}
-                        </div>
-                      )}
-                  </>
+                  </div>
                 )}
 
-                {/* Max Earnings Per Creator (milestone + dual: always; others: when multiple submissions) */}
                 {(multipleSubmissionsEnabled ||
                   isMilestoneContestType(contestType)) && (
                   <div
                     className={cn(
-                      "space-y-3 p-4 border rounded-lg",
-                      isDark
-                        ? "bg-blue-950/50 border-blue-800"
-                        : "bg-blue-50 border-blue-200",
+                      "space-y-3 rounded-xl border px-4 py-3",
+                      isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]",
                     )}
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">🎯</span>
-                      <Label
-                        htmlFor="maxEarnings"
-                        className="text-base font-semibold"
-                      >
-                        Maximum Earnings Per Creator (Optional)
-                      </Label>
-                    </div>
-                    <Input
-                      id="maxEarnings"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={maxEarningsPerCreator}
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white text-black",
-                      )}
-                      onChange={(e) =>
-                        setMaxEarningsPerCreator(e.target.value)
-                      }
-                      placeholder="e.g., 500 for $500 max per creator"
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      Set a maximum earning cap per creator for{" "}
-                      <strong>THIS CONTEST ONLY</strong>. Once reached, they
-                      can still submit but won't earn more from this
-                      campaign. This does NOT affect their earnings from
-                      other campaigns on the platform. Helps ensure fair
-                      reward distribution within this campaign.
-                    </p>
-                    {maxEarningsPerCreator &&
-                      parseFloat(maxEarningsPerCreator.toString()) > 0 && (
-                        <Alert
-                          className={cn(
-                            isDark
-                              ? "bg-blue-900/30 border-blue-900"
-                              : "bg-blue-100 border-blue-300",
-                          )}
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <Label
+                          htmlFor="maxEarningsToggle"
+                          className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}
                         >
-                          <AlertDescription
-                            className={cn(
-                              isDark ? "text-blue-200" : "text-blue-800",
-                            )}
-                          >
-                            ℹ️ Each creator can earn up to{" "}
-                            <strong>
-                              $
-                              {parseFloat(
-                                maxEarningsPerCreator.toString(),
-                              ).toFixed(2)}
-                            </strong>{" "}
-                            from this campaign.
-                          </AlertDescription>
-                        </Alert>
-                      )}
+                          Maximum earnings per creator
+                        </Label>
+                        <p className={cn("mt-0.5 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                          Cap how much one creator can earn from this campaign only.
+                        </p>
+                      </div>
+                      <Switch
+                        id="maxEarningsToggle"
+                        checked={maxEarningsEnabled}
+                        onCheckedChange={(checked) => {
+                          const on = Boolean(checked);
+                          setMaxEarningsEnabled(on);
+                          if (!on) {
+                            setMaxEarningsPerCreator("");
+                          }
+                        }}
+                        className="mt-0.5 data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]"
+                      />
+                    </div>
+                    {maxEarningsEnabled && (
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="maxEarnings"
+                          className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}
+                        >
+                          Maximum amount
+                        </Label>
+                        <Input
+                          id="maxEarnings"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={maxEarningsPerCreator}
+                          onChange={(e) => setMaxEarningsPerCreator(e.target.value)}
+                          placeholder="e.g., 500 for $500 max per creator"
+                          className={cn(
+                            "h-11",
+                            isDark
+                              ? "border-white/40 bg-[#161616] text-white"
+                              : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
+                          )}
+                        />
+                        {maxEarningsPerCreator &&
+                          parseFloat(maxEarningsPerCreator.toString()) > 0 && (
+                            <p className={cn("text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                              Each creator can earn up to $
+                              {parseFloat(maxEarningsPerCreator.toString()).toFixed(2)} from this
+                              campaign.
+                            </p>
+                          )}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Additional Bonus Section */}
+                {isMilestoneContestType(contestType) && (
+                  <div
+                    className={cn(
+                      "space-y-3 rounded-xl border px-4 py-3",
+                      isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <Label
+                          htmlFor="milestoneBonusToggle"
+                          className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}
+                        >
+                          Creator bonus (verified creators)
+                        </Label>
+                        <p className={cn("mt-0.5 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                          Optional extras for top performers. Configure at least one category when enabled.
+                        </p>
+                      </div>
+                      <Switch
+                        id="milestoneBonusToggle"
+                        checked={milestoneBonusEnabled}
+                        onCheckedChange={(checked) => {
+                          const on = Boolean(checked);
+                          setMilestoneBonusEnabled(on);
+                          if (!on) {
+                            setMilestoneBonusTopViewsMin("");
+                            setMilestoneBonusTopViewsMinReels("");
+                            setMilestoneBonusTopViewsPayout("");
+                            setMilestoneBonusTopReelsMin("");
+                            setMilestoneBonusTopReelsMinViews("");
+                            setMilestoneBonusTopReelsPayout("");
+                          }
+                        }}
+                        className="mt-0.5 data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]"
+                      />
+                    </div>
+                    {milestoneBonusEnabled && (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <p className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                            Most verified views
+                          </p>
+                          <div className="grid gap-3 md:grid-cols-3">
+                            <div className="space-y-2">
+                              <Label className={cn("text-sm", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                                Minimum total verified views
+                              </Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={milestoneBonusTopViewsMin}
+                                onChange={(e) =>
+                                  setMilestoneBonusTopViewsMin(
+                                    e.target.value === ""
+                                      ? ""
+                                      : parseInt(e.target.value, 10),
+                                  )
+                                }
+                                className={cn(
+                                  "h-11",
+                                  isDark
+                                    ? "border-white/40 bg-[#161616] text-white"
+                                    : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
+                                )}
+                                placeholder="e.g. 200000"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className={cn("text-sm", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                                Minimum verified reels
+                              </Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={milestoneBonusTopViewsMinReels}
+                                onChange={(e) =>
+                                  setMilestoneBonusTopViewsMinReels(
+                                    e.target.value === ""
+                                      ? ""
+                                      : parseInt(e.target.value, 10),
+                                  )
+                                }
+                                className={cn(
+                                  "h-11",
+                                  isDark
+                                    ? "border-white/40 bg-[#161616] text-white"
+                                    : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
+                                )}
+                                placeholder="e.g. 5"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className={cn("text-sm", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                                Winner bonus (USD)
+                              </Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min={MIN_MILESTONE_PAYOUT_CENTS / 100}
+                                value={milestoneBonusTopViewsPayout}
+                                onChange={(e) =>
+                                  setMilestoneBonusTopViewsPayout(e.target.value)
+                                }
+                                className={cn(
+                                  "h-11",
+                                  isDark
+                                    ? "border-white/40 bg-[#161616] text-white"
+                                    : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
+                                )}
+                                placeholder="e.g. 100"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <p className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                            Most verified reels
+                          </p>
+                          <div className="grid gap-3 md:grid-cols-3">
+                            <div className="space-y-2">
+                              <Label className={cn("text-sm", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                                Minimum total verified views
+                              </Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={milestoneBonusTopReelsMinViews}
+                                onChange={(e) =>
+                                  setMilestoneBonusTopReelsMinViews(
+                                    e.target.value === ""
+                                      ? ""
+                                      : parseInt(e.target.value, 10),
+                                  )
+                                }
+                                className={cn(
+                                  "h-11",
+                                  isDark
+                                    ? "border-white/40 bg-[#161616] text-white"
+                                    : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
+                                )}
+                                placeholder="e.g. 200000"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className={cn("text-sm", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                                Minimum verified reels
+                              </Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={milestoneBonusTopReelsMin}
+                                onChange={(e) =>
+                                  setMilestoneBonusTopReelsMin(
+                                    e.target.value === ""
+                                      ? ""
+                                      : parseInt(e.target.value, 10),
+                                  )
+                                }
+                                className={cn(
+                                  "h-11",
+                                  isDark
+                                    ? "border-white/40 bg-[#161616] text-white"
+                                    : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
+                                )}
+                                placeholder="e.g. 5"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className={cn("text-sm", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                                Winner bonus (USD)
+                              </Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min={MIN_MILESTONE_PAYOUT_CENTS / 100}
+                                value={milestoneBonusTopReelsPayout}
+                                onChange={(e) =>
+                                  setMilestoneBonusTopReelsPayout(e.target.value)
+                                }
+                                className={cn(
+                                  "h-11",
+                                  isDark
+                                    ? "border-white/40 bg-[#161616] text-white"
+                                    : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
+                                )}
+                                placeholder="e.g. 50"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div
                   className={cn(
-                    "space-y-3 p-4 border rounded-lg",
-                    isDark
-                      ? "bg-purple-950/50 border-purple-800"
-                      : "bg-purple-50 border-purple-200",
+                    "space-y-3 rounded-xl border px-4 py-3",
+                    isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]",
                   )}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">🏆</span>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
                       <Label
                         htmlFor="bonusToggle"
-                        className="text-base font-semibold"
+                        className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}
                       >
-                        Additional Bonus Opportunities
+                        Additional bonus opportunities
                       </Label>
+                      <p className={cn("mt-0.5 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                        Manual bonuses you handle yourself, like top-creator or affiliate rewards.
+                      </p>
                     </div>
-                    <Checkbox
+                    <Switch
                       id="bonusToggle"
                       checked={bonusEnabled}
-                      onCheckedChange={(checked) =>
-                        setBonusEnabled(checked === true)
-                      }
-                      className="h-5 w-5 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 data-[state=checked]:text-white"
+                      onCheckedChange={(checked) => setBonusEnabled(Boolean(checked))}
+                      className="mt-0.5 data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]"
                     />
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Offer additional bonuses that you'll handle manually (e.g.,
-                    top creators bonus, affiliate commissions, special rewards).
-                  </p>
 
                   {bonusEnabled && (
-                    <div className="space-y-3 pt-3 border-t border-purple-300">
-                      <div className="flex items-center justify-between">
-                        <Label>Bonus Details</Label>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={toggleBonusPreview}
-                          className="text-xs"
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <Label className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          Bonus details
+                        </Label>
+                        <div
+                          role="tablist"
+                          aria-label="Bonus editor mode"
+                          className={cn(
+                            "inline-flex rounded-lg p-1",
+                            isDark ? "bg-white/10" : "bg-[#ececef]",
+                          )}
                         >
-                          {showBonusPreview ? "Edit" : "Preview"}
-                        </Button>
+                          <button
+                            type="button"
+                            role="tab"
+                            aria-selected={!showBonusPreview}
+                            onClick={() => {
+                              if (showBonusPreview) toggleBonusPreview();
+                            }}
+                            className={cn(
+                              "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                              !showBonusPreview
+                                ? isDark
+                                  ? "bg-white text-[#1a1a1a]"
+                                  : "bg-[#1a1a1a] text-white"
+                                : isDark
+                                  ? "text-gray-400 hover:text-gray-200"
+                                  : "text-[#8d8d95] hover:text-[#3a3a42]",
+                            )}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            role="tab"
+                            aria-selected={showBonusPreview}
+                            onClick={() => {
+                              if (!showBonusPreview) toggleBonusPreview();
+                            }}
+                            className={cn(
+                              "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                              showBonusPreview
+                                ? isDark
+                                  ? "bg-white text-[#1a1a1a]"
+                                  : "bg-[#1a1a1a] text-white"
+                                : isDark
+                                  ? "text-gray-400 hover:text-gray-200"
+                                  : "text-[#8d8d95] hover:text-[#3a3a42]",
+                            )}
+                          >
+                            Preview
+                          </button>
+                        </div>
                       </div>
 
                       {showBonusPreview ? (
                         <div
                           className={cn(
-                            "prose max-w-none p-4 border rounded-lg min-h-[200px]",
+                            "prose max-w-none p-4 border rounded-xl min-h-[200px]",
                             isDark
-                              ? "bg-[#180438] border-gray-600 text-white"
-                              : "bg-white",
+                              ? "bg-[#161616] border-gray-600 text-white"
+                              : "border-[#e6e6ea] bg-white",
                           )}
                         >
-                          <div
-                            dangerouslySetInnerHTML={{ __html: bonusHtml }}
-                          />
+                          <div dangerouslySetInnerHTML={{ __html: bonusHtml }} />
                         </div>
                       ) : (
-                        <div className="bg-white rounded-lg border">
+                        <div
+                          className={cn(
+                            "rounded-xl border",
+                            isDark
+                              ? "border-gray-600 bg-[#161616]"
+                              : "border-[#e6e6ea] bg-white",
+                          )}
+                        >
                           <NovelEditor
                             value={bonusHtml}
                             isDark={isDark}
@@ -10172,17 +9863,15 @@ export default function CreateContestPage({
 • Special reward for first 10 submissions"
                             height="250px"
                             ref={bonusRichTextEditorRef}
-                            onChange={(html: string, json: any) => {
+                            onChange={(html, json) => {
                               setBonusHtml(html);
                               setBonusJson(json);
                             }}
                           />
                         </div>
                       )}
-                      <p className="text-xs text-muted-foreground">
-                        Describe all additional bonus opportunities. These will
-                        be visible to creators and handled manually by you. Use
-                        formatting, links, and bullet points to make it clear!
+                      <p className={cn("text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                        These details are shown to creators and handled manually by you.
                       </p>
                     </div>
                   )}
@@ -10217,8 +9906,8 @@ export default function CreateContestPage({
                     ? cn(
                         "sm:mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
                         isDark
-                          ? "text-white bg-[#170337] border-gray-400"
-                          : "border-[#4A00BE] bg-white text-[#4A00BE]",
+                          ? "text-white bg-transparent border-white/20 hover:bg-white/10"
+                          : "border-[#1a1a1a] bg-white text-[#1a1a1a]",
                       )
                     : "",
                 )}
@@ -10236,8 +9925,8 @@ export default function CreateContestPage({
                   className={cn(
                     "border font-semibold px-4 py-2 rounded-lg text-md t w-full sm:w-auto",
                     isDark
-                      ? "text-white border-gray-400"
-                      : "border-[#4A00BE] bg-white text-[#4A00BE]",
+                      ? "border-white/20 text-white hover:bg-white/10"
+                      : "border-[#1a1a1a] bg-white text-[#1a1a1a]",
                   )}
                   onClick={handleSaveDraft}
                   disabled={isLoading || !title.trim()}
@@ -10254,7 +9943,7 @@ export default function CreateContestPage({
                       />
                     </div>
                   ) : (
-                    "Save Draft"
+                    "Save draft"
                   )}
                 </button>
                 <Button
@@ -10269,7 +9958,9 @@ export default function CreateContestPage({
                   }
                   className={cn(
                     "px-5 py-4 rounded-lg transition w-full sm:w-auto",
-                    isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
+                    isDark
+                      ? "bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]"
+                      : "bg-[#1a1a1a] text-white hover:bg-black",
                   )}
                 >
                   {isLoading &&
@@ -10668,17 +10359,21 @@ export default function CreateContestPage({
     <div
       className={cn(
         "fixed inset-0 bg-opacity-65 flex items-center justify-center z-50",
-        isDark ? "bg-[#100A33]" : "bg-black",
+        isDark ? "bg-black/70" : "bg-black/50",
       )}
     >
       <div
         className={cn(
-          "rounded-lg p-6 max-w-md w-full shadow-xl",
-          isDark ? "bg-[#06021D]  border border-gray-800" : "bg-white",
+          "w-full max-w-md rounded-2xl p-6 shadow-xl",
+          isDark
+            ? "border border-white/10 bg-[#161616] text-white"
+            : "border border-[#ececef] bg-white text-[#1a1a1a]",
         )}
       >
-        <h2 className="text-xl font-bold mb-4">Leave Campaign Creation?</h2>
-        <p className="mb-6">
+        <h2 className={cn("mb-2 text-xl font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+          Leave Campaign Creation?
+        </h2>
+        <p className={cn("mb-6 text-sm leading-relaxed", isDark ? "text-white/60" : "text-[#55555F]")}>
           Do you want to save this campaign as a draft or delete it? All
           progress will be lost if you delete.
         </p>
@@ -10688,6 +10383,12 @@ export default function CreateContestPage({
             variant="outline"
             onClick={() => setShowBackModal(false)}
             disabled={isDeleting}
+            className={cn(
+              "h-10 rounded-full px-4 shadow-none",
+              isDark
+                ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                : "border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
+            )}
           >
             Cancel
           </Button>
@@ -10695,10 +10396,15 @@ export default function CreateContestPage({
             variant="destructive"
             onClick={handleDeleteAndBack}
             disabled={isDeleting}
+            className="h-10 rounded-full px-4 shadow-none"
           >
             {isDeleting ? "Deleting..." : "Delete"}
           </Button>
-          <Button onClick={handleSaveDraftAndBack} disabled={isDeleting}>
+          <Button
+            onClick={handleSaveDraftAndBack}
+            disabled={isDeleting}
+            className="h-10 rounded-full px-4 goc-btn-primary"
+          >
             Save as Draft
           </Button>
         </div>
@@ -10711,15 +10417,15 @@ export default function CreateContestPage({
     <div
       className={cn(
         "fixed inset-0 bg-opacity-65 flex items-center justify-center z-50",
-        isDark ? "bg-[#100A33]" : "bg-black",
+        isDark ? "bg-black/70" : "bg-black",
       )}
     >
       <div
         className={cn(
           "rounded-lg p-6 max-w-lg w-full shadow-xl",
           isDark
-            ? "bg-[#06021D] border border-gray-800 text-white"
-            : "bg-white text-black",
+            ? "border border-white/10 bg-[#161616] text-white"
+            : "border border-[#ececef] bg-white text-[#1a1a1a]",
         )}
       >
         <div className="flex items-center gap-3 mb-4">
@@ -10728,7 +10434,7 @@ export default function CreateContestPage({
               "w-10 h-10 rounded-full flex items-center justify-center",
               isDark
                 ? "bg-[#FFFFFF36] text-white"
-                : "bg-purple-200 text-purple-600",
+                : "bg-[#e6e6e8] text-[#1a1a1a]",
             )}
           >
             <Trophy className="h-5 w-5" />
@@ -10745,8 +10451,8 @@ export default function CreateContestPage({
             className={cn(
               "w-full text-md rounded-full font-semibold",
               isDark
-                ? "bg-[#7F39EC] py-3 text-white"
-                : " bg-[#D9C0FF61] py-4 text-[#7F39EC] ",
+                ? "bg-[#1a1a1a] py-3 text-white"
+                : " bg-[#f3f3f5] py-4 text-[#1a1a1a] ",
             )}
           >
             Save Draft & Upgrade
@@ -10758,7 +10464,7 @@ export default function CreateContestPage({
               "w-full border text-md py-3 rounded-full",
               isDark
                 ? "border-gray-400 text-gray-300"
-                : "border-[#7F39EC] text-[#7F39EC]",
+                : "border-[#1a1a1a] text-[#1a1a1a]",
             )}
           >
             Upgrade without saving draft
@@ -10785,15 +10491,15 @@ export default function CreateContestPage({
     <div
       className={cn(
         "fixed inset-0 bg-opacity-65 flex items-center justify-center z-50",
-        isDark ? "bg-[#100A33]" : "bg-black",
+        isDark ? "bg-black/70" : "bg-black",
       )}
     >
       <div
         className={cn(
           "rounded-lg p-6 max-w-md w-full shadow-xl",
           isDark
-            ? "bg-[#06021D] border border-gray-800 text-white"
-            : "bg-white text-black",
+            ? "border border-white/10 bg-[#161616] text-white"
+            : "border border-[#ececef] bg-white text-[#1a1a1a]",
         )}
       >
         <div className="flex items-center gap-3 mb-4">
@@ -10812,8 +10518,8 @@ export default function CreateContestPage({
             className={cn(
               "w-full text-md rounded-full font-semibold",
               isDark
-                ? "bg-[#7F39EC] py-3 text-white"
-                : " bg-[#D9C0FF61] py-4 text-[#7F39EC] ",
+                ? "bg-[#1a1a1a] py-3 text-white"
+                : " bg-[#f3f3f5] py-4 text-[#1a1a1a] ",
             )}
           >
             Save Draft
@@ -10825,7 +10531,7 @@ export default function CreateContestPage({
               "w-full border text-md py-3 rounded-full",
               isDark
                 ? "border-gray-400 text-gray-300"
-                : "border-[#7F39EC] text-[#7F39EC]",
+                : "border-[#1a1a1a] text-[#1a1a1a]",
             )}
           >
             Refresh Anyway
@@ -10846,6 +10552,56 @@ export default function CreateContestPage({
       </div>
     </div>
   );
+
+  if (showRewardPicker === null) {
+    return (
+      <div className="flex h-64 items-center justify-center text-sm text-[#6d6d75]">
+        Loading campaign...
+      </div>
+    );
+  }
+
+  if (showRewardPicker) {
+    const paidTypesLocked = !getPlanFeatures(userPlan).contestTypes?.includes(
+      "cpm",
+    );
+    return (
+      <>
+        <CampaignRewardPicker
+          value={contestType}
+          paidTypesLocked={paidTypesLocked}
+          onChange={setContestType}
+          onCancel={handleBackToContests}
+          onContinue={() => {
+            if (
+              (contestType === "milestone" || contestType === "dual_rewards") &&
+              contestFormat !== "video"
+            ) {
+              setContestFormat("video");
+              if (platform === "twitter") {
+                setPlatform("youtube");
+                setSelectedPlatforms(["youtube"]);
+                setActivePlatform("youtube");
+                setSectionPlatforms(createDefaultSectionPlatforms());
+                setAllSectionLive(createDefaultAllSectionLive());
+              }
+            }
+            setShowRewardPicker(false);
+          }}
+        />
+        {showBackModal && <BackModal />}
+      </>
+    );
+  }
+
+  const rewardModelLabel =
+    contestType === "cpm"
+      ? "CPM"
+      : contestType === "milestone"
+        ? "Milestone"
+        : contestType === "dual_rewards"
+          ? "Dual rewards"
+          : "Leaderboard";
 
   return (
     <div className="container mx-auto py-8 bg-background text-foreground no-theme-transition">
@@ -10903,184 +10659,186 @@ export default function CreateContestPage({
         }}
       />
       {/* Enhanced Header with Better Back Button */}
-      <div className="mb-8">
-        <div className="flex items-center gap-4 mb-6">
-          <Button
-            variant="outline"
-            asChild={false}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-all duration-200"
-            onClick={handleBackToContests}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span className="font-medium">Back to Campaigns</span>
-          </Button>
-        </div>
-        <div className="text-center">
-          {isAdmin && (
-            <div className="mb-3 inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-4 py-1.5 text-sm font-medium text-amber-700 dark:text-amber-300">
-              ADMIN MODE — creating for{" "}
-              {targetBrandCompanyName || "selected brand"}
-            </div>
+      <div className="mb-6">
+        <div className="mb-2 ml-6">
+        <button
+          type="button"
+          className={cn(
+            "mb-2 inline-flex items-center gap-2 text-md font-medium",
+            isDark ? "text-gray-300" : "text-[#3a3a40]",
           )}
-          <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">
-            {isAdmin ? "Create Campaign for Brand" : "Create New Campaign"}
+          onClick={handleBackToContests}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Campaigns
+        </button>
+        </div>
+        <div className="mb-4 ml-6">
+          <button
+            type="button"
+            onClick={() => setShowRewardPicker(true)}
+            className={cn(
+              "inline-flex items-center rounded-full border px-3 py-1 text-sm font-medium",
+              isDark
+                ? "border-white/15 bg-white/10 text-white"
+                : "border-[#e4e4e7] bg-white text-[#1a1a1a]",
+            )}
+          >
+            {rewardModelLabel} campaign
+          </button>
+        </div>
+        {isAdmin && (
+          <div className="mb-3 ml-6 inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-4 py-1.5 text-sm font-medium text-amber-700 dark:text-amber-300">
+            ADMIN MODE — creating for{" "}
+            {targetBrandCompanyName || "selected brand"}
+          </div>
+        )}
+        <div className="ml-6">
+          <h1
+            className={cn(
+              "text-[32px] font-semibold tracking-tight",
+              isDark ? "text-white" : "text-[#1a1a1a]",
+            )}
+          >
+            {isAdmin ? "Create campaign for brand" : "New campaign"}
           </h1>
-          <p className="text-muted-foreground text-lg">
-            Build your campaign in 4 simple steps
+          <p
+            className={cn(
+              "mt-1 max-w-xl text-md leading-relaxed",
+              isDark ? "text-gray-400" : "text-[#6d6d75]",
+            )}
+          >
+            {contestType === "cpm"
+              ? "Creators are paid for the views their content gets, at a CPM rate you set, with an optional minimum and maximum."
+              : contestType === "milestone"
+                ? "Creators are paid as their posts reach the view milestones you set."
+                : contestType === "dual_rewards"
+                  ? "Creators earn for views and again when a post hits a milestone."
+                  : "Creators compete for top spots. Prizes are awarded to winners."}
           </p>
         </div>
+        {copiedFrom && <CopiedFromBanner sourceTitle={copiedFrom.title} />}
       </div>
 
-      {/* Modern Progress Stepper */}
-      <div className="mb-12">
-        <div className="max-w-4xl mx-auto px-4">
-          {/* Desktop Stepper */}
+      {/* Progress stepper */}
+      <div className="mb-10">
+        <div className="mx-auto max-w-[1180px]">
           <div className="hidden md:block">
-            <div className="relative">
-              {/* Background Progress Line */}
-              <div className="absolute top-8 left-0 right-0 h-2 bg-[#E9E9E9] rounded-full">
-                <div
-                  className="h-full rounded-full bg-purple-600 transition-all duration-700 ease-out"
-                  style={{
-                    width:
-                      step === "basics"
-                        ? "8%"
-                        : step === "brief"
-                          ? "35%"
-                          : step === "resources"
-                            ? "70%"
-                            : "100%",
-                    // background:
-                    //   "linear-gradient(270deg, #E9E9E9 60%, #7F39EC 100%)",
-                  }}
-                ></div>
-              </div>
-
-              {/* Step Items */}
-              <div className="relative flex justify-between">
-                {[
+            <div className="flex items-start gap-3">
+              {(() => {
+                const stepperSteps = [
                   {
                     key: "basics",
                     number: "1",
-                    title: "Get Started",
-                    description: "Basic information",
+                    title: "Basics",
+                    description: "Format and platforms",
+                  },
+                  {
+                    key: "audience",
+                    number: "2",
+                    title: "Audience",
+                    description: "Who can see and join",
                   },
                   {
                     key: "brief",
-                    number: "2",
-                    title: "Create Brief",
-                    description: "Project details",
+                    number: "3",
+                    title: "Brief",
+                    description: "Name, brief and rules",
                   },
                   {
                     key: "resources",
-                    number: "3",
+                    number: "4",
                     title: "Resources",
-                    description: "Assets & links",
+                    description: "What creators work from",
                   },
                   {
                     key: "prize",
-                    number: "4",
-                    title: "Prize",
-                    description: "Rewards & timeline",
+                    number: "5",
+                    title: "Reward",
+                    description: "Pay, dates and terms",
                   },
-                ].map((stepItem, index) => {
-                  const isActive = step === stepItem.key;
-                  const isCompleted =
-                    (stepItem.key === "basics" &&
-                      (step === "brief" ||
-                        step === "resources" ||
-                        step === "prize")) ||
-                    (stepItem.key === "brief" &&
-                      (step === "resources" || step === "prize")) ||
-                    (stepItem.key === "resources" && step === "prize");
-                  const isUpcoming = !isActive && !isCompleted;
+                ] as const;
+                const activeStepKey = step === "payment" ? "prize" : step;
+                const currentIndex = stepperSteps.findIndex(
+                  (s) => s.key === activeStepKey,
+                );
+
+                return stepperSteps.map((stepItem, index) => {
+                  const isCompleted = index < currentIndex;
+                  const isActive = index === currentIndex;
 
                   return (
-                    <div
-                      key={stepItem.key}
-                      className="relative flex flex-col items-center group"
-                    >
-                      {/* Step Circle */}
-                      <div className="relative">
-                        {/* Glow Effect for Active Step */}
-                        {isActive && (
-                          <div className="absolute inset-0 bg-[#7F39EC] rounded-full blur-lg opacity-30 animate-pulse"></div>
+                    <div key={stepItem.key} className="min-w-0 flex-1">
+                      <div
+                        className={cn(
+                          "mb-3 h-1.5 w-full rounded-full",
+                          isCompleted
+                            ? isDark
+                              ? "bg-white"
+                              : "bg-[#1a1a1a]"
+                            : isActive
+                              ? "bg-[#22c55e]"
+                              : isDark
+                                ? "bg-white/15"
+                                : "bg-[#e6e6ea]",
                         )}
-
-                        <div
-                          className={`relative flex h-16 w-16 items-center justify-center rounded-full border-2 transition-all duration-500 ${
-                            isActive
-                              ? "bg-[#7F39EC] border-[#7F39EC] text-white"
-                              : isCompleted
-                                ? "bg-[#7F39EC] border-[#7F39EC] text-white"
+                      />
+                      <div className="flex items-start gap-2">
+                        <span
+                          className={cn(
+                            "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+                            isCompleted
+                              ? isDark
+                                ? "bg-white text-[#1a1a1a]"
+                                : "bg-[#1a1a1a] text-white"
+                              : isActive
+                                ? "border-2 border-[#22c55e] bg-transparent text-[#22c55e]"
                                 : isDark
-                                  ? "bg-white border-white text-slate-500 shadow-md"
-                                  : "bg-white border-slate-200 text-slate-400 shadow-md"
-                          }`}
+                                  ? "border border-white/20 bg-transparent text-gray-500"
+                                  : "border border-[#d5d5db] bg-transparent text-[#9a9aa1]",
+                          )}
                         >
                           {isCompleted ? (
-                            <svg
-                              className="h-6 w-6"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={3}
-                                d="M5 13l4 4L19 7"
-                              />
-                            </svg>
+                            <Check className="h-3 w-3" strokeWidth={3} />
                           ) : (
-                            <span className="text-lg font-bold">
-                              {stepItem.number}
-                            </span>
+                            stepItem.number
                           )}
+                        </span>
+                        <div className="min-w-0">
+                          <p
+                            className={cn(
+                              "text-md font-semibold leading-tight",
+                              isCompleted || isActive
+                                ? isDark
+                                  ? "text-white"
+                                  : "text-[#1a1a1a]"
+                                : isDark
+                                  ? "text-gray-500"
+                                  : "text-[#9a9aa1]",
+                            )}
+                          >
+                            {stepItem.title}
+                          </p>
+                          <p
+                            className={cn(
+                              "mt-0.5 text-sm leading-snug",
+                              isCompleted || isActive
+                                ? isDark
+                                  ? "text-gray-400"
+                                  : "text-[#6b6b72]"
+                                : isDark
+                                  ? "text-gray-600"
+                                  : "text-[#b5b5bb]",
+                            )}
+                          >
+                            {stepItem.description}
+                          </p>
                         </div>
-                      </div>
-
-                      {/* Step Content */}
-                      <div className="mt-4 text-center max-w-32">
-                        <h3
-                          className={`text-[14px] font-semibold transition-colors duration-300 ${
-                            isActive
-                              ? isDark
-                                ? "text-white"
-                                : "text-black"
-                              : isCompleted
-                                ? isDark
-                                  ? "text-white"
-                                  : "text-black"
-                                : isDark
-                                  ? "text-slate-400 text-md"
-                                  : "text-slate-500 text-md"
-                          }`}
-                        >
-                          {stepItem.title}
-                        </h3>
-                        <p
-                          className={`text-[12px] mt-1 transition-colors duration-300 ${
-                            isActive
-                              ? isDark
-                                ? "text-white"
-                                : "text-black"
-                              : isCompleted
-                                ? isDark
-                                  ? "text-white"
-                                  : "text-black"
-                                : isDark
-                                  ? "text-slate-400"
-                                  : "text-slate-400"
-                          }`}
-                        >
-                          {stepItem.description}
-                        </p>
                       </div>
                     </div>
                   );
-                })}
-              </div>
+                });
+              })()}
             </div>
           </div>
 
@@ -11090,41 +10848,52 @@ export default function CreateContestPage({
               className={cn(
                 "rounded-xl p-4 shadow-lg border transition-colors duration-300",
                 isDark
-                  ? "bg-[#180438] border-[#3A2C63]"
+                  ? "bg-[#161616] border-white/10"
                   : "bg-white border-slate-200",
               )}
             >
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#7F39EC] text-white font-bold">
+                  <div
+                    className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-full font-bold",
+                      isDark ? "bg-white text-[#1a1a1a]" : "bg-[#1a1a1a] text-white",
+                    )}
+                  >
                     {step === "basics"
                       ? "1"
-                      : step === "brief"
+                      : step === "audience"
                         ? "2"
-                        : step === "resources"
+                        : step === "brief"
                           ? "3"
-                          : "4"}
+                          : step === "resources"
+                            ? "4"
+                            : "5"}
                   </div>
                   <div>
                     <h3 className="font-semibold text-foreground">
                       {step === "basics"
-                        ? "Get Started"
-                        : step === "brief"
-                          ? "Create Brief"
-                          : step === "resources"
-                            ? "Resources"
-                            : "Prize"}
+                        ? "Basics"
+                        : step === "audience"
+                          ? "Audience"
+                          : step === "brief"
+                            ? "Brief"
+                            : step === "resources"
+                              ? "Resources"
+                              : "Reward"}
                     </h3>
                     <p className="text-xs text-muted-foreground">
                       Step{" "}
                       {step === "basics"
                         ? "1"
-                        : step === "brief"
+                        : step === "audience"
                           ? "2"
-                          : step === "resources"
+                          : step === "brief"
                             ? "3"
-                            : "4"}{" "}
-                      of 4
+                            : step === "resources"
+                              ? "4"
+                              : "5"}{" "}
+                      of 5
                     </p>
                   </div>
                 </div>
@@ -11140,7 +10909,7 @@ export default function CreateContestPage({
                 <div
                   className={cn(
                     "h-full rounded-full transition-all duration-500",
-                    isDark ? "bg-[#9C7BFF]" : "bg-[#7F39EC]",
+                    isDark ? "bg-white" : "bg-[#1a1a1a]",
                   )}
                   style={{ width: `${mobileProgressPercent}%` }}
                 />
@@ -11151,76 +10920,65 @@ export default function CreateContestPage({
       </div>
 
       {/* Step Content */}
-      <div className="max-w-[1100px] mx-auto no-theme-transition">
+      <div className="mx-auto grid max-w-[1180px] items-start gap-6 no-theme-transition lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0">
         {/* Removed global success Alert (for draft save) that was at the top of the card */}
 
-        {step === "basics" && (
+        {(step === "basics" || step === "audience") && (
           <>
             <div
               className={cn(
                 "p-6 border-b rounded-tl-xl rounded-tr-xl shadow-xl space-y-6",
                 isDark
-                  ? "bg-[#180438] border-gray-600"
+                  ? "bg-[#161616] border-gray-600"
                   : "bg-white border-[#D0D0D0]",
               )}
             >
               <h2
                 className={cn(
                   "font-semibold text-2xl ",
-                  isDark ? "text-white" : "text-purple-600",
+                  isDark ? "text-white" : "text-[#1a1a1a]",
                 )}
               >
-                Customize your Contest
+                {step === "basics" ? "Basics" : "Audience"}
               </h2>
             </div>
             <div
               className={cn(
                 "space-y-6 p-6 rounded-bl-xl rounded-br-xl shadow-xl",
-                isDark ? "bg-[#180438]" : "bg-white",
+                isDark ? "bg-[#161616]" : "bg-white",
               )}
             >
               {/* Removed general validationError Alert from CardContent */}
 
+              {step === "basics" && (
+              <>
               {/* Campaign Format Toggle */}
-              <div className="space-y-2 ">
-                <Label className="text-xl font-semibold">Campaign Format</Label>
-                <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                  <Button
+              <div
+                className={cn(
+                  "space-y-2 rounded-2xl border p-4",
+                  isDark ? "border-white/10 bg-[#161616]" : "border-[#e6e6ea] bg-white",
+                )}
+              >
+                <Label className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                  Campaign format
+                </Label>
+                <p className={cn("text-sm", isDark ? "text-gray-400" : "text-[#6d6d75]")}>
+                  Video runs on YouTube, Instagram and TikTok. Text and image runs on X.
+                </p>
+                <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+                  <button
                     type="button"
-                    variant={
-                      contestFormat === "text_image" ? "default" : "outline"
-                    }
                     className={cn(
-                      "flex-1 justify-center",
-                      contestFormat === "text_image" &&
-                        "bg-[#7F39EC] text-white",
-                    )}
-                    onClick={() => {
-                      setContestFormat("text_image");
-                      // Text/Image campaigns default to Twitter platform
-                      if (platform !== "twitter") {
-                        setPlatform("twitter");
-                      }
-                      setSelectedPlatforms(["youtube"]);
-                      setActivePlatform("youtube");
-                      setSectionPlatforms(createDefaultSectionPlatforms());
-                      setAllSectionLive(createDefaultAllSectionLive());
-                      // Instantly persist contest_format change
-                      updateContestInDB({ contest_format: "text_image" });
-                    }}
-                  >
-                    Text / Image Campaign
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={contestFormat === "video" ? "default" : "outline"}
-                    className={cn(
-                      "flex-1 justify-center",
-                      contestFormat === "video" && "bg-[#7F39EC] text-white",
+                      "flex flex-1 items-center justify-between rounded-xl border px-4 py-3 text-left",
+                      contestFormat === "video"
+                        ? isDark
+                        ? "border-white bg-white/10"
+                        : "border-[#1a1a1a] bg-[#f3f3f5]"
+                        : isDark ? "border-white/10 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]",
                     )}
                     onClick={() => {
                       setContestFormat("video");
-                      // Default to YouTube when switching back to video if currently on Twitter
                       if (platform === "twitter") {
                         setPlatform("youtube");
                         setSelectedPlatforms(["youtube"]);
@@ -11228,390 +10986,112 @@ export default function CreateContestPage({
                         setSectionPlatforms(createDefaultSectionPlatforms());
                         setAllSectionLive(createDefaultAllSectionLive());
                       }
-                      // Instantly persist contest_format change
                       updateContestInDB({ contest_format: "video" });
                     }}
                   >
-                    Video Campaign
-                  </Button>
+                    <span>
+                      <span className={cn("block text-sm font-medium", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                        Video
+                      </span>
+                      <span className={cn("mt-1 block text-xs", isDark ? "text-gray-400" : "text-[#6d6d75]")}>
+                        Short and long video
+                      </span>
+                    </span>
+                    <span
+                      className={cn(
+                        "flex h-5 w-5 items-center justify-center rounded-full border text-[10px]",
+                        contestFormat === "video"
+                          ? isDark
+                          ? "border-white bg-white text-[#1a1a1a]"
+                          : "border-[#1a1a1a] bg-[#1a1a1a] text-white"
+                          : "border-[#d4d4d8] bg-white",
+                      )}
+                    >
+                      {contestFormat === "video" ? "✓" : ""}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex flex-1 items-center justify-between rounded-xl border px-4 py-3 text-left",
+                      contestFormat === "text_image"
+                        ? isDark
+                        ? "border-white bg-white/10"
+                        : "border-[#1a1a1a] bg-[#f3f3f5]"
+                        : isDark ? "border-white/10 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]",
+                    )}
+                    onClick={() => {
+                      setContestFormat("text_image");
+                      if (platform !== "twitter") {
+                        setPlatform("twitter");
+                      }
+                      setSelectedPlatforms(["youtube"]);
+                      setActivePlatform("youtube");
+                      setSectionPlatforms(createDefaultSectionPlatforms());
+                      setAllSectionLive(createDefaultAllSectionLive());
+                      updateContestInDB({ contest_format: "text_image" });
+                    }}
+                  >
+                    <span>
+                      <span className={cn("block text-sm font-medium", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                        Text & image
+                      </span>
+                      <span className={cn("mt-1 block text-xs", isDark ? "text-gray-400" : "text-[#6d6d75]")}>
+                        Posts and images on X
+                      </span>
+                    </span>
+                    <span
+                      className={cn(
+                        "flex h-5 w-5 items-center justify-center rounded-full border text-[10px]",
+                        contestFormat === "text_image"
+                          ? isDark
+                          ? "border-white bg-white text-[#1a1a1a]"
+                          : "border-[#1a1a1a] bg-[#1a1a1a] text-white"
+                          : "border-[#d4d4d8] bg-white",
+                      )}
+                    >
+                      {contestFormat === "text_image" ? "✓" : ""}
+                    </span>
+                  </button>
                 </div>
               </div>
+              </>
+              )}
 
-              {/* Campaign Type Selection */}
-              <div className="space-y-2 ">
-                <Label className="text-xl font-semibold">Campaign Type</Label>
-                <RadioGroup
-                  value={contestType}
-                  onValueChange={(
-                    value: "leaderboard" | "cpm" | "milestone" | "dual_rewards",
-                  ) => {
-                    const planFeatures = getPlanFeatures(userPlan);
-                    const hasCpmAccess =
-                      planFeatures.contestTypes &&
-                      planFeatures.contestTypes.includes("cpm");
-
-                    if (
-                      (value === "cpm" ||
-                        value === "milestone" ||
-                        value === "dual_rewards") &&
-                      !hasCpmAccess
-                    ) {
-                      return;
-                    }
-                    if (
-                      (value === "milestone" || value === "dual_rewards") &&
-                      contestFormat !== "video"
-                    ) {
-                      return;
-                    }
-                    setContestType(value);
-                    if (sectionPlatforms.campaignType === ALL_PLATFORM_TAB) {
-                      setAllSectionLive((prev) => ({
-                        ...prev,
-                        campaignType: true,
-                      }));
-                    }
-                    const current = {
-                      ...captureCurrentPlatformSnapshot(),
-                      contestType: value,
-                    };
-                    setPlatformCampaigns((prev) => {
-                      const next = { ...prev };
-                      for (const p of platformsForTab(
-                        sectionPlatforms.campaignType,
-                        selectedPlatforms,
-                      )) {
-                        const existing =
-                          next[p] ?? createDefaultPlatformCampaignSnapshot();
-                        next[p] = patchSnapshotSection(
-                          existing,
-                          "campaignType",
-                          current,
-                        );
-                      }
-                      return next;
-                    });
-                  }}
-                  className="flex flex-col lg:flex-row flex-wrap gap-3 lg:gap-4 pt-2"
-                >
-                  <div
-                    className={`flex flex-col gap-3 p-4 border ${
-                      isDark ? "border-gray-600" : "border-gray-300"
-                    } rounded-lg cursor-pointer flex-1 
-        hover:bg-[#D9C0FF26] 
-        ${
-          contestType === "leaderboard" ? "bg-[#D9C0FF26] border-[#7F39EC]" : ""
-        }`}
-                  >
-                    <div className="flex items-start space-x-2">
-                    <RadioGroupItem value="leaderboard" id="leaderboard" />
-                    <Label htmlFor="leaderboard" className="cursor-pointer">
-                      <span className="font-semibold text-lg">
-                        Leaderboard Campaign
-                      </span>
-                      <p className="text-[14px] leading-tight mt-[2px] text-muted-foreground">
-                        Creators compete for top spots based on performance.
-                        Prizes are awarded to winners.
-                      </p>
-                    </Label>
-                    </div>
-                  </div>
-                  {(() => {
-                    const planFeatures = getPlanFeatures(userPlan);
-                    const hasCpmAccess =
-                      planFeatures.contestTypes &&
-                      planFeatures.contestTypes.includes("cpm");
-                    const currentPlan = dbSubscriptionPlans.find(
-                      (p) => p.id === userPlan,
-                    );
-                    const isFreePlan = !currentPlan || currentPlan.price === 0;
-
-                    // CPM is allowed for:
-                    // - Video campaigns (YouTube/Instagram)
-                    // - Twitter text/image contests
-                    const isDisabledForFormat = false;
-                    const isDisabled = !hasCpmAccess || isDisabledForFormat;
-
-                    return (
-                      <div
-                        className={`flex flex-col gap-3 p-4 border ${
-                          isDark ? "border-gray-600" : "border-gray-300"
-                        } rounded-lg flex-1 relative 
-                        ${
-                          isDisabled
-                            ? isDark
-                              ? "opacity-50 cursor-not-allowed bg-slate-800"
-                              : "opacity-50 cursor-not-allowed bg-gray-50"
-                            : `cursor-pointer hover:bg-[#D9C0FF26] ${
-                                contestType === "cpm"
-                                  ? "bg-[#D9C0FF26] border-[#7F39EC]"
-                                  : ""
-                              }`
-                        }`}
-                      >
-                        <div className="flex items-start space-x-2">
-                        <RadioGroupItem
-                          value="cpm"
-                          id="cpm"
-                          disabled={isDisabled}
-                        />
-                        <Label
-                          htmlFor="cpm"
-                          className={
-                            isDisabled ? "cursor-not-allowed" : "cursor-pointer"
-                          }
-                        >
-                          <span className="font-semibold text-lg">
-                            CPM Based Campaign
-                          </span>
-                          <p className="text-[14px] leading-tight mt-[2px] text-muted-foreground">
-                            Creators are paid based on the number of views their
-                            content receives, at a pre-defined CPM rate.
-                          </p>
-                          {isDisabledForFormat && (
-                            <div className="mt-2 flex items-center gap-2">
-                              <button
-                                className={cn(
-                                  "text-white text-md px-3 rounded-full py-1 h-8",
-                                  isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
-                                )}
-                              >
-                                Coming Soon
-                              </button>
-                              <p
-                                className={cn(
-                                  "text-sm font-medium",
-                                  isDark ? "text-white" : "text-black",
-                                )}
-                              >
-                                Not available for text/image campaigns
-                              </p>
-                            </div>
-                          )}
-                          {!hasCpmAccess && !isDisabledForFormat && (
-                            <div className="mt-2 flex items-center gap-2">
-                              {isFreePlan && !isAdmin && (
-                                <button
-                                  className={cn(
-                                    "text-white text-md px-3 rounded-full py-1 h-8",
-                                    isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
-                                  )}
-                                >
-                                  <Link href="/dashboard/billing?tab=subscription">
-                                    Upgrade Plan
-                                  </Link>
-                                </button>
-                              )}
-                              <p
-                                className={cn(
-                                  "text-sm font-medium",
-                                  isDark ? "text-white" : "text-black",
-                                )}
-                              >
-                                Available in paid plans only
-                              </p>
-                            </div>
-                          )}
-                        </Label>
-                        </div>
-                        {/* {!hasCpmAccess && (
-                          <div className="absolute top-2 right-2">
-                            <span className="bg-purple-100 text-purple-600 px-2 py-1 rounded-full text-xs font-medium">
-                              Premium
-                            </span>
-                          </div>
-                        )} */}
-                      </div>
-                    );
-                  })()}
-                  {contestFormat === "video" &&
-                    (() => {
-                      const planFeatures = getPlanFeatures(userPlan);
-                      const hasCpmAccess =
-                        planFeatures.contestTypes &&
-                        planFeatures.contestTypes.includes("cpm");
-                      const currentPlan = dbSubscriptionPlans.find(
-                        (p) => p.id === userPlan,
-                      );
-                      const isFreePlan =
-                        !currentPlan || currentPlan.price === 0;
-                      const isDisabled = !hasCpmAccess;
-
-                      return (
-                        <div
-                          className={`flex flex-col gap-3 p-4 border ${
-                            isDark ? "border-gray-600" : "border-gray-300"
-                          } rounded-lg flex-1 min-w-[220px] ${
-                            isDisabled
-                              ? isDark
-                                ? "opacity-50 cursor-not-allowed bg-slate-800"
-                                : "opacity-50 cursor-not-allowed bg-gray-50"
-                              : `cursor-pointer hover:bg-[#D9C0FF26] ${
-                                  contestType === "milestone"
-                                    ? "bg-[#D9C0FF26] border-[#7F39EC]"
-                                    : ""
-                                }`
-                          }`}
-                        >
-                          <div className="flex items-start space-x-2">
-                          <RadioGroupItem
-                            value="milestone"
-                            id="milestone"
-                            disabled={isDisabled}
-                          />
-                          <Label
-                            htmlFor="milestone"
-                            className={
-                              isDisabled
-                                ? "cursor-not-allowed"
-                                : "cursor-pointer"
-                            }
-                          >
-                            <span className="font-semibold text-lg">
-                              Milestone Campaign
-                            </span>
-                            <p className="text-[14px] leading-tight mt-[2px] text-muted-foreground">
-                              Creators will be rewarded upon reaching milestone
-                              based on views, according to the defined view
-                              targets and payout for each milestone.
-                            </p>
-                            {!hasCpmAccess && (
-                              <div className="mt-2 flex items-center gap-2">
-                                {isFreePlan && !isAdmin && (
-                                  <button
-                                    className={cn(
-                                      "text-white text-md px-3 rounded-full py-1 h-8",
-                                      isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
-                                    )}
-                                  >
-                                    <Link href="/dashboard/billing?tab=subscription">
-                                      Upgrade Plan
-                                    </Link>
-                                  </button>
-                                )}
-                                <p
-                                  className={cn(
-                                    "text-sm font-medium",
-                                    isDark ? "text-white" : "text-black",
-                                  )}
-                                >
-                                  Available in paid plans only
-                                </p>
-                              </div>
-                            )}
-                          </Label>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  {contestFormat === "video" &&
-                    (() => {
-                      const planFeatures = getPlanFeatures(userPlan);
-                      const hasCpmAccess =
-                        planFeatures.contestTypes &&
-                        planFeatures.contestTypes.includes("cpm");
-                      const currentPlan = dbSubscriptionPlans.find(
-                        (p) => p.id === userPlan,
-                      );
-                      const isFreePlan =
-                        !currentPlan || currentPlan.price === 0;
-                      const isDisabled = !hasCpmAccess;
-
-                      return (
-                        <div
-                          className={`flex flex-col gap-3 p-4 border ${
-                            isDark ? "border-gray-600" : "border-gray-300"
-                          } rounded-lg flex-1 min-w-[220px] ${
-                            isDisabled
-                              ? isDark
-                                ? "opacity-50 cursor-not-allowed bg-slate-800"
-                                : "opacity-50 cursor-not-allowed bg-gray-50"
-                              : `cursor-pointer hover:bg-[#D9C0FF26] ${
-                                  contestType === "dual_rewards"
-                                    ? "bg-[#D9C0FF26] border-[#7F39EC]"
-                                    : ""
-                                }`
-                          }`}
-                        >
-                          <div className="flex items-start space-x-2">
-                          <RadioGroupItem
-                            value="dual_rewards"
-                            id="dual_rewards"
-                            disabled={isDisabled}
-                          />
-                          <Label
-                            htmlFor="dual_rewards"
-                            className={
-                              isDisabled
-                                ? "cursor-not-allowed"
-                                : "cursor-pointer"
-                            }
-                          >
-                            <span className="font-semibold text-lg">
-                              Dual Rewards Campaign
-                            </span>
-                            <p className="text-[14px] leading-tight mt-[2px] text-muted-foreground">
-                              Earn per view at your CPM rate plus unlock
-                              milestone rewards as creators hit view targets
-                              (video campaigns).
-                            </p>
-                            {!hasCpmAccess && (
-                              <div className="mt-2 flex items-center gap-2">
-                                {isFreePlan && !isAdmin && (
-                                  <button
-                                    type="button"
-                                    className={cn(
-                                      "text-white text-md px-3 rounded-full py-1 h-8",
-                                      isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
-                                    )}
-                                  >
-                                    <Link href="/dashboard/billing?tab=subscription">
-                                      Upgrade Plan
-                                    </Link>
-                                  </button>
-                                )}
-                                <p
-                                  className={cn(
-                                    "text-sm font-medium",
-                                    isDark ? "text-white" : "text-black",
-                                  )}
-                                >
-                                  Available in paid plans only
-                                </p>
-                              </div>
-                            )}
-                          </Label>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                </RadioGroup>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="title">Add campaign title</Label>
-                <Input
-                  id="title"
-                  value={title}
-                  className={cn(
-                    isDark ? "bg-[#180438] border border-gray-600" : "bg-white",
+              {step === "basics" && (
+              <>
+              <div
+                className={cn(
+                  "space-y-2 rounded-2xl border p-4 ",
+                  isDark ? "border-white/10 bg-[#161616]" : "border-[#e6e6ea] bg-white",
+                )}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <Label className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                    Platforms
+                  </Label>
+                  {contestFormat === "video" && selectedPlatforms.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleVideoPlatformsChange([])}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-sm font-medium",
+                        isDark
+                          ? "border-white/20 text-white"
+                          : "border-[#1a1a1a] bg-white text-[#1a1a1a]",
+                      )}
+                    >
+                      Clear
+                    </button>
                   )}
-                  onChange={(e) => {
-                    setTitle(e.target.value);
-                  }}
-                  placeholder="e.g., Create a Viral shorts/video for our New App"
-                  maxLength={100}
-                  required
-                />
-                <p className="text-xs text-muted-foreground text-right">
-                  {title.length} / 100
+                </div>
+                <p className={cn("text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                  {contestFormat === "text_image"
+                    ? "Posts and images run on X."
+                    : "One or more. With two or more, each platform gets its own brief, rules, prize, earnings, resources and inspiration."}
                 </p>
-              </div>
-
-              <div>
                 {contestFormat === "text_image" ? (
                   <>
-                    <Label htmlFor="platform">Platform</Label>
                     <Select
                       value={platform}
                       onValueChange={(value) => {
@@ -11625,7 +11105,7 @@ export default function CreateContestPage({
                         id="platform"
                         className={cn(
                           isDark
-                            ? "bg-[#180438] border border-gray-600"
+                            ? "bg-[#0e0e0e] border border-white/10"
                             : "bg-white",
                         )}
                       >
@@ -11637,160 +11117,165 @@ export default function CreateContestPage({
                         </SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Choose the platform where creators will submit content.
-                    </p>
                   </>
                 ) : (
                   <VideoPlatformMultiSelect
                     value={selectedPlatforms}
                     onChange={handleVideoPlatformsChange}
                     isDark={isDark}
+                    variant="cards"
+                    allowEmpty
                   />
                 )}
               </div>
 
               {/* Content Type Selection */}
-              <div className="space-y-2">
-                <Label htmlFor="contentType">Content Type</Label>
-                <Select
-                    value={contentType}
-                  onValueChange={(value: any) => {
-                    setContentType(value);
-                    if (sectionPlatforms.contentType === ALL_PLATFORM_TAB) {
-                      setAllSectionLive((prev) => ({
-                        ...prev,
-                        contentType: true,
-                      }));
-                    }
-                    const videoContentType: VideoContentType =
-                      value === "ugc" ||
-                      value === "clipping" ||
-                      value === "other"
-                        ? value
-                        : "";
-                    const current = {
-                      ...captureCurrentPlatformSnapshot(),
-                      contentType: videoContentType,
-                    };
-                    setPlatformCampaigns((prev) => {
-                      const next = { ...prev };
-                      for (const p of platformsForTab(
-                        sectionPlatforms.contentType === ALL_PLATFORM_TAB
-                          ? ALL_PLATFORM_TAB
-                          : sectionPlatforms.contentType,
-                        selectedPlatforms,
-                      )) {
-                        const existing =
-                          next[p] ?? createDefaultPlatformCampaignSnapshot();
-                        next[p] = patchSnapshotSection(
-                          existing,
-                          "contentType",
-                          current,
-                        );
-                      }
-                      return next;
-                    });
-                  }}
-                >
-                  <SelectTrigger
-                    id="contentType"
-                    className={cn(
-                      isDark ? "border-gray-600" : "border-gray-300",
-                    )}
-                  >
-                    <SelectValue placeholder="Select content type (optional)" />
-                  </SelectTrigger>
-                  <SelectContent isDark={isDark}>
-                    {platform === "twitter" ? (
-                      <>
-                        <SelectItem value="raid" isDark={isDark}>
-                          ⚔️ Raid (creators like/comment your tweet)
-                        </SelectItem>
-                        <SelectItem value="awareness" isDark={isDark}>
-                          📣 Awareness (creators post their own tweet)
-                        </SelectItem>
-                      </>
-                    ) : (
-                      <>
-                        <SelectItem value="ugc" isDark={isDark}>
-                          📹 UGC (User Generated Content)
-                        </SelectItem>
-                        <SelectItem value="clipping" isDark={isDark}>
-                          ✂️ Clipping (Short clips/repurposed content)
-                        </SelectItem>
-                        <SelectItem value="other" isDark={isDark}>
-                          📋 Other (Check Rules for details)
-                        </SelectItem>
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Specify the type of content you need from creators. This helps
-                  creators filter opportunities.
-                </p>
-              </div>
-
               <div
                 className={cn(
-                  "space-y-4 p-4 border rounded-lg",
-                  isDark
-                    ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
-                    : "bg-gray-50",
+                  "space-y-2 rounded-2xl border p-4",
+                  isDark ? "border-white/10 bg-[#161616]" : "border-[#e6e6ea] bg-white",
+                )}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="contentType" className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                    Content type
+                  </Label>
+                  {contentType && (
+                    <button
+                      type="button"
+                      onClick={() => handleContentTypeChange("")}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-sm font-medium",
+                        isDark
+                          ? "border-white/20 text-white"
+                          : "border-[#1a1a1a] bg-white text-[#1a1a1a]",
+                      )}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <p className={cn("text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                  Optional. Helps creators filter campaigns.
+                </p>
+                <div className="flex flex-wrap gap-3 pt-1">
+                  {(platform === "twitter"
+                    ? [
+                        {
+                          id: "raid" as const,
+                          title: "Raid",
+                          detail: "Creators like and comment on your post",
+                        },
+                        {
+                          id: "awareness" as const,
+                          title: "Awareness",
+                          detail: "Creators post their own tweet",
+                        },
+                      ]
+                    : [
+                        {
+                          id: "ugc" as const,
+                          title: "UGC",
+                          detail: "Original creator content",
+                        },
+                        {
+                          id: "clipping" as const,
+                          title: "Clipping",
+                          detail: "Short clips of your content",
+                        },
+                        {
+                          id: "other" as const,
+                          title: "Other",
+                          detail: "Explained in your rules",
+                        },
+                      ]
+                  ).map((option) => {
+                    const selected = contentType === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() =>
+                          handleContentTypeChange(selected ? "" : option.id)
+                        }
+                        className={cn(
+                          "min-w-[160px] flex-1 rounded-xl border px-4 py-3 text-left",
+                          selected
+                            ? isDark
+                        ? "border-white bg-white/10"
+                        : "border-[#1a1a1a] bg-[#f3f3f5]"
+                            : isDark ? "border-white/10 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]",
+                        )}
+                      >
+                        <span className={cn("flex items-center justify-between gap-2 text-base font-medium", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          {option.title}
+                          <span
+                            className={cn(
+                              "flex h-4 w-4 items-center justify-center rounded-full border text-[10px]",
+                              selected
+                                ? isDark
+                          ? "border-white bg-white text-[#1a1a1a]"
+                          : "border-[#1a1a1a] bg-[#1a1a1a] text-white"
+                                : "border-[#d4d4d8] bg-white",
+                            )}
+                          >
+                            {selected ? "✓" : ""}
+                          </span>
+                        </span>
+                        <span className={cn("mt-1 block text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                          {option.detail}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              </>
+              )}
+
+              {step === "audience" && (
+              <>
+              <div
+                className={cn(
+                  "space-y-4 rounded-2xl border p-5",
+                  isDark ? "border-white/10 bg-[#161616]" : "border-[#e6e6ea] bg-white",
                 )}
               >
                 <div>
-                  <Label className="text-base font-semibold">
+                  <h3 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
                     Who can see this campaign
-                  </Label>
-                  <p
-                    className={cn(
-                      "text-sm mt-1",
-                      isDark ? "text-gray-300" : "text-gray-600",
-                    )}
-                  >
-                    Private campaigns are hidden from everyone except the
-                    creators you add. Restricted campaigns show a preview and
-                    creators apply to join. The requirements below still decide
-                    who can submit.
+                  </h3>
+                  <p className={cn("mt-1 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                    Choose how creators find and join it.
                   </p>
                 </div>
-                <AccessModeSelector value={accessMode} onChange={setAccessMode} />
+                <AccessModeSelector value={accessMode} onChange={setAccessMode} accent="ink" />
                 {accessMode === "public" && isVideoContestFormat(contestFormat) && (
-                  <div className="flex items-start gap-3 pt-2 border-t">
-                    <Checkbox
-                      id="listOnlyToEligible"
-                      checked={hasCreatorRequirement && listOnlyToEligible}
-                      disabled={!hasCreatorRequirement}
-                      onCheckedChange={(checked: any) =>
-                        setListOnlyToEligible(Boolean(checked))
-                      }
-                      className={cn(
-                        "border h-5 w-5 mt-0.5",
-                        isDark ? "border-gray-300" : "border-gray-500",
-                      )}
-                    />
+                  <div
+                    className={cn(
+                      "flex items-start justify-between gap-4 rounded-xl border px-4 py-3",
+                      isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]",
+                      !hasCreatorRequirement && "opacity-60",
+                    )}
+                  >
                     <Label
                       htmlFor="listOnlyToEligible"
-                      className={cn(
-                        "text-sm font-normal leading-snug",
-                        !hasCreatorRequirement && "opacity-60",
-                      )}
+                      className={cn("text-sm font-normal leading-snug", isDark ? "text-gray-200" : "text-[#1a1a1a]")}
                     >
-                      Only show this campaign to creators who meet the
-                      requirements
-                      <span
-                        className={cn(
-                          "block text-xs",
-                          isDark ? "text-gray-400" : "text-gray-500",
-                        )}
-                      >
+                      Only show this campaign to creators who meet the requirements
+                      <span className={cn("mt-0.5 block text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
                         {hasCreatorRequirement
                           ? "Other creators won't see it in Opportunities."
                           : "Turn on a requirement below to use this."}
                       </span>
                     </Label>
+                    <Switch
+                      id="listOnlyToEligible"
+                      checked={hasCreatorRequirement && listOnlyToEligible}
+                      disabled={!hasCreatorRequirement}
+                      onCheckedChange={(checked) => setListOnlyToEligible(Boolean(checked))}
+                      className="mt-0.5 data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]"
+                    />
                   </div>
                 )}
                 {accessMode === "restricted" && (
@@ -11799,6 +11284,7 @@ export default function CreateContestPage({
                       step={1}
                       title="Preview creators see"
                       description="What everyone sees before you approve them."
+                      accent="ink"
                       action={
                         <RestrictedPreviewDialog
                           title={title}
@@ -11809,6 +11295,7 @@ export default function CreateContestPage({
                           description={previewDescription}
                           applicationsOpen={applicationsOpen}
                           questions={applicationQuestions}
+                          accent="ink"
                         />
                       }
                     >
@@ -11817,35 +11304,49 @@ export default function CreateContestPage({
                         onDescriptionChange={setPreviewDescription}
                         applicationsOpen={applicationsOpen}
                         onApplicationsOpenChange={setApplicationsOpen}
+                        accent="ink"
                       />
                     </AccessStep>
                     <AccessStep
                       step={2}
                       title="Application questions"
                       description="Optional. Creators answer these when they apply."
+                      accent="ink"
                     >
                       <ApplicationQuestionsEditor
                         questions={applicationQuestions}
                         onChange={setApplicationQuestions}
                         showHeading={false}
                         endDate={endDate}
+                        accent="ink"
                       />
                     </AccessStep>
                     <AccessStep
                       step={3}
                       title="Invite creators directly (optional)"
                       description="They get access without applying."
+                      accent="ink"
                     >
                       <div className="space-y-4">
+                        {existingInviteCount > 0 && (contestId || draftId) && (
+                          <CopiedInvitesNote
+                            count={existingInviteCount}
+                            contestId={(contestId || draftId)!}
+                            advertiserId={isAdmin ? effectiveAdvertiserId : null}
+                            onChanged={setExistingInviteCount}
+                          />
+                        )}
                         <AllowlistPicker
                           value={allowlistSelection}
                           onChange={setAllowlistSelection}
                           advertiserId={isAdmin ? effectiveAdvertiserId : null}
+                          accent="ink"
                         />
                         <SkipRequirementsSwitch
                           checked={accessListSkipsRequirements}
                           onCheckedChange={setAccessListSkipsRequirements}
                           note="You can add more creators later from the campaign's Access tab."
+                          accent="ink"
                         />
                       </div>
                     </AccessStep>
@@ -11863,21 +11364,35 @@ export default function CreateContestPage({
                       step={1}
                       title="Add creators"
                       description="Only these creators will see the campaign. You can add more later from the Access tab."
+                      accent="ink"
                     >
-                      <AllowlistPicker
-                        value={allowlistSelection}
-                        onChange={setAllowlistSelection}
-                        advertiserId={isAdmin ? effectiveAdvertiserId : null}
-                      />
+                      <div className="space-y-4">
+                        {existingInviteCount > 0 && (contestId || draftId) && (
+                          <CopiedInvitesNote
+                            count={existingInviteCount}
+                            contestId={(contestId || draftId)!}
+                            advertiserId={isAdmin ? effectiveAdvertiserId : null}
+                            onChanged={setExistingInviteCount}
+                          />
+                        )}
+                        <AllowlistPicker
+                          value={allowlistSelection}
+                          onChange={setAllowlistSelection}
+                          advertiserId={isAdmin ? effectiveAdvertiserId : null}
+                          accent="ink"
+                        />
+                      </div>
                     </AccessStep>
                     <AccessStep
                       step={2}
                       title="Requirements"
                       description="Set requirements in the sections below, then choose whether they apply to the creators you add."
+                      accent="ink"
                     >
                       <SkipRequirementsSwitch
                         checked={accessListSkipsRequirements}
                         onCheckedChange={setAccessListSkipsRequirements}
+                        accent="ink"
                       />
                     </AccessStep>
                   </div>
@@ -11885,40 +11400,47 @@ export default function CreateContestPage({
               </div>
 
               {isVideoContestFormat(contestFormat) && (
+                <ReviewBeforePostingSettings
+                  value={draftReview}
+                  onChange={setDraftReview}
+                  isDark={isDark}
+                />
+              )}
+
+              {isVideoContestFormat(contestFormat) && (
                 <div
                   className={cn(
-                    "space-y-4 p-4 border rounded-lg",
-                    isDark
-                      ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
-                      : "bg-gray-50",
+                    "space-y-3 rounded-2xl border p-5",
+                    isDark ? "border-white/10 bg-[#161616]" : "border-[#e6e6ea] bg-white",
                   )}
                 >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label
-                        htmlFor="trustScoreRequirement"
-                        className="text-base font-semibold"
-                      >
-                        Trust %
-                      </Label>
-                      <p
-                        className={cn(
-                          "text-sm mt-1",
-                          isDark ? "text-gray-300" : "text-gray-600",
-                        )}
-                      >
-                        Enable trust % requirements to allow only reliable
-                        creators to participate. Trust % may decrease for
-                        rejected, low-quality, or policy-violating submissions.
-                        Creators below the required Trust % cannot submit to this
-                        campaign.
-                      </p>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
+                  <div>
+                    <h3 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                      Creator requirements
+                    </h3>
+                    <p className={cn("mt-1 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                      Optional. Creators below a minimum cannot submit.
+                    </p>
+                  </div>
+                  <div
+                    className={cn(
+                      "space-y-3 rounded-xl border px-4 py-3",
+                      isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <Label htmlFor="trustScoreRequirement" className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          Trust %
+                        </Label>
+                        <p className={cn("mt-0.5 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                          Only reliable creators can submit. Trust % drops for rejected, low-quality or policy-breaking submissions.
+                        </p>
+                      </div>
+                      <Switch
                         id="trustScoreRequirement"
                         checked={trustScoreEnabled}
-                        onCheckedChange={(checked: any) => {
+                        onCheckedChange={(checked) => {
                           setTrustScoreEnabled(Boolean(checked));
                           if (!checked) {
                             setContestTrustScore("");
@@ -11926,95 +11448,70 @@ export default function CreateContestPage({
                             setContestTrustScore(70);
                           }
                         }}
-                        className={cn(
-                          "border h-5 w-5",
-                          isDark ? "border-gray-300" : "border-gray-500",
-                        )}
+                        className="mt-0.5 data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]"
                       />
                     </div>
+                    {trustScoreEnabled && (
+                      <div className="space-y-2">
+                        <Label htmlFor="trustScoreInput" className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          Minimum trust %
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            id="trustScoreInput"
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={contestTrustScore}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              if (raw === "") {
+                                setContestTrustScore("");
+                                return;
+                              }
+                              const value = parseInt(raw, 10);
+                              if (!Number.isNaN(value) && value >= 0 && value <= 100) {
+                                setContestTrustScore(value);
+                              }
+                            }}
+                            className={cn(
+                              "h-11 pr-10",
+                              isDark ? "border-white/40 bg-[#161616] text-white" : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
+                            )}
+                            placeholder="0–100"
+                          />
+                          <span className={cn("pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium", isDark ? "text-gray-300" : "text-[#6d6d75]")} aria-hidden>
+                            %
+                          </span>
+                        </div>
+                        {contestTrustScore !== "" && (
+                          <p className={cn("text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                            Creators need at least {contestTrustScore}% to submit.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  {trustScoreEnabled && (
-                    <div className="space-y-2 pt-2 border-t">
-                      <Label htmlFor="trustScoreInput">Minimum Trust %</Label>
-                      <div className="relative max-w-xs">
-                        <Input
-                          id="trustScoreInput"
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={contestTrustScore}
-                          onChange={(e) => {
-                            const raw = e.target.value;
-                            if (raw === "") {
-                              setContestTrustScore("");
-                              return;
-                            }
-                            const value = parseInt(raw, 10);
-                            if (
-                              !Number.isNaN(value) &&
-                              value >= 0 &&
-                              value <= 100
-                            ) {
-                              setContestTrustScore(value);
-                            }
-                          }}
-                          className={cn(
-                            "pr-10",
-                            isDark
-                              ? "bg-[#C9A7FF26] border border-gray-400 text-white"
-                              : "bg-white text-black",
-                          )}
-                          placeholder="0–100"
-                        />
-                        <span
-                          className={cn(
-                            "pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium",
-                            isDark ? "text-gray-300" : "text-muted-foreground",
-                          )}
-                          aria-hidden
-                        >
-                          %
-                        </span>
-                      </div>
-                      {contestTrustScore !== "" && (
-                        <p
-                          className={cn(
-                            "text-sm",
-                            isDark ? "text-gray-300" : "text-muted-foreground",
-                          )}
-                        >
-                          Creators need at least {contestTrustScore}% to submit.
+                  <div
+                    className={cn(
+                      "space-y-3 rounded-xl border px-4 py-3",
+                      isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <Label htmlFor="trustNumberRequirement" className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          Trust score
+                        </Label>
+                        <p className={cn("mt-0.5 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                          Only creators with a strong track record can submit.
                         </p>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between pt-2 border-t">
-                    <div>
-                      <Label
-                        htmlFor="trustNumberRequirement"
-                        className="text-base font-semibold"
-                      >
-                        Trust Score
-                      </Label>
-                      <p
-                        className={cn(
-                          "text-sm mt-1",
-                          isDark ? "text-gray-300" : "text-gray-600",
-                        )}
-                      >
-                        Enable trust score requirements to allow only creators
-                        with a strong track record to participate. Creators
-                        below the required score cannot submit to this
-                        campaign.
-                      </p>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
+                      </div>
+                      <Switch
                         id="trustNumberRequirement"
                         checked={trustNumberEnabled}
-                        onCheckedChange={(checked: any) => {
+                        onCheckedChange={(checked) => {
                           setTrustNumberEnabled(Boolean(checked));
                           if (!checked) {
                             setContestTrustNumber("");
@@ -12022,356 +11519,321 @@ export default function CreateContestPage({
                             setContestTrustNumber(5);
                           }
                         }}
-                        className={cn(
-                          "border h-5 w-5",
-                          isDark ? "border-gray-300" : "border-gray-500",
-                        )}
+                        className="mt-0.5 data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]"
                       />
                     </div>
+                    {trustNumberEnabled && (
+                      <div className="space-y-2">
+                        <Label htmlFor="trustNumberInput" className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          Minimum trust score
+                        </Label>
+                        <Input
+                          id="trustNumberInput"
+                          type="number"
+                          value={contestTrustNumber}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === "") {
+                              setContestTrustNumber("");
+                              return;
+                            }
+                            const value = parseInt(raw, 10);
+                            if (!Number.isNaN(value)) {
+                              setContestTrustNumber(value);
+                            }
+                          }}
+                          className={cn(
+                            "h-11",
+                            isDark ? "border-white/40 bg-[#161616] text-white" : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
+                          )}
+                          placeholder="Enter minimum trust score"
+                        />
+                      </div>
+                    )}
                   </div>
 
-                  {trustNumberEnabled && (
-                    <div className="space-y-2 pt-2 border-t">
-                      <Label htmlFor="trustNumberInput">
-                        Minimum Trust Score
-                      </Label>
-                      <Input
-                        id="trustNumberInput"
-                        type="number"
-                        value={contestTrustNumber}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          if (raw === "") {
-                            setContestTrustNumber("");
-                            return;
-                          }
-                          const value = parseInt(raw, 10);
-                          if (!Number.isNaN(value)) {
-                            setContestTrustNumber(value);
-                          }
+                  <details
+                    className={cn(
+                      "group rounded-xl border bg-white",
+                      isDark ? "border-white/15 bg-transparent" : "border-[#e6e6ea]",
+                    )}
+                  >
+                    <summary
+                      className={cn(
+                        "flex cursor-pointer list-none items-center justify-between px-4 py-3 text-base font-semibold [&::-webkit-details-marker]:hidden",
+                        isDark ? "text-white" : "text-[#1a1a1a]",
+                      )}
+                    >
+                      <span>Quality and platform minimums</span>
+                      <ChevronDown className="h-4 w-4 text-[#8d8d95] transition-transform group-open:rotate-180" />
+                    </summary>
+                    <div className="space-y-3 px-4 pb-4">
+
+                  <div className={cn("space-y-3 rounded-xl border px-4 py-3", isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]")}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <Label htmlFor="bestQualityRequirement" className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          Min best quality
+                        </Label>
+                        <p className={cn("mt-0.5 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                          The creator&apos;s best verified reel quality, 1 to 5.
+                        </p>
+                      </div>
+                      <Switch
+                        id="bestQualityRequirement"
+                        checked={bestQualityEnabled}
+                        onCheckedChange={(checked) => {
+                          setBestQualityEnabled(Boolean(checked));
+                          if (!checked) setContestMinBestQuality("");
+                          else if (contestMinBestQuality === "") setContestMinBestQuality(2);
                         }}
-                        className={cn(
-                          isDark
-                            ? "bg-[#C9A7FF26] border border-gray-400 text-white"
-                            : "bg-white text-black",
-                        )}
-                        placeholder="Enter minimum trust score"
+                        className="mt-0.5 data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]"
                       />
                     </div>
-                  )}
-
-                  <p className="text-sm font-semibold pt-2 border-t">
-                    Quality & platform minimums
-                  </p>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label
-                        htmlFor="bestQualityRequirement"
-                        className="text-base font-semibold"
-                      >
-                        Min Best Quality
-                      </Label>
-                      <p
-                        className={cn(
-                          "text-sm mt-1",
-                          isDark ? "text-gray-300" : "text-gray-600",
-                        )}
-                      >
-                        Creator&apos;s best verified reel quality (1–5) must
-                        meet this minimum.
-                      </p>
-                    </div>
-                    <Checkbox
-                      id="bestQualityRequirement"
-                      checked={bestQualityEnabled}
-                      onCheckedChange={(checked: any) => {
-                        setBestQualityEnabled(Boolean(checked));
-                        if (!checked) setContestMinBestQuality("");
-                        else if (contestMinBestQuality === "")
-                          setContestMinBestQuality(2);
-                      }}
-                      className={cn(
-                        "border h-5 w-5",
-                        isDark ? "border-gray-300" : "border-gray-500",
-                      )}
-                    />
+                    {bestQualityEnabled && (
+                      <div className="space-y-2">
+                        <Label htmlFor="bestQualityInput" className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          Minimum best quality
+                        </Label>
+                        <Input
+                          id="bestQualityInput"
+                          type="number"
+                          min={1}
+                          max={5}
+                          value={contestMinBestQuality}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === "") {
+                              setContestMinBestQuality("");
+                              return;
+                            }
+                            const v = parseInt(raw, 10);
+                            if (!Number.isNaN(v) && v >= 1 && v <= 5) setContestMinBestQuality(v);
+                          }}
+                          placeholder="1–5"
+                          className={cn("h-11", isDark ? "border-white/40 bg-[#161616] text-white" : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]")}
+                        />
+                      </div>
+                    )}
                   </div>
-                  {bestQualityEnabled && (
-                    <Input
-                      type="number"
-                      min={1}
-                      max={5}
-                      value={contestMinBestQuality}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        if (raw === "") {
-                          setContestMinBestQuality("");
-                          return;
-                        }
-                        const v = parseInt(raw, 10);
-                        if (!Number.isNaN(v) && v >= 1 && v <= 5)
-                          setContestMinBestQuality(v);
-                      }}
-                      placeholder="1–5"
-                      className={cn(
-                        isDark
-                          ? "bg-[#C9A7FF26] border border-gray-400 text-white"
-                          : "bg-white text-black",
-                      )}
-                    />
-                  )}
 
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label
-                        htmlFor="avgQualityRequirement"
-                        className="text-base font-semibold"
-                      >
-                        Min Avg Quality
-                      </Label>
-                      <p
-                        className={cn(
-                          "text-sm mt-1",
-                          isDark ? "text-gray-300" : "text-gray-600",
-                        )}
-                      >
-                        Creator&apos;s average quality across verified reels.
-                      </p>
+                  <div className={cn("space-y-3 rounded-xl border px-4 py-3", isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]")}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <Label htmlFor="avgQualityRequirement" className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          Min average quality
+                        </Label>
+                        <p className={cn("mt-0.5 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                          The creator&apos;s average quality across verified reels.
+                        </p>
+                      </div>
+                      <Switch
+                        id="avgQualityRequirement"
+                        checked={avgQualityEnabled}
+                        onCheckedChange={(checked) => {
+                          setAvgQualityEnabled(Boolean(checked));
+                          if (!checked) setContestMinAvgQuality("");
+                          else if (contestMinAvgQuality === "") setContestMinAvgQuality(1.5);
+                        }}
+                        className="mt-0.5 data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]"
+                      />
                     </div>
-                    <Checkbox
-                      id="avgQualityRequirement"
-                      checked={avgQualityEnabled}
-                      onCheckedChange={(checked: any) => {
-                        setAvgQualityEnabled(Boolean(checked));
-                        if (!checked) setContestMinAvgQuality("");
-                        else if (contestMinAvgQuality === "")
-                          setContestMinAvgQuality(1.5);
-                      }}
-                      className={cn(
-                        "border h-5 w-5",
-                        isDark ? "border-gray-300" : "border-gray-500",
-                      )}
-                    />
+                    {avgQualityEnabled && (
+                      <div className="space-y-2">
+                        <Label htmlFor="avgQualityInput" className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          Minimum average quality
+                        </Label>
+                        <Input
+                          id="avgQualityInput"
+                          type="number"
+                          min={1}
+                          max={5}
+                          step={0.1}
+                          value={contestMinAvgQuality}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === "") {
+                              setContestMinAvgQuality("");
+                              return;
+                            }
+                            const v = parseFloat(raw);
+                            if (!Number.isNaN(v) && v >= 1 && v <= 5) setContestMinAvgQuality(v);
+                          }}
+                          placeholder="1.0–5.0"
+                          className={cn("h-11", isDark ? "border-white/40 bg-[#161616] text-white" : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]")}
+                        />
+                      </div>
+                    )}
                   </div>
-                  {avgQualityEnabled && (
-                    <Input
-                      type="number"
-                      min={1}
-                      max={5}
-                      step={0.1}
-                      value={contestMinAvgQuality}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        if (raw === "") {
-                          setContestMinAvgQuality("");
-                          return;
-                        }
-                        const v = parseFloat(raw);
-                        if (!Number.isNaN(v) && v >= 1 && v <= 5)
-                          setContestMinAvgQuality(v);
-                      }}
-                      placeholder="1.0–5.0"
-                      className={cn(
-                        isDark
-                          ? "bg-[#C9A7FF26] border border-gray-400 text-white"
-                          : "bg-white text-black",
-                      )}
-                    />
-                  )}
 
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label
-                        htmlFor="minQualityRequirement"
-                        className="text-base font-semibold"
-                      >
-                         Quality Score
-                      </Label>
-                      <p
-                        className={cn(
-                          "text-sm mt-1",
-                          isDark ? "text-gray-300" : "text-gray-600",
-                        )}
-                      >
-                        Creator&apos;s total quality score (sum of all verified
-                        reel ratings, 1–5 each) must meet this minimum.
-                      </p>
+                  <div className={cn("space-y-3 rounded-xl border px-4 py-3", isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]")}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <Label htmlFor="minQualityRequirement" className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          Quality score
+                        </Label>
+                        <p className={cn("mt-0.5 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                          Total quality score from verified reel ratings, 1 to 5 each.
+                        </p>
+                      </div>
+                      <Switch
+                        id="minQualityRequirement"
+                        checked={minQualityEnabled}
+                        onCheckedChange={(checked) => {
+                          setMinQualityEnabled(Boolean(checked));
+                          if (!checked) setContestMinQuality("");
+                          else if (contestMinQuality === "") setContestMinQuality(3);
+                        }}
+                        className="mt-0.5 data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]"
+                      />
                     </div>
-                    <Checkbox
-                      id="minQualityRequirement"
-                      checked={minQualityEnabled}
-                      onCheckedChange={(checked: any) => {
-                        setMinQualityEnabled(Boolean(checked));
-                        if (!checked) setContestMinQuality("");
-                        else if (contestMinQuality === "")
-                          setContestMinQuality(3);
-                      }}
-                      className={cn(
-                        "border h-5 w-5",
-                        isDark ? "border-gray-300" : "border-gray-500",
-                      )}
-                    />
+                    {minQualityEnabled && (
+                      <div className="space-y-2">
+                        <Label htmlFor="minQualityInput" className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          Minimum quality score
+                        </Label>
+                        <Input
+                          id="minQualityInput"
+                          type="number"
+                          min={1}
+                          value={contestMinQuality}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === "") {
+                              setContestMinQuality("");
+                              return;
+                            }
+                            const v = parseInt(raw, 10);
+                            if (!Number.isNaN(v) && v >= 1) setContestMinQuality(v);
+                          }}
+                          placeholder="e.g. 5"
+                          className={cn("h-11", isDark ? "border-white/40 bg-[#161616] text-white" : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]")}
+                        />
+                      </div>
+                    )}
                   </div>
-                  {minQualityEnabled && (
-                    <Input
-                      type="number"
-                      min={1}
-                      value={contestMinQuality}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        if (raw === "") {
-                          setContestMinQuality("");
-                          return;
-                        }
-                        const v = parseInt(raw, 10);
-                        if (!Number.isNaN(v) && v >= 1)
-                          setContestMinQuality(v);
-                      }}
-                      placeholder="e.g. 5"
-                      className={cn(
-                        isDark
-                          ? "bg-[#C9A7FF26] border border-gray-400 text-white"
-                          : "bg-white text-black",
-                      )}
-                    />
-                  )}
 
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label
-                        htmlFor="minEarningsRequirement"
-                        className="text-base font-semibold"
-                      >
-                        Min Platform Earnings
-                      </Label>
-                      <p
-                        className={cn(
-                          "text-sm mt-1",
-                          isDark ? "text-gray-300" : "text-gray-600",
-                        )}
-                      >
-                        Total earned on the platform from past campaigns and
-                        payouts (USD).
-                      </p>
+                  <div className={cn("space-y-3 rounded-xl border px-4 py-3", isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]")}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <Label htmlFor="minEarningsRequirement" className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          Min platform earnings
+                        </Label>
+                        <p className={cn("mt-0.5 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                          Total earned on the platform from past campaigns and payouts, in USD.
+                        </p>
+                      </div>
+                      <Switch
+                        id="minEarningsRequirement"
+                        checked={minEarningsEnabled}
+                        onCheckedChange={(checked) => {
+                          setMinEarningsEnabled(Boolean(checked));
+                          if (!checked) setContestMinEarnings("");
+                          else if (contestMinEarnings === "") setContestMinEarnings(50);
+                        }}
+                        className="mt-0.5 data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]"
+                      />
                     </div>
-                    <Checkbox
-                      id="minEarningsRequirement"
-                      checked={minEarningsEnabled}
-                      onCheckedChange={(checked: any) => {
-                        setMinEarningsEnabled(Boolean(checked));
-                        if (!checked) setContestMinEarnings("");
-                        else if (contestMinEarnings === "")
-                          setContestMinEarnings(50);
-                      }}
-                      className={cn(
-                        "border h-5 w-5",
-                        isDark ? "border-gray-300" : "border-gray-500",
-                      )}
-                    />
+                    {minEarningsEnabled && (
+                      <div className="space-y-2">
+                        <Label htmlFor="minEarningsInput" className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          Minimum platform earnings
+                        </Label>
+                        <Input
+                          id="minEarningsInput"
+                          type="number"
+                          min={0}
+                          value={contestMinEarnings}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value);
+                            if (!Number.isNaN(v) && v >= 0) setContestMinEarnings(v);
+                          }}
+                          placeholder="USD"
+                          className={cn("h-11", isDark ? "border-white/40 bg-[#161616] text-white" : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]")}
+                        />
+                      </div>
+                    )}
                   </div>
-                  {minEarningsEnabled && (
-                    <Input
-                      type="number"
-                      min={0}
-                      value={contestMinEarnings}
-                      onChange={(e) => {
-                        const v = parseFloat(e.target.value);
-                        if (!Number.isNaN(v) && v >= 0)
-                          setContestMinEarnings(v);
-                      }}
-                      placeholder="USD"
-                      className={cn(
-                        isDark
-                          ? "bg-[#C9A7FF26] border border-gray-400 text-white"
-                          : "bg-white text-black",
-                      )}
-                    />
-                  )}
 
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label
-                        htmlFor="minViewsRequirement"
-                        className="text-base font-semibold"
-                      >
-                        Min Platform Views
-                      </Label>
-                      <p
-                        className={cn(
-                          "text-sm mt-1",
-                          isDark ? "text-gray-300" : "text-gray-600",
-                        )}
-                      >
-                        Minimum total views credited on the platform.
-                      </p>
+                  <div className={cn("space-y-3 rounded-xl border px-4 py-3", isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]")}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <Label htmlFor="minViewsRequirement" className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          Min platform views
+                        </Label>
+                        <p className={cn("mt-0.5 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                          Minimum total views credited on the platform.
+                        </p>
+                      </div>
+                      <Switch
+                        id="minViewsRequirement"
+                        checked={minViewsEnabled}
+                        onCheckedChange={(checked) => {
+                          setMinViewsEnabled(Boolean(checked));
+                          if (!checked) setContestMinViews("");
+                          else if (contestMinViews === "") setContestMinViews(10000);
+                        }}
+                        className="mt-0.5 data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]"
+                      />
                     </div>
-                    <Checkbox
-                      id="minViewsRequirement"
-                      checked={minViewsEnabled}
-                      onCheckedChange={(checked: any) => {
-                        setMinViewsEnabled(Boolean(checked));
-                        if (!checked) setContestMinViews("");
-                        else if (contestMinViews === "")
-                          setContestMinViews(10000);
-                      }}
-                      className={cn(
-                        "border h-5 w-5",
-                        isDark ? "border-gray-300" : "border-gray-500",
-                      )}
-                    />
+                    {minViewsEnabled && (
+                      <div className="space-y-2">
+                        <Label htmlFor="minViewsInput" className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                          Minimum platform views
+                        </Label>
+                        <Input
+                          id="minViewsInput"
+                          type="number"
+                          min={0}
+                          value={contestMinViews}
+                          onChange={(e) => {
+                            const v = parseInt(e.target.value, 10);
+                            if (!Number.isNaN(v) && v >= 0) setContestMinViews(v);
+                          }}
+                          placeholder="Minimum views"
+                          className={cn("h-11", isDark ? "border-white/40 bg-[#161616] text-white" : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]")}
+                        />
+                      </div>
+                    )}
                   </div>
-                  {minViewsEnabled && (
-                    <Input
-                      type="number"
-                      min={0}
-                      value={contestMinViews}
-                      onChange={(e) => {
-                        const v = parseInt(e.target.value, 10);
-                        if (!Number.isNaN(v) && v >= 0) setContestMinViews(v);
-                      }}
-                      placeholder="Minimum views"
-                      className={cn(
-                        isDark
-                          ? "bg-[#C9A7FF26] border border-gray-400 text-white"
-                          : "bg-white text-black",
-                      )}
-                    />
-                  )}
+                    </div>
+                  </details>
                 </div>
               )}
 
-              {/* Multiple Submissions Configuration */}
               <div
                 className={cn(
-                  "space-y-4 p-4 border rounded-lg",
-                  isDark
-                    ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
-                    : "bg-gray-50",
+                  "space-y-3 rounded-2xl border p-5",
+                  isDark ? "border-white/10 bg-[#161616]" : "border-[#e6e6ea] bg-white",
                 )}
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label
-                      htmlFor="multipleSubmissions"
-                      className="text-base font-semibold"
-                    >
-                      Multiple Submissions
-                    </Label>
-                    <p
-                      className={cn(
-                        "text-sm mt-1",
-                        isDark ? "text-gray-300" : "text-gray-600",
-                      )}
-                    >
-                      Allow creators to submit multiple entries to this campaign
-                    </p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
+                <div>
+                  <h3 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                    Submissions
+                  </h3>
+                  <p className={cn("mt-1 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                    How many entries one creator can make.
+                  </p>
+                </div>
+                <div
+                  className={cn(
+                    "space-y-3 rounded-xl border px-4 py-3",
+                    isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <Label htmlFor="multipleSubmissions" className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                        Multiple submissions
+                      </Label>
+                      <p className={cn("mt-0.5 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                        Let creators submit more than one entry to this campaign.
+                      </p>
+                    </div>
+                    <Switch
                       id="multipleSubmissions"
                       checked={multipleSubmissionsEnabled}
-                      onCheckedChange={(checked: any) => {
+                      onCheckedChange={(checked) => {
                         setMultipleSubmissionsEnabled(Boolean(checked));
                         if (!checked) {
                           setMaxSubmissionsPerCreator(1);
@@ -12379,19 +11841,15 @@ export default function CreateContestPage({
                           setMaxSubmissionsPerCreator(2);
                         }
                       }}
-                      className={cn(
-                        "border h-5 w-5",
-                        isDark ? "border-gray-300" : "border-gray-500",
-                      )}
+                      className="mt-0.5 data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]"
                     />
                   </div>
-                </div>
 
                 {multipleSubmissionsEnabled && (
-                  <div className="space-y-2 pt-2 border-t">
-                    <Label htmlFor="maxSubmissions">
-                      Maximum Submissions Per Creator
-                    </Label>
+                  <div className="space-y-2">
+                    {/* <Label htmlFor="maxSubmissions" className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                      Most per creator
+                    </Label> */}
                     <Input
                       id="maxSubmissions"
                       type="number"
@@ -12405,23 +11863,42 @@ export default function CreateContestPage({
                         }
                       }}
                       className={cn(
+                        "h-11",
                         isDark
-                          ? "bg-[#C9A7FF26] border border-gray-400 text-white"
-                          : "bg-white text-black",
+                          ? "border-white/40 bg-[#161616] text-white"
+                          : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]",
                       )}
                       placeholder="Enter number between 2-100"
                     />
-                    <p className="text-sm text-muted-foreground">
+                    <p className={cn("text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
                       Each creator can submit up to {maxSubmissionsPerCreator}{" "}
                       entries. Min/max view limits will apply to all
                       submissions.
                     </p>
                   </div>
                 )}
+                </div>
               </div>
+              </>
+              )}
 
-              <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
+              {step === "basics" && (
+              <>
+              <div
+                className={cn(
+                  "space-y-2 rounded-2xl border p-4",
+                  isDark ? "border-white/10 bg-[#161616]" : "border-[#e6e6ea] bg-white",
+                )}
+              >
+                <Label
+                  htmlFor="category"
+                  className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}
+                >
+                  Category
+                </Label>
+                <p className={cn("text-sm", isDark ? "text-gray-400" : "text-[#6d6d75]")}>
+                  What your brand or product is about.
+                </p>
                 <Select
                   value={category}
                   onValueChange={(value) => setCategory(value)}
@@ -12429,7 +11906,7 @@ export default function CreateContestPage({
                   <SelectTrigger
                     className={cn(
                       isDark
-                        ? "bg-[#180438] border border-gray-600"
+                        ? "bg-[#0e0e0e] border border-white/10"
                         : "bg-white",
                     )}
                   >
@@ -12473,10 +11950,164 @@ export default function CreateContestPage({
                 </Select>
               </div>
 
-              {/* Targeting Toggle Checkbox */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Checkbox
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="title">Campaign title</Label>
+                  <span className="text-xs text-[#8d8d95]">{title.length}/100</span>
+                </div>
+                <Input
+                  id="title"
+                  value={title}
+                  className={cn(
+                    isDark ? "bg-[#0e0e0e] border border-white/10" : "bg-white",
+                  )}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                  }}
+                  placeholder="e.g., Create a Viral shorts/video for our New App"
+                  maxLength={100}
+                  required
+                />
+                <p className="text-xs text-[#6d6d75]">
+                  What creators see first, on Discover and on the campaign card.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Thumbnail</Label>
+                <div
+                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
+                    isDragActive
+                      ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
+                      : isDark
+                        ? "border-white/15 bg-[#161616]"
+                        : "border-gray-300 bg-white"
+                  }`}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  tabIndex={0}
+                  role="button"
+                  aria-label="Upload thumbnail"
+                >
+                  {thumbnailPreview ? (
+                    <div className="relative">
+                      {thumbnailPreview === "uploading" ? (
+                        <div
+                          className={cn(
+                            "flex flex-col items-center justify-center h-64 rounded",
+                            isDark ? "bg-[#161616]" : "bg-gray-50",
+                          )}
+                        >
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-rose-500 mb-2"></div>
+                          <p className="text-sm text-gray-600">
+                            Uploading thumbnail...
+                          </p>
+                        </div>
+                      ) : (
+                        <img
+                          src={thumbnailPreview}
+                          alt="Thumbnail preview"
+                          className="mx-auto max-h-64 object-contain"
+                        />
+                      )}
+                      <div className="mt-2 flex justify-between items-center">
+                        <p className="text-sm text-gray-500">
+                          {thumbnailPreview === "uploading"
+                            ? "Uploading..."
+                            : thumbnail?.name || "Saved thumbnail"}
+                          {thumbnail?.size
+                            ? ` · ${(thumbnail.size / (1024 * 1024)).toFixed(
+                                2,
+                              )}MB`
+                            : ""}
+                        </p>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={removeThumbnail}
+                          className="text-[#1a1a1a]"
+                          disabled={thumbnailPreview === "uploading"}
+                        >
+                          <Trash className="h-4 w-4 mr-1" /> Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-40">
+                      <Upload className="mx-auto text-gray-500 text-3xl mb-2" />
+
+                      <p className="text-md font-medium mb-1">
+                        Drag, drop or browse{" "}
+                        <span className={isDark ? "text-white" : "text-[#1a1a1a]"}>
+                          thumbnail
+                        </span>
+                      </p>
+                      <p className="text-sm text-gray-500 mb-4">
+                        Max file size: 5MB
+                      </p>
+                      <Button
+                        className={cn(
+                          "px-4 py-4 rounded-lg text-sm hover:text-white",
+                          isDark
+                            ? "bg-white text-[#1a1a1a]"
+                            : "bg-[#1a1a1a] text-white",
+                        )}
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          fileInputRef.current?.click();
+                        }}
+                      >
+                        <Upload className="h-4 w-4" /> Upload
+                      </Button>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleThumbnailChange}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+              </>
+              )}
+
+              {step === "audience" && (
+              <>
+              <div
+                className={cn(
+                  "space-y-3 rounded-2xl border p-5",
+                  isDark ? "border-white/10 bg-[#161616]" : "border-[#e6e6ea] bg-white",
+                )}
+              >
+                <div>
+                  <h3 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                    Targeting
+                  </h3>
+                  <p className={cn("mt-1 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                    Optional. Aim the campaign at creators by category, interest, region or country.
+                  </p>
+                </div>
+                <div
+                  className={cn(
+                    "flex items-start justify-between gap-4 rounded-xl border px-4 py-3",
+                    isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-[#f6f6f7]",
+                  )}
+                >
+                  <div>
+                    <Label htmlFor="show-targeting-sections" className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                      Target specific creators
+                    </Label>
+                    <p className={cn("mt-0.5 text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                      Only creators who match what you select will see this campaign.
+                    </p>
+                  </div>
+                  <Switch
                     id="show-targeting-sections"
                     checked={
                       showTargetingSections ||
@@ -12517,25 +12148,9 @@ export default function CreateContestPage({
                         setShowTargetingSections(checked === true);
                       }
                     }}
-                    className={cn(
-                      isDark
-                        ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                        : "border-gray-400 data-[state=checked]:bg-purple-600",
-                    )}
+                    className="mt-0.5 data-[state=checked]:bg-[#1a1a1a] data-[state=unchecked]:bg-[#d9d9de]"
                   />
-                  <label
-                    htmlFor="show-targeting-sections"
-                    className={cn(
-                      "text-sm font-medium cursor-pointer",
-                      isDark ? "text-gray-300" : "text-gray-700",
-                    )}
-                  >
-                    Target specific creators by selecting categories,
-                    subcategories, interests, or regions. Only matching creators
-                    will see this campaign.
-                  </label>
                 </div>
-              </div>
 
               {/* Categories Selection */}
               {showTargetingSections && (
@@ -12546,133 +12161,94 @@ export default function CreateContestPage({
                   >
                     <div
                       className={cn(
-                        "rounded-lg border",
+                        "rounded-xl border",
                         isDark
-                          ? "bg-[#180438] border-gray-300"
-                          : "bg-white border-gray-300",
+                          ? "border-white/15 bg-white/5"
+                          : "border-[#e6e6ea] bg-white",
                       )}
                     >
-                      <div className="relative">
-                        <CollapsibleTrigger
-                          className={cn(
-                            "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "" : "hover:bg-gray-50",
-                          )}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-[14px] font-medium cursor-pointer">
-                              Categories{" "}
-                              {/* <span className="text-xs text-gray-500">
-                                (Select up to 3)
-                              </span> */}
-                            </span>
-                            {contestCategories.length > 0 && (
-                              <span
-                                className={cn(
-                                  "text-xs px-2 py-0.5 rounded-full",
-                                  isDark
-                                    ? "bg-purple-600 text-white"
-                                    : "bg-purple-100 text-purple-700",
-                                )}
-                              >
-                                {contestCategories.length} selected
-                              </span>
-                            )}
-                          </div>
-                        </CollapsibleTrigger>
-                        <div
-                          className="absolute right-4 top-1/2 -translate-y-1/2"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Checkbox
-                            id="categories-checkbox"
-                            checked={categoriesOpen}
-                            onCheckedChange={(checked) =>
-                              setCategoriesOpen(checked as boolean)
-                            }
-                            className={cn(
-                              isDark
-                                ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                : "border-gray-400 data-[state=checked]:bg-purple-600",
-                            )}
-                          />
-                        </div>
-                      </div>
-                      <CollapsibleContent className="px-4 pb-4 space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      <CollapsibleTrigger
+                        className="flex w-full items-center justify-between px-4 py-3 text-left [&[data-state=open]>svg]:rotate-180"
+                      >
+                        <span className="flex items-baseline gap-2">
+                          <span className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                            Categories
+                          </span>
+                          <span className={cn("text-base font-normal", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                            {contestCategories.length} selected
+                          </span>
+                        </span>
+                        <ChevronDown className="h-4 w-4 shrink-0 text-[#8d8d95] transition-transform" />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="space-y-3 px-4 pb-4">
+                        <p className={cn("text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                          Choosing a category includes all of its subcategories.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
                           {CONTENT_TYPE_CATEGORIES.map((cat) => {
                             const isChecked = contestCategories.includes(
                               cat.id,
                             );
                             return (
-                              <div
+                              <button
                                 key={cat.id}
-                                className="flex items-center space-x-2"
-                              >
-                                <Checkbox
-                                  id={`contest-category-${cat.id}`}
-                                  checked={isChecked}
-                                  disabled={isLoading}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      setContestCategories([
-                                        ...contestCategories,
-                                        cat.id,
-                                      ]);
-                                      // Automatically add all subcategories when category is selected
-                                      const newSubcategories =
-                                        cat.subcategories.map(
-                                          (subcategory) => ({
-                                            category: cat.id,
-                                            subcategory: subcategory,
-                                          }),
-                                        );
-                                      // Add subcategories that aren't already in the list
-                                      setContestSubcategories((prev) => {
-                                        const existing = new Set(
-                                          prev.map(
-                                            (item) =>
-                                              `${item.category}:${item.subcategory}`,
-                                          ),
-                                        );
-                                        const toAdd = newSubcategories.filter(
+                                type="button"
+                                disabled={isLoading}
+                                onClick={() => {
+                                  if (!isChecked) {
+                                    setContestCategories([
+                                      ...contestCategories,
+                                      cat.id,
+                                    ]);
+                                    const newSubcategories =
+                                      cat.subcategories.map(
+                                        (subcategory) => ({
+                                          category: cat.id,
+                                          subcategory: subcategory,
+                                        }),
+                                      );
+                                    setContestSubcategories((prev) => {
+                                      const existing = new Set(
+                                        prev.map(
                                           (item) =>
-                                            !existing.has(
-                                              `${item.category}:${item.subcategory}`,
-                                            ),
-                                        );
-                                        return [...prev, ...toAdd];
-                                      });
-                                    } else {
-                                      // Remove category and all its subcategories
-                                      setContestCategories(
-                                        contestCategories.filter(
-                                          (id) => id !== cat.id,
+                                            `${item.category}:${item.subcategory}`,
                                         ),
                                       );
-                                      setContestSubcategories(
-                                        contestSubcategories.filter(
-                                          (item) => item.category !== cat.id,
-                                        ),
+                                      const toAdd = newSubcategories.filter(
+                                        (item) =>
+                                          !existing.has(
+                                            `${item.category}:${item.subcategory}`,
+                                          ),
                                       );
-                                    }
-                                  }}
-                                  className={cn(
-                                    isDark
-                                      ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                      : "border-gray-400 data-[state=checked]:bg-purple-600",
-                                  )}
-                                />
-                                <label
-                                  htmlFor={`contest-category-${cat.id}`}
-                                  className={cn(
-                                    "text-sm font-normal cursor-pointer",
-                                    isDark ? "text-gray-300" : "text-gray-700",
-                                  )}
-                                >
-                                  {cat.name}
-                                </label>
-                              </div>
+                                      return [...prev, ...toAdd];
+                                    });
+                                  } else {
+                                    setContestCategories(
+                                      contestCategories.filter(
+                                        (id) => id !== cat.id,
+                                      ),
+                                    );
+                                    setContestSubcategories(
+                                      contestSubcategories.filter(
+                                        (item) => item.category !== cat.id,
+                                      ),
+                                    );
+                                  }
+                                }}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-base font-medium",
+                                  isChecked
+                                    ? isDark
+                                      ? "border-white bg-white/15 text-white"
+                                      : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]"
+                                    : isDark
+                                      ? "border-transparent bg-white/5 text-gray-300"
+                                      : "border-transparent bg-[#ececef] text-[#3a3a42]",
+                                )}
+                              >
+                                {isChecked && <Check className="h-3.5 w-3.5" />}
+                                {cat.name}
+                              </button>
                             );
                           })}
                         </div>
@@ -12696,13 +12272,12 @@ export default function CreateContestPage({
                               }}
                               disabled={isLoading}
                               className={cn(
-                                "h-7 px-2 text-xs",
+                                "h-9 rounded-full px-4 text-sm font-medium",
                                 isDark
-                                  ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100",
+                                  ? "border-white/20 bg-white/5 text-gray-200"
+                                  : "border-[#e6e6ea] bg-[#f3f3f5] text-[#1a1a1a] hover:bg-[#ececef]",
                               )}
                             >
-                              <RotateCcw className="h-3 w-3" />
                               Reset
                             </Button>
                           </div>
@@ -12722,163 +12297,83 @@ export default function CreateContestPage({
                   >
                     <div
                       className={cn(
-                        "rounded-lg border",
+                        "rounded-xl border",
                         isDark
-                          ? "bg-[#180438] border-gray-300"
-                          : "bg-white border-gray-300",
+                          ? "border-white/15 bg-white/5"
+                          : "border-[#e6e6ea] bg-white",
                       )}
                     >
-                      <div className="relative">
-                        <CollapsibleTrigger
-                          className={cn(
-                            "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "" : "hover:bg-gray-50",
-                          )}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-[14px] font-medium cursor-pointer">
-                              Subcategories
-                            </span>
-                            {contestSubcategories.length > 0 && (
-                              <span
-                                className={cn(
-                                  "text-xs px-2 py-0.5 rounded-full",
-                                  isDark
-                                    ? "bg-purple-600 text-white"
-                                    : "bg-purple-100 text-purple-700",
-                                )}
-                              >
-                                {contestSubcategories.length} selected
-                              </span>
-                            )}
-                          </div>
-                        </CollapsibleTrigger>
-                        <div
-                          className="absolute right-4 top-1/2 -translate-y-1/2"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Checkbox
-                            id="subcategories-checkbox"
-                            checked={subcategoriesOpen}
-                            onCheckedChange={(checked) =>
-                              setSubcategoriesOpen(checked as boolean)
-                            }
-                            className={cn(
-                              isDark
-                                ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                : "border-gray-400 data-[state=checked]:bg-purple-600",
-                            )}
-                          />
-                        </div>
-                      </div>
-                      <CollapsibleContent className="px-4 pb-4 space-y-3">
-                        <Accordion type="multiple" className="w-full">
-                          {CONTENT_TYPE_CATEGORIES.map((category) => {
-                            // Get selected subcategories for this category
-                            const selectedSubcategoriesForCategory =
-                              contestSubcategories.filter(
-                                (item) => item.category === category.id,
-                              );
-                            const selectedCount =
-                              selectedSubcategoriesForCategory.length;
-
-                            return (
-                              <AccordionItem
-                                key={category.id}
-                                value={category.id}
-                                className="border-b border-gray-200 dark:border-gray-700"
-                              >
-                                <AccordionTrigger
-                                  className={cn(
-                                    "text-sm font-medium hover:no-underline py-3",
-                                    isDark ? "text-gray-300" : "text-gray-700",
-                                  )}
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <span>{category.name}</span>
-                                    {selectedCount > 0 && (
-                                      <span
-                                        className={cn(
-                                          "text-xs px-2 py-0.5 rounded-full",
-                                          isDark
-                                            ? "bg-purple-600 text-white"
-                                            : "bg-purple-100 text-purple-700",
-                                        )}
-                                      >
-                                        {selectedCount} selected
-                                      </span>
-                                    )}
-                                  </div>
-                                </AccordionTrigger>
-                                <AccordionContent className="pt-2 pb-4">
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {category.subcategories.map(
-                                      (subcategory) => {
-                                        const isChecked =
-                                          contestSubcategories.some(
+                      <CollapsibleTrigger
+                        className="flex w-full items-center justify-between px-4 py-3 text-left [&[data-state=open]>svg]:rotate-180"
+                      >
+                        <span className="flex items-baseline gap-2">
+                          <span className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                            Subcategories
+                          </span>
+                          <span className={cn("text-base font-normal", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                            {contestSubcategories.length} selected
+                          </span>
+                        </span>
+                        <ChevronDown className="h-4 w-4 shrink-0 text-[#8d8d95] transition-transform" />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="space-y-4 px-4 pb-4">
+                        {CONTENT_TYPE_CATEGORIES.map((category) => (
+                          <div key={category.id} className="space-y-2">
+                            <p className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                              {category.name}
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {category.subcategories.map((subcategory) => {
+                                const isChecked = contestSubcategories.some(
+                                  (item) =>
+                                    item.category === category.id &&
+                                    item.subcategory === subcategory,
+                                );
+                                return (
+                                  <button
+                                    key={`${category.id}-${subcategory}`}
+                                    type="button"
+                                    disabled={isLoading}
+                                    onClick={() => {
+                                      if (!isChecked) {
+                                        setContestSubcategories([
+                                          ...contestSubcategories,
+                                          {
+                                            category: category.id,
+                                            subcategory: subcategory,
+                                          },
+                                        ]);
+                                      } else {
+                                        setContestSubcategories(
+                                          contestSubcategories.filter(
                                             (item) =>
-                                              item.category === category.id &&
-                                              item.subcategory === subcategory,
-                                          );
-                                        return (
-                                          <div
-                                            key={`${category.id}-${subcategory}`}
-                                            className="flex items-center space-x-2"
-                                          >
-                                            <Checkbox
-                                              id={`contest-subcategory-${category.id}-${subcategory}`}
-                                              checked={isChecked}
-                                              disabled={isLoading}
-                                              onCheckedChange={(checked) => {
-                                                if (checked) {
-                                                  setContestSubcategories([
-                                                    ...contestSubcategories,
-                                                    {
-                                                      category: category.id,
-                                                      subcategory: subcategory,
-                                                    },
-                                                  ]);
-                                                } else {
-                                                  setContestSubcategories(
-                                                    contestSubcategories.filter(
-                                                      (item) =>
-                                                        !(
-                                                          item.category ===
-                                                            category.id &&
-                                                          item.subcategory ===
-                                                            subcategory
-                                                        ),
-                                                    ),
-                                                  );
-                                                }
-                                              }}
-                                              className={cn(
-                                                isDark
-                                                  ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                                  : "border-gray-400 data-[state=checked]:bg-purple-600",
-                                              )}
-                                            />
-                                            <label
-                                              htmlFor={`contest-subcategory-${category.id}-${subcategory}`}
-                                              className={cn(
-                                                "text-sm font-normal cursor-pointer",
-                                                isDark
-                                                  ? "text-gray-300"
-                                                  : "text-gray-700",
-                                              )}
-                                            >
-                                              {subcategory}
-                                            </label>
-                                          </div>
+                                              !(
+                                                item.category === category.id &&
+                                                item.subcategory === subcategory
+                                              ),
+                                          ),
                                         );
-                                      },
+                                      }
+                                    }}
+                                    className={cn(
+                                      "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-base font-medium",
+                                      isChecked
+                                        ? isDark
+                                          ? "border-white bg-white/15 text-white"
+                                          : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]"
+                                        : isDark
+                                          ? "border-transparent bg-white/5 text-gray-300"
+                                          : "border-transparent bg-[#ececef] text-[#3a3a42]",
                                     )}
-                                  </div>
-                                </AccordionContent>
-                              </AccordionItem>
-                            );
-                          })}
-                        </Accordion>
+                                  >
+                                    {isChecked && <Check className="h-3.5 w-3.5" />}
+                                    {subcategory}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
                         {contestSubcategories.length > 0 && (
                           <div className="flex items-center justify-end mt-2">
                             {/* <p
@@ -12897,13 +12392,12 @@ export default function CreateContestPage({
                               onClick={() => setContestSubcategories([])}
                               disabled={isLoading}
                               className={cn(
-                                "h-7 px-2 text-xs",
+                                "h-9 rounded-full px-4 text-sm font-medium",
                                 isDark
-                                  ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100",
+                                  ? "border-white/20 bg-white/5 text-gray-200"
+                                  : "border-[#e6e6ea] bg-[#f3f3f5] text-[#1a1a1a] hover:bg-[#ececef]",
                               )}
                             >
-                              <RotateCcw className="h-3 w-3" />
                               Reset
                             </Button>
                           </div>
@@ -12923,112 +12417,75 @@ export default function CreateContestPage({
                   >
                     <div
                       className={cn(
-                        "rounded-lg border",
+                        "rounded-xl border",
                         isDark
-                          ? "bg-[#180438] border-gray-300"
-                          : "bg-white border-gray-300",
+                          ? "border-white/15 bg-white/5"
+                          : "border-[#e6e6ea] bg-white",
                       )}
                     >
-                      <div className="relative">
-                        <CollapsibleTrigger
-                          className={cn(
-                            "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "" : "hover:bg-gray-50",
-                          )}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-[14px] font-medium cursor-pointer">
-                              Interests
-                            </span>
-                            {contestInterests.length > 0 && (
-                              <span
-                                className={cn(
-                                  "text-xs px-2 py-0.5 rounded-full",
-                                  isDark
-                                    ? "bg-purple-600 text-white"
-                                    : "bg-purple-100 text-purple-700",
-                                )}
-                              >
-                                {contestInterests.length} selected
-                              </span>
-                            )}
+                      <CollapsibleTrigger
+                        className="flex w-full items-center justify-between px-4 py-3 text-left [&[data-state=open]>svg]:rotate-180"
+                      >
+                        <span className="flex items-baseline gap-2">
+                          <span className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                            Interests
+                          </span>
+                          <span className={cn("text-base font-normal", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                            {contestInterests.length} selected
+                          </span>
+                        </span>
+                        <ChevronDown className="h-4 w-4 shrink-0 text-[#8d8d95] transition-transform" />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="space-y-4 px-4 pb-4">
+                        {INTEREST_CATEGORIES.map((category) => (
+                          <div key={category.id} className="space-y-2">
+                            <p className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                              {category.name}
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {category.interests.map((interest) => {
+                                const isChecked =
+                                  contestInterests.includes(interest);
+                                return (
+                                  <button
+                                    key={`${category.id}-${interest}`}
+                                    type="button"
+                                    disabled={isLoading}
+                                    onClick={() => {
+                                      if (!isChecked) {
+                                        setContestInterests([
+                                          ...contestInterests,
+                                          interest,
+                                        ]);
+                                      } else {
+                                        setContestInterests(
+                                          contestInterests.filter(
+                                            (item) => item !== interest,
+                                          ),
+                                        );
+                                      }
+                                    }}
+                                    className={cn(
+                                      "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-base font-medium",
+                                      isChecked
+                                        ? isDark
+                                          ? "border-white bg-white/15 text-white"
+                                          : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]"
+                                        : isDark
+                                          ? "border-transparent bg-white/5 text-gray-300"
+                                          : "border-transparent bg-[#ececef] text-[#3a3a42]",
+                                    )}
+                                  >
+                                    {isChecked && <Check className="h-3.5 w-3.5" />}
+                                    {interest}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </CollapsibleTrigger>
-                        <div
-                          className="absolute right-4 top-1/2 -translate-y-1/2"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Checkbox
-                            id="interests-checkbox"
-                            checked={interestsOpen}
-                            onCheckedChange={(checked) =>
-                              setInterestsOpen(checked as boolean)
-                            }
-                            className={cn(
-                              isDark
-                                ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                : "border-gray-400 data-[state=checked]:bg-purple-600",
-                            )}
-                          />
-                        </div>
-                      </div>
-                      <CollapsibleContent className="px-4 pb-4 space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                          {INTERESTS.map((interest) => {
-                            const isChecked =
-                              contestInterests.includes(interest);
-                            return (
-                              <div
-                                key={interest}
-                                className="flex items-center space-x-2"
-                              >
-                                <Checkbox
-                                  id={`contest-interest-${interest}`}
-                                  checked={isChecked}
-                                  disabled={isLoading}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      setContestInterests([
-                                        ...contestInterests,
-                                        interest,
-                                      ]);
-                                    } else {
-                                      setContestInterests(
-                                        contestInterests.filter(
-                                          (item) => item !== interest,
-                                        ),
-                                      );
-                                    }
-                                  }}
-                                  className={cn(
-                                    isDark
-                                      ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                      : "border-gray-400 data-[state=checked]:bg-purple-600",
-                                  )}
-                                />
-                                <label
-                                  htmlFor={`contest-interest-${interest}`}
-                                  className={cn(
-                                    "text-sm font-normal cursor-pointer",
-                                    isDark ? "text-gray-300" : "text-gray-700",
-                                  )}
-                                >
-                                  {interest}
-                                </label>
-                              </div>
-                            );
-                          })}
-                        </div>
+                        ))}
                         {contestInterests.length > 0 && (
                           <div className="flex items-center justify-end mt-2">
-                            {/* <p
-                              className={cn(
-                                "text-xs",
-                                isDark ? "text-gray-400" : "text-gray-500"
-                              )}
-                            >
-                              {contestInterests.length} interests selected
-                            </p> */}
                             <Button
                               type="button"
                               variant="outline"
@@ -13036,13 +12493,12 @@ export default function CreateContestPage({
                               onClick={() => setContestInterests([])}
                               disabled={isLoading}
                               className={cn(
-                                "h-7 px-2 text-xs",
+                                "h-9 rounded-full px-4 text-sm font-medium",
                                 isDark
-                                  ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100",
+                                  ? "border-white/20 bg-white/5 text-gray-200"
+                                  : "border-[#e6e6ea] bg-[#f3f3f5] text-[#1a1a1a] hover:bg-[#ececef]",
                               )}
                             >
-                              <RotateCcw className="h-3 w-3" />
                               Reset
                             </Button>
                           </div>
@@ -13059,209 +12515,142 @@ export default function CreateContestPage({
                   <Collapsible open={regionsOpen} onOpenChange={setRegionsOpen}>
                     <div
                       className={cn(
-                        "rounded-lg border",
+                        "rounded-xl border",
                         isDark
-                          ? "bg-[#180438] border-gray-300"
-                          : "bg-white border-gray-300",
+                          ? "border-white/15 bg-white/5"
+                          : "border-[#e6e6ea] bg-white",
                       )}
                     >
-                      <div className="relative">
-                        <CollapsibleTrigger
-                          className={cn(
-                            "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "" : "hover:bg-gray-50",
-                          )}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-[14px] font-medium cursor-pointer">
-                              Regions
-                            </span>
-                            {/* {selectedRegions.length > 0 && (
-                              <span
-                                className={cn(
-                                  "text-xs px-2 py-0.5 rounded-full",
-                                  isDark
-                                    ? "bg-purple-600 text-white"
-                                    : "bg-purple-100 text-purple-700"
-                                )}
-                              >
-                                {selectedRegions.length} selected
-                              </span>
-                            )} */}
-                            {selectedCountries.length > 0 && (
-                              <span
-                                className={cn(
-                                  "text-xs px-2 py-0.5 rounded-full",
-                                  isDark
-                                    ? "bg-purple-600 text-white"
-                                    : "bg-purple-100 text-purple-700",
-                                )}
-                              >
-                                {selectedCountries.length} selected
-                              </span>
-                            )}
-                          </div>
-                        </CollapsibleTrigger>
-                        <div
-                          className="absolute right-4 top-1/2 -translate-y-1/2"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Checkbox
-                            id="regions-checkbox"
-                            checked={regionsOpen}
-                            onCheckedChange={(checked) =>
-                              setRegionsOpen(checked as boolean)
-                            }
-                            className={cn(
-                              isDark
-                                ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                : "border-gray-400 data-[state=checked]:bg-purple-600",
-                            )}
-                          />
-                        </div>
-                      </div>
-                      <CollapsibleContent className="px-4 pb-4 space-y-4">
-                        <div className="space-y-4">
-                          {Object.keys(REGIONS_AND_COUNTRIES).map((region) => {
-                            const regionKey =
-                              region as keyof typeof REGIONS_AND_COUNTRIES;
-                            const regionCountries =
-                              REGIONS_AND_COUNTRIES[regionKey];
-                            if (!regionCountries) return null;
-                            const countriesArray: string[] = Array.isArray(
-                              regionCountries,
-                            )
-                              ? regionCountries.map((c) => String(c))
-                              : [];
-                            const isRegionSelected =
-                              selectedRegions.includes(region);
-                            const selectedCountriesInRegion =
-                              countriesArray.filter((country) =>
-                                selectedCountries.includes(country),
-                              );
-                            const isPartiallySelected =
-                              selectedCountriesInRegion.length > 0 &&
-                              selectedCountriesInRegion.length <
-                                countriesArray.length;
-                            const hasAnySelected =
-                              selectedCountriesInRegion.length > 0;
+                      <CollapsibleTrigger
+                        className="flex w-full items-center justify-between px-4 py-3 text-left [&[data-state=open]>svg]:rotate-180"
+                      >
+                        <span className="flex items-baseline gap-2">
+                          <span className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                            Regions
+                          </span>
+                          <span className={cn("text-base font-normal", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                            {selectedCountries.length} selected
+                          </span>
+                        </span>
+                        <ChevronDown className="h-4 w-4 shrink-0 text-[#8d8d95] transition-transform" />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="space-y-4 px-4 pb-4">
+                        {Object.keys(REGIONS_AND_COUNTRIES).map((region) => {
+                          const regionKey =
+                            region as keyof typeof REGIONS_AND_COUNTRIES;
+                          const regionCountries =
+                            REGIONS_AND_COUNTRIES[regionKey];
+                          if (!regionCountries) return null;
+                          const countriesArray: string[] = Array.isArray(
+                            regionCountries,
+                          )
+                            ? regionCountries.map((c) => String(c))
+                            : [];
+                          const isRegionSelected =
+                            selectedRegions.includes(region);
+                          const selectedCountriesInRegion =
+                            countriesArray.filter((country) =>
+                              selectedCountries.includes(country),
+                            );
+                          const hasAnySelected =
+                            selectedCountriesInRegion.length > 0;
 
-                            return (
-                              <div key={region} className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center space-x-2 flex-1">
-                                    <Checkbox
-                                      id={`region-${region}`}
-                                      checked={isRegionSelected}
-                                      disabled={isLoading}
-                                      onCheckedChange={(checked) => {
-                                        handleRegionToggle(
-                                          region,
-                                          checked as boolean,
-                                        );
-                                      }}
-                                      className={cn(
-                                        isDark
-                                          ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                          : "border-gray-400 data-[state=checked]:bg-purple-600",
-                                      )}
-                                    />
-                                    <label
-                                      htmlFor={`region-${region}`}
-                                      className={cn(
-                                        "text-sm font-semibold cursor-pointer flex items-center gap-2",
-                                        isDark
-                                          ? "text-gray-300"
-                                          : "text-gray-700",
-                                      )}
-                                    >
-                                      <span>{region}</span>
-                                      {hasAnySelected && (
-                                        <span
-                                          className={cn(
-                                            "text-xs px-2 py-0.5 rounded-full",
-                                            isDark
-                                              ? "bg-purple-600 text-white"
-                                              : "bg-purple-100 text-purple-700",
-                                          )}
-                                        >
-                                          {selectedCountriesInRegion.length}{" "}
-                                          selected
-                                        </span>
-                                      )}
-                                    </label>
-                                  </div>
-                                  {hasAnySelected && (
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleUncheckAllCountriesInRegion(
-                                          region,
-                                        );
-                                      }}
-                                      disabled={isLoading}
-                                      className={cn(
-                                        "h-7 px-2 text-xs",
-                                        isDark
-                                          ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800"
-                                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
-                                      )}
-                                    >
-                                      Uncheck all
-                                    </Button>
-                                  )}
-                                </div>
-                                {(isRegionSelected || hasAnySelected) && (
-                                  <div className="ml-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                    {countriesArray.map((country: string) => {
-                                      const isCountrySelected =
-                                        selectedCountries.includes(country);
-                                      return (
-                                        <div
-                                          key={country}
-                                          className="flex items-center space-x-2"
-                                        >
-                                          <Checkbox
-                                            id={`country-${region}-${country}`}
-                                            checked={isCountrySelected}
-                                            disabled={isLoading}
-                                            onCheckedChange={(checked) => {
-                                              handleCountryToggle(
-                                                country,
-                                                checked as boolean,
-                                              );
-                                            }}
-                                            className={cn(
-                                              isDark
-                                                ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                                : "border-gray-400 data-[state=checked]:bg-purple-600",
-                                            )}
-                                          />
-                                          <label
-                                            htmlFor={`country-${region}-${country}`}
-                                            className={cn(
-                                              "text-sm font-normal cursor-pointer",
-                                              isDark
-                                                ? "text-gray-300"
-                                                : "text-gray-700",
-                                            )}
-                                          >
-                                            {country}
-                                          </label>
-                                        </div>
+                          return (
+                            <div key={region} className="space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center space-x-2 flex-1 min-w-0">
+                                  <Checkbox
+                                    id={`region-${region}`}
+                                    checked={isRegionSelected}
+                                    disabled={isLoading}
+                                    onCheckedChange={(checked) => {
+                                      handleRegionToggle(
+                                        region,
+                                        checked as boolean,
                                       );
-                                    })}
-                                  </div>
+                                    }}
+                                    className={cn(
+                                      isDark
+                                        ? "border-gray-400 data-[state=checked]:bg-[#1a1a1a] data-[state=checked]:text-white"
+                                        : "border-gray-400 data-[state=checked]:bg-[#1a1a1a]",
+                                    )}
+                                  />
+                                  <label
+                                    htmlFor={`region-${region}`}
+                                    className={cn(
+                                      "text-base font-semibold cursor-pointer",
+                                      isDark
+                                        ? "text-white"
+                                        : "text-[#1a1a1a]",
+                                    )}
+                                  >
+                                    {region}
+                                  </label>
+                                </div>
+                                {hasAnySelected && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleUncheckAllCountriesInRegion(
+                                        region,
+                                      );
+                                    }}
+                                    disabled={isLoading}
+                                    className={cn(
+                                      "h-7 px-2 text-xs shrink-0",
+                                      isDark
+                                        ? "text-gray-400 hover:text-gray-300 hover:bg-white/10"
+                                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
+                                    )}
+                                  >
+                                    Uncheck all
+                                  </Button>
                                 )}
                               </div>
-                            );
-                          })}
-                        </div>
+                              {(isRegionSelected || hasAnySelected) && (
+                                <div className="flex flex-wrap gap-2">
+                                  {countriesArray.map((country: string) => {
+                                    const isCountrySelected =
+                                      selectedCountries.includes(country);
+                                    return (
+                                      <button
+                                        key={country}
+                                        type="button"
+                                        disabled={isLoading}
+                                        onClick={() => {
+                                          handleCountryToggle(
+                                            country,
+                                            !isCountrySelected,
+                                          );
+                                        }}
+                                        className={cn(
+                                          "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-base font-medium",
+                                          isCountrySelected
+                                            ? isDark
+                                              ? "border-white bg-white/15 text-white"
+                                              : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]"
+                                            : isDark
+                                              ? "border-transparent bg-white/5 text-gray-300"
+                                              : "border-transparent bg-[#ececef] text-[#3a3a42]",
+                                        )}
+                                      >
+                                        {isCountrySelected && (
+                                          <Check className="h-3.5 w-3.5" />
+                                        )}
+                                        {country}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                         {selectedCountries.length > 0 && (
-                          <div className="flex items-center justify-end mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                          <div className="flex items-center justify-end mt-2">
                             <Button
                               type="button"
                               variant="outline"
@@ -13272,13 +12661,12 @@ export default function CreateContestPage({
                               }}
                               disabled={isLoading}
                               className={cn(
-                                "h-7 px-2 text-xs",
+                                "h-9 rounded-full px-4 text-sm font-medium",
                                 isDark
-                                  ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100",
+                                  ? "border-white/20 bg-white/5 text-gray-200"
+                                  : "border-[#e6e6ea] bg-[#f3f3f5] text-[#1a1a1a] hover:bg-[#ececef]",
                               )}
                             >
-                              <RotateCcw className="h-3 w-3" />
                               Reset
                             </Button>
                           </div>
@@ -13288,108 +12676,29 @@ export default function CreateContestPage({
                   </Collapsible>
                 </div>
               )}
-
-              <div className="space-y-2">
-                <Label>Thumbnail</Label>
-                <div
-                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
-                    isDragActive
-                      ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
-                      : isDark
-                        ? "border-slate-600 bg-[#170337]"
-                        : "border-gray-300 bg-white"
-                  }`}
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  tabIndex={0}
-                  role="button"
-                  aria-label="Upload thumbnail"
-                >
-                  {thumbnailPreview ? (
-                    <div className="relative">
-                      {thumbnailPreview === "uploading" ? (
-                        <div
-                          className={cn(
-                            "flex flex-col items-center justify-center h-64 rounded",
-                            isDark ? "bg-[#180438]" : "bg-gray-50",
-                          )}
-                        >
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-rose-500 mb-2"></div>
-                          <p className="text-sm text-gray-600">
-                            Uploading thumbnail...
-                          </p>
-                        </div>
-                      ) : (
-                        <img
-                          src={thumbnailPreview}
-                          alt="Thumbnail preview"
-                          className="mx-auto max-h-64 object-contain"
-                        />
-                      )}
-                      <div className="mt-2 flex justify-between items-center">
-                        <p className="text-sm text-gray-500">
-                          {thumbnailPreview === "uploading"
-                            ? "Uploading..."
-                            : thumbnail?.name || "Saved thumbnail"}
-                          {thumbnail?.size
-                            ? ` · ${(thumbnail.size / (1024 * 1024)).toFixed(
-                                2,
-                              )}MB`
-                            : ""}
-                        </p>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={removeThumbnail}
-                          className="text-purple-500"
-                          disabled={thumbnailPreview === "uploading"}
-                        >
-                          <Trash className="h-4 w-4 mr-1" /> Remove
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-40">
-                      <Upload className="mx-auto text-gray-500 text-3xl mb-2" />
-
-                      <p className="text-md font-medium mb-1">
-                        Drag, drop or browse{" "}
-                        <span className="text-purple-500">thumbnail</span>
-                      </p>
-                      <p className="text-sm text-gray-500 mb-4">
-                        Max file size: 5MB
-                      </p>
-                      <Button
-                        className={cn(
-                          "px-4 py-4 rounded-lg text-sm hover:text-white",
-                          isDark
-                            ? "bg-[#7F39EC] text-white"
-                            : "bg-[#4A00BE] text-white",
-                        )}
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          fileInputRef.current?.click();
-                        }}
-                      >
-                        <Upload className="h-4 w-4" /> Upload
-                      </Button>
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleThumbnailChange}
-                      />
-                    </div>
-                  )}
-                </div>
               </div>
 
-              <CardFooter className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-6">
+              </>
+              )}
+
+              <CardFooter className="flex flex-col items-stretch gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
+                <button
+                  type="button"
+                  onClick={
+                    step === "basics"
+                      ? () => setShowRewardPicker(true)
+                      : prevStep
+                  }
+                  disabled={isLoading}
+                  className={cn(
+                    "w-full border font-semibold px-4 py-2 rounded-lg text-md sm:w-auto",
+                    isDark
+                      ? "border-white/20 text-white hover:bg-white/10"
+                      : "border-[#d5d5db] text-[#1a1a1a]",
+                  )}
+                >
+                  Back
+                </button>
                 {/* Display error message if validation fails (not shown in basics step - uses toast only) */}
                 {formFeedback &&
                   formFeedbackType === "error" &&
@@ -13407,21 +12716,13 @@ export default function CreateContestPage({
                       </div>
                     </div>
                   )}
-                <div
-                  className={`flex gap-2 ${
-                    formFeedback &&
-                    formFeedbackType === "error" &&
-                    step !== "basics"
-                      ? "ml-auto"
-                      : "ml-auto"
-                  }`}
-                >
+                <div className="flex w-full gap-2 sm:w-auto">
                   <button
                     className={cn(
-                      "border font-semibold px-4 py-2 rounded-lg text-md",
+                      "min-w-0 flex-1 border font-semibold px-4 py-2 rounded-lg text-md sm:flex-none",
                       isDark
-                        ? "border-gray-300 text-gray-300"
-                        : "border-[#4A00BE] text-[#4A00BE]",
+                        ? "border-white/20 text-white hover:bg-white/10"
+                        : "border-[#d5d5db] text-[#1a1a1a]",
                     )}
                     onClick={handleSaveDraft}
                     disabled={isLoading || !title.trim()}
@@ -13437,15 +12738,15 @@ export default function CreateContestPage({
                         />
                       </div>
                     ) : (
-                      "Save Draft"
+                      "Save draft"
                     )}
                   </button>
                   <button
                     className={cn(
-                      "px-8 py-2 rounded-lg text-md cursor-pointer",
+                      "min-w-0 flex-1 px-8 py-2 rounded-lg text-md cursor-pointer sm:flex-none",
                       isDark
-                        ? "bg-[#7F39EC] text-white hover:bg-[#6B2FD6]"
-                        : "bg-[#4A00BE] text-white hover:bg-[#3A00A0]",
+                        ? "bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]"
+                        : "bg-[#1a1a1a] text-white hover:bg-black",
                       isLoading && "opacity-50 cursor-not-allowed",
                     )}
                     type="button"
@@ -13455,10 +12756,10 @@ export default function CreateContestPage({
                     {isLoading ? (
                       <div className="flex items-center gap-2">
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        Next
+                        Continue
                       </div>
                     ) : (
-                      "Next"
+                      "Continue"
                     )}
                   </button>
                 </div>
@@ -13471,25 +12772,25 @@ export default function CreateContestPage({
           <>
             <div
               className={cn(
-                "p-6 border-b rounded-t-xl shadow-xl space-y-6",
+                "p-6 border-b rounded-tl-xl rounded-tr-xl shadow-xl space-y-6",
                 isDark
-                  ? "bg-[#180438] border-gray-600"
+                  ? "bg-[#161616] border-gray-600"
                   : "border-[#D0D0D0] bg-white",
               )}
             >
               <h2
                 className={cn(
                   "font-semibold text-2xl ",
-                  isDark ? "text-white" : "text-purple-600",
+                  isDark ? "text-white" : "text-[#1a1a1a]",
                 )}
               >
-                Project Overview
+                Brief
               </h2>
             </div>
             <CardContent
               className={cn(
                 "space-y-6 p-6 rounded-bl-xl rounded-br-xl shadow-xl",
-                isDark ? "bg-[#180438]" : "bg-white",
+                isDark ? "bg-[#161616]" : "bg-white",
               )}
             >
               {/* formFeedback display removed from CardContent for brief step, it's in the CardFooter */}
@@ -13500,21 +12801,66 @@ export default function CreateContestPage({
                     <Label htmlFor="project-brief" className="text-lg">
                       Brief / Project Description
                     </Label>
-                    <span className="text-red-500 font-bold text-lg">*</span>
-                    <span className="text-xs text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded-full font-medium">
+                    <span className={cn("font-bold text-lg", isDark ? "text-white" : "text-[#1a1a1a]")}>*</span>
+                    <span
+                      className={cn(
+                        "text-xs px-2 py-1 rounded-full font-medium",
+                        isDark
+                          ? "bg-white/10 text-white"
+                          : "bg-[#f3f3f5] text-[#1a1a1a]",
+                      )}
+                    >
                       Required
                     </span>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      className="bg-[#6C43D0] px-6 py-4 rounded-lg text-md text-white hover:bg-[#6C43D0] hover:text-white"
+                  <div
+                    role="tablist"
+                    aria-label="Brief editor mode"
+                    className={cn(
+                      "inline-flex rounded-full p-1",
+                      isDark ? "bg-white/10" : "bg-[#ececef]",
+                    )}
+                  >
+                    <button
                       type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={toggleBriefPreview}
+                      role="tab"
+                      aria-selected={!showBriefPreview}
+                      onClick={() => {
+                        if (showBriefPreview) toggleBriefPreview();
+                      }}
+                      className={cn(
+                        "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+                        !showBriefPreview
+                          ? isDark
+                            ? "bg-white/20 text-white shadow-sm"
+                            : "bg-white text-[#1a1a1a] shadow-sm"
+                          : isDark
+                            ? "text-gray-400 hover:text-gray-200"
+                            : "text-[#8d8d95] hover:text-[#3a3a42]",
+                      )}
                     >
-                      {showBriefPreview ? "Edit" : "Preview"}
-                    </Button>
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={showBriefPreview}
+                      onClick={() => {
+                        if (!showBriefPreview) toggleBriefPreview();
+                      }}
+                      className={cn(
+                        "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+                        showBriefPreview
+                          ? isDark
+                            ? "bg-white/20 text-white shadow-sm"
+                            : "bg-white text-[#1a1a1a] shadow-sm"
+                          : isDark
+                            ? "text-gray-400 hover:text-gray-200"
+                            : "text-[#8d8d95] hover:text-[#3a3a42]",
+                      )}
+                    >
+                      Preview
+                    </button>
                   </div>
                 </div>
                 {contestFormat === "video" && (
@@ -13624,7 +12970,7 @@ export default function CreateContestPage({
                             placeholder="Add keyword"
                             className={cn(
                               isDark
-                                ? "bg-[#180438] border border-gray-600"
+                                ? "bg-[#0e0e0e] border border-white/10"
                                 : "bg-white",
                             )}
                           />
@@ -13680,7 +13026,9 @@ export default function CreateContestPage({
                         className="flex flex-col gap-1 sm:flex-row sm:gap-4"
                       >
                         <label className="flex items-center gap-2 cursor-pointer text-xs sm:text-sm">
-                          <RadioGroupItem value="all" id="req-all-keywords" />
+                          <RadioGroupItem
+                            className="border-[#1a1a1a] text-[#1a1a1a]"
+                            indicatorClassName="text-[#1a1a1a]" value="all" id="req-all-keywords" />
                           <span
                             className={cn(
                               "leading-snug",
@@ -13691,7 +13039,9 @@ export default function CreateContestPage({
                           </span>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer text-xs sm:text-sm">
-                          <RadioGroupItem value="any" id="req-any-keywords" />
+                          <RadioGroupItem
+                            className="border-[#1a1a1a] text-[#1a1a1a]"
+                            indicatorClassName="text-[#1a1a1a]" value="any" id="req-any-keywords" />
                           <span
                             className={cn(
                               "leading-snug",
@@ -13735,7 +13085,7 @@ export default function CreateContestPage({
                             placeholder="@username"
                             className={cn(
                               isDark
-                                ? "bg-[#180438] border border-gray-600"
+                                ? "bg-[#0e0e0e] border border-white/10"
                                 : "bg-white",
                             )}
                           />
@@ -13797,7 +13147,9 @@ export default function CreateContestPage({
                         className="flex flex-col gap-1 sm:flex-row sm:gap-4"
                       >
                         <label className="flex items-center gap-2 cursor-pointer text-xs sm:text-sm">
-                          <RadioGroupItem value="all" id="req-all-mentions" />
+                          <RadioGroupItem
+                            className="border-[#1a1a1a] text-[#1a1a1a]"
+                            indicatorClassName="text-[#1a1a1a]" value="all" id="req-all-mentions" />
                           <span
                             className={cn(
                               "leading-snug",
@@ -13808,7 +13160,9 @@ export default function CreateContestPage({
                           </span>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer text-xs sm:text-sm">
-                          <RadioGroupItem value="any" id="req-any-mentions" />
+                          <RadioGroupItem
+                            className="border-[#1a1a1a] text-[#1a1a1a]"
+                            indicatorClassName="text-[#1a1a1a]" value="any" id="req-any-mentions" />
                           <span
                             className={cn(
                               "leading-snug",
@@ -13853,7 +13207,7 @@ export default function CreateContestPage({
                       placeholder="No limit (leave empty)"
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-600"
+                          ? "bg-[#0e0e0e] border border-white/10"
                           : "bg-white",
                       )}
                     />
@@ -13865,21 +13219,66 @@ export default function CreateContestPage({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <h3 className="text-lg font-medium">Set rules</h3>
-                    <span className="text-red-500 font-bold text-lg">*</span>
-                    <span className="text-xs text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded-full font-medium">
+                    <span className={cn("font-bold text-lg", isDark ? "text-white" : "text-[#1a1a1a]")}>*</span>
+                    <span
+                      className={cn(
+                        "text-xs px-2 py-1 rounded-full font-medium",
+                        isDark
+                          ? "bg-white/10 text-white"
+                          : "bg-[#f3f3f5] text-[#1a1a1a]",
+                      )}
+                    >
                       Required
                     </span>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      className="bg-[#6C43D0] px-6 py-4 rounded-lg text-md text-white hover:bg-[#6C43D0] hover:text-white"
+                  <div
+                    role="tablist"
+                    aria-label="Rules editor mode"
+                    className={cn(
+                      "inline-flex rounded-full p-1",
+                      isDark ? "bg-white/10" : "bg-[#ececef]",
+                    )}
+                  >
+                    <button
                       type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={toggleRulesPreview}
+                      role="tab"
+                      aria-selected={!showRulesPreview}
+                      onClick={() => {
+                        if (showRulesPreview) toggleRulesPreview();
+                      }}
+                      className={cn(
+                        "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+                        !showRulesPreview
+                          ? isDark
+                            ? "bg-white/20 text-white shadow-sm"
+                            : "bg-white text-[#1a1a1a] shadow-sm"
+                          : isDark
+                            ? "text-gray-400 hover:text-gray-200"
+                            : "text-[#8d8d95] hover:text-[#3a3a42]",
+                      )}
                     >
-                      {showRulesPreview ? "Edit" : "Preview"}
-                    </Button>
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={showRulesPreview}
+                      onClick={() => {
+                        if (!showRulesPreview) toggleRulesPreview();
+                      }}
+                      className={cn(
+                        "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+                        showRulesPreview
+                          ? isDark
+                            ? "bg-white/20 text-white shadow-sm"
+                            : "bg-white text-[#1a1a1a] shadow-sm"
+                          : isDark
+                            ? "text-gray-400 hover:text-gray-200"
+                            : "text-[#8d8d95] hover:text-[#3a3a42]",
+                      )}
+                    >
+                      Preview
+                    </button>
                   </div>
                 </div>
                 {contestFormat === "video" && (
@@ -13952,7 +13351,7 @@ export default function CreateContestPage({
                 )}
               </div>
 
-              <CardFooter className="flex justify-between items-center pt-6">
+              <CardFooter className="flex flex-col items-stretch gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
                 {/* Modern Error Display for Brief step */}
                 {formFeedback && formFeedbackType === "error" && (
                   <div className="mr-auto">
@@ -13973,28 +13372,22 @@ export default function CreateContestPage({
                   onClick={prevStep}
                   disabled={isLoading}
                   className={cn(
-                    "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
+                    "w-full border font-semibold px-4 py-2 rounded-lg text-md sm:mr-auto sm:w-auto",
                     !(formFeedback && formFeedbackType === "error") &&
                       (isDark
-                        ? "border-gray-300 text-gray-300"
-                        : "border-[#4A00BE] text-[#4A00BE]"),
+                        ? "border-white/20 text-white hover:bg-white/10"
+                        : "border-[#d5d5db] text-[#1a1a1a]"),
                   )}
                 >
                   Back
                 </button>
-                <div
-                  className={`flex gap-2 ${
-                    formFeedback && formFeedbackType === "error"
-                      ? "ml-4"
-                      : "ml-auto"
-                  }`}
-                >
+                <div className="flex w-full gap-2 sm:ml-auto sm:w-auto">
                   <button
                     className={cn(
                       "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
                       isDark
-                        ? "border-gray-300 text-gray-300"
-                        : "border-[#4A00BE] text-[#4A00BE]",
+                        ? "border-white/20 text-white hover:bg-white/10"
+                        : "border-[#d5d5db] text-[#1a1a1a]",
                     )}
                     onClick={handleSaveDraft}
                     disabled={isLoading || !title.trim()}
@@ -14010,15 +13403,15 @@ export default function CreateContestPage({
                         />
                       </div>
                     ) : (
-                      "Save Draft"
+                      "Save draft"
                     )}
                   </button>
                   <button
                     className={cn(
                       "cursor-pointer px-8 py-2 rounded-lg text-md ",
                       isDark
-                        ? "bg-[#7F39EC] text-white"
-                        : "bg-[#4A00BE] text-white",
+                        ? "bg-white text-[#1a1a1a]"
+                        : "bg-[#1a1a1a] text-white",
                     )}
                     type="button"
                     onClick={nextStep}
@@ -14027,10 +13420,10 @@ export default function CreateContestPage({
                     {isLoading ? (
                       <div className="flex items-center gap-2">
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        Next
+                        Continue
                       </div>
                     ) : (
-                      "Next"
+                      "Continue"
                     )}
                   </button>
                 </div>
@@ -14047,39 +13440,45 @@ export default function CreateContestPage({
                 className={cn(
                   "px-6 py-4 border-b rounded-tl-xl rounded-tr-xl bg-white shadow-xl space-y-6",
                   isDark
-                    ? "bg-[#180438] border-gray-600"
+                    ? "bg-[#161616] border-gray-600"
                     : "bg-white border-[#D0D0D0]",
                 )}
               >
                 <h2
                   className={cn(
                     "font-semibold text-2xl ",
-                    isDark ? "text-white" : "text-purple-600",
+                    isDark ? "text-white" : "text-[#1a1a1a]",
                   )}
                 >
-                  Add Resources
+                  Resources
                 </h2>
               </div>
               <div
                 className={cn(
                   "space-y-6 px-1 rounded-b-xl pb-5 shadow-xl",
-                  isDark ? "bg-[#180438]" : "bg-white",
+                  isDark ? "bg-[#161616]" : "bg-white",
                 )}
               >
                 <div className="px-6 pt-6">
-                  <CardTitle className="mb-3">
-                    Resources for Participants{" "}
-                    <span className="text-red-500">*</span>
-                  </CardTitle>
-                  <CardDescription className="text-[13px]">
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <CardTitle className={cn(isDark ? "text-white" : "text-[#1a1a1a]")}>
+                      Resources for Participants
+                    </CardTitle>
+                    <span className={cn("font-bold text-lg", isDark ? "text-white" : "text-[#1a1a1a]")}>*</span>
+                    <span
+                      className={cn(
+                        "text-xs px-2 py-1 rounded-full font-medium",
+                        isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#1a1a1a]",
+                      )}
+                    >
+                      At least one required
+                    </span>
+                  </div>
+                  <CardDescription className={cn("text-[13px]", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
                     Provide at least one resource to help participants
-                    understand your brand and campaign requirements. You can
-                    upload assets (logos, guidelines, examples) <b>or</b> add
-                    external links (website, social media, portfolio).
+                    understand your brand and campaign requirements. Upload
+                    assets (logos, guidelines, examples) or add external links.
                   </CardDescription>
-                  <span className="text-sm text-red-600 font-medium mt-2">
-                    At least one required
-                  </span>
                   {contestFormat === "video" && (
                     <div className="pt-3">
                       <PlatformCampaignTabs
@@ -14089,15 +13488,29 @@ export default function CreateContestPage({
                   )}
                 </div>
                 <CardContent className="space-y-6">
+                  <div className="grid gap-4">
                   {/* Asset Upload */}
-                  <div className="flex flex-col gap-6">
+                  <div
+                    className={cn(
+                      "flex flex-col gap-4 rounded-xl border p-4",
+                      isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-white",
+                    )}
+                  >
+                    <div>
+                      <h4 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                        Upload a file
+                      </h4>
+                      <p className={cn("mt-0.5 text-sm", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                        Logos, guidelines, examples and other assets.
+                      </p>
+                    </div>
                     <div
-                      className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
+                      className={`border-2 border-dashed rounded-xl p-4 transition-colors duration-200 cursor-pointer ${
                         isDragActive
                           ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
                           : isDark
-                            ? "border-slate-600 bg-[#170337]"
-                            : "border-gray-300 bg-white"
+                            ? "border-white/15 bg-[#161616]"
+                            : "border-[#d5d5db] bg-[#fafafa]"
                       }`}
                       onClick={() => resourceFileRef.current?.click()}
                       onDragOver={handleDragOver}
@@ -14263,11 +13676,17 @@ export default function CreateContestPage({
                             )}
                           </div>
                           <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               removeResourceFile();
                             }}
-                            className="text-purple-500 ml-auto flex items-center gap-1"
+                            className={cn(
+                              "ml-auto inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium",
+                              isDark
+                                ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                                : "border-[#1a1a1a] bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]",
+                            )}
                           >
                             <Trash className="h-4 w-4" /> Remove
                           </button>
@@ -14275,7 +13694,7 @@ export default function CreateContestPage({
                       ) : (
                         <div className="flex flex-col items-center justify-center h-32">
                           <Upload className="h-10 w-10 text-3xl text-gray-400 mb-2" />
-                          <p className="text-md font-medium mb-1">
+                          <p className={cn("text-md font-medium mb-1", isDark ? "text-white" : "text-[#1a1a1a]")}>
                             Drag, drop or browse file
                           </p>
                           <p className="text-sm text-gray-500 mb-2">
@@ -14283,10 +13702,10 @@ export default function CreateContestPage({
                           </p>
                           <Button
                             className={cn(
-                              "px-4 py-2 rounded-lg text-md",
+                              "rounded-lg border px-4 py-2 text-md",
                               isDark
-                                ? "bg-[#7F39EC] text-white"
-                                : "bg-[#4A00BE] text-white",
+                                ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                                : "border-[#1a1a1a] bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]",
                             )}
                             variant="outline"
                             size="sm"
@@ -14308,18 +13727,18 @@ export default function CreateContestPage({
                     </div>
                     {/* File Description and Add Button */}
                     {resourceFile && (
-                      <div className="mt-4 flex flex-col gap-4 items-end">
-                        <div className="flex-1 w-full space-y-2">
-                          <Label htmlFor="fileDescription">
-                            Description <span className="text-red-500">*</span>
+                      <div className="flex flex-col gap-3">
+                        <div className="w-full space-y-2">
+                          <Label htmlFor="fileDescription" className={cn(isDark ? "text-white" : "text-[#1a1a1a]")}>
+                            Description <span className={cn("font-bold", isDark ? "text-white" : "text-[#1a1a1a]")}>*</span>
                           </Label>
                           <Input
                             id="fileDescription"
                             placeholder="Describe this asset"
                             className={cn(
                               isDark
-                                ? "bg-[#180438] border border-gray-600"
-                                : "bg-white",
+                                ? "bg-[#0e0e0e] border border-white/10"
+                                : "border-[#1a1a1a] bg-white",
                             )}
                             value={resourceDescription}
                             onChange={(e) =>
@@ -14329,13 +13748,19 @@ export default function CreateContestPage({
                         </div>
                         <Button
                           type="button"
+                          variant="outline"
                           onClick={addFileResource}
                           disabled={!resourceDescription || isUploadingAsset}
-                          className="w-full py-5 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
+                          className={cn(
+                            "w-full py-5 text-md",
+                            isDark
+                              ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                              : "border-[#1a1a1a] bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]",
+                          )}
                         >
                           {isUploadingAsset ? (
                             <div className="flex items-center gap-2">
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
                               Uploading...
                             </div>
                           ) : (
@@ -14345,21 +13770,30 @@ export default function CreateContestPage({
                       </div>
                     )}
                     {assetUploadError && (
-                      <div className="text-red-500 text-sm mt-2">
+                      <div className="text-red-500 text-sm">
                         {assetUploadError}
                       </div>
                     )}
                   </div>
-                  {/* Or Separator */}
-                  <div className="flex items-center my-4">
-                    <div className="flex-grow border-t border-gray-300"></div>
-                    <span className="mx-4 text-gray-500 font-semibold">Or</span>
-                    <div className="flex-grow border-t border-gray-300"></div>
-                  </div>
                   {/* External Link Input */}
-                  <div>
+                  <div
+                    className={cn(
+                      "flex flex-col gap-4 rounded-xl border p-4",
+                      isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-white",
+                    )}
+                  >
+                    <div>
+                      <h4 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>
+                        Add a link
+                      </h4>
+                      <p className={cn("mt-0.5 text-sm", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                        Website, social, portfolio or other URL.
+                      </p>
+                    </div>
                     <div className="space-y-2">
-                      <Label htmlFor="resourceLinkUrl">External Link</Label>
+                      <Label htmlFor="resourceLinkUrl" className={cn(isDark ? "text-white" : "text-[#1a1a1a]")}>
+                        External Link
+                      </Label>
                       <Input
                         id="resourceLinkUrl"
                         type="url"
@@ -14368,14 +13802,14 @@ export default function CreateContestPage({
                         onChange={(e) => setNewResourceUrl(e.target.value)}
                         className={cn(
                           isDark
-                            ? "bg-[#180438] border border-gray-600"
+                            ? "bg-[#0e0e0e] border border-white/10"
                             : "bg-white",
                         )}
                       />
                     </div>
-                    <div className="space-y-2 mt-4 mb-4">
-                      <Label htmlFor="resourceLinkDescription">
-                        Description <span className="text-red-500">*</span>
+                    <div className="space-y-2">
+                      <Label htmlFor="resourceLinkDescription" className={cn(isDark ? "text-white" : "text-[#1a1a1a]")}>
+                        Description <span className={cn("font-bold", isDark ? "text-white" : "text-[#1a1a1a]")}>*</span>
                       </Label>
                       <Input
                         id="resourceLinkDescription"
@@ -14386,32 +13820,46 @@ export default function CreateContestPage({
                         }
                         className={cn(
                           isDark
-                            ? "bg-[#180438] border border-gray-600"
+                            ? "bg-[#0e0e0e] border border-white/10"
                             : "bg-white",
                         )}
                       />
                     </div>
                     <Button
                       type="button"
+                      variant="outline"
                       onClick={addResource}
                       disabled={!newResourceUrl || !externalResourceDescription}
-                      className="w-full py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
+                      className={cn(
+                        "mt-auto w-full py-5 text-md",
+                        isDark
+                          ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                          : "border-[#1a1a1a] bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]",
+                      )}
                     >
                       Add Link
                     </Button>
                     {externalLinkError && (
-                      <div className="text-red-500 text-sm mt-2">
+                      <div className="text-red-500 text-sm">
                         {externalLinkError}
                       </div>
                     )}
                   </div>
+                  </div>
                   {/* Resource List */}
-                  <div className="mt-8">
-                    <h4 className="text-md font-medium mb-2">
+                  <div className="mt-2">
+                    <h4 className={cn("text-base font-semibold mb-3", isDark ? "text-white" : "text-[#1a1a1a]")}>
                       Assets & Resources
                     </h4>
                     {resources.length === 0 && (
-                      <div className="text-gray-500">
+                      <div
+                        className={cn(
+                          "rounded-xl border border-dashed px-4 py-6 text-sm",
+                          isDark
+                            ? "border-white/15 text-gray-400"
+                            : "border-[#e6e6ea] text-[#6d6d75]",
+                        )}
+                      >
                         No assets or links added yet.
                       </div>
                     )}
@@ -14436,10 +13884,10 @@ export default function CreateContestPage({
                           <li
                             key={idx}
                             className={cn(
-                              "flex items-center gap-3 border rounded-lg p-4",
+                              "flex items-center gap-3 rounded-xl border p-4",
                               isDark
-                                ? "bg-[#180438] border border-gray-600"
-                                : " bg-white border-gray-300",
+                                ? "border-white/15 bg-white/5"
+                                : "border-[#e6e6ea] bg-white",
                             )}
                           >
                             {isInternal && isImage && !isPdf && (
@@ -14584,23 +14032,23 @@ export default function CreateContestPage({
                             {resource.type === "external" && (
                               <div
                                 className={cn(
-                                  "rounded-full flex items-center justify-center w-12 h-12",
+                                  "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border",
                                   isDark
-                                    ? "bg-[#FFFFFF36] text-white"
-                                    : "text-[#4A00BE] bg-[#D8C3FF]",
+                                    ? "border-white/20 bg-transparent text-white"
+                                    : "border-[#1a1a1a] bg-white text-[#1a1a1a]",
                                 )}
                               >
-                                <ExternalLink className="w-6 h-6" />
+                                <ExternalLink className="h-5 w-5" />
                               </div>
                             )}
-                            <div className="flex-1">
-                              <div className="font-medium">
+                            <div className="flex-1 min-w-0">
+                              <div className={cn("font-medium", isDark ? "text-white" : "text-[#1a1a1a]")}>
                                 {resource.description}
                               </div>
                               <div
                                 className={cn(
                                   "text-xs mt-1",
-                                  isDark ? "text-white" : "text-gray-700",
+                                  isDark ? "text-gray-300" : "text-[#6d6d75]",
                                 )}
                               >
                                 {resource.type === "internal"
@@ -14614,9 +14062,7 @@ export default function CreateContestPage({
                                   rel="noopener noreferrer"
                                   className={cn(
                                     "text-sm hover:underline break-all",
-                                    isDark
-                                      ? "text-purple-400"
-                                      : "text-blue-600",
+                                    isDark ? "text-gray-200" : "text-[#1a1a1a]",
                                   )}
                                 >
                                   {resource.url}
@@ -14629,7 +14075,10 @@ export default function CreateContestPage({
                                     href={resource.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-xs text-blue-600 hover:underline flex items-center mt-1"
+                                    className={cn(
+                                      "mt-1 flex items-center text-xs hover:underline",
+                                      isDark ? "text-gray-200" : "text-[#1a1a1a]",
+                                    )}
                                   >
                                     Open PDF
                                   </a>
@@ -14638,7 +14087,10 @@ export default function CreateContestPage({
                                     href={resource.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-xs text-blue-600 hover:underline flex items-center mt-1"
+                                    className={cn(
+                                      "mt-1 flex items-center text-xs hover:underline",
+                                      isDark ? "text-gray-200" : "text-[#1a1a1a]",
+                                    )}
                                   >
                                     Play Video
                                   </a>
@@ -14647,19 +14099,24 @@ export default function CreateContestPage({
                                     href={resource.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-xs text-blue-600 hover:underline flex items-center mt-1"
+                                    className={cn(
+                                      "mt-1 flex items-center text-xs hover:underline",
+                                      isDark ? "text-gray-200" : "text-[#1a1a1a]",
+                                    )}
                                   >
                                     Open File
                                   </a>
                                 ))}
                             </div>
                             <button
+                              type="button"
                               onClick={() => removeResource(idx)}
+                              aria-label="Remove resource"
                               className={cn(
-                                "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
+                                "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border",
                                 isDark
-                                  ? "bg-[#FFFFFF36] text-white"
-                                  : "text-[#4A00BE] bg-[#D8C3FF]",
+                                  ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                                  : "border-[#1a1a1a] bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]",
                               )}
                             >
                               <Trash className="h-4 w-4" />
@@ -14705,7 +14162,7 @@ export default function CreateContestPage({
                             value={inspirationLinks[0]?.url || ""}
                             className={cn(
                               isDark
-                                ? "bg-[#180438] border border-gray-600"
+                                ? "bg-[#0e0e0e] border border-white/10"
                                 : "bg-white",
                             )}
                             onChange={(e) => {
@@ -14735,7 +14192,7 @@ export default function CreateContestPage({
                             value={inspirationLinks[0]?.description || ""}
                             className={cn(
                               isDark
-                                ? "bg-[#180438] border border-gray-600"
+                                ? "bg-[#0e0e0e] border border-white/10"
                                 : "bg-white",
                             )}
                             onChange={(e) => {
@@ -14776,7 +14233,7 @@ export default function CreateContestPage({
                             className={cn(
                               "mb-3",
                               isDark
-                                ? "bg-[#180438] border border-gray-600"
+                                ? "bg-[#0e0e0e] border border-white/10"
                                 : "bg-white",
                             )}
                             onChange={(e) =>
@@ -14797,7 +14254,7 @@ export default function CreateContestPage({
                             className={cn(
                               "mb-4",
                               isDark
-                                ? "bg-[#180438] border border-gray-600"
+                                ? "bg-[#0e0e0e] border border-white/10"
                                 : "bg-white",
                             )}
                             onChange={(e) =>
@@ -14806,11 +14263,12 @@ export default function CreateContestPage({
                           />
                           <Button
                             type="button"
+                            variant="outline"
                             className={cn(
-                              "w-full py-6 text-md",
+                              "w-full py-5 text-md",
                               isDark
-                                ? "bg-[#6C43D0] hover:bg-[#6C43D0]"
-                                : "bg-[#4A00BE] hover:bg-[#4A00BE]",
+                                ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                                : "border-[#1a1a1a] bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]",
                             )}
                             onClick={addInspiration}
                             disabled={
@@ -14831,24 +14289,24 @@ export default function CreateContestPage({
                               <li
                                 key={index}
                                 className={cn(
-                                  "flex items-center gap-3 border rounded-lg p-4",
+                                  "flex items-center gap-3 rounded-xl border p-4",
                                   isDark
-                                    ? "bg-[#180438] border border-gray-600"
-                                    : " bg-white border-gray-300",
+                                    ? "border-white/15 bg-white/5"
+                                    : "border-[#e6e6ea] bg-white",
                                 )}
                               >
                                 <div
                                   className={cn(
-                                    "rounded-full flex items-center justify-center w-12 h-12",
+                                    "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border",
                                     isDark
-                                      ? "bg-[#FFFFFF36] text-white"
-                                      : "text-[#4A00BE] bg-[#D8C3FF]",
+                                      ? "border-white/20 bg-transparent text-white"
+                                      : "border-[#1a1a1a] bg-white text-[#1a1a1a]",
                                   )}
                                 >
-                                  <ExternalLink className="w-6 h-6" />
+                                  <ExternalLink className="h-5 w-5" />
                                 </div>
 
-                                <div className="flex-1">
+                                <div className="flex-1 min-w-0">
                                   <a
                                     href={item.url}
                                     target="_blank"
@@ -14856,23 +14314,25 @@ export default function CreateContestPage({
                                     className={cn(
                                       "font-medium hover:underline break-all",
                                       isDark
-                                        ? "text-purple-400"
-                                        : "text-blue-600",
+                                        ? "text-gray-200"
+                                        : "text-[#1a1a1a]",
                                     )}
                                   >
                                     {item.url}
                                   </a>
-                                  <div className="text-xs text-gray-500 mt-1">
+                                  <div className={cn("text-xs mt-1", isDark ? "text-gray-400" : "text-[#6d6d75]")}>
                                     {item.description}
                                   </div>
                                 </div>
                                 <button
+                                  type="button"
                                   onClick={() => removeInspirationLink(index)}
+                                  aria-label="Remove inspiration"
                                   className={cn(
-                                    "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
+                                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border",
                                     isDark
-                                      ? "bg-[#FFFFFF36] text-white"
-                                      : "text-[#4A00BE] bg-[#D8C3FF]",
+                                      ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                                      : "border-[#1a1a1a] bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]",
                                   )}
                                 >
                                   <Trash className="h-4 w-4" />
@@ -14916,7 +14376,7 @@ export default function CreateContestPage({
                             className={cn(
                               "text-sm",
                               isDark
-                                ? "bg-[#180438] border border-gray-600"
+                                ? "bg-[#0e0e0e] border border-white/10"
                                 : "bg-white",
                             )}
                           />
@@ -14938,7 +14398,7 @@ export default function CreateContestPage({
                             className={cn(
                               "text-sm",
                               isDark
-                                ? "bg-[#180438] border border-gray-600"
+                                ? "bg-[#0e0e0e] border border-white/10"
                                 : "bg-white",
                             )}
                           />
@@ -14962,7 +14422,7 @@ export default function CreateContestPage({
                             className={cn(
                               "text-sm",
                               isDark
-                                ? "bg-[#180438] border border-gray-600"
+                                ? "bg-[#0e0e0e] border border-white/10"
                                 : "bg-white",
                             )}
                           />
@@ -14986,7 +14446,7 @@ export default function CreateContestPage({
                             className={cn(
                               "text-sm",
                               isDark
-                                ? "bg-[#180438] border border-gray-600"
+                                ? "bg-[#0e0e0e] border border-white/10"
                                 : "bg-white",
                             )}
                           />
@@ -15040,7 +14500,7 @@ export default function CreateContestPage({
                               }
                               className={cn(
                                 isDark
-                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  ? "bg-[#0e0e0e] border border-white/10 text-white"
                                   : "bg-white text-black",
                               )}
                             />
@@ -15058,22 +14518,23 @@ export default function CreateContestPage({
                               }
                               className={cn(
                                 isDark
-                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  ? "bg-[#0e0e0e] border border-white/10 text-white"
                                   : "bg-white text-black",
                               )}
                             />
                           </div>
                           <Button
                             type="button"
+                            variant="outline"
                             onClick={addTrackingLink}
                             disabled={
                               !newTrackingUrl || !newTrackingDescription
                             }
                             className={cn(
-                              "w-full py-6 text-md",
+                              "w-full py-5 text-md",
                               isDark
-                                ? "bg-[#6C43D0] hover:bg-[#6C43D0]"
-                                : "bg-[#4A00BE] hover:bg-[#4A00BE]",
+                                ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                                : "border-[#1a1a1a] bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]",
                             )}
                           >
                             Add Tracking Link
@@ -15084,23 +14545,23 @@ export default function CreateContestPage({
                                 <li
                                   key={index}
                                   className={cn(
-                                    "flex items-center gap-3 rounded-lg p-4 border shadow-sm",
+                                    "flex items-center gap-3 rounded-xl border p-4",
                                     isDark
-                                      ? "border-gray-600"
-                                      : "border-gray-300",
+                                      ? "border-white/15 bg-white/5"
+                                      : "border-[#e6e6ea] bg-white",
                                   )}
                                 >
                                   <div
                                     className={cn(
-                                      "rounded-full flex items-center justify-center w-12 h-12 mr-2",
+                                      "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border",
                                       isDark
-                                        ? "bg-[#FFFFFF36] text-white"
-                                        : "text-[#4A00BE] bg-[#D8C3FF]",
+                                        ? "border-white/20 bg-transparent text-white"
+                                        : "border-[#1a1a1a] bg-white text-[#1a1a1a]",
                                     )}
                                   >
-                                    <ExternalLink className="w-6 h-6" />
+                                    <ExternalLink className="h-5 w-5" />
                                   </div>
-                                  <div className="flex-1">
+                                  <div className="flex-1 min-w-0">
                                     <a
                                       href={
                                         item.url.includes("[creator]")
@@ -15117,8 +14578,8 @@ export default function CreateContestPage({
                                       className={cn(
                                         "font-medium hover:underline break-all",
                                         isDark
-                                          ? "text-purple-400"
-                                          : "text-blue-600",
+                                          ? "text-gray-200"
+                                          : "text-[#1a1a1a]",
                                       )}
                                     >
                                       {item.url.includes("[creator]")
@@ -15131,19 +14592,21 @@ export default function CreateContestPage({
                                     <div
                                       className={cn(
                                         "text-xs mt-1",
-                                        isDark ? "text-white" : "text-gray-600",
+                                        isDark ? "text-gray-400" : "text-[#6d6d75]",
                                       )}
                                     >
                                       {item.description}
                                     </div>
                                   </div>
                                   <button
+                                    type="button"
                                     onClick={() => removeTrackingLink(index)}
+                                    aria-label="Remove tracking link"
                                     className={cn(
-                                      "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
+                                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border",
                                       isDark
-                                        ? "bg-[#FFFFFF36] text-white"
-                                        : "text-[#4A00BE] bg-[#D8C3FF]",
+                                        ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                                        : "border-[#1a1a1a] bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]",
                                     )}
                                   >
                                     <Trash className="h-4 w-4" />
@@ -15157,13 +14620,13 @@ export default function CreateContestPage({
                     </div>
                   )}
                 </div>
-                <CardFooter className="py-6 px-6">
+                <CardFooter className="flex flex-col items-stretch gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
                   <button
                     className={cn(
-                      "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
-                      isDark
-                        ? "text-white border-gray-400"
-                        : "border-[#4A00BE] text-[#4A00BE]",
+                      "w-full border font-semibold px-4 py-2 rounded-lg text-md sm:w-auto",
+                    isDark
+                      ? "border-white/20 text-white hover:bg-white/10"
+                      : "border-[#d5d5db] text-[#1a1a1a]",
                     )}
                     type="button"
                     onClick={prevStep}
@@ -15171,14 +14634,14 @@ export default function CreateContestPage({
                   >
                     Back
                   </button>
-                  <div className="flex gap-2 ml-auto">
-                    <div className="flex gap-2 ml-auto">
+                  <div className="flex w-full gap-2 sm:w-auto">
+                    <div className="flex w-full gap-2 sm:w-auto">
                       <button
                         className={cn(
                           "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
-                          isDark
-                            ? "text-white border-gray-400"
-                            : "border-[#4A00BE] text-[#4A00BE]",
+                    isDark
+                      ? "border-white/20 text-white hover:bg-white/10"
+                      : "border-[#d5d5db] text-[#1a1a1a]",
                         )}
                         onClick={handleSaveDraft}
                         disabled={isLoading || !title.trim()}
@@ -15191,15 +14654,15 @@ export default function CreateContestPage({
                             <span>Saving...</span>
                           </div>
                         ) : (
-                          "Save Draft"
+                          "Save draft"
                         )}
                       </button>
                       <button
                         className={cn(
                           "cursor-pointer px-8 py-2 rounded-lg text-md",
                           isDark
-                            ? "bg-[#7F39EC] text-white"
-                            : "bg-[#4A00BE] text-white",
+                            ? "bg-white text-[#1a1a1a]"
+                            : "bg-[#1a1a1a] text-white",
                         )}
                         type="button"
                         onClick={nextStep}
@@ -15212,10 +14675,10 @@ export default function CreateContestPage({
                         {isLoading ? (
                           <div className="flex items-center gap-2">
                             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                            Next
+                            Continue
                           </div>
                         ) : (
-                          "Next"
+                          "Continue"
                         )}
                       </button>
                     </div>
@@ -15238,6 +14701,256 @@ export default function CreateContestPage({
             </div>
           </>
         )}
+        </div>
+        <aside className="hidden space-y-4 lg:sticky lg:top-4 lg:block">
+          {(() => {
+            const platformName = (id: string) =>
+              id === "youtube"
+                ? "YouTube"
+                : id === "instagram"
+                  ? "Instagram"
+                  : id === "tiktok"
+                    ? "TikTok"
+                    : id === "twitter"
+                      ? "X"
+                      : id;
+            const previewPlatforms =
+              contestFormat === "text_image"
+                ? ["twitter"]
+                : selectedPlatforms.length > 0
+                  ? selectedPlatforms
+                  : [];
+            const checks: {
+              label: string;
+              done: boolean;
+              value: string;
+              marked: boolean;
+            }[] = [
+              { label: "Reward model", done: true, value: rewardModelLabel, marked: false },
+              {
+                label: "Format",
+                done: true,
+                value: `${contestFormat === "text_image" ? "Text & image" : "Video"}${contentType ? ` · ${contentType}` : ""}`,
+                marked: false,
+              },
+              {
+                label: "Platforms",
+                done: previewPlatforms.length > 0,
+                value: previewPlatforms.map(platformName).join(", ") || "—",
+                marked: true,
+              },
+              {
+                label: "Category",
+                done: Boolean(category),
+                value: category ? category.replace(/-/g, " ") : "—",
+                marked: true,
+              },
+              {
+                label: "Who can see it",
+                done: true,
+                value: accessMode,
+                marked: false,
+              },
+              { label: "Title", done: Boolean(title.trim()), value: title || "—", marked: true },
+              {
+                label: "Thumbnail",
+                done: Boolean(thumbnail || (thumbnailPreview && thumbnailPreview !== "uploading")),
+                value: thumbnail || thumbnailPreview ? "Added" : "—",
+                marked: true,
+              },
+              {
+                label: "Brief and rules",
+                done: !isQuillEmpty(briefHtml) && !isQuillEmpty(rulesHtml),
+                value:
+                  !isQuillEmpty(briefHtml) && !isQuillEmpty(rulesHtml)
+                    ? "Added"
+                    : "—",
+                marked: true,
+              },
+              {
+                label: "Runs",
+                done: Boolean(startDate && endDate),
+                value: startDate && endDate ? `${startDate} – ${endDate}` : "—",
+                marked: true,
+              },
+              {
+                label: "Resources",
+                done: resources.length > 0,
+                value: resources.length > 0 ? String(resources.length) : "—",
+                marked: true,
+              },
+              ...(contestType === "cpm" || contestType === "dual_rewards"
+                ? [
+                    {
+                      label: "Per 1K views",
+                      done: String(cpmRate).trim() !== "",
+                      value: String(cpmRate).trim() || "—",
+                      marked: true,
+                    },
+                  ]
+                : []),
+              (() => {
+                if (contestType === "leaderboard") {
+                  const prizeCents = totalPrizePool || 0;
+                  const bonusDollars =
+                    flatFeeBonus &&
+                    parseFloat(String(flatFeeBonus)) > 0 &&
+                    totalBudget &&
+                    parseFloat(String(totalBudget)) > 0
+                      ? parseFloat(String(totalBudget))
+                      : 0;
+                  const totalCents =
+                    prizeCents + Math.round(bonusDollars * 100);
+                  return {
+                    label: "Budget",
+                    done: prizeCents > 0,
+                    value:
+                      prizeCents > 0
+                        ? formatCurrencyFromCents(totalCents)
+                        : "—",
+                    marked: true,
+                  };
+                }
+                const budgetDollars = parseFloat(String(totalBudget));
+                const budgetCents =
+                  !isNaN(budgetDollars) && budgetDollars > 0
+                    ? Math.round(budgetDollars * 100)
+                    : 0;
+                return {
+                  label: "Budget",
+                  done: budgetCents > 0,
+                  value:
+                    budgetCents > 0
+                      ? formatCurrencyFromCents(budgetCents)
+                      : "—",
+                  marked: true,
+                };
+              })(),
+            ];
+            const ready = Math.round(
+              (checks.filter((item) => item.done).length / checks.length) * 100,
+            );
+            const card = cn(
+              "overflow-hidden rounded-2xl border",
+              isDark ? "border-white/10 bg-[#161616]" : "border-[#e6e6ea] bg-white",
+            );
+            const ink = isDark ? "text-white" : "text-[#1a1a1a]";
+            const mute = isDark ? "text-gray-300" : "text-[#5c5c66]";
+            return (
+              <>
+                <div className={card}>
+                  <div
+                    className={cn(
+                      "relative flex aspect-[16/10] w-full items-center justify-center overflow-hidden",
+                      isDark ? "bg-[#0e0e0e]" : "bg-[#f3f4f7]",
+                    )}
+                    style={
+                      thumbnailPreview && thumbnailPreview !== "uploading"
+                        ? undefined
+                        : {
+                            backgroundImage: isDark
+                              ? "repeating-linear-gradient(135deg, transparent, transparent 10px, rgba(255,255,255,0.05) 10px, rgba(255,255,255,0.05) 11px)"
+                              : "repeating-linear-gradient(135deg, transparent, transparent 10px, rgba(0,0,0,0.045) 10px, rgba(0,0,0,0.045) 11px)",
+                          }
+                    }
+                  >
+                    {thumbnailPreview && thumbnailPreview !== "uploading" ? (
+                      <img
+                        src={thumbnailPreview}
+                        alt=""
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <span className={cn("flex flex-col items-center gap-1 text-xs", mute)}>
+                        <Image className="h-4 w-4" />
+                        Thumbnail
+                      </span>
+                    )}
+                    <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-[#1a1a1a] px-2.5 py-1 text-xs font-medium text-white">
+                      <Link2 className="h-3.5 w-3.5" />
+                      {rewardModelLabel}
+                    </span>
+                  </div>
+                  <div className="px-4 py-3">
+                    <p className={cn("text-xs", mute)}>Your campaign name</p>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      {previewPlatforms.map((id) => (
+                        <span key={id} className="shrink-0">
+                          {getPlatformIcon(id, "sm")}
+                        </span>
+                      ))}
+                      <p className={cn("truncate text-sm font-medium", ink)}>
+                        {title || rewardModelLabel}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className={cn(card, "p-4")}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className={cn("text-sm font-semibold", ink)}>Summary</p>
+                    <p className={cn("text-xs", mute)}>{ready}% ready</p>
+                  </div>
+                  <div
+                    className={cn(
+                      "mb-2 h-1 overflow-hidden rounded-full",
+                      isDark ? "bg-white/10" : "bg-[#ececef]",
+                    )}
+                  >
+                    <div
+                      className="h-full rounded-full bg-[#16a34a]"
+                      style={{ width: `${ready}%` }}
+                    />
+                  </div>
+                  <div className="text-sm">
+                    {checks.map((item) => (
+                      <div
+                        key={item.label}
+                        className={cn(
+                          "flex items-center justify-between gap-3 border-b py-2.5 last:border-b-0",
+                          isDark ? "border-white/10" : "border-[#f0f0f2]",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "flex shrink-0 items-center gap-2",
+                            mute,
+                          )}
+                        >
+                          {item.marked && (
+                            <span
+                              className={cn(
+                                "flex h-4 w-4 items-center justify-center rounded-full border text-[9px]",
+                                item.done
+                                  ? "border-[#16a34a] bg-[#16a34a] text-white"
+                                  : isDark
+                                    ? "border-white/30"
+                                    : "border-[#d4d4d8]",
+                              )}
+                            >
+                              {item.done ? "✓" : ""}
+                            </span>
+                          )}
+                          {item.label}
+                        </span>
+                        <span
+                          className={cn(
+                            "min-w-0 flex-1 text-right font-medium break-words",
+                            item.label === "Platforms" || item.label === "Runs"
+                              ? "normal-case"
+                              : "capitalize",
+                            ink,
+                          )}
+                        >
+                          {item.done ? item.value : "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </aside>
       </div>
 
       <CampaignPaymentModal

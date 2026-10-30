@@ -14,8 +14,12 @@ type Props = {
   disabled?: boolean;
   /** Shows a button to load usernames from a CSV or text file. */
   allowFile?: boolean;
+  /** Hide the valid-count / clear / upload row (parent can render its own). */
+  hideFooter?: boolean;
   placeholder?: string;
   labelledBy?: string;
+  accent?: "purple" | "ink";
+  className?: string;
 };
 
 /** Adds tokens to the list, dropping "@" and case-insensitive duplicates. */
@@ -41,15 +45,20 @@ export function UsernameChipsInput({
   onChange,
   disabled,
   allowFile,
+  hideFooter,
   placeholder = "Type or paste usernames",
   labelledBy,
+  accent = "purple",
+  className,
 }: Props) {
+  const ink = accent === "ink";
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { invalid } = parseUsernames(value);
   const invalidSet = new Set(invalid.map((n) => n.toLowerCase()));
   const validCount = value.length - invalidSet.size;
+  const showFooter = !hideFooter;
 
   const commit = (text: string) => {
     const tokens = text.split(/[\s,;]+/).filter(Boolean);
@@ -83,10 +92,11 @@ export function UsernameChipsInput({
   };
 
   return (
-    <div className="space-y-2">
+    <div className={cn("space-y-2", className)}>
       <div
         className={cn(
-          "flex min-h-[3rem] flex-wrap items-center gap-1.5 rounded-md border border-input bg-white px-2 py-1.5 focus-within:ring-2 focus-within:ring-[#7F39EC] dark:border-white/15 dark:bg-white/5",
+          "flex min-h-[3rem] flex-wrap items-center gap-1.5 rounded-xl border border-input bg-white px-2 py-1.5 focus-within:ring-2 dark:border-white/15 dark:bg-white/5",
+          ink ? "focus-within:ring-[#1a1a1a]" : "focus-within:ring-[#7F39EC]",
           disabled && "opacity-50",
         )}
         onClick={() => inputRef.current?.focus()}
@@ -100,7 +110,9 @@ export function UsernameChipsInput({
                 "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
                 bad
                   ? "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-300"
-                  : "border-purple-200 bg-purple-50 text-[#4A00BE] dark:border-[#7F39EC]/40 dark:bg-[#2B1159] dark:text-purple-200",
+                  : ink
+                    ? "border-[#e6e6ea] bg-[#f3f3f5] text-[#1a1a1a] dark:border-white/20 dark:bg-white/10 dark:text-white"
+                    : "border-purple-200 bg-purple-50 text-[#4A00BE] dark:border-[#7F39EC]/40 dark:bg-[#2B1159] dark:text-purple-200",
               )}
             >
               @{name}
@@ -109,7 +121,10 @@ export function UsernameChipsInput({
                 type="button"
                 aria-label={`Remove ${name}`}
                 disabled={disabled}
-                className="rounded-full p-0.5 hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:hover:bg-white/10"
+                className={cn(
+                  "rounded-full p-0.5 hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 dark:hover:bg-white/10",
+                  ink ? "focus-visible:ring-[#1a1a1a]" : "focus-visible:ring-[#7F39EC]",
+                )}
                 onClick={(e) => {
                   e.stopPropagation();
                   onChange(value.filter((n) => n !== name));
@@ -146,50 +161,66 @@ export function UsernameChipsInput({
           onBlur={() => draft.trim() && commit(draft)}
         />
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p id={`${id}-count`} className="text-xs text-gray-500 dark:text-gray-400" aria-live="polite">
-          {validCount} valid
-          {invalidSet.size > 0 && (
-            <span className="text-red-600 dark:text-red-400"> · {invalidSet.size} invalid</span>
-          )}
-          {value.length > 0 && (
+      {showFooter && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p id={`${id}-count`} className="text-xs text-gray-500 dark:text-gray-400" aria-live="polite">
+            {validCount} valid
+            {invalidSet.size > 0 && (
+              <span className="text-red-600 dark:text-red-400"> · {invalidSet.size} invalid</span>
+            )}
+            {value.length > 0 && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  className={cn(
+                    "rounded-sm underline underline-offset-2 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 dark:hover:text-gray-200",
+                    ink ? "focus-visible:ring-[#1a1a1a]" : "focus-visible:ring-[#7F39EC]",
+                  )}
+                  onClick={() => onChange([])}
+                  disabled={disabled}
+                >
+                  Clear
+                </button>
+              </>
+            )}
+          </p>
+          {allowFile && (
             <>
-              {" · "}
-              <button
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,.txt,text/csv,text/plain"
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden="true"
+                onChange={(e) => loadFile(e.target.files?.[0])}
+              />
+              <Button
                 type="button"
-                className="rounded-sm underline underline-offset-2 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC] dark:hover:text-gray-200"
-                onClick={() => onChange([])}
+                size="sm"
+                variant="outline"
+                className={cn(
+                  "h-8",
+                  ink
+                    ? "border border-[#1a1a1a] bg-white text-[#1a1a1a] hover:bg-[#f3f3f5] dark:border-white/40 dark:bg-transparent dark:text-white dark:hover:bg-white/10"
+                    : "dark:text-gray-200 dark:hover:bg-white/10",
+                )}
                 disabled={disabled}
+                onClick={() => fileRef.current?.click()}
               >
-                Clear
-              </button>
+                <FileUp className="mr-1.5 h-4 w-4" /> Upload CSV
+              </Button>
             </>
           )}
-        </p>
-        {allowFile && (
-          <>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".csv,.txt,text/csv,text/plain"
-              className="sr-only"
-              tabIndex={-1}
-              aria-hidden="true"
-              onChange={(e) => loadFile(e.target.files?.[0])}
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-8 dark:text-gray-200 dark:hover:bg-white/10"
-              disabled={disabled}
-              onClick={() => fileRef.current?.click()}
-            >
-              <FileUp className="mr-1.5 h-4 w-4" /> Upload CSV
-            </Button>
-          </>
-        )}
-      </div>
+        </div>
+      )}
+      {hideFooter && (
+        <span id={`${id}-count`} className="sr-only" aria-live="polite">
+          {validCount} valid
+          {invalidSet.size > 0 ? `, ${invalidSet.size} invalid` : ""}
+        </span>
+      )}
     </div>
   );
 }

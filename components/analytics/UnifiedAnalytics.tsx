@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   BarChart3,
@@ -48,7 +46,6 @@ import ContestAnalytics from "./ContestAnalytics";
 import CreatorAnalytics from "./CreatorAnalytics";
 import BrandDetailedAnalytics from "./BrandDetailedAnalytics";
 import BrandAnalyticsGraph from "./BrandAnalyticsGraph";
-import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
 import { cn } from "@/lib/utils";
@@ -558,7 +555,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
         </p>
         <button
           onClick={fetchAnalyticsData}
-          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+          className="h-10 rounded-full bg-[#171717] px-5 text-sm font-medium text-white hover:bg-[#171717]/90"
         >
           Retry
         </button>
@@ -569,7 +566,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
   if (loading && !analyticsData) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#171717]"></div>
       </div>
     );
   }
@@ -577,7 +574,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
   if (!analyticsData) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#171717]"></div>
       </div>
     );
   }
@@ -675,13 +672,13 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
       {/* Unified Filter */}
       <div
         className={cn(
-          "rounded-lg p-4 shadow-sm border",
+          "w-full min-w-0 rounded-2xl border p-4 shadow-none",
           isDark
-            ? "bg-[#170337] border-[#170337] text-white"
-            : "bg-white border border-gray-200",
+            ? "border-white/10 bg-white/5 text-white"
+            : "border-neutral-200 bg-white text-[#171717]",
         )}
       >
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+        <div className="mb-4 flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <h3
             className={cn(
               "text-base font-semibold tracking-tight",
@@ -690,17 +687,18 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
           >
             Filters
           </h3>
-          <div className="flex flex-wrap items-center gap-2 justify-start md:justify-end">
+          <div className="flex w-full min-w-0 flex-col gap-2 xl:w-auto xl:flex-row xl:flex-wrap xl:items-center xl:justify-end">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
                   size="sm"
                   className={cn(
-                    "flex items-center gap-2 min-w-[160px] justify-between",
+                    "flex w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden",
+                    "h-10 rounded-full border shadow-none xl:w-auto xl:min-w-[160px] xl:max-w-xs",
                     isDark
-                      ? "bg-[#170337] text-white border-gray-600"
-                      : "bg-white hover:bg-gray-50 text-gray-700 border-gray-400",
+                      ? "border-white/15 bg-transparent text-white hover:bg-white/10"
+                      : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
                   )}
                 >
                   {(videoYoutube || videoInstagram || videoTiktok) &&
@@ -708,7 +706,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   twitterAnalytics ? (
                     <>
                       <Video className="w-4 h-4 shrink-0" />
-                      <span className="truncate">
+                      <span className="min-w-0 flex-1 truncate text-left">
                         {[
                           videoYoutube && "YouTube",
                           videoInstagram && "Instagram",
@@ -722,7 +720,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   ) : videoYoutube || videoInstagram || videoTiktok ? (
                     <>
                       <Video className="w-4 h-4 shrink-0" />
-                      <span className="truncate">
+                      <span className="min-w-0 flex-1 truncate text-left">
                         Video
                         <span className="text-muted-foreground font-normal">
                           {" "}
@@ -741,7 +739,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   ) : !isPcSubmissions && twitterAnalytics ? (
                     <>
                       <ImageIcon className="w-4 h-4 shrink-0" />
-                      <span className="truncate">
+                      <span className="min-w-0 flex-1 truncate text-left">
                         Text/Image
                         <span className="text-muted-foreground font-normal">
                           {" "}
@@ -751,7 +749,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                     </>
                   ) : (
                     <>
-                      <span className="truncate text-muted-foreground">
+                      <span className="min-w-0 flex-1 truncate text-left text-muted-foreground">
                         Select platforms
                       </span>
                     </>
@@ -763,7 +761,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 align="end"
                 className={cn(
                   "min-w-[220px]",
-                  isDark ? "bg-[#06021D] border-gray-800" : "bg-white",
+                  isDark ? "bg-[#161616] border-gray-800" : "bg-white",
                 )}
               >
                 <DropdownMenuItem
@@ -1005,13 +1003,14 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   variant="outline"
                   size="sm"
                   className={cn(
-                    "flex items-center gap-2 min-w-[180px] justify-between",
+                    "flex w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden",
+                    "h-10 rounded-full border shadow-none xl:w-auto xl:min-w-[180px]",
                     isDark
-                      ? "bg-[#170337] text-white border-gray-600"
-                      : "bg-white hover:bg-gray-50 text-gray-700 border-gray-400",
+                      ? "border-white/15 bg-transparent text-white hover:bg-white/10"
+                      : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
                   )}
                 >
-                  <span className="max-w-[150px] truncate">
+                  <span className="min-w-0 flex-1 truncate text-left">
                     {contestTypeButtonLabel}
                   </span>
                   <ChevronDown className="w-4 h-4 shrink-0 opacity-70" />
@@ -1023,7 +1022,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 className={cn(
                   "w-56 border shadow-lg",
                   isDark
-                    ? "bg-[#06021D] border-gray-800 text-white"
+                    ? "bg-[#161616] border-gray-800 text-white"
                     : "bg-white border-black/5 text-black",
                 )}
               >
@@ -1066,13 +1065,14 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   variant="outline"
                   size="sm"
                   className={cn(
-                    "flex items-center gap-2 min-w-[200px] justify-between",
+                    "flex w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden",
+                    "h-10 rounded-full border shadow-none xl:w-auto xl:min-w-[200px]",
                     isDark
-                      ? "bg-[#170337] text-white border-gray-600"
-                      : "bg-white hover:bg-gray-50 text-gray-700 border-gray-400",
+                      ? "border-white/15 bg-transparent text-white hover:bg-white/10"
+                      : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
                   )}
                 >
-                  <span className="max-w-[160px] truncate">{campaignButtonLabel}</span>
+                  <span className="min-w-0 flex-1 truncate text-left">{campaignButtonLabel}</span>
                   <ChevronDown className="w-4 h-4 shrink-0 opacity-70" />
                 </Button>
               </DropdownMenuTrigger>
@@ -1082,7 +1082,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 className={cn(
                   "w-96 border shadow-lg",
                   isDark
-                    ? "bg-[#06021D] border-gray-800 text-white"
+                    ? "bg-[#161616] border-gray-800 text-white"
                     : "bg-white border-black/5 text-black",
                 )}
               >
@@ -1150,11 +1150,12 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
               variant="outline"
               size="sm"
               onClick={() => setShowTileSettings(!showTileSettings)}
-              className={`flex items-center gap-2 ${
+              className={cn(
+                "h-10 w-full min-w-0 rounded-full border px-4 shadow-none xl:w-auto",
                 isDark
-                  ? "bg-[#170337] text-white border-gray-600"
-                  : "bg-white hover:bg-gray-50 text-gray-700 border-gray-400"
-              }`}
+                  ? "border-white/15 bg-transparent text-white hover:bg-white/10"
+                  : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
+              )}
             >
               <Settings className="w-4 h-4" />
               Customize Tiles
@@ -1163,13 +1164,11 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
         </div>
 
         {/* Submissions vs PC Submissions — drives overview tiles + graph */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div
             className={cn(
-              "inline-flex w-fit flex-wrap gap-1 rounded-full border p-1",
-              isDark
-                ? "border-white/10 bg-[#0d0d0d]"
-                : "border-black/10 bg-[#f5f5f5]",
+              "flex w-full min-w-0 items-center gap-0.5 rounded-full p-1 sm:w-fit",
+              isDark ? "bg-white/10" : "bg-[#E4E4E4]",
             )}
           >
             {DATA_SOURCE_TABS.map((tab) => (
@@ -1178,12 +1177,14 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 type="button"
                 onClick={() => setDataSource(tab.id)}
                 className={cn(
-                  "rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
+                  "inline-flex h-9 min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-full px-3 text-sm font-medium leading-none outline-none transition-colors sm:flex-none sm:px-4",
                   dataSource === tab.id
-                    ? "bg-[#7F39EC] text-white shadow-sm"
+                    ? isDark
+                      ? "bg-white/15 text-white shadow-sm"
+                      : "bg-white text-[#1a1a1a] shadow-sm"
                     : isDark
-                      ? "text-white/60 hover:text-white"
-                      : "text-black/55 hover:text-black",
+                      ? "text-white/75 hover:bg-white/10 hover:text-white"
+                      : "text-[#3f3f46] hover:bg-white/80 hover:text-[#1a1a1a]",
                 )}
               >
                 {tab.label}
@@ -1195,6 +1196,13 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
             value={dateRange}
             presetLabel={dateRangePresetLabel}
             maxHistoryDays={BRAND_ANALYTICS_MAX_RANGE_DAYS}
+            triggerClassName={cn(
+              "h-10 w-full min-w-0 max-w-none shrink rounded-full px-4 shadow-none",
+              "sm:w-auto sm:min-w-[180px] sm:max-w-[220px] sm:shrink-0",
+              isDark
+                ? "border-white/15 bg-transparent hover:bg-white/10"
+                : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]",
+            )}
             onChange={(next, label) => {
               setDateRange(next);
               setDateRangePresetLabel(label);
@@ -1203,7 +1211,12 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
           />
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-1.5">
+        <div
+          className={cn(
+            "mt-3 flex w-full min-w-0 flex-wrap gap-1 rounded-2xl p-1 xl:inline-flex xl:w-fit xl:max-w-full xl:gap-0.5 xl:rounded-full",
+            isDark ? "bg-white/10" : "bg-[#E4E4E4]",
+          )}
+        >
           {submissionStatusOptions.map((option) => {
             const Icon = option.icon;
             const isActive = activeFilter === option.id;
@@ -1213,16 +1226,18 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 type="button"
                 onClick={() => setActiveFilter(option.id)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
+                  "inline-flex h-9 max-w-full shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-sm font-medium leading-none outline-none transition-colors",
                   isActive
-                    ? "border-transparent bg-[#7F39EC] text-white"
+                    ? isDark
+                      ? "bg-white/15 text-white shadow-sm"
+                      : "bg-white text-[#1a1a1a] shadow-sm"
                     : isDark
-                      ? "border-white/10 bg-transparent text-white/70 hover:bg-white/5 hover:text-white"
-                      : "border-black/10 bg-white text-gray-600 hover:border-black/20 hover:text-gray-900",
+                      ? "text-white/75 hover:bg-white/10 hover:text-white"
+                      : "text-[#3f3f46] hover:bg-white/80 hover:text-[#1a1a1a]",
                 )}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0 opacity-80" />
-                {option.label}
+                <span className="truncate">{option.label}</span>
               </button>
             );
           })}
@@ -1240,37 +1255,25 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
             <div
               key={tile.id}
               className={cn(
-                "rounded-xl border p-4",
+                "rounded-2xl border px-4 py-4 shadow-none",
                 isDark
-                  ? "border-white/5 bg-[#170337] text-white"
-                  : "border-black/[0.04] bg-white text-black shadow-[0px_5px_20px_0px_#0000000D]",
+                  ? "border-white/10 bg-white/5 text-white"
+                  : "border-neutral-200 bg-white text-[#171717]",
               )}
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 space-y-2">
-                  <p
-                    className={cn(
-                      "text-sm font-medium leading-snug",
-                      isDark ? "text-white/70" : "text-gray-500",
-                    )}
-                  >
+                <div className="min-w-0">
+                  <p className={cn("text-sm", isDark ? "text-slate-400" : "text-[#737373]")}>
                     {tile.label}
                   </p>
-                  <p
-                    className={cn(
-                      "text-2xl font-bold tracking-tight tabular-nums",
-                      isDark ? "text-white" : "text-gray-900",
-                    )}
-                  >
+                  <p className={cn("mt-2 text-2xl font-semibold tracking-tight tabular-nums", isDark ? "text-white" : "text-[#171717]")}>
                     {displayValue}
                   </p>
                 </div>
                 <div
                   className={cn(
-                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-                    isDark
-                      ? "bg-white/15 text-white"
-                      : "bg-[#D8C3FF] text-[#4A00BE]",
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+                    isDark ? "bg-white/10 text-white" : "bg-[#F4F4F5] text-[#171717]",
                   )}
                 >
                   <Icon className="h-4 w-4" />
@@ -1286,13 +1289,13 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
         <div
           className={cn(
             "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
-            isDark ? "bg-[#100A33]" : "bg-black",
+            isDark ? "bg-black/70" : "bg-black",
           )}
         >
           <div
             className={cn(
               "rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto",
-              isDark ? "bg-[#06021D] border border-gray-800" : "bg-white",
+              isDark ? "bg-[#161616] border border-gray-800" : "bg-white",
             )}
           >
             <div className="flex items-center justify-between mb-6">
@@ -1338,11 +1341,11 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                             "p-3 border rounded-lg cursor-pointer transition-all",
                             tile.enabled
                               ? isDark
-                                ? "bg-purple-900/30 border-purple-600/50 text-white"
-                                : "bg-purple-50 border-purple-200 text-gray-900"
+                                ? "border-white bg-white/10 text-white"
+                                : "border-[#171717] bg-[#F6F6F7] text-[#171717]"
                               : isDark
-                                ? "bg-[#06021D] border-gray-600 text-white"
-                                : "border-gray-300 hover:bg-gray-100 text-gray-700",
+                                ? "border-white/15 bg-transparent text-white"
+                                : "border-neutral-200 bg-white text-[#44403c] hover:bg-[#F6F6F7]",
                           )}
                           onClick={() => toggleMetricTile(tile.id)}
                         >
@@ -1352,11 +1355,11 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                                 "w-4 h-4",
                                 tile.enabled
                                   ? isDark
-                                    ? "text-purple-300"
-                                    : "text-purple-600"
+                                    ? "text-white"
+                                    : "text-[#171717]"
                                   : isDark
-                                    ? "text-gray-400"
-                                    : "text-gray-500",
+                                    ? "text-slate-400"
+                                    : "text-[#737373]",
                               )}
                             />
                             <span
@@ -1385,232 +1388,177 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
       )}
 
       {/* Tabs */}
-      <EnhancedTabs
-        tabs={computedTabs}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        className="mb-6"
-        isDark={isDark}
-        light={!isDark}
-      />
+      <div className="max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div
+          className={cn(
+            "flex w-max min-w-full gap-x-6 border-b",
+            isDark ? "border-white/15" : "border-[#d9d9de]",
+          )}
+        >
+          {computedTabs.map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "relative shrink-0 whitespace-nowrap px-0.5 pb-3 text-base outline-none focus:outline-none focus-visible:outline-none",
+                  active
+                    ? isDark
+                      ? "font-semibold text-white"
+                      : "font-semibold text-[#1a1a1a]"
+                    : isDark
+                      ? "font-medium text-white"
+                      : "font-medium text-[#1a1a1a]",
+                )}
+              >
+                {tab.label}
+                <span
+                  aria-hidden
+                  className={cn(
+                    "absolute inset-x-0 -bottom-px h-0.5",
+                    active
+                      ? isDark
+                        ? "bg-white"
+                        : "bg-[#1a1a1a]"
+                      : "bg-transparent",
+                  )}
+                />
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Tab Content */}
       <TabContent activeTab={activeTab}>
         <TabPanel value="overview" activeTab={activeTab}>
           <div className="space-y-6">
-            {/* Top Performing Contest */}
             {analyticsData.overview.topContest && (
-              <Card
+              <section
                 className={cn(
-                  "border shadow-smv flex-col sm:flex-row",
+                  "overflow-hidden rounded-2xl border",
                   isDark
-                    ? "bg-gradient-to-br from-purple-800/40 to-blue-900/40 border-purple-700/30"
-                    : "bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200",
+                    ? "border-[#f0d7a8]/40 bg-[linear-gradient(180deg,rgba(255,246,234,0.16)_0%,rgba(255,255,255,0.04)_70%)] text-white"
+                    : "border-[#f0d7a8] bg-[linear-gradient(180deg,#fff6ea_0%,#fffdf8_46%,#ffffff_100%)] text-[#171717]",
                 )}
               >
-                <CardHeader>
-                  <CardTitle
-                    className={cn(
-                      "text-lg",
-                      isDark ? "text-white" : "text-gray-900",
-                    )}
-                  >
-                    Top Performing Campaign
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h3
-                        className={cn(
-                          "font-semibold text-lg",
-                          isDark ? "text-white" : "text-gray-900",
-                        )}
-                      >
-                        {analyticsData.overview.topContest.title}
-                      </h3>
-                      <div
-                        className={cn(
-                          "flex gap-4 mt-2 text-sm",
-                          isDark ? "text-gray-300" : "text-gray-700",
-                        )}
-                      >
-                        <span>
-                          {analyticsData.overview.topContest.views.toLocaleString()}{" "}
-                          views
-                        </span>
-                        <span>
-                          {analyticsData.overview.topContest.submissions}{" "}
-                          submissions
-                        </span>
-                      </div>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "shadow-sm self-start sm:self-auto",
-                        isDark
-                          ? "bg-gradient-to-r from-purple-800/40 to-blue-800/40 text-purple-200 border-purple-600/50"
-                          : "bg-gradient-to-r from-purple-100 to-blue-100 text-purple-800 border-purple-300",
-                      )}
-                    >
-                      Best Performer
-                    </Badge>
+                <div className="flex items-start justify-between gap-4 px-5 py-4">
+                  <div className="min-w-0">
+                    <p className={cn("text-sm font-medium", isDark ? "text-[#f0d7a8]" : "text-[#8a6a32]")}>
+                      Top Performing Campaign
+                    </p>
+                    <h3 className="mt-1 text-xl font-semibold">
+                      {analyticsData.overview.topContest.title}
+                    </h3>
                   </div>
-                </CardContent>
-              </Card>
+                  <p className={cn("shrink-0 text-sm font-semibold", isDark ? "text-[#f0d7a8]" : "text-[#8a6a32]")}>
+                    Best Performer
+                  </p>
+                </div>
+                <div className={cn("grid grid-cols-2 border-t", isDark ? "border-[#f0d7a8]/30" : "border-[#f3e6d0]")}>
+                  <div className="px-5 py-4">
+                    <p className="text-2xl font-semibold tracking-tight tabular-nums">
+                      {analyticsData.overview.topContest.views.toLocaleString()}
+                    </p>
+                    <p className={cn("mt-1 text-sm", isDark ? "text-slate-200" : "text-[#44403c]")}>views</p>
+                  </div>
+                  <div className={cn("border-l px-5 py-4", isDark ? "border-[#f0d7a8]/30" : "border-[#f3e6d0]")}>
+                    <p className="text-2xl font-semibold tracking-tight tabular-nums">
+                      {analyticsData.overview.topContest.submissions}
+                    </p>
+                    <p className={cn("mt-1 text-sm", isDark ? "text-slate-200" : "text-[#44403c]")}>submissions</p>
+                  </div>
+                </div>
+              </section>
             )}
 
-            {/* Platform Performance */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card
+            <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
+              <section
                 className={cn(
-                  "shadow-sm",
-                  isDark ? "bg-[#170337] border-[#170337]" : "bg-white",
+                  "flex h-full flex-col overflow-hidden rounded-2xl border",
+                  isDark ? "border-white/10 bg-white/5 text-white" : "border-neutral-200 bg-white text-[#171717]",
                 )}
               >
-                <CardHeader>
-                  <CardTitle
-                    className={cn(
-                      "text-lg",
-                      isDark ? "text-white" : "text-gray-900",
-                    )}
-                  >
-                    Platform Performance
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {Object.entries(analyticsData.platformStats).map(
-                      ([platform, stats]: [string, any]) => (
-                        <div
-                          key={platform}
-                          className="flex items-center justify-between"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={cn(
-                                "w-8 h-8 rounded-full flex items-center justify-center",
-                                isDark ? "bg-[#FFFFFF36]" : "bg-gray-100",
-                              )}
-                            >
-                              <span className="text-xs font-semibold capitalize">
-                                {platform[0]}
-                              </span>
-                            </div>
-                            <div>
-                              <p
-                                className={cn(
-                                  "font-medium capitalize",
-                                  isDark ? "text-white" : "text-gray-900",
-                                )}
-                              >
-                                {platform}
-                              </p>
-                              <p
-                                className={cn(
-                                  "text-sm",
-                                  isDark ? "text-gray-400" : "text-gray-500",
-                                )}
-                              >
-                                {stats.contests} campaigns •{" "}
-                                {stats.submissions?.toLocaleString() ?? 0}{" "}
-                                submissions
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p
-                              className={cn(
-                                "font-semibold",
-                                isDark ? "text-white" : "text-gray-900",
-                              )}
-                            >
-                              {(stats.views ?? 0).toLocaleString()}
-                            </p>
-                            <p
-                              className={cn(
-                                "text-sm",
-                                isDark ? "text-gray-400" : "text-gray-500",
-                              )}
-                            >
-                              views
-                            </p>
-                          </div>
+                <h3 className={cn("border-b px-5 py-4 text-base font-semibold", isDark ? "border-white/10" : "border-neutral-200")}>
+                  Platform Performance
+                </h3>
+                <div className="flex-1">
+                  {Object.entries(analyticsData.platformStats).map(([platform, stats]: [string, any], index) => {
+                    const key = platform.toLowerCase();
+                    const iconClass = "h-4 w-4";
+                    const icon =
+                      key === "youtube" ? (
+                        <Youtube className={iconClass} />
+                      ) : key === "instagram" ? (
+                        <Instagram className={iconClass} />
+                      ) : key === "tiktok" ? (
+                        <SiTiktok className={iconClass} />
+                      ) : key === "twitter" || key === "x" ? (
+                        <Twitter className={iconClass} />
+                      ) : null;
+                    return (
+                      <div
+                        key={platform}
+                        className={cn(
+                          "flex items-center justify-between gap-4 px-5 py-3.5",
+                          index > 0 && "border-t",
+                          isDark ? "border-white/10" : "border-[#f1f1f3]",
+                        )}
+                      >
+                        <div className="min-w-0">
+                          <p className="flex items-center gap-2 text-sm font-medium capitalize">
+                            {icon}
+                            {platform}
+                          </p>
+                          <p className={cn("mt-0.5 text-sm", isDark ? "text-slate-200" : "text-[#44403c]")}>
+                            {stats.contests} campaigns · {stats.submissions?.toLocaleString() ?? 0} submissions
+                          </p>
                         </div>
-                      ),
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                        <div className="text-right">
+                          <p className="text-base font-semibold tabular-nums">{(stats.views ?? 0).toLocaleString()}</p>
+                          <p className={cn("text-sm", isDark ? "text-slate-200" : "text-[#44403c]")}>views</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
 
-              <Card
+              <section
                 className={cn(
-                  "shadow-sm",
-                  isDark ? "bg-[#170337] border-[#170337]" : "bg-white",
+                  "flex h-full flex-col overflow-hidden rounded-2xl border",
+                  isDark ? "border-white/10 bg-white/5 text-white" : "border-neutral-200 bg-white text-[#171717]",
                 )}
               >
-                <CardHeader>
-                  <CardTitle
-                    className={cn(
-                      "text-lg",
-                      isDark ? "text-white" : "text-gray-900",
-                    )}
-                  >
-                    Campaign Type Performance
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {Object.entries(analyticsData.contestTypeStats).map(
-                      ([type, stats]: [string, any]) => (
-                        <div
-                          key={type}
-                          className="flex items-center justify-between"
-                        >
-                          <div>
-                            <p
-                              className={cn(
-                                "font-medium capitalize",
-                                isDark ? "text-white" : "text-gray-900",
-                              )}
-                            >
-                              {type.replace("_", " ")}
-                            </p>
-                            <p
-                              className={cn(
-                                "text-sm",
-                                isDark ? "text-gray-400" : "text-gray-500",
-                              )}
-                            >
-                              {stats.count} campaigns • {stats.submissions}{" "}
-                              submissions
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p
-                              className={cn(
-                                "font-semibold",
-                                isDark ? "text-white" : "text-gray-900",
-                              )}
-                            >
-                              {formatCurrencyFromCents(stats.spent)}
-                            </p>
-                            <p
-                              className={cn(
-                                "text-sm",
-                                isDark ? "text-gray-400" : "text-gray-500",
-                              )}
-                            >
-                              budget
-                            </p>
-                          </div>
-                        </div>
-                      ),
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                <h3 className={cn("border-b px-5 py-4 text-base font-semibold", isDark ? "border-white/10" : "border-neutral-200")}>
+                  Campaign Type Performance
+                </h3>
+                <div className="flex-1">
+                  {Object.entries(analyticsData.contestTypeStats).map(([type, stats]: [string, any], index) => (
+                    <div
+                      key={type}
+                      className={cn(
+                        "flex items-center justify-between gap-4 px-5 py-3.5",
+                        index > 0 && "border-t",
+                        isDark ? "border-white/10" : "border-[#f1f1f3]",
+                      )}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium capitalize">{type.replaceAll("_", " ")}</p>
+                        <p className={cn("mt-0.5 text-sm", isDark ? "text-slate-200" : "text-[#44403c]")}>
+                          {stats.count} campaigns · {stats.submissions} submissions
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-base font-semibold tabular-nums">{formatCurrencyFromCents(stats.spent)}</p>
+                        <p className={cn("text-sm", isDark ? "text-slate-200" : "text-[#44403c]")}>budget</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
             </div>
           </div>
         </TabPanel>

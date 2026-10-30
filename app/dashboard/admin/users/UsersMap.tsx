@@ -2160,7 +2160,7 @@ export function UsersMap({
                 isDrawer &&
                   "max-[389px]:h-12 max-[389px]:flex-col max-[389px]:gap-0.5 max-[389px]:px-1 max-[389px]:text-[11px]",
                 isDrawer && isSelected &&
-                  "bg-purple-500 text-white shadow-sm hover:bg-purple-400 hover:text-white",
+                  "bg-[#f6f6f7]0 text-white shadow-sm hover:bg-purple-400 hover:text-white",
                 isDrawer && !isSelected &&
                   "text-slate-300 hover:bg-slate-800 hover:text-white",
                 !isDrawer && isSelected && isDark &&
@@ -2205,7 +2205,7 @@ export function UsersMap({
           className={cn(
             "h-12 min-w-0 flex-col gap-0.5 rounded-lg px-1 text-slate-300 transition-colors duration-200 hover:bg-slate-800 hover:text-white focus-visible:ring-2 focus-visible:ring-purple-400",
             selectedMapTab === tab &&
-              "bg-purple-500 text-white shadow-sm hover:bg-purple-400 hover:text-white",
+              "bg-[#f6f6f7]0 text-white shadow-sm hover:bg-purple-400 hover:text-white",
           )}
           onClick={() => onActiveTabChange(tab)}
           aria-pressed={selectedMapTab === tab}
@@ -2664,7 +2664,7 @@ export function UsersMap({
                     className={cn(
                       "rounded-full px-2.5 py-1 text-[11px] font-semibold",
                       isDark
-                        ? "bg-purple-500/15 text-purple-300"
+                        ? "bg-[#f6f6f7]0/15 text-purple-300"
                         : "bg-purple-100 text-purple-700",
                     )}
                   >
@@ -2938,8 +2938,8 @@ export function UsersMap({
                       className={cn(
                         "border-t transition-colors duration-150",
                         isDark
-                          ? "border-white/5 text-slate-100 odd:bg-white/[0.025] hover:bg-purple-500/10"
-                          : "border-slate-100 text-slate-800 odd:bg-slate-50/60 hover:bg-purple-50/80",
+                          ? "border-white/5 text-slate-100 odd:bg-white/[0.025] hover:bg-[#f6f6f7]0/10"
+                          : "border-slate-100 text-slate-800 odd:bg-slate-50/60 hover:bg-[#f6f6f7]/80",
                       )}
                     >
                       <td className="px-3 py-3 text-center">
@@ -2948,7 +2948,7 @@ export function UsersMap({
                             "inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-[11px] font-semibold tabular-nums",
                             (demographicPage - 1) * DEMOGRAPHIC_PAGE_SIZE + idx < 3
                               ? isDark
-                                ? "bg-purple-500/20 text-purple-300"
+                                ? "bg-[#f6f6f7]0/20 text-purple-300"
                                 : "bg-purple-100 text-purple-700"
                               : isDark
                                 ? "bg-slate-800 text-slate-400"
@@ -3220,7 +3220,7 @@ export function UsersMap({
                           "inline-flex h-7 min-w-7 shrink-0 items-center justify-center rounded-md px-1.5 text-xs font-semibold tabular-nums",
                           rank <= 3
                             ? isDark
-                              ? "bg-purple-500/20 text-purple-300"
+                              ? "bg-[#f6f6f7]0/20 text-purple-300"
                               : "bg-purple-100 text-purple-700"
                             : isDark
                               ? "bg-slate-700 text-slate-300"

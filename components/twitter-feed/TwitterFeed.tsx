@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   ExternalLink,
@@ -22,6 +21,8 @@ import {
   formatRemainingTime,
 } from "@/lib/constants";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { getBrandSubmissionsStyles } from "@/components/contest/brandSubmissionsStyles";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 export interface TwitterFeedProps {
   contestId: string;
@@ -747,67 +748,47 @@ export function TwitterFeed({
     }
   };
 
-  const getTweetTypeColor = (
-    type: string
-  ): { bg: string; text: string; border: string } => {
-    switch (type) {
-      case "quote":
-        return {
-          bg: "bg-blue-500",
-          text: "text-white",
-          border: "border-blue-500",
-        };
-      case "retweet":
-        return {
-          bg: "bg-green-500",
-          text: "text-white",
-          border: "border-green-500",
-        };
-      case "reply":
-        return {
-          bg: "bg-purple-500",
-          text: "text-white",
-          border: "border-purple-500",
-        };
-      default:
-        return {
-          bg: "bg-gray-700",
-          text: "text-white",
-          border: "border-gray-700",
-        };
-    }
-  };
+  const sx = getBrandSubmissionsStyles(isDark);
+  const textPrimary = isDark ? "text-white" : "text-[#0a0a0a]";
+  const textSecondary = isDark ? "text-slate-300" : "text-[#404040]";
+  const textMuted = isDark ? "text-slate-400" : "text-[#737373]";
+  const selectedRow = isDark
+    ? "bg-white text-[#0a0a0a]"
+    : "bg-[#0a0a0a] text-white";
+  const idleRow = isDark
+    ? "text-slate-300 hover:bg-white/5"
+    : "text-[#404040] hover:bg-[#fafafa]";
+  const avatarFallback = isDark
+    ? "bg-white/10 text-slate-200"
+    : "bg-[#f5f5f5] text-[#404040]";
 
   return (
     <div
       className={cn(
         "w-full max-w-full min-w-0 space-y-4 sm:space-y-6",
-        isDark ? "bg-[#170337]" : "bg-white",
         className
       )}
     >
       {showHeader && (
         <div
           className={cn(
-            "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6 p-4 sm:p-5 rounded-t-xl border-b shadow-sm",
-            isDark
-              ? "bg-gradient-to-b from-[#1a0a3d]/90 to-[#170337] border-white/10"
-              : "bg-gradient-to-b from-white to-purple-50/35 border-gray-200/90",
+            sx.card,
+            "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6 p-4 sm:p-5",
           )}
         >
           <div className="min-w-0 flex-1 space-y-1 sm:pr-2 md:pr-4">
             <div className="flex items-center gap-2 min-w-0">
               <span
                 className={cn(
-                  "inline-flex h-2 w-2 shrink-0 rounded-full",
-                  isDark ? "bg-fuchsia-400 shadow-[0_0_8px_rgba(232,121,249,0.6)]" : "bg-purple-500",
+                  "inline-flex h-1.5 w-1.5 shrink-0 rounded-full",
+                  isDark ? "bg-white" : "bg-[#0a0a0a]",
                 )}
                 aria-hidden
               />
               <h1
                 className={cn(
-                  "text-lg sm:text-xl md:text-2xl font-bold tracking-tight truncate",
-                  isDark ? "text-white" : "text-gray-900",
+                  "text-lg font-semibold tracking-tight truncate",
+                  textPrimary,
                 )}
               >
                 Twitter Feed
@@ -816,8 +797,8 @@ export function TwitterFeed({
             {showRefreshButton ? (
               <p
                 className={cn(
-                  "text-xs sm:text-sm max-w-xl leading-relaxed",
-                  isDark ? "text-gray-400" : "text-gray-600",
+                  "text-[13px] max-w-xl leading-relaxed",
+                  textMuted,
                 )}
               >
                 {creatorOnlyMode
@@ -828,8 +809,8 @@ export function TwitterFeed({
             {!showRefreshButton && (
               <p
                 className={cn(
-                  "text-xs font-normal mt-1.5 max-w-xl leading-relaxed",
-                  isDark ? "text-gray-400" : "text-gray-600",
+                  "text-[13px] font-normal mt-1.5 max-w-xl leading-relaxed",
+                  textMuted,
                 )}
               >
                 To pull the latest posts from X for <strong>all creators</strong>,
@@ -887,21 +868,17 @@ export function TwitterFeed({
                 return (
                   <div
                     className={cn(
-                      "rounded-xl border p-3 sm:p-3.5 w-full sm:min-w-[260px] sm:max-w-sm shadow-sm transition-shadow",
+                      "rounded-2xl border p-3 sm:p-3.5 w-full sm:min-w-[260px] sm:max-w-sm",
                       isDark
-                        ? "border-purple-500/25 bg-white/[0.04] backdrop-blur-sm"
-                        : "border-purple-200/80 bg-white/80 backdrop-blur-sm hover:shadow-md",
-                      isButtonBusy &&
-                        (isDark
-                          ? "ring-1 ring-fuchsia-500/30"
-                          : "ring-1 ring-purple-200"),
+                        ? "border-white/10 bg-white/5"
+                        : "border-[#e5e5e5] bg-[#fafafa]",
                     )}
                   >
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <span
                         className={cn(
-                          "text-[10px] font-semibold uppercase tracking-wider",
-                          isDark ? "text-purple-300/90" : "text-purple-700/80",
+                          "text-[11px] font-medium uppercase tracking-wide",
+                          textMuted,
                         )}
                       >
                         Sync from X
@@ -909,8 +886,8 @@ export function TwitterFeed({
                       {isButtonBusy && (
                         <span
                           className={cn(
-                            "text-[10px] tabular-nums font-medium",
-                            isDark ? "text-fuchsia-200" : "text-purple-600",
+                            "text-[11px] tabular-nums font-medium",
+                            textSecondary,
                           )}
                         >
                           {Math.max(
@@ -927,15 +904,9 @@ export function TwitterFeed({
                       onClick={handleRefreshFeed}
                       disabled={isDisabled}
                       className={cn(
-                        "w-full h-10 rounded-lg font-medium gap-2 border-2 transition-all",
-                        isDark
-                          ? "border-purple-400/40 text-purple-100 hover:bg-purple-950/50 hover:border-purple-400/60"
-                          : "border-purple-400/50 text-purple-700 hover:bg-purple-50 hover:border-purple-500",
-                        isDisabled && "opacity-55 cursor-not-allowed hover:bg-transparent",
-                        isButtonBusy &&
-                          (isDark
-                            ? "border-purple-400/50 bg-purple-950/30"
-                            : "border-purple-500/60 bg-purple-50/80"),
+                        sx.primaryBtn,
+                        "w-full h-10",
+                        isDisabled && "opacity-55 cursor-not-allowed",
                       )}
                       title={
                         disabledReason ||
@@ -959,7 +930,7 @@ export function TwitterFeed({
                         <div
                           className={cn(
                             "flex items-center justify-between gap-2 text-[11px]",
-                            isDark ? "text-gray-400" : "text-gray-600",
+                            textMuted,
                           )}
                         >
                           <span>
@@ -973,16 +944,14 @@ export function TwitterFeed({
                         </div>
                         <div
                           className={cn(
-                            "h-2 w-full rounded-full overflow-hidden",
-                            isDark ? "bg-white/10" : "bg-purple-100/80",
+                            "h-1.5 w-full rounded-full overflow-hidden",
+                            isDark ? "bg-white/10" : "bg-[#e5e5e5]",
                           )}
                         >
                           <div
                             className={cn(
-                              "h-full rounded-full transition-[width] duration-300 ease-out shadow-sm",
-                              isDark
-                                ? "bg-gradient-to-r from-purple-400 via-fuchsia-400 to-pink-400"
-                                : "bg-gradient-to-r from-purple-600 via-fuchsia-500 to-pink-500",
+                              "h-full rounded-full transition-[width] duration-300 ease-out",
+                              isDark ? "bg-white" : "bg-[#0a0a0a]",
                             )}
                             style={{
                               width: `${Math.max(
@@ -1006,44 +975,14 @@ export function TwitterFeed({
         {/* Main Feed — below creators on mobile; left column on ≥500px */}
         <div className="order-2 min-[500px]:order-1 flex-1 min-w-0 space-y-4">
           {isLoading && tweets.length === 0 ? (
-            <Card
-              className={cn(
-                "border overflow-hidden",
-                isDark
-                  ? "bg-[#180438]/80 border-purple-500/20"
-                  : "bg-gradient-to-br from-white to-purple-50/50 border-purple-100",
-              )}
-            >
-              <CardContent className="flex flex-col items-center justify-center gap-4 py-14 px-6">
-                <div className="relative">
-                  <div
-                    className={cn(
-                      "absolute inset-0 rounded-full blur-xl opacity-40",
-                      isDark ? "bg-fuchsia-500" : "bg-purple-400",
-                    )}
-                  />
-                  <Loader2
-                    className={cn(
-                      "relative h-10 w-10 animate-spin",
-                      isDark ? "text-fuchsia-300" : "text-purple-600",
-                    )}
-                  />
-                </div>
+            <Card className={cn(sx.card, "overflow-hidden shadow-none")}>
+              <CardContent className="flex flex-col items-center justify-center gap-3 py-10 px-6">
+                <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
                 <div className="text-center space-y-1">
-                  <p
-                    className={cn(
-                      "text-sm font-semibold",
-                      isDark ? "text-white" : "text-gray-900",
-                    )}
-                  >
+                  <p className={cn("text-sm font-semibold", textPrimary)}>
                     Loading your feed
                   </p>
-                  <p
-                    className={cn(
-                      "text-xs max-w-xs",
-                      isDark ? "text-gray-400" : "text-gray-600",
-                    )}
-                  >
+                  <p className={cn("text-[13px] max-w-xs", textMuted)}>
                     Fetching posts from the contest database. You can sync from X
                     after this finishes.
                   </p>
@@ -1051,13 +990,9 @@ export function TwitterFeed({
               </CardContent>
             </Card>
           ) : tweets.length === 0 ? (
-            <Card
-              className={cn(
-                isDark ? "bg-[#170337] border-gray-600" : "bg-white"
-              )}
-            >
+            <Card className={cn(sx.card, "shadow-none")}>
               <CardContent className="p-8 text-center">
-                <p className={cn(isDark ? "text-gray-400" : "text-gray-600")}>
+                <p className={cn("text-[13px]", textMuted)}>
                   No tweets found. Tweets will appear here once they are
                   fetched.
                 </p>
@@ -1069,46 +1004,24 @@ export function TwitterFeed({
               return (
                 <Card
                   key={tweet.id}
-                  className={cn(
-                    "border overflow-hidden",
-                    isDark
-                      ? "bg-[#170337] border-gray-700 hover:border-purple-500"
-                      : "bg-white border-gray-200 hover:border-purple-300"
-                  )}
+                  className={cn(sx.card, "overflow-hidden shadow-none")}
                 >
                   <CardContent className="relative overflow-hidden p-3.5 sm:p-4">
-                    <div
-                      className={cn(
-                        "pointer-events-none absolute left-0 top-0 bottom-0 w-1",
-                        isDark
-                          ? "bg-gradient-to-b from-fuchsia-400/50 via-purple-400/40 to-transparent"
-                          : "bg-gradient-to-b from-purple-500/60 via-fuchsia-500/50 to-transparent",
-                      )}
-                      aria-hidden
-                    />
-
                     <div className="mb-3 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 sm:gap-3">
-                        {(() => {
-                          const typeColors = getTweetTypeColor(
-                            tweet.tweet_type
-                          );
-                          return (
-                            <Badge
-                              className={cn(
-                                "text-[11px] font-bold px-2.5 py-1 rounded-md border-0 shrink-0",
-                                typeColors.bg,
-                                typeColors.text
-                              )}
-                            >
-                              {getTweetTypeLabel(tweet.tweet_type)}
-                            </Badge>
-                          );
-                        })()}
                         <span
                           className={cn(
-                            "min-w-0 text-sm break-words",
-                            isDark ? "text-gray-300" : "text-gray-700"
+                            sx.chip,
+                            sx.chipNeutral,
+                            "shrink-0 uppercase tracking-wide",
+                          )}
+                        >
+                          {getTweetTypeLabel(tweet.tweet_type)}
+                        </span>
+                        <span
+                          className={cn(
+                            "min-w-0 text-[13px] font-medium break-words",
+                            textSecondary,
                           )}
                         >
                           @{tweet.twitter_username}
@@ -1116,8 +1029,8 @@ export function TwitterFeed({
                       </div>
                       <span
                         className={cn(
-                          "shrink-0 text-xs sm:text-sm sm:text-right tabular-nums",
-                          isDark ? "text-gray-400" : "text-gray-500",
+                          "shrink-0 text-xs sm:text-right tabular-nums",
+                          textMuted,
                         )}
                       >
                         {timeAgo}
@@ -1129,20 +1042,20 @@ export function TwitterFeed({
                         className={cn(
                           "p-3.5 rounded-xl border break-words relative",
                           isDark
-                            ? "bg-white/[0.04] border-white/10 text-white"
-                            : "bg-gradient-to-br from-white to-purple-50/60 border-purple-100 text-gray-900"
+                            ? "bg-white/5 border-white/10 text-white"
+                            : "bg-[#fafafa] border-[#e5e5e5] text-[#0a0a0a]",
                         )}
                       >
                         <div
                           className={cn(
-                            "absolute left-3 top-3 text-lg leading-none select-none",
-                            isDark ? "text-white/20" : "text-purple-300/70",
+                            "absolute left-3 top-2.5 text-lg leading-none select-none",
+                            isDark ? "text-white/25" : "text-[#d4d4d4]",
                           )}
                           aria-hidden
                         >
                           “
                         </div>
-                        <p className="whitespace-pre-wrap break-words text-sm sm:text-[15px] leading-relaxed pl-4">
+                        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed pl-4">
                           {tweet.tweet_text}
                         </p>
                       </div>
@@ -1153,47 +1066,27 @@ export function TwitterFeed({
                         {[
                           {
                             Icon: Eye,
-                            iconClass: isDark ? "text-emerald-300" : "text-emerald-600",
-                            chipBg: isDark
-                              ? "bg-emerald-500/10 border-emerald-500/25"
-                              : "bg-emerald-50 border-emerald-100",
                             text: `${(tweet.impressions || 0).toLocaleString()} Impressions`,
                           },
                           {
                             Icon: ThumbsUp,
-                            iconClass: isDark ? "text-pink-300" : "text-pink-600",
-                            chipBg: isDark
-                              ? "bg-pink-500/10 border-pink-500/25"
-                              : "bg-pink-50 border-pink-100",
                             text: `${tweet.likes || 0} Likes`,
                           },
                           {
                             Icon: RefreshCw,
-                            iconClass: isDark ? "text-teal-300" : "text-teal-600",
-                            chipBg: isDark
-                              ? "bg-teal-500/10 border-teal-500/25"
-                              : "bg-teal-50 border-teal-100",
                             text: `${tweet.retweets || 0} Retweets`,
                           },
                           {
                             Icon: MessageCircle,
-                            iconClass: isDark ? "text-sky-300" : "text-sky-600",
-                            chipBg: isDark
-                              ? "bg-sky-500/10 border-sky-500/25"
-                              : "bg-sky-50 border-sky-100",
                             text: `${tweet.replies || 0} Replies`,
                           },
-                        ].map(({ Icon, iconClass, chipBg, text }) => (
+                        ].map(({ Icon, text }) => (
                           <div
                             key={text}
-                            className={cn(
-                              "inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] sm:text-xs font-medium tabular-nums",
-                              chipBg,
-                              isDark ? "text-slate-200" : "text-slate-700",
-                            )}
+                            className={cn(sx.chip, sx.chipNeutral, "tabular-nums")}
                           >
                             <Icon
-                              className={cn("h-3.5 w-3.5 shrink-0", iconClass)}
+                              className={cn("h-3.5 w-3.5 shrink-0", textMuted)}
                               aria-hidden
                             />
                             <span className="whitespace-nowrap">{text}</span>
@@ -1203,14 +1096,12 @@ export function TwitterFeed({
 
                       <div
                         className={cn(
-                          "inline-flex items-center gap-2 rounded-xl border px-3 py-2 w-full sm:w-auto sm:ml-auto",
-                          isDark
-                            ? "bg-white/[0.04] border-white/10 text-white"
-                            : "bg-white/90 border-violet-100 shadow-sm text-gray-900",
+                          sx.chip,
+                          sx.chipOk,
+                          "w-full justify-center sm:w-auto sm:ml-auto px-3 py-1",
                         )}
                       >
-                        <div className="w-2 h-2 shrink-0 bg-green-500 rounded-full" />
-                        <span className="text-sm font-semibold tabular-nums">
+                        <span className="text-[13px] font-semibold tabular-nums">
                           +{(tweet.points || 0).toFixed(1)} points
                         </span>
                       </div>
@@ -1219,7 +1110,7 @@ export function TwitterFeed({
                     <div
                       className={cn(
                         "mt-4 pt-4 border-t",
-                        isDark ? "border-gray-700" : "border-gray-200"
+                        isDark ? "border-white/10" : "border-[#f5f5f5]",
                       )}
                     >
                       {tweet.tweet_url ? (
@@ -1228,10 +1119,8 @@ export function TwitterFeed({
                           target="_blank"
                           rel="noopener noreferrer"
                           className={cn(
-                            "text-sm inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 w-full sm:w-auto border transition-colors",
-                            isDark
-                              ? "border-white/10 text-purple-200 hover:bg-white/[0.06]"
-                              : "border-purple-200 text-purple-700 hover:bg-purple-50"
+                            sx.smOutlineBtn,
+                            "inline-flex items-center justify-center gap-2 px-3 py-2 w-full sm:w-auto",
                           )}
                         >
                           View on X
@@ -1240,8 +1129,8 @@ export function TwitterFeed({
                       ) : (
                         <span
                           className={cn(
-                            "text-sm inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 w-full sm:w-auto border opacity-50",
-                            isDark ? "text-gray-400" : "text-gray-500"
+                            sx.smOutlineBtn,
+                            "inline-flex items-center justify-center gap-2 px-3 py-2 w-full sm:w-auto opacity-50",
                           )}
                         >
                           View on X
@@ -1257,12 +1146,7 @@ export function TwitterFeed({
 
           {/* Pagination — show whenever there are entries so page size / position are visible */}
           {totalEntries > 0 && (
-            <div
-              className={cn(
-                "py-3 sm:py-4 mt-4 sm:mt-6 min-w-0 overflow-x-auto",
-                isDark ? "bg-[#170337]" : "bg-white"
-              )}
-            >
+            <div className={cn("py-3 sm:py-4 mt-4 sm:mt-6 min-w-0 overflow-x-auto", sx.pagination)}>
               <PaginationControls
                 page={currentPage}
                 limit={pageLimit}
@@ -1294,23 +1178,16 @@ export function TwitterFeed({
         {creators.length > 0 && (
           <div
             className={cn(
-              "order-1 min-[500px]:order-2 w-full min-[500px]:w-64 flex-shrink-0 border rounded-lg p-3 sm:p-4 min-w-0",
-              isDark
-                ? "bg-[#170337] border-gray-700"
-                : "bg-white border-gray-200"
+              sx.card,
+              "order-1 min-[500px]:order-2 w-full min-[500px]:w-64 flex-shrink-0 p-3 sm:p-4 min-w-0 shadow-none",
             )}
           >
-            <h3
-              className={cn(
-                "font-semibold text-sm sm:text-base mb-2 min-[500px]:mb-4",
-                isDark ? "text-white" : "text-gray-900"
-              )}
-            >
+            <h3 className={cn("font-semibold text-sm mb-2 min-[500px]:mb-4", textPrimary)}>
               <span className="hidden min-[500px]:inline">Creators</span>
               <span
                 className={cn(
-                  "min-[500px]:hidden block text-[11px] font-semibold uppercase tracking-wide",
-                  isDark ? "text-gray-400" : "text-gray-500"
+                  "min-[500px]:hidden block text-[11px] font-medium uppercase tracking-wide",
+                  textMuted,
                 )}
               >
                 Filter by creator
@@ -1330,22 +1207,24 @@ export function TwitterFeed({
                 className={cn(
                   "snap-start shrink-0 flex items-center gap-2 pl-1 pr-3 py-2 rounded-full border transition-colors",
                   selectedCreatorId === null
-                    ? isDark
-                      ? "bg-purple-900/50 border-purple-500/50 text-white"
-                      : "bg-purple-100 border-purple-200 text-purple-900"
-                    : isDark
-                      ? "border-gray-600 text-gray-300 hover:bg-gray-800/80"
-                      : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                    ? cn(
+                        selectedRow,
+                        "border-transparent",
+                      )
+                    : cn(
+                        idleRow,
+                        isDark ? "border-white/10" : "border-[#e5e5e5]",
+                      ),
                 )}
               >
                 <span
                   className={cn(
                     "flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold",
                     selectedCreatorId === null
-                      ? "bg-purple-600 text-white"
-                      : isDark
-                        ? "bg-gray-700 text-gray-200"
-                        : "bg-gray-200 text-gray-700"
+                      ? isDark
+                        ? "bg-[#0a0a0a]/10 text-[#0a0a0a]"
+                        : "bg-white/15 text-white"
+                      : avatarFallback,
                   )}
                 >
                   All
@@ -1362,17 +1241,16 @@ export function TwitterFeed({
                   className={cn(
                     "snap-start shrink-0 flex items-center gap-2 pl-1 pr-3 py-2 rounded-full border transition-colors max-w-[220px]",
                     selectedCreatorId === creator.id
-                      ? isDark
-                        ? "bg-purple-900/50 border-purple-500/50 text-white"
-                        : "bg-purple-100 border-purple-200 text-purple-900"
-                      : isDark
-                        ? "border-gray-600 text-gray-300 hover:bg-gray-800/80"
-                        : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                      ? cn(selectedRow, "border-transparent")
+                      : cn(
+                          idleRow,
+                          isDark ? "border-white/10" : "border-[#e5e5e5]",
+                        ),
                   )}
                 >
                   <Avatar className="h-9 w-9 shrink-0">
                     <AvatarImage src={creator.profile_picture_url || ""} />
-                    <AvatarFallback className="text-xs">
+                    <AvatarFallback className={cn("text-xs", avatarFallback)}>
                       {(creator.username || creator.full_name || "U")
                         .charAt(0)
                         .toUpperCase()}
@@ -1385,7 +1263,11 @@ export function TwitterFeed({
                     <p
                       className={cn(
                         "text-[11px] truncate tabular-nums",
-                        isDark ? "text-gray-400" : "text-gray-500"
+                        selectedCreatorId === creator.id
+                          ? isDark
+                            ? "text-[#0a0a0a]/60"
+                            : "text-white/70"
+                          : textMuted,
                       )}
                     >
                       {creator.tweetCount} tweets
@@ -1400,14 +1282,8 @@ export function TwitterFeed({
                 type="button"
                 onClick={() => setSelectedCreatorId(null)}
                 className={cn(
-                  "w-full text-left p-2 rounded-lg transition-colors",
-                  selectedCreatorId === null
-                    ? isDark
-                      ? "bg-purple-900/50 text-white"
-                      : "bg-purple-100 text-purple-900"
-                    : isDark
-                      ? "hover:bg-gray-800 text-gray-300"
-                      : "hover:bg-gray-100 text-gray-700"
+                  "w-full text-left p-2 rounded-[10px] text-[13px] font-medium transition-colors",
+                  selectedCreatorId === null ? selectedRow : idleRow,
                 )}
               >
                 All Creators
@@ -1418,19 +1294,13 @@ export function TwitterFeed({
                   key={creator.id}
                   onClick={() => setSelectedCreatorId(creator.id)}
                   className={cn(
-                    "w-full text-left p-2 rounded-lg transition-colors flex items-center gap-3",
-                    selectedCreatorId === creator.id
-                      ? isDark
-                        ? "bg-purple-900/50 text-white"
-                        : "bg-purple-100 text-purple-900"
-                      : isDark
-                        ? "hover:bg-gray-800 text-gray-300"
-                        : "hover:bg-gray-100 text-gray-700"
+                    "w-full text-left p-2 rounded-[10px] text-[13px] transition-colors flex items-center gap-3",
+                    selectedCreatorId === creator.id ? selectedRow : idleRow,
                   )}
                 >
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={creator.profile_picture_url || ""} />
-                    <AvatarFallback>
+                    <AvatarFallback className={avatarFallback}>
                       {(creator.username || creator.full_name || "U")
                         .charAt(0)
                         .toUpperCase()}
@@ -1443,7 +1313,11 @@ export function TwitterFeed({
                     <p
                       className={cn(
                         "text-xs truncate",
-                        isDark ? "text-gray-400" : "text-gray-500"
+                        selectedCreatorId === creator.id
+                          ? isDark
+                            ? "text-[#0a0a0a]/60"
+                            : "text-white/70"
+                          : textMuted,
                       )}
                     >
                       {creator.tweetCount} tweets

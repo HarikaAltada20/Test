@@ -12,15 +12,18 @@ import {
   AlertTriangle,
   ArrowRight,
   Building2,
+  Copy,
   Crown,
   Loader2,
   Mail,
+  Plus,
   Sparkles,
   Trophy,
   Wallet,
   Zap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { DuplicateCampaignDialog } from "@/components/campaign-duplicate/DuplicateCampaignDialog";
 
 type BrandSummary = {
   advertiser: AdvertiserSearchOption;
@@ -72,6 +75,7 @@ export function AdminCreateForBrandClient() {
   const [summary, setSummary] = useState<BrandSummary | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [copyOpen, setCopyOpen] = useState(false);
 
   useEffect(() => {
     if (!selectedBrand) {
@@ -150,10 +154,10 @@ export function AdminCreateForBrandClient() {
 
   return (
     <div className="mx-auto w-full max-w-4xl">
-      <div className="overflow-hidden rounded-2xl border border-purple-100/80 bg-white shadow-[0_8px_40px_-12px_rgba(74,0,190,0.18)] dark:border-violet-500/20 dark:bg-[#0c0618]">
-        <div className="border-b border-purple-100/80 bg-gradient-to-r from-[#4A00BE]/8 via-[#7F39EC]/6 to-transparent px-6 py-5 dark:border-violet-500/20 dark:from-[#5F2BB1]/20">
+      <div className="overflow-hidden rounded-2xl border border-[#ececef] bg-white shadow-[0_8px_28px_-18px_rgba(26,26,26,0.28)] dark:border-white/10 dark:bg-[#161616]">
+        <div className="border-b border-[#ececef] bg-gradient-to-r from-[#f6f6f7] to-transparent px-6 py-5 dark:border-white/10 dark:from-white/5">
           <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#4A00BE]/10 text-[#4A00BE] dark:bg-violet-500/15 dark:text-violet-300">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#f3f3f5] text-[#1a1a1a] dark:bg-white/10 dark:text-white">
               <Building2 className="h-5 w-5" />
             </div>
             <div className="min-w-0">
@@ -169,7 +173,7 @@ export function AdminCreateForBrandClient() {
         </div>
 
         <div className="grid gap-0 lg:grid-cols-[1fr_1.05fr]">
-          <div className="space-y-5 border-b border-purple-100/80 p-6 dark:border-violet-500/20 lg:border-b-0 lg:border-r">
+          <div className="space-y-5 border-b border-[#ececef] p-6 dark:border-white/10 lg:border-b-0 lg:border-r">
             <AdvertiserSearchSelect
               value={selectedBrand}
               onChange={handleBrandChange}
@@ -177,8 +181,8 @@ export function AdminCreateForBrandClient() {
             />
 
             {!selectedBrand && (
-              <div className="rounded-xl border border-dashed border-purple-200/80 bg-purple-50/30 px-4 py-8 text-center dark:border-violet-500/25 dark:bg-violet-950/20">
-                <Sparkles className="mx-auto h-8 w-8 text-[#7F39EC]/60" />
+              <div className="rounded-xl border border-dashed border-[#e6e6e8]/80 bg-[#f6f6f7]/30 px-4 py-8 text-center dark:border-white/10 dark:bg-white/5">
+                <Sparkles className="mx-auto h-8 w-8 text-[#1a1a1a]/60" />
                 <p className="mt-3 text-sm font-medium text-foreground">
                   Start by searching for a brand
                 </p>
@@ -211,7 +215,7 @@ export function AdminCreateForBrandClient() {
                     <h3 className="text-base font-semibold truncate">
                       {displayName}
                     </h3>
-                    <Badge className="bg-[#4A00BE] hover:bg-[#4A00BE] text-white border-0">
+                    <Badge className="bg-[#1a1a1a] hover:bg-black text-white border-0">
                       <Crown className="mr-1 h-3 w-3" />
                       {summary.plan.displayName}
                     </Badge>
@@ -228,7 +232,7 @@ export function AdminCreateForBrandClient() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl border border-purple-100/80 bg-gradient-to-br from-white to-purple-50/50 p-4 dark:border-violet-500/20 dark:from-[#120a24] dark:to-violet-950/30">
+                  <div className="rounded-xl border border-[#ececef] bg-gradient-to-br from-white to-[#f6f6f7] p-4 dark:border-white/10 dark:from-[#161616] dark:to-[#161616]">
                     <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       <Wallet className="h-3.5 w-3.5" />
                       Wallet
@@ -245,7 +249,7 @@ export function AdminCreateForBrandClient() {
                     )}
                   </div>
 
-                  <div className="rounded-xl border border-purple-100/80 bg-gradient-to-br from-white to-purple-50/50 p-4 dark:border-violet-500/20 dark:from-[#120a24] dark:to-violet-950/30">
+                  <div className="rounded-xl border border-[#ececef] bg-gradient-to-br from-white to-[#f6f6f7] p-4 dark:border-white/10 dark:from-[#161616] dark:to-[#161616]">
                     <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       <Trophy className="h-3.5 w-3.5" />
                       Active slots
@@ -265,7 +269,7 @@ export function AdminCreateForBrandClient() {
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-purple-100/80 p-4 dark:border-violet-500/20">
+                <div className="rounded-xl border border-[#ececef] p-4 dark:border-white/10">
                   <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Plan limits for this brand
                   </p>
@@ -296,7 +300,7 @@ export function AdminCreateForBrandClient() {
                         <Badge
                           key={type}
                           variant="secondary"
-                          className="bg-purple-100/80 text-[#4A00BE] dark:bg-violet-500/15 dark:text-violet-200"
+                          className="bg-[#f3f3f5] text-[#1a1a1a] dark:bg-white/10 dark:text-white"
                         >
                           <Zap className="mr-1 h-3 w-3" />
                           {type}
@@ -314,7 +318,7 @@ export function AdminCreateForBrandClient() {
                 )}
               </div>
             ) : (
-              <div className="flex h-full min-h-[280px] flex-col items-center justify-center rounded-xl border border-dashed border-purple-200/60 bg-muted/20 px-6 text-center dark:border-violet-500/20">
+              <div className="flex h-full min-h-[280px] flex-col items-center justify-center rounded-xl border border-dashed border-[#e6e6e8]/60 bg-muted/20 px-6 text-center dark:border-white/10">
                 <Crown className="h-10 w-10 text-muted-foreground/40" />
                 <p className="mt-4 text-sm font-medium text-muted-foreground">
                   Plan summary
@@ -328,36 +332,61 @@ export function AdminCreateForBrandClient() {
           </div>
         </div>
 
-        <div className="border-t border-purple-100/80 bg-muted/20 px-6 py-4 dark:border-violet-500/20">
-          <button
-            type="button"
-            disabled={!canContinue}
-            onClick={handleContinue}
-            className={cn(
-              "inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition-all",
-              "bg-[#4A00BE] ring-1 ring-black/5 hover:opacity-95 active:scale-[0.99]",
-              "disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100",
-              "dark:bg-[#5F2BB1] dark:ring-white/10",
-            )}
-          >
-            {loadingSummary ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Checking plan…
-              </>
-            ) : (
-              <>
-                Continue to campaign wizard
+        <div className="border-t border-[#ececef] bg-muted/20 px-6 py-4 dark:border-white/10">
+          {loadingSummary ? (
+            <div className="flex items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking plan…
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                disabled={!canContinue}
+                onClick={handleContinue}
+                className={cn(
+                  "inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition-all",
+                  "bg-[#1a1a1a] ring-1 ring-black/5 hover:opacity-95 active:scale-[0.99]",
+                  "disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100",
+                  "dark:bg-[#1a1a1a] dark:ring-white/10",
+                )}
+              >
+                <Plus className="h-4 w-4" />
+                Start from scratch
                 <ArrowRight className="h-4 w-4" />
-              </>
-            )}
-          </button>
+              </button>
+              <button
+                type="button"
+                disabled={!canContinue}
+                onClick={() => setCopyOpen(true)}
+                className={cn(
+                  "inline-flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3.5 text-sm font-semibold shadow-sm transition-all",
+                  "border-[#1a1a1a] text-[#1a1a1a] hover:bg-[#f6f6f7] active:scale-[0.99]",
+                  "disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100",
+                  "dark:border-white/20 dark:text-white dark:hover:bg-white/10",
+                )}
+              >
+                <Copy className="h-4 w-4" />
+                Copy an existing campaign
+              </button>
+            </div>
+          )}
           <p className="mt-2 text-center text-xs text-muted-foreground">
             Wizard uses this brand&apos;s plan for contest types, limits, and
             commission. Payment is wallet-only.
           </p>
         </div>
       </div>
+
+      {selectedBrand && (
+        <DuplicateCampaignDialog
+          open={copyOpen}
+          onOpenChange={setCopyOpen}
+          isAdmin
+          targetAdvertiserId={selectedBrand.id}
+          targetBrandName={displayName || null}
+        />
+      )}
     </div>
   );
 }

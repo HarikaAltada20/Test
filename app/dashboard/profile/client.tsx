@@ -20,10 +20,13 @@ import {
   Save,
   X,
   Upload,
+  Camera,
+  Calendar,
   Loader2,
   Copy,
   Search,
   RotateCcw,
+  Check,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/utils/supabase/client";
@@ -39,7 +42,6 @@ import { subscriptionPlans } from "@/constants/subscriptionPlans";
 import {
   CONTENT_TYPE_CATEGORIES,
   INTEREST_CATEGORIES,
-  INTERESTS,
 } from "@/constants/contentCategories";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
@@ -58,13 +60,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import {
   Dialog,
   DialogContent,
@@ -200,6 +195,9 @@ export default function ProfilePage({
     useState<Array<{ category: string; subcategory: string }>>([]);
   // Interests: stores array of interest strings
   const [editedInterests, setEditedInterests] = useState<string[]>([]);
+  const [profileStep, setProfileStep] = useState<
+    "about" | "location" | "content" | "interests" | "review"
+  >("about");
 
   // Country, state, city codes for cascading dropdowns
   const [selectedCountryCode, setSelectedCountryCode] = useState<string>("");
@@ -1847,132 +1845,172 @@ export default function ProfilePage({
 
   const isDark = mode === "dark";
 
+  const isCreatorProfile = userData.user_type === "creator";
+  const isAdminProfile = userData.user_type === "admin";
+  const useProfileShell = isCreatorProfile || isAdminProfile;
+  const detailRowClass = "grid grid-cols-1 items-center gap-3 py-3 sm:grid-cols-[13rem_1fr_auto]";
+  const detailActionClass = cn(
+    "h-9 w-fit rounded-full px-4",
+    isDark
+      ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+      : "border-neutral-300 bg-white text-[#171717]",
+  );
+
   return (
-    <div className="space-y-10 bg-background text-foreground transition-colors duration-300">
-      <div className="flex flex-col items-center justify-center text-center">
-        <h1 className="text-4xl font-bold">Profile</h1>
-        <p className="mt-3 text-lg text-muted-foreground">
-          Manage your Profile Information
+    <div className={cn("space-y-6 bg-background text-foreground transition-colors duration-300", useProfileShell && "w-full max-w-[820px]")}>
+      <div className="space-y-1">
+        <h1 className={cn("text-3xl font-semibold tracking-tight", isDark ? "text-white" : "text-[#171717]")}>
+          Profile
+        </h1>
+        <p className={cn("text-lg", isDark ? "text-slate-300" : "text-[#44403c]")}>
+          {isAdminProfile
+            ? "Your admin account details."
+            : "How brands see you, and what helps us match you to campaigns."}
         </p>
       </div>
-      {userData.user_type === "creator" && (
-        <CreatorStatsCard
-          trustMetrics={trustMetrics}
-          qualityMetrics={qualityMetrics}
-          totalEarningsCents={creatorStatsEarningsCents}
-          totalViews={creatorStatsViews}
-          loading={isLoading}
-          isDark={isDark}
-        />
-      )}
-      {creatorProfile && (
-        <div
-          className={cn(
-            "rounded-2xl shadow-lg px-2 pb-5",
-            isDark ? "bg-[#180438]" : "bg-white"
-          )}
-        >
-          <CardHeader className="mb-3">
-            <CardTitle
-              className={cn(
-                "text-xl font-semibold",
-                isDark ? "text-white" : "text-[#7F39EC]"
-              )}
-            >
-              Creator Profile
-            </CardTitle>
-            <CardDescription className="text-md">
-              Your creator statistics
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-12">
-              <div className="relative w-full">
-                <label
-                  htmlFor="floating"
-                  className={cn(
-                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
-                    isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
-                      : "bg-white text-gray-500"
-                  )}
-                >
-                  Campaigns Participated
-                </label>
-                <div
-                  className={cn(
-                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                    isDark
-                      ? "text-[#8A8A8A] border-[#8A8A8A]"
-                      : "border border-gray-300 text-gray-500"
-                  )}
-                >
-                  <p
-                    className={cn(
-                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                    )}
-                  >
-                    {creatorProfile.total_contests_participated}
-                  </p>
-                </div>
-              </div>
-              <div className="relative w-full">
-                <label
-                  htmlFor="floating"
-                  className={cn(
-                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
-                    isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
-                      : "bg-white text-gray-500"
-                  )}
-                >
-                  Campaigns Won
-                </label>
-                <div
-                  className={cn(
-                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                    isDark
-                      ? "text-[#8A8A8A] border-[#8A8A8A]"
-                      : "border border-gray-300 text-gray-500"
-                  )}
-                >
-                  <p
-                    className={cn(
-                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                    )}
-                  >
-                    {creatorProfile.total_contests_won}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </div>
-      )}
       <div>
+        {!useProfileShell && (
         <div
           className={cn(
             "rounded-t-2xl border-b px-6 py-4 shadow-lg",
-            isDark ? "bg-[#180438]" : "bg-white "
+            isDark ? "bg-[#161616]" : "bg-white "
           )}
         >
           <CardTitle
-            className={cn("text-xl", isDark ? "text-white" : "text-[#7F39EC]")}
+            className={cn("text-xl", isDark ? "text-white" : "text-[#171717]")}
           >
-            Your Details
+            Your details
           </CardTitle>
         </div>
+        )}
         <div
           className={cn(
-            "rounded-b-2xl shadow-lg px-2 pb-4",
-            isDark ? "bg-[#180438]" : "bg-white "
+            useProfileShell
+              ? cn(
+                  "rounded-2xl border px-5 py-4 shadow-none",
+                  isAdminProfile
+                    ? isDark
+                      ? "border-white/10 bg-[#161616]"
+                      : "border-[#ececef] bg-white"
+                    : isDark
+                      ? "border-[#c4a574]/35 bg-[linear-gradient(180deg,rgba(196,161,90,0.16)_0%,rgba(14,14,14,0.55)_48%,#161616_100%)]"
+                      : "border-[#f3e6d4] bg-white",
+                )
+              : "rounded-b-2xl shadow-lg px-2 pb-4",
+            !useProfileShell && (isDark ? "bg-[#161616]" : "bg-white "),
           )}
         >
+          {useProfileShell && (
+            <div className="flex items-center gap-4">
+              <div className="relative shrink-0">
+                <Avatar className={cn("h-[4.5rem] w-[4.5rem] rounded-2xl border", isDark ? "border-white/15" : "border-neutral-200")}>
+                  <AvatarImage src={avatarPreview || undefined} alt={userData.full_name || "User"} />
+                  <AvatarFallback className={cn("rounded-2xl text-lg font-semibold", isDark ? "bg-white/10 text-white" : "bg-[#E8E8EA] text-[#171717]")}>
+                    {(userData.full_name || userData.email || "U")
+                      .split(" ")
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((part) => part[0]?.toUpperCase())
+                      .join("") || "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <button
+                  type="button"
+                  onClick={triggerAvatarUpload}
+                  className="absolute -bottom-1 -left-1 flex h-7 w-7 items-center justify-center rounded-full goc-btn-primary"
+                  aria-label="Change profile photo"
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="min-w-0 flex-1">
+                {isEditingFullName ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      id="fullName"
+                      value={editedFullName}
+                      onChange={(e) => handleFullNameChange(e.target.value)}
+                      disabled={isSubmitting}
+                      maxLength={NAME_CONSTRAINTS.FULL_NAME_MAX}
+                      className={cn(
+                        "h-11 w-full max-w-[280px] rounded-xl border bg-white px-3 text-base text-[#171717] focus:outline-none focus:ring-1",
+                        fullNameError
+                          ? "border-red-500 focus:ring-red-500"
+                          : isAdminProfile
+                            ? "border-[#1a1a1a] focus:ring-[#1a1a1a]"
+                            : "border-[#ff7a1a] focus:ring-[#ff7a1a]",
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleSaveFullName}
+                      disabled={isSubmitting}
+                      className="h-11 rounded-full goc-btn-primary px-5"
+                    >
+                      {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleCancelFullName}
+                      disabled={isSubmitting}
+                      className="h-11 rounded-full border-neutral-300 bg-white px-5 text-[#171717] shadow-none hover:bg-[#F6F6F7]"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <p className={cn("truncate text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>
+                      {userData.full_name || "Your name"}
+                    </p>
+                    <button type="button" onClick={handleEditFullName} aria-label="Edit name">
+                      <Pencil className="h-4 w-4 text-[#737373]" />
+                    </button>
+                  </div>
+                )}
+                <p className={cn("mt-1.5 flex flex-wrap items-center gap-1.5 text-base", isDark ? "text-slate-300" : "text-[#44403c]")}>
+                  <span>@{userData.username}</span>
+                  <span>·</span>
+                  <span className="capitalize">{userData.user_type}</span>
+                  <span>·</span>
+                  <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", isDark ? "bg-emerald-500/15 text-emerald-400" : "bg-[#e8f6ee] text-[#1f8a4c]")}>Active</span>
+                </p>
+                {isEditingFullName && (fullNameError || editedFullName.length > 0) && (
+                  <div className="mt-1 flex items-center justify-between gap-3">
+                    <span className="text-xs text-[#737373]">
+                      {getCharacterCountDisplay(editedFullName.length, NAME_CONSTRAINTS.FULL_NAME_MAX)}
+                    </span>
+                    {fullNameError && <span className="text-xs text-red-500">{fullNameError}</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {useProfileShell && selectedAvatarFile && (
+            <div className="flex gap-2 px-6 pt-3">
+              <Button size="sm" className="h-9 rounded-full bg-[#171717] px-4 text-white hover:bg-[#171717]/90" onClick={handleAvatarUpload} disabled={isUploadingAvatar}>
+                {isUploadingAvatar ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                {isUploadingAvatar ? "Uploading..." : "Save Avatar"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 rounded-full border-neutral-300 bg-white px-4 text-[#171717]"
+                onClick={() => {
+                  setSelectedAvatarFile(null);
+                  setAvatarPreview(userData?.profile_picture_url || null);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+                disabled={isUploadingAvatar}
+              >
+                Cancel
+              </Button>
+            </div>
+          )}
+          {!useProfileShell && (
           <div className="px-6 pt-4">
             <div className="flex items-center gap-2">
-              {/* <User className="h-4 w-4" /> */}
               <CardTitle className="text-xl font-semibold">
                 Account Information
               </CardTitle>
@@ -1982,7 +2020,8 @@ export default function ProfilePage({
               hover.
             </CardDescription>
           </div>
-          <CardHeader>
+          )}
+          <CardHeader className={cn(useProfileShell && "sr-only")}>
             <div className="flex items-center gap-6 mb-6">
               <div className="relative group">
                 <Avatar className="h-20 w-20 border-2 border-border transition-all duration-200 group-hover:border-primary">
@@ -2056,9 +2095,9 @@ export default function ProfilePage({
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className={cn("space-y-6", useProfileShell && "hidden")}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-12">
-              <div className="space-y-3">
+              <div className={cn("space-y-3", userData.user_type === "creator" && !isEditingFullName && "hidden")}>
                 {isEditingFullName ? (
                   <div className="space-y-2 mt-1">
                     <div className="flex items-center gap-2 relative w-full">
@@ -2075,7 +2114,7 @@ export default function ProfilePage({
                    focus:outline-none focus:ring-1 transition-colors duration-300
                    ${
                      isDark
-                       ? "bg-[#180438] text-white border border-gray-300"
+                       ? "bg-[#161616] text-white border border-gray-300"
                        : "bg-white text-gray-900 border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                    }
                 ${
@@ -2097,7 +2136,7 @@ export default function ProfilePage({
                           className={cn(
                             "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 bg-white px-1 peer-placeholder-shown:top-1/2 peer-placeholder-shown:text-sm peer-placeholder-shown:text-gray-400",
                             isDark
-                              ? "bg-[#180438] text-white"
+                              ? "bg-[#161616] text-white"
                               : "bg-white text-[#1A1A1A]"
                           )}
                         >
@@ -2154,7 +2193,7 @@ export default function ProfilePage({
                         className={cn(
                           "peer block w-full rounded-lg border focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-purple-500 px-3 pr-10 pt-5 pb-2 text-md cursor-default",
                           isDark
-                            ? "bg-[#180438] border border-gray-400"
+                            ? "bg-[#161616] border border-gray-400"
                             : "text-[#1A1A1A] bg-gray-50 "
                         )}
                         placeholder=" "
@@ -2164,7 +2203,7 @@ export default function ProfilePage({
                         className={cn(
                           "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                           isDark
-                            ? "bg-[#180438] text-white"
+                            ? "bg-[#161616] text-white"
                             : "bg-white text-[#1A1A1A]"
                         )}
                       >
@@ -2199,7 +2238,7 @@ export default function ProfilePage({
                 />
               </div> */}
 
-              <div className="relative w-full">
+              <div className={cn("relative w-full", userData.user_type === "creator" && "hidden")}>
                 {/* Display Mode: Read-only Input with Edit Button */}
                 <div className="relative flex-1">
                   <input
@@ -2209,7 +2248,7 @@ export default function ProfilePage({
                     className={cn(
                       "peer block w-full rounded-lg border focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-purple-500 px-3 pr-10 pt-5 pb-2 text-md cursor-default",
                       isDark
-                        ? "bg-[#180438] border border-gray-400"
+                        ? "bg-[#161616] border border-gray-400"
                         : "text-[#1A1A1A] bg-gray-50 "
                     )}
                     placeholder=" "
@@ -2219,7 +2258,7 @@ export default function ProfilePage({
                     className={cn(
                       "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                       isDark
-                        ? "bg-[#180438] text-white"
+                        ? "bg-[#161616] text-white"
                         : "bg-white text-[#1A1A1A]"
                     )}
                   >
@@ -2237,13 +2276,13 @@ export default function ProfilePage({
                 </div>
               </div>
 
-              <div className="relative w-full">
+              <div className={cn("relative w-full", userData.user_type === "creator" && "hidden")}>
                 <label
                   htmlFor="floating"
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
+                      ? "bg-[#161616] text-[#8A8A8A]"
                       : "bg-white text-gray-500"
                   )}
                 >
@@ -2295,13 +2334,13 @@ export default function ProfilePage({
                 </div>
               </div> */}
 
-              <div className="relative w-full">
+              <div className={cn("relative w-full", userData.user_type === "creator" && "hidden")}>
                 <label
                   htmlFor="floating"
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
+                      ? "bg-[#161616] text-[#8A8A8A]"
                       : "bg-white text-gray-500"
                   )}
                 >
@@ -2368,42 +2407,201 @@ export default function ProfilePage({
         </div>
       </div>
 
+      {isAdminProfile && (
+        <>
+          <div className={cn("rounded-2xl border px-5 py-4 shadow-none", isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white")}>
+            <h3 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Your details</h3>
+            <div className={cn("mt-2 divide-y", isDark ? "divide-white/10" : "divide-neutral-200")}>
+              <div className={detailRowClass}>
+                <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Email</p>
+                <p className={cn("truncate text-base", isDark ? "text-white" : "text-[#171717]")}>{userData.email}</p>
+                <Button type="button" variant="outline" className={detailActionClass} onClick={handleEditEmail}>
+                  Change
+                </Button>
+              </div>
+              <div className={detailRowClass}>
+                <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Username</p>
+                <p className={cn("truncate text-base", isDark ? "text-white" : "text-[#171717]")}>@{userData.username}</p>
+                <Button type="button" variant="outline" className={detailActionClass} onClick={handleCopyUsername}>
+                  <Copy className="h-4 w-4" />
+                  Copy
+                </Button>
+              </div>
+              <div className={detailRowClass}>
+                <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Account type</p>
+                <p className={cn("text-base capitalize", isDark ? "text-white" : "text-[#171717]")}>{userData.user_type}</p>
+                <span />
+              </div>
+            </div>
+          </div>
+          <div className={cn("rounded-2xl border px-5 py-4 shadow-none", isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white")}>
+            <h3 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Referrals</h3>
+            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Referred by</p>
+                <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{referrer || "No one"}</p>
+              </div>
+              <div>
+                <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Available coins</p>
+                <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{(userData.coins ?? 0).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Creators referred</p>
+                <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{userData.creators_referred ?? 0}</p>
+              </div>
+              <div>
+                <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Brands referred</p>
+                <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{userData.advertisers_referred ?? 0}</p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Creator Profile Details - Only for Creators */}
       {userData.user_type === "creator" && creatorProfile && (
         <div>
           <div
             className={cn(
-              "rounded-t-2xl border-b px-6 py-4 shadow-lg",
-              isDark ? "bg-[#180438]" : "bg-white "
+              "rounded-2xl border px-2 pb-4 shadow-sm",
+              isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white"
             )}
           >
-            <CardTitle
-              className={cn(
-                "text-xl",
-                isDark ? "text-white" : "text-[#7F39EC]"
-              )}
-            >
-              Profile Details
-            </CardTitle>
-          </div>
-          <div
-            className={cn(
-              "rounded-b-2xl shadow-lg px-2 pb-4",
-              isDark ? "bg-[#180438]" : "bg-white "
-            )}
-          >
-            <div className="px-6 pt-4 pb-8">
-              <CardTitle className="text-xl font-semibold">
-                Personal Information
-              </CardTitle>
-              <CardDescription className="mt-2 text-md">
-                Complete your profile to get campaigns matched to your country,
-                categories, subcategories, and interests. Click "Save Changes"
-                to save all updates and receive a $0.50 bonus.
-              </CardDescription>
+            <div className="px-6 pt-4 pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <CardTitle className={cn("text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>
+                  Complete your profile
+                </CardTitle>
+                {!hasReceivedProfileBonus && (
+                  <span className={cn("rounded-full px-3 py-1 text-sm font-medium", isDark ? "border border-[#c4a574]/50 bg-transparent text-[#c4a574]" : "bg-[#fff1e6] text-[#ff7a1a]")}>
+                    Earn $0.50
+                  </span>
+                )}
+              </div>
+              <div
+                className={cn(
+                  "mt-4 flex gap-4 overflow-x-auto border-b [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+                  isDark ? "border-white/10" : "border-neutral-200",
+                )}
+              >
+                {(
+                  [
+                    ["about", "About you"],
+                    ["location", "Location"],
+                    ["content", "Your content"],
+                    ["interests", "Interests"],
+                    ["review", "Review"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setProfileStep(id)}
+                    className={cn(
+                      "-mb-px shrink-0 whitespace-nowrap border-b-2 px-1 pb-3 text-left text-base font-medium",
+                      profileStep === id
+                        ? isDark
+                          ? "border-[#ff7a1a] text-white"
+                          : "border-[#c4a574] text-[#171717]"
+                        : isDark
+                          ? "border-transparent text-slate-400 hover:text-white"
+                          : "border-transparent text-[#737373] hover:text-[#171717]",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-10">
+              <div>
+                <h3 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>
+                  {profileStep === "about" && "Tell us about yourself"}
+                  {profileStep === "location" && "Where you live"}
+                  {profileStep === "content" && "What you create"}
+                  {profileStep === "interests" && "What you enjoy"}
+                  {profileStep === "review" && "Review your answers"}
+                </h3>
+                <p className={cn("mt-1 text-base", isDark ? "text-slate-300" : "text-[#737373]")}>
+                  {profileStep === "about" && "Your photo, birthday and gender."}
+                  {profileStep === "location" && "Your country, state, city and address."}
+                  {profileStep === "content" && "The languages you speak and the kinds of content you make."}
+                  {profileStep === "interests" && "Beyond your own content. Pick any."}
+                  {profileStep === "review" && "Check everything, then claim your bonus."}
+                </p>
+              </div>
+              {profileStep === "review" && (
+                <div className="space-y-3">
+                  {(
+                    [
+                      {
+                        title: "About you",
+                        step: "about" as const,
+                        rows: [
+                          ["Profile picture", avatarPreview || userData.profile_picture_url ? "Added" : ""],
+                          ["Date of birth", editedDateOfBirth],
+                          ["Gender", editedGender],
+                        ],
+                      },
+                      {
+                        title: "Location",
+                        step: "location" as const,
+                        rows: [
+                          ["Country", editedCountry],
+                          ["State", editedState],
+                          ["City", editedCity],
+                          ["Address", editedAddress],
+                        ],
+                      },
+                      {
+                        title: "Your content",
+                        step: "content" as const,
+                        rows: [
+                          ["Languages", editedLanguages.join(", ")],
+                          ["Categories", editedContentTypesCreated.join(", ")],
+                          ["Subcategories", editedInterestedContentTypes.length ? `${editedInterestedContentTypes.length} selected` : ""],
+                        ],
+                      },
+                      {
+                        title: "Interests",
+                        step: "interests" as const,
+                        rows: [["Interests", editedInterests.join(", ")]],
+                      },
+                    ] as const
+                  ).map((group) => {
+                    const missing = group.rows.filter(([, value]) => !value);
+                    return (
+                      <div key={group.title} className={cn("rounded-2xl border px-4 py-3", isDark ? "border-white/10 bg-[#0e0e0e]" : "border-neutral-200 bg-[#F6F6F7]")}>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>
+                            {group.title}
+                            {missing.length > 0 && (
+                              <span className={cn("ml-2 rounded-full px-2 py-0.5 text-xs font-medium", isDark ? "bg-[#ff7a1a]/15 text-[#ffd29a]" : "bg-[#fff1e6] text-[#ff7a1a]")}>
+                                {missing.length} missing
+                              </span>
+                            )}
+                          </p>
+                          <button type="button" onClick={() => setProfileStep(group.step)} className={cn("inline-flex items-center gap-1 rounded-full border px-3 py-1 text-sm", isDark ? "border-white/20 bg-transparent text-white" : "border-neutral-300 bg-white text-[#171717]")}>
+                            <Pencil className="h-3.5 w-3.5" />
+                            Edit
+                          </button>
+                        </div>
+                        <div className={cn("mt-3 divide-y", isDark ? "divide-white/10" : "divide-neutral-200")}>
+                          {group.rows.map(([label, value]) => (
+                            <div key={label} className="flex items-center justify-between gap-3 py-2 text-base">
+                              <span className={isDark ? "text-slate-400" : "text-[#44403c]"}>{label}</span>
+                              <span className={cn("text-right", value ? (isDark ? "text-white" : "text-[#171717]") : "text-[#ff7a1a]")}>
+                                {value || "Not added"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-6">
                 {/* Phone Number */}
                 {/* <div className="relative w-full">
                   <div className="relative flex-1">
@@ -2413,10 +2611,10 @@ export default function ProfilePage({
                         "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 z-10 px-1 pointer-events-none",
                         hasReceivedProfileBonus || isSubmitting
                           ? isDark
-                            ? "bg-[#180438] text-gray-400"
+                            ? "bg-[#161616] text-gray-400"
                             : "bg-white text-gray-400"
                           : isDark
-                          ? "bg-[#180438] text-white"
+                          ? "bg-[#161616] text-white"
                           : "bg-white text-[#1A1A1A]"
                       )}
                     >
@@ -2436,17 +2634,17 @@ export default function ProfilePage({
                         "custom-phone-input",
                         hasReceivedProfileBonus || isSubmitting
                           ? isDark
-                            ? "bg-[#180438] text-gray-400 border-gray-400"
+                            ? "bg-[#161616] text-gray-400 border-gray-400"
                             : "bg-white text-gray-400 border-gray-400"
                           : isDark
-                          ? "bg-[#180438] text-white border-gray-300"
+                          ? "bg-[#161616] text-white border-gray-300"
                           : "bg-white text-gray-900 border-gray-300"
                       )}
                       style={
                         {
                           "--PhoneInputCountryFlag-height": "1.2em",
                           "--PhoneInputCountryFlag-borderWidth": "0",
-                          backgroundColor: isDark ? "#180438" : "white",
+                          backgroundColor: isDark ? "#161616" : "white",
                           color:
                             hasReceivedProfileBonus || isSubmitting
                               ? "#9ca3af"
@@ -2476,9 +2674,37 @@ export default function ProfilePage({
                   </div>
                 </div> */}
 
+                {profileStep === "about" && (
+                  <div className={cn("relative col-span-1 flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 sm:col-span-2", isDark ? "border-white/10 bg-[#0e0e0e]" : "border-neutral-200 bg-[#F6F6F7]")}>
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-12 w-12 rounded-2xl">
+                        <AvatarImage src={avatarPreview || undefined} alt="" />
+                        <AvatarFallback className={cn("rounded-2xl text-sm font-semibold", isDark ? "bg-white/10 text-white" : "bg-[#E4E4E7] text-[#171717]")}>
+                          {(userData.full_name || "U").slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className={cn("text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>Profile picture</p>
+                        <p className={cn("text-sm", isDark ? "text-slate-400" : "text-[#737373]")}>PNG, JPG or WEBP, up to 5 MB.</p>
+                      </div>
+                    </div>
+                    <Button type="button" variant="outline" className={cn("h-9 rounded-full px-4", isDark ? "border-white/20 bg-transparent text-white hover:bg-white/10" : "border-neutral-300 bg-white text-[#171717]")} onClick={triggerAvatarUpload}>
+                      <Upload className="h-4 w-4" />
+                      Upload photo
+                    </Button>
+                  </div>
+                )}
+
                 {/* Date of Birth */}
-                <div className="relative w-full">
-                  <div className="relative flex-1">
+                <div className={cn("relative w-full", profileStep !== "about" && "hidden")}>
+                  <p className={cn("mb-2 text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>Date of birth</p>
+                  <div className="relative">
+                    <Calendar className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#737373]" />
+                    {!editedDateOfBirth && (
+                      <span className="pointer-events-none absolute left-10 top-1/2 -translate-y-1/2 text-base text-[#737373]">
+                        Select a date
+                      </span>
+                    )}
                     <input
                       id="dateOfBirth"
                       type="date"
@@ -2491,65 +2717,47 @@ export default function ProfilePage({
                       })()}
                       disabled={hasReceivedProfileBonus || isSubmitting}
                       className={cn(
-                        "peer px-2.5 pb-2.5 pt-4 w-full text-[14px] rounded-lg focus:outline-none focus:ring-1 transition-colors duration-300",
-                        hasReceivedProfileBonus || isSubmitting
-                          ? isDark
-                            ? "bg-[#180438] text-gray-400 border border-gray-400 focus:border-gray-400 focus:ring-gray-400"
-                            : "bg-white text-gray-400 border border-gray-400 focus:border-gray-400 focus:ring-gray-400"
-                          : isDark
-                          ? "bg-[#180438] text-white border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                          : "bg-white text-gray-900 border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                        "h-11 w-full rounded-xl border pl-10 pr-3 text-base focus:outline-none focus:ring-1",
+                        isDark
+                          ? "border-white/15 bg-[#0e0e0e] text-white focus:ring-white/30"
+                          : "border-neutral-200 bg-white text-[#171717] focus:ring-[#171717]",
+                        !editedDateOfBirth && "text-transparent [&::-webkit-datetime-edit]:text-transparent",
+                        (hasReceivedProfileBonus || isSubmitting) && "cursor-not-allowed opacity-60",
                       )}
-                      style={
-                        {
-                          colorScheme: isDark ? "dark" : "light",
-                        } as React.CSSProperties
-                      }
                     />
-                    <label
-                      htmlFor="dateOfBirth"
-                      className={cn(
-                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 px-1",
-                        hasReceivedProfileBonus || isSubmitting
-                          ? isDark
-                            ? "bg-[#180438] text-gray-400"
-                            : "bg-white text-gray-400"
-                          : isDark
-                          ? "bg-[#180438] text-white"
-                          : "bg-white text-[#1A1A1A]"
-                      )}
-                    >
-                      Date of Birth
-                    </label>
                   </div>
-                  <p
-                    className={cn(
-                      "mt-1 text-sm",
-                      isDark ? "text-gray-400" : "text-gray-500"
-                    )}
-                  >
-                    This can be set only once and cannot be changed later
-                  </p>
+                  <p className="mt-2 text-sm text-[#737373]">You can set this once.</p>
                 </div>
 
                 {/* Gender */}
-                <div className="relative w-full">
+                <div className={cn("relative w-full", profileStep !== "about" && "hidden")}>
                   <div className="relative flex-1">
+                    <p className={cn("mb-2 text-base font-medium", isDark ? "text-white" : "text-[#171717]")}>Gender</p>
+                    <div className={cn("inline-flex h-11 items-center gap-1 rounded-xl px-1", isDark ? "bg-white/10" : "bg-[#F3F3F5]")}>
+                      {["Female", "Male", ...(editedGender && editedGender !== "Female" && editedGender !== "Male" ? [editedGender] : [])].map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          disabled={hasReceivedProfileBonus || isSubmitting}
+                          onClick={() => setEditedGender(option)}
+                          className={cn(
+                            "h-9 rounded-lg px-4 text-base",
+                            isDark ? "text-white" : "text-[#171717]",
+                            editedGender === option && (isDark ? "bg-white/15 shadow-sm" : "bg-white shadow-sm"),
+                            (hasReceivedProfileBonus || isSubmitting) && "cursor-not-allowed opacity-60",
+                          )}
+                        >
+                          {option}
+                        </button>
+                      ))}
+                    </div>
                     <select
                       id="gender"
                       value={editedGender}
                       onChange={(e) => setEditedGender(e.target.value)}
                       disabled={hasReceivedProfileBonus || isSubmitting}
-                      className={cn(
-                        "peer px-2.5 pb-2.5 pt-4 w-full text-[14px] rounded-lg focus:outline-none focus:ring-1 transition-colors duration-300",
-                        hasReceivedProfileBonus || isSubmitting
-                          ? isDark
-                            ? "bg-[#180438] text-gray-400 border border-gray-400 focus:border-gray-400 focus:ring-gray-400"
-                            : "bg-white text-gray-600 border border-gray-400 focus:border-gray-400 focus:ring-gray-400"
-                          : isDark
-                          ? "bg-[#180438] text-white border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                          : "bg-white text-gray-900 border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                      )}
+                      className="sr-only"
+                      aria-hidden
                     >
                       <option value="">Select Gender</option>
                       <option value="Male">Male</option>
@@ -2559,47 +2767,15 @@ export default function ProfilePage({
                         Prefer not to say
                       </option> */}
                     </select>
-                    <label
-                      htmlFor="gender"
-                      className={cn(
-                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 px-1",
-                        hasReceivedProfileBonus || isSubmitting
-                          ? isDark
-                            ? "bg-[#180438] text-gray-400"
-                            : "bg-white text-gray-400"
-                          : isDark
-                          ? "bg-[#180438] text-white"
-                          : "bg-white text-[#1A1A1A]"
-                      )}
-                    >
-                      Gender
-                    </label>
                   </div>
-                  <p
-                    className={cn(
-                      "mt-1 text-sm",
-                      isDark ? "text-gray-400" : "text-gray-500"
-                    )}
-                  >
-                    This can be set only once and cannot be changed later
-                  </p>
                 </div>
 
                 {/* Country */}
-                <div className="relative w-full">
+                <div className={cn("relative w-full", profileStep !== "location" && "hidden")}>
                   <div className="relative flex-1">
                     <label
                       htmlFor="country"
-                      className={cn(
-                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 px-1 z-10",
-                        hasReceivedProfileBonus || isSubmitting
-                          ? isDark
-                            ? "bg-[#180438] text-gray-400"
-                            : "bg-white text-gray-400"
-                          : isDark
-                          ? "bg-[#180438] text-white"
-                          : "bg-white text-[#1A1A1A]"
-                      )}
+                      className={cn("mb-2 block text-base font-medium", isDark ? "text-white" : "text-[#171717]")}
                     >
                       Country
                     </label>
@@ -2634,14 +2810,14 @@ export default function ProfilePage({
                         id="country"
                         isDark={isDark}
                         className={cn(
-                          "h-12 w-full text-[14px] transition-colors duration-200",
+                          "h-11 w-full rounded-xl border px-3 text-base font-normal shadow-none focus:ring-1 focus:ring-[#171717]",
                           hasReceivedProfileBonus || isSubmitting
                             ? isDark
-                              ? "bg-transparent border-gray-400 text-gray-400 hover:bg-[#180438]/50 hover:border-gray-400"
-                              : "border-gray-400 text-gray-700 hover:bg-gray-50 hover:border-gray-400"
+                              ? "border-white/15 bg-white/5 text-slate-400"
+                              : "border-neutral-200 bg-[#F6F6F7] text-[#737373]"
                             : isDark
-                            ? "bg-[#180438] text-white border-gray-300 hover:bg-[#180438]/50 hover:border-gray-500"
-                            : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
+                              ? "border-white/15 bg-[#0e0e0e] text-white"
+                              : "border-neutral-200 bg-white text-[#171717]"
                         )}
                       >
                         <SelectValue placeholder="Select Country" />
@@ -2660,7 +2836,7 @@ export default function ProfilePage({
                               className={cn(
                                 "pl-8 h-9 text-sm",
                                 isDark
-                                  ? "bg-[#180438] text-white border-gray-600"
+                                  ? "bg-[#161616] text-white border-gray-600"
                                   : "bg-white text-gray-900 border-gray-300"
                               )}
                             />
@@ -2708,20 +2884,11 @@ export default function ProfilePage({
                 </div>
 
                 {/* State */}
-                <div className="relative w-full">
+                <div className={cn("relative w-full", profileStep !== "location" && "hidden")}>
                   <div className="relative flex-1">
                     <label
                       htmlFor="state"
-                      className={cn(
-                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 px-1 z-10",
-                        hasReceivedProfileBonus || isSubmitting
-                          ? isDark
-                            ? "bg-[#180438] text-gray-400"
-                            : "bg-white text-gray-400"
-                          : isDark
-                          ? "bg-[#180438] text-white"
-                          : "bg-white text-[#1A1A1A]"
-                      )}
+                      className={cn("mb-2 block text-base font-medium", isDark ? "text-white" : "text-[#171717]")}
                     >
                       State
                     </label>
@@ -2753,14 +2920,14 @@ export default function ProfilePage({
                         id="state"
                         isDark={isDark}
                         className={cn(
-                          "h-12 w-full text-[14px] transition-colors duration-200",
+                          "h-11 w-full rounded-xl border px-3 text-base font-normal shadow-none focus:ring-1 focus:ring-[#171717]",
                           hasReceivedProfileBonus || isSubmitting
                             ? isDark
-                              ? "bg-transparent border-gray-400 text-gray-400 hover:bg-[#180438]/50 hover:border-gray-400"
-                              : "border-gray-400 text-gray-700 hover:bg-gray-50 hover:border-gray-400"
+                              ? "border-white/15 bg-white/5 text-slate-400"
+                              : "border-neutral-200 bg-[#F6F6F7] text-[#737373]"
                             : isDark
-                            ? "bg-[#180438] text-white border-gray-300 hover:bg-[#180438]/50 hover:border-gray-500"
-                            : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
+                              ? "border-white/15 bg-[#0e0e0e] text-white"
+                              : "border-neutral-200 bg-white text-[#171717]"
                         )}
                       >
                         <SelectValue
@@ -2789,7 +2956,7 @@ export default function ProfilePage({
                                 className={cn(
                                   "pl-8 h-9 text-sm",
                                   isDark
-                                    ? "bg-[#180438] text-white border-gray-600"
+                                    ? "bg-[#161616] text-white border-gray-600"
                                     : "bg-white text-gray-900 border-gray-300"
                                 )}
                               />
@@ -2850,20 +3017,11 @@ export default function ProfilePage({
                 </div>
 
                 {/* City */}
-                <div className="relative w-full">
+                <div className={cn("relative w-full", profileStep !== "location" && "hidden")}>
                   <div className="relative flex-1">
                     <label
                       htmlFor="city"
-                      className={cn(
-                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 px-1 z-10",
-                        hasReceivedProfileBonus || isSubmitting
-                          ? isDark
-                            ? "bg-[#180438] text-gray-400"
-                            : "bg-white text-gray-400"
-                          : isDark
-                          ? "bg-[#180438] text-white"
-                          : "bg-white text-[#1A1A1A]"
-                      )}
+                      className={cn("mb-2 block text-base font-medium", isDark ? "text-white" : "text-[#171717]")}
                     >
                       City
                     </label>
@@ -2884,14 +3042,14 @@ export default function ProfilePage({
                         id="city"
                         isDark={isDark}
                         className={cn(
-                          "h-12 w-full text-[14px] transition-colors duration-200",
+                          "h-11 w-full rounded-xl border px-3 text-base font-normal shadow-none focus:ring-1 focus:ring-[#171717]",
                           hasReceivedProfileBonus || isSubmitting
                             ? isDark
-                              ? "bg-transparent border-gray-400 text-gray-400 hover:bg-[#180438]/50 hover:border-gray-400"
-                              : "border-gray-400 text-gray-700 hover:bg-gray-50 hover:border-gray-400"
+                              ? "border-white/15 bg-white/5 text-slate-400"
+                              : "border-neutral-200 bg-[#F6F6F7] text-[#737373]"
                             : isDark
-                            ? "bg-[#180438] text-white border-gray-300 hover:bg-[#180438]/50  hover:border-gray-500"
-                            : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
+                              ? "border-white/15 bg-[#0e0e0e] text-white"
+                              : "border-neutral-200 bg-white text-[#171717]"
                         )}
                       >
                         <SelectValue
@@ -2927,7 +3085,7 @@ export default function ProfilePage({
                                   className={cn(
                                     "pl-8 h-9 text-sm",
                                     isDark
-                                      ? "bg-[#180438] text-white border-gray-600"
+                                      ? "bg-[#161616] text-white border-gray-600"
                                       : "bg-white text-gray-900 border-gray-300"
                                   )}
                                 />
@@ -2991,57 +3149,48 @@ export default function ProfilePage({
                 </div>
 
                 {/* Address */}
-                <div className="relative w-full col-span-1 sm:col-span-2">
+                <div className={cn("relative w-full col-span-1 sm:col-span-2", profileStep !== "location" && "hidden")}>
                   <div className="relative flex-1">
+                    <label
+                      htmlFor="address"
+                      className={cn("mb-2 block text-base font-medium", isDark ? "text-white" : "text-[#171717]")}
+                    >
+                      House / flat address
+                    </label>
                     <textarea
                       id="address"
                       value={editedAddress}
                       onChange={(e) => setEditedAddress(e.target.value)}
                       disabled={hasReceivedProfileBonus || isSubmitting}
-                      placeholder=" "
+                      placeholder="House, flat, street"
                       rows={3}
                       className={cn(
-                        "peer px-2.5 pb-2.5 pt-4 w-full text-[14px] rounded-lg focus:outline-none focus:ring-1 transition-colors duration-300 resize-none",
+                        "w-full resize-none rounded-xl border px-3 py-3 text-base focus:outline-none focus:ring-1 focus:ring-[#171717]",
                         hasReceivedProfileBonus || isSubmitting
                           ? isDark
-                            ? "bg-[#180438] text-gray-400 border border-gray-400 focus:border-gray-400 focus:ring-gray-400"
-                            : "bg-white text-gray-400 border border-gray-400 focus:border-gray-400 focus:ring-gray-400"
+                            ? "border-white/15 bg-white/5 text-slate-400"
+                            : "border-neutral-200 bg-[#F6F6F7] text-[#737373]"
                           : isDark
-                          ? "bg-[#180438] text-white border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                          : "bg-white text-gray-900 border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                            ? "border-white/15 bg-[#0e0e0e] text-white placeholder:text-slate-500"
+                            : "border-neutral-200 bg-white text-[#171717] placeholder:text-[#737373]"
                       )}
                     />
-                    <label
-                      htmlFor="address"
-                      className={cn(
-                        "absolute font-medium text-[14px] left-3 top-0 -translate-y-1/2 px-1",
-                        hasReceivedProfileBonus || isSubmitting
-                          ? isDark
-                            ? "bg-[#180438] text-gray-400"
-                            : "bg-white text-gray-400"
-                          : isDark
-                          ? "bg-[#180438] text-white"
-                          : "bg-white text-[#1A1A1A]"
-                      )}
-                    >
-                      House/Flat Address
-                    </label>
                   </div>
                 </div>
 
                 {/* Languages */}
-                <div className="relative w-full col-span-1 sm:col-span-2">
+                <div className={cn("relative w-full col-span-1 sm:col-span-2", profileStep !== "content" && "hidden")}>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="relative flex-1">
                         <Label
                           htmlFor="languageSelect"
                           className={cn(
-                            "block mb-2 text-[14px] font-medium",
+                            "block mb-2 text-base font-medium",
                             isDark ? "text-white" : "text-[#1A1A1A]"
                           )}
                         >
-                          My Languages{" "}
+                          Languages{" "}
                           <span className="text-xs font-normal opacity-70">
                             ({editedLanguages.length}/5)
                           </span>
@@ -3061,10 +3210,10 @@ export default function ProfilePage({
                             id="languageSelect"
                             
                             className={cn(
-                              "w-full text-[14px]",
+                              "h-11 w-full rounded-xl border px-3 text-base font-normal shadow-none focus:ring-1 focus:ring-[#171717]",
                               isDark
-                                ? "bg-[#180438] text-white border-gray-300"
-                                : "bg-white text-gray-900 border-gray-300"
+                                ? "border-white/15 bg-transparent text-white"
+                                : "border-neutral-200 bg-white text-[#171717]"
                             )}
                           >
                             <SelectValue placeholder="Select a language" />
@@ -3110,8 +3259,8 @@ export default function ProfilePage({
                             className={cn(
                               "inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm",
                               isDark
-                                ? "bg-purple-900/30 text-purple-200 border border-purple-700"
-                                : "bg-purple-100 text-purple-800 border border-purple-300"
+                                ? "bg-white/10 text-white"
+                                : "bg-[#171717] text-white"
                             )}
                           >
                             {lang}
@@ -3131,444 +3280,280 @@ export default function ProfilePage({
                 </div>
 
                 {/* Type of content I create - Max 3 category selections */}
-                <div className="relative w-full col-span-1 sm:col-span-2">
-                  <div className="space-y-3">
-                    <label
-                      className={cn(
-                        "text-sm text-[14px] font-medium block",
-                        isDark ? "text-white" : "text-[#1A1A1A]"
-                      )}
-                    >
-                      Categories{" "}
-                      <span className="text-xs text-gray-500">
-                        (Select up to 3)
+                <div className={cn("relative w-full col-span-1 sm:col-span-2 space-y-3", profileStep !== "content" && "hidden")}>
+                  <div className={cn("space-y-3 rounded-xl border px-4 py-4", isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-white")}>
+                      <span className="flex items-baseline gap-2">
+                        <span className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>Categories</span>
+                        <span className={cn("text-sm font-normal", isDark ? "text-gray-300" : "text-[#3a3a42]")}>{editedContentTypesCreated.length} selected</span>
                       </span>
-                    </label>
-                    <div
-                      className={cn(
-                        "rounded-lg border p-4 space-y-3",
-                        isDark
-                          ? "bg-[#180438] border-gray-300"
-                          : "bg-white border-gray-300"
-                      )}
-                    >
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {CONTENT_TYPE_CATEGORIES.map((category) => {
-                          const isChecked = editedContentTypesCreated.includes(
-                            category.id
-                          );
-                          const isDisabled =
-                            !isChecked && editedContentTypesCreated.length >= 3;
-                          return (
-                            <div
-                              key={category.id}
-                              className="flex items-center space-x-2"
-                            >
-                              <Checkbox
-                                id={`content-created-${category.id}`}
-                                checked={isChecked}
+                        <p className={cn("text-base", isDark ? "text-gray-300" : "text-[#3a3a42]")}>
+                          Choosing a category includes all of its subcategories. Select up to 3.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {CONTENT_TYPE_CATEGORIES.map((category) => {
+                            const isChecked = editedContentTypesCreated.includes(category.id);
+                            const isDisabled = !isChecked && editedContentTypesCreated.length >= 3;
+                            return (
+                              <button
+                                key={category.id}
+                                type="button"
                                 disabled={isDisabled || isSubmitting}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    if (editedContentTypesCreated.length < 3) {
-                                      setEditedContentTypesCreated([
-                                        ...editedContentTypesCreated,
-                                        category.id,
-                                      ]);
-                                      // Automatically check all subcategories when category is selected
-                                      const newSubcategories =
-                                        category.subcategories.map(
-                                          (subcategory) => ({
-                                            category: category.id,
-                                            subcategory: subcategory,
-                                          })
-                                        );
-                                      // Add subcategories that aren't already in the list
-                                      setEditedInterestedContentTypes(
-                                        (prev) => {
-                                          const existing = new Set(
-                                            prev.map(
-                                              (item) =>
-                                                `${item.category}:${item.subcategory}`
-                                            )
-                                          );
-                                          const toAdd = newSubcategories.filter(
-                                            (item) =>
-                                              !existing.has(
-                                                `${item.category}:${item.subcategory}`
-                                              )
-                                          );
-                                          return [...prev, ...toAdd];
-                                        }
-                                      );
-                                    }
+                                onClick={() => {
+                                  if (!isChecked) {
+                                    if (editedContentTypesCreated.length >= 3) return;
+                                    setEditedContentTypesCreated([...editedContentTypesCreated, category.id]);
+                                    const newSubcategories = category.subcategories.map((subcategory) => ({
+                                      category: category.id,
+                                      subcategory,
+                                    }));
+                                    setEditedInterestedContentTypes((prev) => {
+                                      const existing = new Set(prev.map((item) => `${item.category}:${item.subcategory}`));
+                                      const toAdd = newSubcategories.filter((item) => !existing.has(`${item.category}:${item.subcategory}`));
+                                      return [...prev, ...toAdd];
+                                    });
                                   } else {
-                                    // Remove category and all its subcategories from interested list
-                                    setEditedContentTypesCreated(
-                                      editedContentTypesCreated.filter(
-                                        (id) => id !== category.id
-                                      )
-                                    );
-                                    setEditedInterestedContentTypes(
-                                      editedInterestedContentTypes.filter(
-                                        (item) => item.category !== category.id
-                                      )
-                                    );
+                                    setEditedContentTypesCreated(editedContentTypesCreated.filter((id) => id !== category.id));
+                                    setEditedInterestedContentTypes(editedInterestedContentTypes.filter((item) => item.category !== category.id));
                                   }
                                 }}
                                 className={cn(
-                                  isDark
-                                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
-                                )}
-                              />
-                              <label
-                                htmlFor={`content-created-${category.id}`}
-                                className={cn(
-                                  "text-sm font-normal",
-                                  isDisabled
-                                    ? "opacity-50 cursor-not-allowed"
-                                    : "cursor-pointer",
-                                  isDark ? "text-gray-300" : "text-gray-700"
+                                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium",
+                                  isChecked
+                                    ? isDark
+                                      ? "border-white bg-white/15 text-white"
+                                      : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]"
+                                    : isDark
+                                      ? "border-white/20 bg-transparent text-gray-300"
+                                      : "border-transparent bg-[#ececef] text-[#3a3a42]",
+                                  (isDisabled || isSubmitting) && "cursor-not-allowed opacity-50",
                                 )}
                               >
+                                {isChecked && <Check className="h-3.5 w-3.5" />}
                                 {category.name}
-                              </label>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {editedContentTypesCreated.length > 0 && (
-                        <div className="flex items-center justify-between mt-2">
-                          <p
-                            className={cn(
-                              "text-xs",
-                              isDark ? "text-gray-400" : "text-gray-500"
-                            )}
-                          >
-                            {editedContentTypesCreated.length} of 3 selected
-                          </p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setEditedContentTypesCreated([]);
-                              setEditedInterestedContentTypes([]);
-                            }}
-                            disabled={isSubmitting}
-                            className={cn(
-                              "h-7 px-2 text-xs",
-                              isDark
-                                ? "border-gray-400 text-gray-300"
-                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
-                            )}
-                          >
-                            <RotateCcw className="h-3 w-3" />
-                            Reset
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Other type of content I am interested in - Subcategories of selected categories */}
-                <div className="relative w-full col-span-1 sm:col-span-2">
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <label
-                        className={cn(
-                          "text-[14px] font-medium block",
-                          isDark ? "text-white" : "text-[#1A1A1A]"
-                        )}
-                      >
-                        Subcategories
-                      </label>
-                      {editedInterestedContentTypes.length > 0 && (
-                        <span
-                          className={cn(
-                            "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
-                            isDark
-                              ? "bg-purple-900/30 text-purple-200 border border-purple-700"
-                              : "bg-purple-100 text-purple-800 border border-purple-300"
-                          )}
-                        >
-                          {editedInterestedContentTypes.length}
-                          selected
-                        </span>
-                      )}
-                    </div>
-                    <div
-                      className={cn(
-                        "rounded-lg border p-4 space-y-3",
-                        isDark
-                          ? "bg-[#180438] border-gray-300"
-                          : "bg-white border-gray-300"
-                      )}
-                    >
-                      <Accordion type="multiple" className="w-full">
-                        {CONTENT_TYPE_CATEGORIES.map((category) => {
-                          // Get selected subcategories for this category
-                          const selectedSubcategoriesForCategory =
-                            editedInterestedContentTypes.filter(
-                              (item) => item.category === category.id
+                              </button>
                             );
-                          const selectedCount =
-                            selectedSubcategoriesForCategory.length;
-
-                          return (
-                            <AccordionItem
-                              key={category.id}
-                              value={category.id}
-                              className="border-b border-gray-200 dark:border-gray-700"
-                            >
-                              <AccordionTrigger
-                                className={cn(
-                                  "text-sm font-medium hover:no-underline py-3",
-                                  isDark ? "text-gray-300" : "text-gray-700"
-                                )}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span>{category.name}</span>
-                                  {selectedCount > 0 && (
-                                    <span
-                                      className={cn(
-                                        "text-xs px-2 py-0.5 rounded-full",
-                                        isDark
-                                          ? "bg-purple-600 text-white"
-                                          : "bg-purple-100 text-purple-700"
-                                      )}
-                                    >
-                                      {selectedCount} selected
-                                    </span>
-                                  )}
-                                </div>
-                              </AccordionTrigger>
-                              <AccordionContent className="pt-2 pb-4">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  {category.subcategories.map((subcategory) => {
-                                    const isChecked =
-                                      editedInterestedContentTypes.some(
-                                        (item) =>
-                                          item.category === category.id &&
-                                          item.subcategory === subcategory
-                                      );
-                                    return (
-                                      <div
-                                        key={`${category.id}-${subcategory}`}
-                                        className="flex items-center space-x-2"
-                                      >
-                                        <Checkbox
-                                          id={`content-interested-${category.id}-${subcategory}`}
-                                          checked={isChecked}
-                                          disabled={isSubmitting}
-                                          onCheckedChange={(checked) => {
-                                            if (checked) {
-                                              setEditedInterestedContentTypes([
-                                                ...editedInterestedContentTypes,
-                                                {
-                                                  category: category.id,
-                                                  subcategory: subcategory,
-                                                },
-                                              ]);
-                                            } else {
-                                              setEditedInterestedContentTypes(
-                                                editedInterestedContentTypes.filter(
-                                                  (item) =>
-                                                    !(
-                                                      item.category ===
-                                                        category.id &&
-                                                      item.subcategory ===
-                                                        subcategory
-                                                    )
-                                                )
-                                              );
-                                            }
-                                          }}
-                                          className={cn(
-                                            isDark
-                                              ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                              : "border-gray-400 data-[state=checked]:bg-purple-600"
-                                          )}
-                                        />
-                                        <label
-                                          htmlFor={`content-interested-${category.id}-${subcategory}`}
-                                          className={cn(
-                                            "text-sm font-normal cursor-pointer",
-                                            isDark
-                                              ? "text-gray-300"
-                                              : "text-gray-700"
-                                          )}
-                                        >
-                                          {subcategory}
-                                        </label>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </AccordionContent>
-                            </AccordionItem>
-                          );
-                        })}
-                      </Accordion>
-                      {editedInterestedContentTypes.length > 0 && (
-                        <div className="flex items-center justify-end mt-2">
-                          {/* <p
-                            className={cn(
-                              "text-xs",
-                              isDark ? "text-gray-400" : "text-gray-500"
-                            )}
-                          >
-                            {editedInterestedContentTypes.length} subcategories
-                            selected
-                          </p> */}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setEditedInterestedContentTypes([])}
-                            disabled={isSubmitting}
-                            className={cn(
-                              "h-7 px-2 text-xs",
-                              isDark
-                                ? "border-gray-400 text-gray-300"
-                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
-                            )}
-                          >
-                            <RotateCcw className="h-3 w-3" />
-                            Reset
-                          </Button>
+                          })}
                         </div>
-                      )}
-                    </div>
+                        {editedContentTypesCreated.length > 0 && (
+                          <div className="flex items-center justify-end">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditedContentTypesCreated([]);
+                                setEditedInterestedContentTypes([]);
+                              }}
+                              disabled={isSubmitting}
+                              className={cn(
+                                "h-9 rounded-full px-4 text-sm font-medium",
+                                isDark
+                                  ? "border-white/20 bg-white/5 text-gray-200"
+                                  : "border-[#e6e6ea] bg-[#f3f3f5] text-[#1a1a1a] hover:bg-[#ececef]",
+                              )}
+                            >
+                              Reset
+                            </Button>
+                          </div>
+                        )}
+                  </div>
+
+                  <div className={cn("space-y-4 rounded-xl border px-4 py-4", isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-white")}>
+                      <span className="flex items-baseline gap-2">
+                        <span className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>Subcategories</span>
+                        <span className={cn("text-sm font-normal", isDark ? "text-gray-300" : "text-[#3a3a42]")}>{editedInterestedContentTypes.length} selected</span>
+                      </span>
+                        {CONTENT_TYPE_CATEGORIES.map((category) => (
+                          <div key={category.id} className="space-y-2">
+                            <p className={cn("text-base font-medium", isDark ? "text-white" : "text-[#1a1a1a]")}>{category.name}</p>
+                            <div className="flex flex-wrap gap-2">
+                              {category.subcategories.map((subcategory) => {
+                                const isChecked = editedInterestedContentTypes.some(
+                                  (item) => item.category === category.id && item.subcategory === subcategory,
+                                );
+                                return (
+                                  <button
+                                    key={`${category.id}-${subcategory}`}
+                                    type="button"
+                                    disabled={isSubmitting}
+                                    onClick={() => {
+                                      if (!isChecked) {
+                                        setEditedInterestedContentTypes([
+                                          ...editedInterestedContentTypes,
+                                          { category: category.id, subcategory },
+                                        ]);
+                                      } else {
+                                        setEditedInterestedContentTypes(
+                                          editedInterestedContentTypes.filter(
+                                            (item) => !(item.category === category.id && item.subcategory === subcategory),
+                                          ),
+                                        );
+                                      }
+                                    }}
+                                    className={cn(
+                                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium",
+                                      isChecked
+                                        ? isDark
+                                          ? "border-white bg-white/15 text-white"
+                                          : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]"
+                                        : isDark
+                                          ? "border-white/20 bg-transparent text-gray-300"
+                                          : "border-transparent bg-[#ececef] text-[#3a3a42]",
+                                    )}
+                                  >
+                                    {isChecked && <Check className="h-3.5 w-3.5" />}
+                                    {subcategory}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                        {editedInterestedContentTypes.length > 0 && (
+                          <div className="flex items-center justify-end">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditedInterestedContentTypes([])}
+                              disabled={isSubmitting}
+                              className={cn(
+                                "h-9 rounded-full px-4 text-sm font-medium",
+                                isDark
+                                  ? "border-white/20 bg-white/5 text-gray-200"
+                                  : "border-[#e6e6ea] bg-[#f3f3f5] text-[#1a1a1a] hover:bg-[#ececef]",
+                              )}
+                            >
+                              Reset
+                            </Button>
+                          </div>
+                        )}
                   </div>
                 </div>
 
                 {/* Interests */}
-                <div className="relative w-full col-span-1 sm:col-span-2">
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <label
-                        className={cn(
-                          "text-[14px] font-medium",
-                          isDark ? "text-white" : "text-[#1A1A1A]"
-                        )}
-                      >
-                        Interests
-                      </label>
-                      {editedInterests.length > 0 && (
-                        <span
-                          className={cn(
-                            "text-xs px-2 py-0.5 rounded-full",
-                            isDark
-                              ? "bg-purple-600 text-white"
-                              : "bg-purple-100 text-purple-700"
-                          )}
-                        >
-                          {editedInterests.length} selected
-                        </span>
-                      )}
-                    </div>
-                    <div
-                      className={cn(
-                        "rounded-lg border p-4 space-y-3",
-                        isDark
-                          ? "bg-[#180438] border-gray-300"
-                          : "bg-white border-gray-300"
-                      )}
-                    >
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                        {INTERESTS.map((interest) => {
-                          const isChecked = editedInterests.includes(interest);
-                          return (
-                            <div
-                              key={interest}
-                              className="flex items-center space-x-2"
-                            >
-                              <Checkbox
-                                id={`interest-${interest}`}
-                                checked={isChecked}
-                                disabled={isSubmitting}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setEditedInterests([
-                                      ...editedInterests,
-                                      interest,
-                                    ]);
-                                  } else {
-                                    setEditedInterests(
-                                      editedInterests.filter(
-                                        (item) => item !== interest
-                                      )
-                                    );
-                                  }
-                                }}
-                                className={cn(
-                                  isDark
-                                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                    : "border-gray-400 data-[state=checked]:bg-purple-600"
-                                )}
-                              />
-                              <label
-                                htmlFor={`interest-${interest}`}
-                                className={cn(
-                                  "text-sm font-normal cursor-pointer",
-                                  isDark ? "text-gray-300" : "text-gray-700"
-                                )}
-                              >
-                                {interest}
-                              </label>
+                <div className={cn("relative w-full col-span-1 sm:col-span-2", profileStep !== "interests" && "hidden")}>
+                  <div className={cn("space-y-4 rounded-xl border px-4 py-4", isDark ? "border-white/15 bg-white/5" : "border-[#e6e6ea] bg-white")}>
+                      <span className="flex items-baseline gap-2">
+                        <span className={cn("text-sm font-semibold", isDark ? "text-white" : "text-[#1a1a1a]")}>Interests</span>
+                        <span className={cn("text-sm font-normal", isDark ? "text-gray-300" : "text-[#3a3a42]")}>{editedInterests.length} selected</span>
+                      </span>
+                        {INTEREST_CATEGORIES.map((category) => (
+                          <div key={category.id} className="space-y-2">
+                            <p className={cn("text-base font-medium", isDark ? "text-white" : "text-[#1a1a1a]")}>{category.name}</p>
+                            <div className="flex flex-wrap gap-2">
+                              {category.interests.map((interest) => {
+                                const isChecked = editedInterests.includes(interest);
+                                return (
+                                  <button
+                                    key={`${category.id}-${interest}`}
+                                    type="button"
+                                    disabled={isSubmitting}
+                                    onClick={() => {
+                                      if (!isChecked) {
+                                        setEditedInterests([...editedInterests, interest]);
+                                      } else {
+                                        setEditedInterests(editedInterests.filter((item) => item !== interest));
+                                      }
+                                    }}
+                                    className={cn(
+                                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium",
+                                      isChecked
+                                        ? isDark
+                                          ? "border-white bg-white/15 text-white"
+                                          : "border-[#1a1a1a] bg-[#f3f3f5] text-[#1a1a1a]"
+                                        : isDark
+                                          ? "border-white/20 bg-transparent text-gray-300"
+                                          : "border-transparent bg-[#ececef] text-[#3a3a42]",
+                                    )}
+                                  >
+                                    {isChecked && <Check className="h-3.5 w-3.5" />}
+                                    {interest}
+                                  </button>
+                                );
+                              })}
                             </div>
-                          );
-                        })}
-                      </div>
-                      {editedInterests.length > 0 && (
-                        <div className="flex items-center justify-end mt-2">
-                          {/* <p
-                            className={cn(
-                              "text-xs",
-                              isDark ? "text-gray-400" : "text-gray-500"
-                            )}
-                          >
-                            {editedInterests.length} interests selected
-                          </p> */}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setEditedInterests([])}
-                            disabled={isSubmitting}
-                            className={cn(
-                              "h-7 px-2 text-xs",
-                              isDark
-                                ? "border-gray-400 text-gray-300"
-                                : "border-gray-400 text-gray-700 hover:bg-gray-100"
-                            )}
-                          >
-                            <RotateCcw className="h-3 w-3" />
-                            Reset
-                          </Button>
-                        </div>
-                      )}
-                    </div>
+                          </div>
+                        ))}
+                        {editedInterests.length > 0 && (
+                          <div className="flex items-center justify-end">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditedInterests([])}
+                              disabled={isSubmitting}
+                              className={cn(
+                                "h-9 rounded-full px-4 text-sm font-medium",
+                                isDark
+                                  ? "border-white/20 bg-white/5 text-gray-200"
+                                  : "border-[#e6e6ea] bg-[#f3f3f5] text-[#1a1a1a] hover:bg-[#ececef]",
+                              )}
+                            >
+                              Reset
+                            </Button>
+                          </div>
+                        )}
                   </div>
                 </div>
               </div>
 
-              {/* Save Changes Button */}
-              <div className="flex justify-end pt-4">
-                {hasReceivedProfileBonus ? (
-                  hasOnlyEditableFieldChanges() ? (
+              <div className={cn("flex items-center justify-between gap-3 border-t pt-4", isDark ? "border-white/10" : "border-neutral-200")}>
+                {profileStep !== "about" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn("h-10 rounded-full px-4 shadow-none", isDark ? "border-white/20 bg-transparent text-white hover:bg-white/10" : "border-neutral-300 bg-white text-[#171717] hover:bg-[#F6F6F7]")}
+                  onClick={() =>
+                    setProfileStep((step) =>
+                      step === "location"
+                        ? "about"
+                        : step === "content"
+                          ? "location"
+                          : step === "interests"
+                            ? "content"
+                            : step === "review"
+                              ? "interests"
+                              : "about",
+                    )
+                  }
+                >
+                  Back
+                </Button>
+                ) : (
+                  <span />
+                )}
+                <div className="flex items-center gap-3">
+                {profileStep !== "review" && (
+                  <Button
+                    type="button"
+                    className="h-10 rounded-full goc-btn-primary px-5"
+                    onClick={() =>
+                      setProfileStep((step) =>
+                        step === "about"
+                          ? "location"
+                          : step === "location"
+                            ? "content"
+                            : step === "content"
+                              ? "interests"
+                              : "review",
+                      )
+                    }
+                  >
+                    Continue
+                  </Button>
+                )}
+                {(profileStep === "review" || (hasReceivedProfileBonus && (profileStep === "content" || profileStep === "interests"))) && (
+                  hasReceivedProfileBonus && !hasOnlyEditableFieldChanges() ? (
+                    <div className="text-sm text-muted-foreground italic">
+                      You can only edit interests, categories, and subcategories
+                      after receiving the bonus.
+                    </div>
+                  ) : (
                     <Button
-                      onClick={() => handleSaveProfileChanges(false)}
+                      onClick={() => (hasReceivedProfileBonus ? handleSaveProfileChanges(false) : handleSaveClick())}
                       disabled={!hasProfileChanges() || isSubmitting}
-                      className={cn(
-                        "px-6 py-2",
-                        isDark
-                          ? "bg-purple-600 hover:bg-purple-700"
-                          : "bg-[#7F39EC] hover:bg-[#6C43D0]"
-                      )}
+                      className="h-10 rounded-full goc-btn-primary px-5"
                     >
                       {isSubmitting ? (
                         <>
@@ -3582,49 +3567,92 @@ export default function ProfilePage({
                         </>
                       )}
                     </Button>
-                  ) : (
-                    <div className="text-sm text-muted-foreground italic">
-                      You can only edit interests, categories, and subcategories
-                      after receiving the bonus.
-                    </div>
                   )
-                ) : (
-                  <Button
-                    onClick={handleSaveClick}
-                    disabled={!hasProfileChanges() || isSubmitting}
-                    className={cn(
-                      "px-6 py-2",
-                      isDark
-                        ? "bg-purple-600 hover:bg-purple-700"
-                        : "bg-[#7F39EC] hover:bg-[#6C43D0]"
-                    )}
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4" />
-                        Save Changes
-                      </>
-                    )}
-                  </Button>
                 )}
+                </div>
               </div>
             </CardContent>
           </div>
         </div>
       )}
 
+      {userData.user_type === "creator" && (
+        <CreatorStatsCard
+          trustMetrics={trustMetrics}
+          qualityMetrics={qualityMetrics}
+          totalEarningsCents={creatorStatsEarningsCents}
+          totalViews={creatorStatsViews}
+          loading={isLoading}
+          isDark={isDark}
+        />
+      )}
+      {userData.user_type === "creator" && (
+        <div className={cn("rounded-2xl border px-5 py-4 shadow-none", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
+          <h3 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Your details</h3>
+          <div className={cn("mt-2 divide-y", isDark ? "divide-white/10" : "divide-neutral-200")}>
+            <div className="grid grid-cols-[13rem_1fr_auto] items-center gap-3 py-3">
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Email</p>
+              <p className={cn("truncate text-base", isDark ? "text-white" : "text-[#171717]")}>{userData.email}</p>
+              <Button type="button" variant="outline" className={cn("h-9 rounded-full px-4", isDark ? "border-white/20 bg-transparent text-white hover:bg-white/10" : "border-neutral-300 bg-white text-[#171717]")} onClick={handleEditEmail}>
+                Change
+              </Button>
+            </div>
+            <div className="grid grid-cols-[13rem_1fr_auto] items-center gap-3 py-3">
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Username</p>
+              <p className={cn("truncate text-base", isDark ? "text-white" : "text-[#171717]")}>@{userData.username}</p>
+              <Button type="button" variant="outline" className={cn("h-9 rounded-full px-4", isDark ? "border-white/20 bg-transparent text-white hover:bg-white/10" : "border-neutral-300 bg-white text-[#171717]")} onClick={handleCopyUsername}>
+                <Copy className="h-4 w-4" />
+                Copy
+              </Button>
+            </div>
+            <div className="grid grid-cols-[13rem_1fr_auto] items-center gap-3 py-3">
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Account type</p>
+              <p className={cn("text-base capitalize", isDark ? "text-white" : "text-[#171717]")}>{userData.user_type}</p>
+              <span />
+            </div>
+            <div className="grid grid-cols-[13rem_1fr_auto] items-center gap-3 py-3">
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Campaigns participated</p>
+              <p className={cn("text-base", isDark ? "text-white" : "text-[#171717]")}>{creatorProfile?.total_contests_participated ?? 0}</p>
+              <span />
+            </div>
+            <div className="grid grid-cols-[13rem_1fr_auto] items-center gap-3 py-3">
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Campaigns won</p>
+              <p className={cn("text-base", isDark ? "text-white" : "text-[#171717]")}>{creatorProfile?.total_contests_won ?? 0}</p>
+              <span />
+            </div>
+          </div>
+        </div>
+      )}
+      {userData.user_type === "creator" && (
+        <div className={cn("rounded-2xl border px-5 py-4 shadow-none", isDark ? "border-white/10 bg-[#161616]" : "border-neutral-200 bg-white")}>
+          <h3 className={cn("text-base font-semibold", isDark ? "text-white" : "text-[#171717]")}>Referrals</h3>
+          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div>
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Referred by</p>
+              <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{referrer || "No one"}</p>
+            </div>
+            <div>
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Available coins</p>
+              <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{userData.coins.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Creators referred</p>
+              <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{userData.creators_referred}</p>
+            </div>
+            <div>
+              <p className={cn("text-base", isDark ? "text-slate-400" : "text-[#737373]")}>Brands referred</p>
+              <p className={cn("mt-1 text-lg font-semibold", isDark ? "text-white" : "text-[#171717]")}>{userData.advertisers_referred}</p>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Company Profile - Only for Advertisers */}
       {/* {userData?.user_type === "advertiser" && (
         <div>
           <div
             className={cn(
               "rounded-t-2xl border-b px-6 py-4 shadow-lg",
-              isDark ? "bg-[#180438]" : "bg-white "
+              isDark ? "bg-[#161616]" : "bg-white "
             )}
           >
             <CardTitle
@@ -3639,7 +3667,7 @@ export default function ProfilePage({
           <div
             className={cn(
               "rounded-b-2xl shadow-lg px-2 pb-3",
-              isDark ? "bg-[#180438]" : "bg-white "
+              isDark ? "bg-[#161616]" : "bg-white "
             )}
           >
             <div className="px-6 py-4">
@@ -3659,7 +3687,7 @@ export default function ProfilePage({
                     name="company_name"
                     className={cn(
                       isDark
-                        ? "bg-[#180438] border border-gray-600 text-white"
+                        ? "bg-[#161616] border border-gray-600 text-white"
                         : "bg-white border border-gray-300"
                     )}
                     defaultValue={advertiserProfile?.company_name || ""}
@@ -3674,7 +3702,7 @@ export default function ProfilePage({
                     type="url"
                     className={cn(
                       isDark
-                        ? "bg-[#180438] border border-gray-600 text-white"
+                        ? "bg-[#161616] border border-gray-600 text-white"
                         : "bg-white border border-gray-300"
                     )}
                     defaultValue={advertiserProfile?.website_url || ""}
@@ -3697,7 +3725,8 @@ export default function ProfilePage({
       <div
         className={cn(
           "rounded-2xl shadow-lg px-2 pb-5",
-          isDark ? "bg-[#180438]" : "bg-white "
+          isDark ? "bg-[#161616]" : "bg-white ",
+          useProfileShell && "hidden",
         )}
       >
         <CardHeader className="pb-8">
@@ -3733,7 +3762,7 @@ export default function ProfilePage({
                 className={cn(
                   "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                   isDark
-                    ? "bg-[#180438] text-[#8A8A8A]"
+                    ? "bg-[#161616] text-[#8A8A8A]"
                     : "bg-white text-gray-500"
                 )}
               >
@@ -3765,7 +3794,7 @@ export default function ProfilePage({
                 className={cn(
                   "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                   isDark
-                    ? "bg-[#180438] text-[#8A8A8A]"
+                    ? "bg-[#161616] text-[#8A8A8A]"
                     : "bg-white text-gray-500"
                 )}
               >
@@ -3806,7 +3835,7 @@ export default function ProfilePage({
                 className={cn(
                   "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                   isDark
-                    ? "bg-[#180438] text-[#8A8A8A]"
+                    ? "bg-[#161616] text-[#8A8A8A]"
                     : "bg-white text-gray-500"
                 )}
               >
@@ -3847,7 +3876,7 @@ export default function ProfilePage({
                 className={cn(
                   "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                   isDark
-                    ? "bg-[#180438] text-[#8A8A8A]"
+                    ? "bg-[#161616] text-[#8A8A8A]"
                     : "bg-white text-gray-500"
                 )}
               >
@@ -3889,7 +3918,7 @@ export default function ProfilePage({
         <div
           className={cn(
             "rounded-2xl shadow-lg px-2 pb-5",
-            isDark ? "bg-[#180438]" : "bg-white "
+            isDark ? "bg-[#161616]" : "bg-white "
           )}
         >
           <CardHeader className="pb-8">
@@ -3980,7 +4009,7 @@ export default function ProfilePage({
                         className={cn(
                           "peer block w-full rounded-lg border px-3 pt-5 pb-2 text-md  borderfocus:outline-none focus:ring-1 focus:border-purple-500",
                           isDark
-                            ? "bg-[#180438] text-white border-gray-300"
+                            ? "bg-[#161616] text-white border-gray-300"
                             : "bg-white text-gray-500"
                         )}
                       />
@@ -3989,7 +4018,7 @@ export default function ProfilePage({
                         className={cn(
                           "absolute left-3 font-medium top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                           isDark
-                            ? "bg-[#180438] text-white"
+                            ? "bg-[#161616] text-white"
                             : "bg-white text-[#1A1A1A]"
                         )}
                       >
@@ -4029,7 +4058,7 @@ export default function ProfilePage({
                       className={cn(
                         "peer block w-full rounded-lg border px-3 pt-5 pb-2 text-[14px] focus:outline-none focus:ring-1 focus:border-purple-500 cursor-default",
                         isDark
-                          ? "bg-[#180438] text-white border-gray-400"
+                          ? "bg-[#161616] text-white border-gray-400"
                           : "text-gray-500 bg-gray-50"
                       )}
                     />
@@ -4038,7 +4067,7 @@ export default function ProfilePage({
                       className={cn(
                         "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                         isDark
-                          ? "bg-[#180438] text-white"
+                          ? "bg-[#161616] text-white"
                           : "bg-white text-[#1A1A1A]"
                       )}
                     >
@@ -4076,7 +4105,7 @@ export default function ProfilePage({
                         className={cn(
                           "peer block w-full rounded-lg border px-3 pt-5 pb-2 text-md focus:outline-none focus:ring-1 focus:border-purple-500",
                           isDark
-                            ? "bg-[#180438] text-white border-gray-300"
+                            ? "bg-[#161616] text-white border-gray-300"
                             : "bg-white text-[#1A1A1A] border-gray-300"
                         )}
                       />
@@ -4086,7 +4115,7 @@ export default function ProfilePage({
                         className={cn(
                           "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                           isDark
-                            ? "bg-[#180438] text-white"
+                            ? "bg-[#161616] text-white"
                             : "bg-white text-[#1A1A1A]"
                         )}
                       >
@@ -4124,7 +4153,7 @@ export default function ProfilePage({
                       className={cn(
                         "peer block w-full rounded-lg border px-3 pt-5 pb-2 text-[14px] focus:outline-none focus:ring-1 focus:border-purple-500 cursor-default",
                         isDark
-                          ? "bg-[#180438] text-white border-gray-300"
+                          ? "bg-[#161616] text-white border-gray-300"
                           : "bg-gray-50 text-[#1A1A1A]"
                       )}
                     />
@@ -4133,7 +4162,7 @@ export default function ProfilePage({
                       className={cn(
                         "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                         isDark
-                          ? "bg-[#180438] text-white"
+                          ? "bg-[#161616] text-white"
                           : "bg-white text-[#1A1A1A]"
                       )}
                     >
@@ -4182,7 +4211,7 @@ export default function ProfilePage({
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
+                      ? "bg-[#161616] text-[#8A8A8A]"
                       : "bg-white text-gray-500"
                   )}
                 >
@@ -4239,7 +4268,7 @@ export default function ProfilePage({
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
+                      ? "bg-[#161616] text-[#8A8A8A]"
                       : "bg-white text-gray-500"
                   )}
                 >
@@ -4280,7 +4309,7 @@ export default function ProfilePage({
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
+                      ? "bg-[#161616] text-[#8A8A8A]"
                       : "bg-white text-gray-500"
                   )}
                 >
@@ -4320,7 +4349,7 @@ export default function ProfilePage({
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
+                      ? "bg-[#161616] text-[#8A8A8A]"
                       : "bg-white text-gray-500"
                   )}
                 >
@@ -4360,7 +4389,7 @@ export default function ProfilePage({
                   className={cn(
                     "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
                     isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
+                      ? "bg-[#161616] text-[#8A8A8A]"
                       : "bg-white text-gray-500"
                   )}
                 >
@@ -4405,7 +4434,7 @@ export default function ProfilePage({
         onOpenChange={setIsCompleteProfileModalOpen}
         isdark={isDark}
       >
-        <DialogContent className="max-w-xl">
+        <DialogContent className={cn("max-w-xl", isDark && "border-white/10 bg-[#161616]")}>
           <DialogHeader>
             <DialogTitle
               className={cn(isDark ? "text-white" : "text-gray-900")}
@@ -4452,7 +4481,7 @@ export default function ProfilePage({
               className={cn(
                 "w-full sm:w-auto",
                 isDark
-                  ? "border-gray-600 text-gray-300 hover:bg-gray-800"
+                  ? "rounded-full border-white/20 bg-transparent text-white hover:bg-white/10"
                   : "border-gray-300 text-gray-900"
               )}
             >
@@ -4474,12 +4503,7 @@ export default function ProfilePage({
               <Button
                 onClick={handleConfirmCompleteProfile}
                 disabled={isSubmitting}
-                className={cn(
-                  "px-6",
-                  isDark
-                    ? "bg-purple-600 hover:bg-purple-700"
-                    : "bg-[#7F39EC] hover:bg-[#6C43D0]"
-                )}
+                className="h-10 rounded-full px-5 goc-btn-primary"
               >
                 {isSubmitting ? (
                   <>

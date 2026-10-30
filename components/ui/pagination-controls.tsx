@@ -215,6 +215,19 @@ export function PaginationControls({
     return pages;
   };
 
+  const navButtonClass = cn(
+    "h-8 w-8 border p-0 shadow-none",
+    isDark
+      ? "border-white/10 bg-transparent text-white/75 hover:bg-white/10 hover:text-white disabled:border-white/10 disabled:bg-transparent"
+      : "border-[#ececef] bg-white text-[#3a3a40] hover:border-[#e6e6e8] hover:bg-[#e6e6e8] hover:text-[#1a1a1a]",
+  );
+  const pageButtonActiveClass = cn(
+    "border shadow-none",
+    isDark
+      ? "border-white !bg-white !text-[#1a1a1a] hover:!bg-white hover:!text-[#1a1a1a]"
+      : "border-[#1a1a1a] !bg-[#1a1a1a] !text-white hover:!bg-black hover:!text-white",
+  );
+
   return (
     <div className="flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-center sm:justify-between">
       {/* Results info and page size selector */}
@@ -260,7 +273,7 @@ export function PaginationControls({
                   className={cn(
                     // Above dialogs (e.g. download summary z-[80])
                     "z-[90]",
-                    isDark && "border-gray-600 bg-[#07031D] text-white",
+                    isDark && "border-white/10 bg-[#161616] text-white",
                   )}
                 >
                   {(hide200Option
@@ -273,7 +286,7 @@ export function PaginationControls({
                       value={size.toString()}
                       className={cn(
                         isDark &&
-                          "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
+                          "bg-transparent text-white focus:bg-white/10 data-[highlighted]:bg-white/10 data-[state=checked]:bg-white/10 data-[state=checked]:text-white"
                       )}
                     >
                       {size}
@@ -304,11 +317,7 @@ export function PaginationControls({
               size="sm"
               onClick={() => onPageChange(1)}
               disabled={!hasPreviousPage || loading}
-              className={cn(
-                "h-8 w-8 p-0 hidden sm:flex",
-                isDark &&
-                  "border-[#434343] bg-[#242424] text-slate-200 hover:bg-[#353535] disabled:border-[#353535] disabled:bg-[#242424] disabled:opacity-50"
-              )}
+              className={cn(navButtonClass, "hidden sm:flex")}
             >
               <ChevronsLeft className="h-4 w-4" />
             </Button>
@@ -321,11 +330,7 @@ export function PaginationControls({
               size="sm"
               onClick={() => onPageChange(page - 1)}
               disabled={!hasPreviousPage || loading}
-              className={cn(
-                "h-8 w-8 p-0 sm:w-8",
-                isDark &&
-                  "border-[#434343] bg-[#242424] text-slate-200 hover:bg-[#353535] disabled:border-[#353535] disabled:bg-[#242424] disabled:opacity-50"
-              )}
+              className={navButtonClass}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -346,16 +351,13 @@ export function PaginationControls({
                   </span>
                 ) : (
                   <Button
-                    variant={pageNum === page ? "default" : "outline"}
+                    variant="outline"
                     size="sm"
                     onClick={() => onPageChange(pageNum as number)}
                     disabled={loading}
                     className={cn(
-                      "h-8 min-w-8 px-2 sm:w-8 sm:p-0 text-xs sm:text-sm",
-                      isDark &&
-                        (pageNum === page
-                          ? "border-white bg-white text-black hover:bg-gray-200"
-                          : "border-[#434343] bg-[#242424] text-slate-200 hover:bg-[#353535]")
+                      "h-8 min-w-8 px-2 text-xs sm:w-8 sm:p-0 sm:text-sm",
+                      pageNum === page ? pageButtonActiveClass : navButtonClass,
                     )}
                   >
                     {pageNum}
@@ -372,11 +374,7 @@ export function PaginationControls({
               size="sm"
               onClick={() => onPageChange(page + 1)}
               disabled={!hasNextPage || loading}
-              className={cn(
-                "h-8 w-8 p-0",
-                isDark &&
-                  "border-[#434343] bg-[#242424] text-slate-200 hover:bg-[#353535] disabled:border-[#353535] disabled:bg-[#242424] disabled:opacity-50"
-              )}
+              className={navButtonClass}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -389,11 +387,7 @@ export function PaginationControls({
               size="sm"
               onClick={() => onPageChange(totalPages)}
               disabled={!hasNextPage || loading}
-              className={cn(
-                "h-8 w-8 p-0 hidden sm:flex",
-                isDark &&
-                  "border-[#434343] bg-[#242424] text-slate-200 hover:bg-[#353535] disabled:border-[#353535] disabled:bg-[#242424] disabled:opacity-50"
-              )}
+              className={cn(navButtonClass, "hidden sm:flex")}
             >
               <ChevronsRight className="h-4 w-4" />
             </Button>

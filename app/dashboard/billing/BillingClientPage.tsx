@@ -1,14 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -19,17 +13,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  EnhancedTabs as Tabs,
-  EnhancedTabsContent as TabsContent,
-  EnhancedTabsList as TabsList,
-  EnhancedTabsTrigger as TabsTrigger,
-} from "@/components/ui/enhanced-tabs";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
   DialogClose,
 } from "@/components/ui/dialog";
@@ -110,13 +96,11 @@ import {
 import { MIN_WITHDRAWAL_AMOUNT } from "@/constants/subscriptionPlans";
 import { toast } from "sonner";
 import { toast as appToast } from "@/hooks/use-toast";
-import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
 import { WalletTopUp } from "@/components/WalletTopUp";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
-import { SubscriptionManagement } from "@/components/SubscriptionManagement";
 import { SubscriptionManagementBilling } from "@/components/SubscriptionManagementBilling";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
@@ -129,9 +113,61 @@ const formatDateTime = (dateString?: string): string => {
   if (!dateString) return "N/A";
   return new Date(dateString).toLocaleString();
 };
+
+function BillingStatCard({
+  isDark,
+  icon,
+  title,
+  label,
+  value,
+}: {
+  isDark: boolean;
+  icon: ReactNode;
+  title: string;
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <section
+      className={cn(
+        "flex flex-col rounded-2xl border p-5",
+        isDark
+          ? "border-white/10 bg-[#161616]"
+          : "border-neutral-200 bg-white",
+      )}
+    >
+      <div
+        className={cn(
+          "flex items-center gap-2 text-base font-semibold",
+          isDark ? "text-white" : "text-[#171717]",
+        )}
+      >
+        {icon}
+        {title}
+      </div>
+      <p
+        className={cn(
+          "mt-5 text-base font-medium",
+          isDark ? "text-slate-200" : "text-[#66666F]",
+        )}
+      >
+        {label}
+      </p>
+      <p
+        className={cn(
+          "mt-1.5 text-[34px] font-semibold leading-none tracking-tight",
+          isDark ? "text-white" : "text-[#171717]",
+        )}
+      >
+        {value}
+      </p>
+    </section>
+  );
+}
+
 const tabs = [
-  { id: "cash", label: "Cash Account" },
-  { id: "coins", label: "Coin Wallet" },
+  { id: "cash", label: "Cash" },
+  { id: "coins", label: "Coins" },
   { id: "subscription", label: "Subscription" },
 ];
 
@@ -920,6 +956,16 @@ export default function BillingClientPage({
   );
 
   const isDark = mode === "dark";
+  const balance = profile?.withdrawable_balance || 0;
+  const canOpenWithdraw =
+    !!profile && balance >= MIN_WITHDRAWAL_AMOUNT && !isLoading;
+  const hasPayoutMethods = payoutMethods.length > 0;
+  const withdrawLabel =
+    !profile || isLoading
+      ? "Loading account..."
+      : balance < MIN_WITHDRAWAL_AMOUNT
+        ? `Minimum withdrawal: ${formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}`
+        : "Withdraw Balance";
 
   return (
     <div
@@ -929,273 +975,203 @@ export default function BillingClientPage({
         isCompact ? "max-w-none px-4 md:px-6" : "max-w-[1200px]"
       )}
     >
-      <div className="flex items-center justify-between mb-8">
-        <h1
-          className="text-2xl font-bold"
-          style={{
-            color: isDark ? "white" : "black",
-            transition: "none",
-          }}
-        >
-          Billing & Account
-        </h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1
+            className={cn(
+              "text-[28px] font-semibold tracking-tight",
+              isDark ? "text-white" : "text-[#171717]",
+            )}
+          >
+            Billing & Account
+          </h1>
+          <p
+            className={cn(
+              "mt-1.5 text-md",
+              isDark ? "text-slate-200" : "text-[#55555F]",
+            )}
+          >
+            Your wallet, coins, and subscription in one place.
+          </p>
+        </div>
+        {activeTab === "coins" ? (
+          <Button
+            type="button"
+            disabled
+            className="h-10 shrink-0 rounded-full bg-[#d4d4d8] px-4 text-sm font-medium text-[#525252] shadow-none hover:bg-[#d4d4d8] disabled:opacity-100"
+          >
+            <Gift className="mr-1.5 h-4 w-4" />
+            Redeem coins · Coming soon
+          </Button>
+        ) : activeTab === "cash" ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsTopUpModalOpen(true)}
+              disabled={isLoading}
+              className={cn(
+                "h-10 rounded-full px-4 text-md font-medium shadow-none",
+                isDark
+                  ? "border-slate-600 bg-transparent text-slate-100 hover:bg-white/10"
+                  : "border-neutral-300 bg-white text-[#171717] hover:bg-neutral-50",
+              )}
+            >
+              <CreditCard className="mr-1.5 h-4 w-4" />
+              Top Up Wallet
+            </Button>
+            {canOpenWithdraw && hasPayoutMethods ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsWithdrawModalOpen(true)}
+                className={cn(
+                  "h-10 rounded-full px-4 text-md font-medium shadow-none",
+                  isDark
+                    ? "border-slate-600 bg-transparent text-slate-100 hover:bg-white/10"
+                    : "border-neutral-300 bg-white text-[#171717] hover:bg-neutral-50",
+                )}
+              >
+                <ArrowDownToLine className="mr-1.5 h-4 w-4" />
+                Withdraw Balance
+              </Button>
+            ) : canOpenWithdraw ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => openPayoutDialog("add")}
+                className={cn(
+                  "h-10 rounded-full px-4 text-md font-medium shadow-none",
+                  isDark
+                    ? "border-slate-600 bg-transparent text-slate-100 hover:bg-white/10"
+                    : "border-neutral-300 bg-white text-[#171717] hover:bg-neutral-50",
+                )}
+              >
+                <PlusCircle className="mr-1.5 h-4 w-4" />
+                Add Payout Method to Withdraw
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                disabled
+                className={cn(
+                  "h-10 rounded-full px-4 text-md font-medium shadow-none disabled:opacity-60",
+                  isDark
+                    ? "border-slate-600 bg-transparent text-slate-100"
+                    : "border-neutral-300 bg-white text-[#171717]",
+                )}
+              >
+                <ArrowDownToLine className="mr-1.5 h-4 w-4" />
+                {withdrawLabel}
+              </Button>
+            )}
+            <Button
+              type="button"
+              onClick={() => openPayoutDialog("list")}
+              disabled={isLoading}
+              className={cn(
+                "h-10 rounded-full px-4 text-sm font-medium shadow-none",
+                isDark
+                  ? "bg-white text-[#171717] hover:bg-neutral-200"
+                  : "bg-[#171717] text-white hover:bg-[#2a2a2a]",
+              )}
+            >
+              <Settings2 className="mr-1.5 h-4 w-4" />
+              Manage Payout Methods
+            </Button>
+          </div>
+        ) : null}
       </div>
 
-      {/* <Tabs defaultValue="cash" className="w-full" onValueChange={(value) => setActiveTab(value as 'cash' | 'coins')}>
-                <TabsList className="grid w-full grid-cols-3 mb-6">
-                    <TabsTrigger value="cash">
-                        <DollarSign className="h-5 w-5 mr-2" /> Cash Account
-                    </TabsTrigger>
-                    <TabsTrigger value="coins">
-                        <Coins className="h-5 w-5 mr-2" /> Coin Wallet
-                    </TabsTrigger>
-                    <TabsTrigger value="subscription">
-                        <CreditCard className="h-5 w-5 mr-2" /> Subscription
-                    </TabsTrigger>
-                </TabsList> */}
-      {/* Tabs */}
-      <EnhancedTabs
-        tabs={tabs}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        className="mt-12 mb-10"
-        isDark={isDark}
-        light={!isDark}
-      />
+      <div
+        className={cn(
+          "mt-8 flex gap-6 border-b",
+          isDark ? "border-white/10" : "border-neutral-200",
+        )}
+      >
+        {tabs.map((tab) => {
+          const selected = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "-mb-px border-b-2 px-1 pb-2.5 text-base font-semibold transition-colors",
+                selected
+                  ? isDark
+                    ? "border-white text-white"
+                    : "border-[#171717] text-[#171717]"
+                  : isDark
+                    ? "border-transparent text-slate-200 hover:text-white"
+                    : "border-transparent text-[#292524] hover:text-[#171717]",
+              )}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
 
       {/* Cash Account Tab */}
       <TabContent activeTab={activeTab}>
         <TabPanel value="cash" activeTab={activeTab}>
-          <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 [@media(min-width:1000px)]:grid-cols-2 [@media(min-width:1101px)]:grid-cols-4 mb-10">
-            {/*Total Spent*/}
-            <div
-              className={cn(
-                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-              )}
-            >
-              <CardContent className="p-4 flex justify-between">
-                <div className="flex-1  space-y-3">
-                  <p className="text-lg font-medium">Total Spent</p>
-                  <p className="text-xl font-bold">
-                    {formatCurrencyFromCents(profile.total_money_spent)}
-                  </p>
-                  <p className="text-md">Lifetime contest spending</p>
-                </div>
-                <div
-                  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full",
-                    isDark
-                      ? "bg-[#FFFFFF36] text-white"
-                      : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}
-                >
-                  <TrendingDown className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </div>
-            {/* <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Spent
-                </CardTitle>
-                <TrendingDown className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrencyFromCents(profile.total_money_spent)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Lifetime contest spending
-                </p>
-              </CardContent>
-            </Card> */}
-            <div
-              className={cn(
-                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-              )}
-            >
-              <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 space-y-3">
-                  <p className="text-lg font-medium">Campaigns Run</p>
-                  <p className="text-xl font-bold">
-                    {profile.total_contests_run}
-                  </p>
-                  <p className="text-md">Total campaigns created</p>
-                </div>
-                <div
-                  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full",
-                    isDark
-                      ? "bg-[#FFFFFF36] text-white"
-                      : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}
-                >
-                  <BarChart3 className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </div>
-            {/* <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Contests Run
-                </CardTitle>
-                <BarChart3 className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {profile.total_contests_run}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Total contests created
-                </p>
-              </CardContent>
-            </Card> */}
-
-            <div
-              className={cn(
-                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-              )}
-            >
-              <CardContent className="p-4 flex justify-between">
-                <div className="flex-1  space-y-3">
-                  <p className="text-lg font-medium">Available Balance</p>
-                  <p className="text-xl font-bold">
-                    {formatCurrencyFromCents(profile.available_deposit_balance)}
-                  </p>
-                  <p className="text-md">Ready for contests</p>
-                </div>
-                <div
-                  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full",
-                    isDark
-                      ? "bg-[#FFFFFF36] text-white"
-                      : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}
-                >
-                  <Banknote className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </div>
-            {/* <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Available Balance
-                </CardTitle>
-                <Banknote className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold transition-all duration-300 ease-in-out">
-                  {formatCurrencyFromCents(profile.available_deposit_balance)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Ready for contests
-                </p>
-              </CardContent>
-            </Card> */}
-
-            <div
-              className={cn(
-                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-              )}
-            >
-              <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 space-y-3">
-                  <p className="text-lg font-medium">Withdrawable Balance</p>
-                  <p className="text-xl font-bold">
-                    {formatCurrencyFromCents(profile.withdrawable_balance)}
-                  </p>
-                  <p className="text-md">From referrals & bonuses</p>
-                </div>
-                <div
-                  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full",
-                    isDark
-                      ? "bg-[#FFFFFF36] text-white"
-                      : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}
-                >
-                  <Banknote className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </div>
-            {/* <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Withdrawable Balance
-                </CardTitle>
-                <ArrowDownToLine className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrencyFromCents(profile.withdrawable_balance)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  From referrals & bonuses
-                </p>
-              </CardContent>
-            </Card> */}
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <BillingStatCard
+              isDark={isDark}
+              icon={<TrendingDown className="h-4 w-4" />}
+              title="Spent"
+              label="Lifetime contest spending"
+              value={formatCurrencyFromCents(profile.total_money_spent)}
+            />
+            <BillingStatCard
+              isDark={isDark}
+              icon={<BarChart3 className="h-4 w-4" />}
+              title="Campaigns"
+              label="Total campaigns created"
+              value={profile.total_contests_run}
+            />
+            <BillingStatCard
+              isDark={isDark}
+              icon={<Wallet className="h-4 w-4" />}
+              title="Available"
+              label="Ready for contests"
+              value={formatCurrencyFromCents(profile.available_deposit_balance)}
+            />
+            <BillingStatCard
+              isDark={isDark}
+              icon={<Banknote className="h-4 w-4" />}
+              title="Withdrawable"
+              label="From referrals & bonuses"
+              value={formatCurrencyFromCents(profile.withdrawable_balance)}
+            />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-            <Button
-              size="lg"
-              onClick={() => setIsTopUpModalOpen(true)}
-              className="gap-2 text-base font-semibold"
-              disabled={isLoading}
-            >
-              <CreditCard className="h-5 w-5" aria-hidden /> Top Up Wallet
-            </Button>
-            <Button
-              className="gap-2 text-base font-semibold"
-              onClick={() => setIsWithdrawModalOpen(true)}
-              size="lg"
-              disabled={
-                !profile ||
-                (profile.withdrawable_balance || 0) < MIN_WITHDRAWAL_AMOUNT ||
-                payoutMethods.length === 0 ||
-                isLoading
-              }
-            >
-              <ArrowDownToLine className="h-5 w-5" aria-hidden /> Withdraw
-              Balance
-            </Button>
-            <Button
-              className={cn(
-                "gap-2 border-2 text-base font-semibold",
-                isDark
-                  ? "border-[#7F39EC] bg-transparent text-white hover:bg-[#7F39EC]/20"
-                  : "border-[#7F39EC] bg-white text-[#4A00BE] hover:bg-[#7F39EC]/10"
-              )}
-              size="lg"
-              variant="outline"
-              onClick={() => openPayoutDialog("list")}
-              disabled={isLoading}
-            >
-              <Settings2 className="h-5 w-5" aria-hidden /> Manage Payout
-              Methods
-            </Button>
-          </div>
+          {payoutMethods.length === 0 &&
+            (profile.withdrawable_balance || 0) >= MIN_WITHDRAWAL_AMOUNT && (
+              <p className="mt-4 text-sm text-yellow-600 dark:text-yellow-500">
+                Please add a payout method to withdraw your balance.
+              </p>
+            )}
 
-          {payoutMethods.length === 0 && (
-            <p className="text-sm text-black mb-4 text-center">
-              Please add a payout method to withdraw your balance.
-            </p>
-          )}
-
-          <div
+          <h2
             className={cn(
-              "rounded-xl shadow",
-              isDark ? "bg-[#170337]" : "bg-white "
+              "mb-3 mt-8 text-base font-semibold",
+              isDark ? "text-white" : "text-[#171717]",
             )}
           >
-            <CardHeader>
-              <CardTitle>Cash Transaction History</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            Cash transactions
+          </h2>
+          <div
+            className={cn(
+              "overflow-hidden rounded-2xl border",
+              isDark
+                ? "border-white/10 bg-[#161616]"
+                : "border-neutral-200 bg-white",
+            )}
+          >
+            <CardContent className="space-y-4 px-2 py-3 sm:px-4">
               {cashTransactionsError && (
                 <div className="text-center text-red-500 p-4">
                   Error loading transactions: {cashTransactionsError}
@@ -1203,16 +1179,16 @@ export default function BillingClientPage({
               )}
 
               <Table>
-                <TableHeader>
-                  <TableRow
-                    className={cn(
-                      "text-left border-b",
-                      isDark
-                        ? "bg-[#391A6A] text-white"
-                        : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
-                    )}
-                  >
-                    <TableHead>Date & Time</TableHead>
+                <TableHeader
+                  className={cn(
+                    "text-left border-b",
+                    isDark
+                      ? "border-b border-white/10 text-white/50"
+                      : "border-b border-neutral-200 text-[#737373]",
+                  )}
+                >
+                  <TableRow>
+                    <TableHead>Date & time</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Amount</TableHead>
@@ -1323,31 +1299,38 @@ export default function BillingClientPage({
           </div>
 
           {/* Cash Withdrawal Requests */}
-          <div
+          <h2
             className={cn(
-              "mt-8 rounded-xl shadow",
-              isDark ? "bg-[#170337]" : "bg-white "
+              "mb-3 mt-8 text-base font-semibold",
+              isDark ? "text-white" : "text-[#171717]",
             )}
           >
-            <CardHeader>
-              <CardTitle>Cash Withdrawal Request History</CardTitle>
-            </CardHeader>
-            <CardContent>
+            Cash withdrawals
+          </h2>
+          <div
+            className={cn(
+              "overflow-hidden rounded-2xl border",
+              isDark
+                ? "border-white/10 bg-[#161616]"
+                : "border-neutral-200 bg-white",
+            )}
+          >
+            <CardContent className="px-2 py-3 sm:px-4">
               <Table>
-                <TableHeader>
-                  <TableRow
-                    className={cn(
-                      "text-left border-b",
-                      isDark
-                        ? "bg-[#391A6A] text-white"
-                        : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
-                    )}
-                  >
-                    <TableHead>Date Submitted</TableHead>
+                <TableHeader
+                  className={cn(
+                    "text-left border-b",
+                    isDark
+                      ? "border-b border-white/10 text-white/50"
+                      : "border-b border-neutral-200 text-[#737373]",
+                  )}
+                >
+                  <TableRow>
+                    <TableHead>Date submitted</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Method</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Your Notes</TableHead>
+                    <TableHead>Your notes</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1423,152 +1406,47 @@ export default function BillingClientPage({
 
         {/* Coin Wallet Tab */}
         <TabPanel value="coins" activeTab={activeTab}>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-            <div
-              className={cn(
-                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-              )}
-            >
-              <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 space-y-3">
-                  <p className="text-lg font-medium">Total Coins Earned</p>
-                  <p className="text-xl font-bold">
-                    {formatCoins(userData.total_lifetime_coins_earned)}
-                  </p>
-                  <p className="text-md">Lifetime coin earnings</p>
-                </div>
-                <div
-                  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full",
-                    isDark
-                      ? "bg-[#FFFFFF36] text-white"
-                      : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}
-                >
-                  <Banknote className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </div>
-            {/* <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Coins Earned
-                </CardTitle>
-                <Coins className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCoins(userData.total_lifetime_coins_earned)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Lifetime coin earnings
-                </p>
-              </CardContent>
-            </Card> */}
-
-            <div
-              className={cn(
-                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-              )}
-            >
-              <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 space-y-3">
-                  <p className="text-lg font-medium">Coins Available</p>
-                  <p className="text-xl font-bold">
-                    {formatCoins(userData.coins)}
-                  </p>
-                  <p className="text-md">Your current coin balance</p>
-                </div>
-                <div
-                  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full",
-                    isDark
-                      ? "bg-[#FFFFFF36] text-white"
-                      : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}
-                >
-                  <CryptoWalletIcon className="h-4 w-4" />
-                </div>
-              </CardContent>
-            </div>
-            {/* <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Coins Available
-                </CardTitle>
-                <CryptoWalletIcon className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCoins(userData.coins)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Your current coin balance
-                </p>
-              </CardContent>
-            </Card> */}
-
-            <div
-              className={cn(
-                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-              )}
-            >
-              <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 space-y-3">
-                  <p className="text-lg font-medium">Total Referrals</p>
-                  <p className="text-xl font-bold">{totalReferrals}</p>
-                  <p className="text-md">Successful referrals</p>
-                </div>
-                <div
-                  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full",
-                    isDark
-                      ? "bg-[#FFFFFF36] text-white"
-                      : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}
-                >
-                  <Users className="h-4 w-4" />
-                </div>
-              </CardContent>
-            </div>
-            {/* <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Referrals
-                </CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totalReferrals}</div>
-                <p className="text-xs text-muted-foreground">
-                  Successful referrals
-                </p>
-              </CardContent>
-            </Card> */}
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <BillingStatCard
+              isDark={isDark}
+              icon={<Coins className="h-4 w-4" />}
+              title="Earned"
+              label="Lifetime coin earnings"
+              value={formatCoins(userData.total_lifetime_coins_earned)}
+            />
+            <BillingStatCard
+              isDark={isDark}
+              icon={<CryptoWalletIcon className="h-4 w-4" />}
+              title="Available"
+              label="Your current coin balance"
+              value={formatCoins(userData.coins)}
+            />
+            <BillingStatCard
+              isDark={isDark}
+              icon={<Users className="h-4 w-4" />}
+              title="Referrals"
+              label="Successful referrals"
+              value={totalReferrals}
+            />
           </div>
 
-          <div className="mb-6">
-            <Button
-              className="w-full md:w-auto bg-[#6C43D0] text-md text-white"
-              disabled={true}
-            >
-              <Gift className="h-4 w-4 mr-2" /> Redeem Coins (Coming Soon)
-            </Button>
-          </div>
-
-          <div
+          <h2
             className={cn(
-              "rounded-xl shadow",
-              isDark ? "bg-[#170337]" : "bg-white "
+              "mb-3 mt-8 text-base font-semibold",
+              isDark ? "text-white" : "text-[#171717]",
             )}
           >
-            <CardHeader>
-              <CardTitle>Coin Transaction History</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            Coin transactions
+          </h2>
+          <div
+            className={cn(
+              "overflow-hidden rounded-2xl border",
+              isDark
+                ? "border-white/10 bg-[#161616]"
+                : "border-neutral-200 bg-white",
+            )}
+          >
+            <CardContent className="space-y-4 px-2 py-3 sm:px-4">
               {coinTransactionsError && (
                 <div className="text-center text-red-500 p-4">
                   Error loading transactions: {coinTransactionsError}
@@ -1580,12 +1458,12 @@ export default function BillingClientPage({
                   className={cn(
                     "text-left border-b",
                     isDark
-                      ? "bg-[#391A6A] text-white"
-                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                      ? "border-b border-white/10 text-white/50"
+                      : "border-b border-neutral-200 text-[#737373]",
                   )}
                 >
                   <TableRow>
-                    <TableHead>Date & Time</TableHead>
+                    <TableHead>Date & time</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Amount</TableHead>
@@ -1694,30 +1572,37 @@ export default function BillingClientPage({
           </div>
 
           {/* Coin Withdrawal Requests */}
-          <div
+          <h2
             className={cn(
-              "mt-8 rounded-xl shadow",
-              isDark ? "bg-[#170337]" : "bg-white "
+              "mb-3 mt-8 text-base font-semibold",
+              isDark ? "text-white" : "text-[#171717]",
             )}
           >
-            <CardHeader>
-              <CardTitle>Coin Redemption History</CardTitle>
-            </CardHeader>
-            <CardContent>
+            Coin redemptions
+          </h2>
+          <div
+            className={cn(
+              "overflow-hidden rounded-2xl border",
+              isDark
+                ? "border-white/10 bg-[#161616]"
+                : "border-neutral-200 bg-white",
+            )}
+          >
+            <CardContent className="px-2 py-3 sm:px-4">
               <Table>
                 <TableHeader
                   className={cn(
                     "text-left border-b",
                     isDark
-                      ? "bg-[#391A6A] text-white"
-                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                      ? "border-b border-white/10 text-white/50"
+                      : "border-b border-neutral-200 text-[#737373]",
                   )}
                 >
                   <TableRow>
-                    <TableHead>Date Submitted</TableHead>
+                    <TableHead>Date submitted</TableHead>
                     <TableHead>Coins</TableHead>
-                    <TableHead>Redeemed Item</TableHead>
-                    <TableHead>User Notes</TableHead>
+                    <TableHead>Redeemed item</TableHead>
+                    <TableHead>User notes</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -1798,23 +1683,8 @@ export default function BillingClientPage({
 
         {/* Subscription Tab */}
         <TabPanel value="subscription" activeTab={activeTab}>
-          <div className="space-y-6">
-            <div
-              className={cn(
-                "rounded-xl shadow-xl",
-                isDark ? "bg-[#170337]" : "bg-white "
-              )}
-            >
-              <CardHeader>
-                <CardTitle>Subscription Management</CardTitle>
-                <CardDescription className="text-md">
-                  Manage your subscription plan, billing, and payment methods
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <SubscriptionManagementBilling />
-              </CardContent>
-            </div>
+          <div className="mt-6">
+            <SubscriptionManagementBilling />
           </div>
         </TabPanel>
       </TabContent>
@@ -1832,6 +1702,7 @@ export default function BillingClientPage({
         onSave={savePayoutMethod}
         onDelete={deletePayoutMethod}
         onSetDefault={setDefaultPayoutMethod}
+        brandAccent
       />
 
       {/* Withdraw Balance Modal */}
@@ -1851,56 +1722,85 @@ export default function BillingClientPage({
           openPayoutDialog("list");
         }}
         onSubmit={submitWithdrawal}
+        brandAccent
       />
 
       {/* Top Up Wallet Modal */}
       <Dialog
         open={isTopUpModalOpen}
         onOpenChange={(open) => {
-          // Prevent closing if payment is processing
-          if (!open && isProcessingPayment) {
-            return; // Don't close
-          }
+          if (!open && isProcessingPayment) return;
           setIsTopUpModalOpen(open);
         }}
         isdark={isDark}
       >
         <DialogContent
-          className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto"
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onInteractOutside={(e) => e.preventDefault()}
-          onEscapeKeyDown={(e) => e.preventDefault()}
+          hideCloseButton
+          onPointerDownOutside={(e) => {
+            if (isProcessingPayment) e.preventDefault();
+          }}
+          onInteractOutside={(e) => {
+            if (isProcessingPayment) e.preventDefault();
+          }}
+          onEscapeKeyDown={(e) => {
+            if (isProcessingPayment) e.preventDefault();
+          }}
+          className={cn(
+            "flex flex-col gap-0 overflow-hidden p-0 sm:p-2",
+            "h-[100dvh] max-h-[100dvh] w-full max-w-none rounded-none",
+            "sm:h-auto sm:max-h-[min(90vh,720px)] sm:w-[calc(100vw-2rem)] sm:max-w-[480px] sm:rounded-2xl",
+            isDark
+              ? "border-white/10 bg-[#161616]"
+              : "border-neutral-200 bg-white",
+          )}
         >
-          <DialogHeader>
-            <DialogTitle
-              className={cn(
-                "flex items-center gap-2",
-                isDark ? "text-white" : "text-gray-800"
-              )}
-            >
-              Top Up Your Wallet
-            </DialogTitle>
-            <DialogDescription
-              className={cn(
-                "text-sm leading-relaxed",
-                isDark ? "text-gray-300" : "text-gray-600",
-              )}
-            >
-              Add funds for campaign payments. Pay via Stripe (debit, credit,
-              UPI, and more) or top up with Solana USDC/USDT.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="pt-4">
+          <div className="flex shrink-0 items-start gap-3 px-4 py-4">
+            <div className="min-w-0 flex-1 space-y-1">
+              <DialogTitle
+                className={cn(
+                  "text-lg font-semibold leading-tight",
+                  isDark ? "text-white" : "text-[#171717]",
+                )}
+              >
+                Top Up Your Wallet
+              </DialogTitle>
+              <DialogDescription
+                className={cn(
+                  "text-sm leading-relaxed",
+                  isDark ? "text-slate-300" : "text-[#44403c]",
+                )}
+              >
+                Add funds for campaign payments via Stripe or Solana
+                USDC/USDT.
+              </DialogDescription>
+            </div>
+            <DialogClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                disabled={isProcessingPayment}
+                aria-label="Close"
+                className={cn(
+                  "h-9 w-9 shrink-0 rounded-full border-0 shadow-none",
+                  isDark
+                    ? "text-slate-200 hover:bg-white/10 hover:text-white"
+                    : "text-[#171717] hover:bg-[#F4F4F5]",
+                )}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogClose>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5">
             <WalletTopUp
+              isDark={isDark}
               currentBalance={profile?.available_deposit_balance || 0}
               onBalanceUpdate={handleBalanceUpdate}
               onTopUpSuccess={handleWalletTopUpSuccess}
               onClose={() => setIsTopUpModalOpen(false)}
               onTransactionUpdate={() => {
-                // Refresh paginated transaction history
-                console.log(
-                  "🔄 BillingPage: Refreshing transaction history from WalletTopUp..."
-                );
                 refreshCashTransactions();
               }}
               onProcessingChange={setIsProcessingPayment}

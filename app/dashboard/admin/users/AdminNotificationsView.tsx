@@ -172,7 +172,7 @@ function NotificationStatsSkeleton({ isDark }: { isDark?: boolean }) {
           key={i}
           className={cn(
             "rounded-xl border p-4 flex flex-col gap-3 min-h-[108px] shadow-sm",
-            isDark ? "border-white/10 bg-[#170337]" : "border-border/80 bg-white",
+            isDark ? "border-white/10 bg-[#161616]" : "border-border/80 bg-white",
           )}
         >
           <div className="flex items-start justify-between gap-2">
@@ -680,7 +680,7 @@ export function AdminNotificationsView({
     <TableHead
       className={cn(
         "whitespace-nowrap",
-        isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+        isDark ? "bg-[#1f1f1f]" : "bg-[#F9FAFB]",
       )}
     >
       <div className="flex items-center gap-2">
@@ -795,8 +795,8 @@ export function AdminNotificationsView({
     return (
       <Card
         className={cn(
-          "rounded-xl shadow",
-          isDark ? "bg-[#170337]" : "bg-white",
+          "rounded-2xl border shadow-[0_8px_28px_-18px_rgba(26,26,26,0.28)]",
+          isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white",
         )}
       >
         <CardContent className="px-6 py-4 space-y-4">
@@ -1016,7 +1016,7 @@ export function AdminNotificationsView({
 
   return (
     <Card
-      className={cn("rounded-xl shadow", isDark ? "bg-[#170337]" : "bg-white")}
+      className={cn("rounded-2xl border shadow-[0_8px_28px_-18px_rgba(26,26,26,0.28)]", isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white")}
     >
       <CardContent className="px-6 py-4 space-y-4">
         {loading ? (

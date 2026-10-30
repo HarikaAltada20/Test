@@ -33,7 +33,7 @@ export default async function AdminCreateContestPage() {
             "space-y-2 pb-6 border-b border-gray-200/90 dark:border-white/10",
           )}
         >
-          <p className="text-xs font-semibold uppercase tracking-widest text-[#7F39EC]">
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#1a1a1a]">
             Admin workflow
           </p>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-balance">

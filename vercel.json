@@ -67,6 +67,10 @@
     {
       "path": "/api/cron/process-bulk-verify-queue",
       "schedule": "25 4 * * *"
+    },
+    {
+      "path": "/api/cron/content-drafts-cleanup",
+      "schedule": "40 2 * * *"
     }
   ]
 }

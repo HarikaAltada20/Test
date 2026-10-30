@@ -145,7 +145,7 @@ export function ScheduleTimePicker({
           placeholder="HH:MM"
           className={cn(
             "bg-white border-gray-300 cursor-pointer",
-            open && "border-[#662EBD] ring-1 ring-[#662EBD]",
+            open && "border-[#1a1a1a] ring-1 ring-[#1a1a1a]",
             className,
           )}
         />

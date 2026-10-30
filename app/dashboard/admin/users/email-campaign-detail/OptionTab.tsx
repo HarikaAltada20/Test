@@ -215,13 +215,13 @@ export function OptionTab({ campaignId, onSaved }: Props) {
       <div className="flex justify-end gap-3">
         {/* <Button
           variant="outline"
-          className="border-[#662EBD] text-[#662EBD] hover:bg-purple-50"
+          className="border-[#1a1a1a] text-[#1a1a1a] hover:bg-[#f6f6f7]"
           onClick={resetAutoselect}
         >
           Reset to Autoselect
         </Button> */}
         <Button
-          className="bg-[#662EBD] hover:bg-[#5524a8]"
+          className="bg-[#1a1a1a] hover:bg-black"
           onClick={saveOptions}
           disabled={saving}
         >

@@ -126,13 +126,13 @@ export function palette(isDark: boolean) {
   return {
     page: isDark ? "text-white" : "text-gray-900",
     muted: isDark ? "text-gray-400" : "text-muted-foreground",
-    surface: isDark ? "bg-[#0B0629] border-gray-800" : "bg-white border-gray-200",
-    surfaceAlt: isDark ? "bg-[#120A35]" : "bg-gray-50",
-    input: isDark ? "bg-[#06021D] border-gray-700 text-white placeholder:text-gray-500" : "bg-white",
+    surface: isDark ? "bg-[#161616] border-white/10" : "bg-white border-[#ececef]",
+    surfaceAlt: isDark ? "bg-white/5" : "bg-[#f6f6f7]",
+    input: isDark ? "bg-[#161616] border-gray-700 text-white placeholder:text-gray-500" : "bg-white",
     hover: isDark ? "hover:bg-white/5" : "hover:bg-gray-50",
-    selected: isDark ? "bg-[#7F39EC]/15" : "bg-[#F5EEFF]",
-    accent: "#7F39EC",
-    accentRing: "ring-[#7F39EC] border-[#7F39EC]",
+    selected: isDark ? "bg-white/10" : "bg-[#f6f6f7]",
+    accent: isDark ? "#ffffff" : "#1a1a1a",
+    accentRing: "ring-[#1a1a1a] border-[#1a1a1a]",
     button: isDark
       ? "border-gray-700 bg-transparent text-white hover:bg-white/10"
       : "",

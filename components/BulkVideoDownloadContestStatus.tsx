@@ -93,8 +93,8 @@ export function BulkVideoDownloadSummaryButton({
       className={cn(
         "h-auto gap-2 rounded-2xl py-2 px-4 text-sm font-medium",
         isDark
-          ? "border-purple-500/50 bg-purple-950/40 text-purple-100 hover:bg-purple-900/50"
-          : "border-[#D1B7F9] bg-white text-[#4A00BE] hover:bg-purple-50",
+          ? "border-white/10 bg-[#161616] text-white hover:bg-white/10"
+          : "border-[#e5e5e5] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
       )}
     >
       {isRunning ? (

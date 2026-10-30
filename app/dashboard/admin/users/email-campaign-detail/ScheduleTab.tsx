@@ -309,7 +309,7 @@ export function ScheduleTab({ campaignId, projectId }: Props) {
             className={cn(
               "w-full rounded-xl border p-4 text-left transition-colors",
               activeScheduleId === "default" && useProjectDefault
-                ? "border-[#662EBD] bg-purple-50"
+                ? "border-[#1a1a1a] bg-[#f6f6f7]"
                 : "border-gray-200 bg-white hover:bg-gray-50",
             )}
           >
@@ -334,7 +334,7 @@ export function ScheduleTab({ campaignId, projectId }: Props) {
               className={cn(
                 "w-full rounded-xl border p-3 transition-colors flex items-center gap-2",
                 activeScheduleId === schedule.id && !useProjectDefault
-                  ? "border-[#662EBD] bg-purple-50"
+                  ? "border-[#1a1a1a] bg-[#f6f6f7]"
                   : "border-gray-200 bg-white hover:bg-gray-50",
               )}
             >
@@ -352,7 +352,7 @@ export function ScheduleTab({ campaignId, projectId }: Props) {
                 type="button"
                 variant="outline"
                 size="icon"
-                className="h-8 w-8 shrink-0 border-purple-200 text-[#662EBD] hover:bg-purple-50"
+                className="h-8 w-8 shrink-0 border-[#e6e6e8] text-[#1a1a1a] hover:bg-[#f6f6f7]"
                 onClick={(e) => {
                   e.stopPropagation();
                   setEditSchedule(schedule);
@@ -377,7 +377,7 @@ export function ScheduleTab({ campaignId, projectId }: Props) {
 
           <Button
             variant="ghost"
-            className="w-full text-[#662EBD] hover:text-[#5524a8] hover:bg-purple-50"
+            className="w-full text-[#1a1a1a] hover:text-black hover:bg-[#f6f6f7]"
             onClick={() => setCreateModalOpen(true)}
           >
             <Plus className="h-4 w-4 mr-1" />
@@ -497,7 +497,7 @@ export function ScheduleTab({ campaignId, projectId }: Props) {
           {!readOnly && (
             <div className="flex justify-end">
               <Button
-                className="bg-[#662EBD] hover:bg-[#5524a8]"
+                className="bg-[#1a1a1a] hover:bg-black"
                 onClick={saveSchedule}
                 disabled={saving}
               >

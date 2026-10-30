@@ -16,22 +16,16 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import {
   Menu,
+  PanelLeft,
   X,
-  Mail,
   Settings,
-  User,
-  LogOut,
-  ChevronRight,
   Moon,
   Sun,
   Contrast,
   RotateCcw,
-  Trophy,
   Maximize2,
-  CreditCard,
   Maximize,
   Minimize,
-  Loader2,
 } from "lucide-react";
 import {
   Breadcrumb,
@@ -49,7 +43,6 @@ import {
   SheetDescription,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ChatSuppport from "@/components/ChatSupport";
 import { UserNotificationsBell } from "@/components/UserNotificationsBell";
 import { Switch } from "@/components/ui/switch";
@@ -61,11 +54,10 @@ import { subscriptionPlans } from "@/constants/subscriptionPlans";
 import { MARKETING_HOME_AS_GUEST } from "@/constants/marketingHome";
 import Link from "next/link";
 import Image from "next/image";
-import goldLogoHorizontal from "@/public/images/gold_logo_horizontal.svg";
-import goldSquareLogo from "@/public/images/Group (4).png";
-import logo from "@/public/images/Primary Horizintal.svg";
-import squareLogo from "@/public/images/Group (2).avif";
-import { AccountSwitcher } from "@/components/dashboard/switcher/AccountSwitcher";
+import landingLogoWhite from "@/public/images/Primary_Logo_white.png";
+import gocLogoInk from "@/public/images/goc-logo-ink.svg";
+import gocLogoMark from "@/public/images/goc-logo-mark.svg";
+import { HeaderAccountMenu } from "@/components/dashboard/AccountMenuPanel";
 import { BulkModerationProgressProvider } from "@/components/BulkModerationProgressProvider";
 import { BulkPaymentProgressProvider } from "@/components/BulkPaymentProgressProvider";
 import { BulkVideoDownloadProgressProvider } from "@/components/BulkVideoDownloadProgressProvider";
@@ -160,9 +152,9 @@ const modeConfigurations = {
   dark: {
     name: "Dark Mode",
     background: {
-      primary: "15, 23, 42", // slate-900
-      secondary: "30, 41, 59", // slate-800
-      tertiary: "51, 65, 85", // slate-700
+      primary: "14, 14, 14", // #0e0e0e
+      secondary: "22, 22, 22", // #161616
+      tertiary: "26, 26, 26", // #1a1a1a
     },
     text: {
       primary: "248, 250, 252", // slate-50
@@ -188,6 +180,40 @@ const modeConfigurations = {
 } as const;
 
 type ModeKey = keyof typeof modeConfigurations;
+type ThemePreference = "system" | ModeKey;
+type SidebarPreference = "automatic" | "expanded" | "collapsed";
+
+function readThemePreference(): ThemePreference {
+  if (typeof window === "undefined") return "light";
+  const saved = localStorage.getItem("dashboard-theme-preference");
+  if (saved === "system" || saved === "light" || saved === "dark") return saved;
+  const mode = localStorage.getItem("dashboard-mode");
+  if (mode === "light" || mode === "dark") return mode;
+  return "system";
+}
+
+function resolveThemePreference(preference: ThemePreference): ModeKey {
+  if (preference === "light" || preference === "dark") return preference;
+  if (typeof window === "undefined") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
+function readSidebarPreference(): SidebarPreference {
+  if (typeof window === "undefined") return "automatic";
+  const saved = localStorage.getItem("dashboard-sidebar");
+  if (saved === "automatic" || saved === "expanded" || saved === "collapsed") {
+    return saved;
+  }
+  return "automatic";
+}
+
+function sidebarIsCollapsed(preference: SidebarPreference, width: number) {
+  if (preference === "expanded") return false;
+  if (preference === "collapsed") return true;
+  return width < 1280;
+}
 
 // Simple loading bar component that doesn't cause React conflicts
 function SimpleLoadingBar() {
@@ -250,6 +276,7 @@ function DashboardContent({
     username: "",
     subscriptionPlan: null,
   });
+  const [liveCampaignCount, setLiveCampaignCount] = useState(0);
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
   const [open, setOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -259,17 +286,16 @@ function DashboardContent({
   const userRole =
     (user?.user_type as "advertiser" | "creator" | "admin") || null;
 
-  const accountTypeLabel =
-    userRole === "advertiser"
-      ? "Brand"
-      : userRole === "creator"
-        ? "Creator"
-        : userRole === "admin"
-          ? "Admin"
-          : null;
   const pathname = usePathname();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [profileSidebarOpen, setProfileSidebarOpen] = useState(false);
+  const [sidebarPreference, setSidebarPreference] = useState<SidebarPreference>(
+    () => readSidebarPreference(),
+  );
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
+    sidebarIsCollapsed(
+      readSidebarPreference(),
+      typeof window === "undefined" ? 1440 : window.innerWidth,
+    ),
+  );
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [currentTheme, setCurrentTheme] = useState<ThemeKey>(() => {
@@ -282,15 +308,22 @@ function DashboardContent({
     if (savedTheme && savedTheme in colorThemes) return savedTheme;
     return "clean";
   });
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() =>
+    readThemePreference(),
+  );
   const [currentMode, setCurrentMode] = useState<ModeKey>(() => {
     if (typeof window === "undefined") return "light";
+    const preference = readThemePreference();
+    if (localStorage.getItem("dashboard-theme-preference")) {
+      return resolveThemePreference(preference);
+    }
     const savedPreset = localStorage.getItem("dashboard-preset") as PresetKey;
     if (savedPreset && presetConfigurations[savedPreset]) {
       return presetConfigurations[savedPreset].mode;
     }
     const savedMode = localStorage.getItem("dashboard-mode") as ModeKey;
     if (savedMode && savedMode in modeConfigurations) return savedMode;
-    return "light";
+    return resolveThemePreference(preference);
   });
   const [isOpen, setIsOpen] = useState(false);
   const [currentPreset, setCurrentPreset] = useState<PresetKey>(() => {
@@ -346,6 +379,15 @@ function DashboardContent({
     setIsChatOpen(true);
   };
 
+  // Lets pages (e.g. the creator Help page) open the support chat popup.
+  useEffect(() => {
+    if (!userRole || userRole === "admin" || !supportChatEnabled) return;
+    const handleOpenChat = () => setIsChatOpen(true);
+    window.addEventListener("go:open-support-chat", handleOpenChat);
+    return () =>
+      window.removeEventListener("go:open-support-chat", handleOpenChat);
+  }, [userRole, supportChatEnabled]);
+
   const openAdminSupportThread = (threadId: string) => {
     setIsChatOpen(false);
     setSupportThreadId(null);
@@ -383,7 +425,9 @@ function DashboardContent({
         // Check contests for advertisers
         const contestResult = await hasPublishedContests(user.id);
         if (!contestResult.success) {
-          showErrorToast("Failed to check your contest status. Please try again.");
+          showErrorToast(
+            "Failed to check your contest status. Please try again.",
+          );
           return false;
         }
 
@@ -391,7 +435,7 @@ function DashboardContent({
         const contentResult = await hasSubmittedContent(user.id);
         if (!contentResult.success) {
           showErrorToast(
-            "Failed to check your content submission status. Please try again."
+            "Failed to check your content submission status. Please try again.",
           );
           return false;
         }
@@ -405,8 +449,13 @@ function DashboardContent({
           .single();
 
         if (userTypeError) {
-          console.error("Error checking user type for review eligibility:", userTypeError);
-          showErrorToast("Failed to check your account type. Please try again.");
+          console.error(
+            "Error checking user type for review eligibility:",
+            userTypeError,
+          );
+          showErrorToast(
+            "Failed to check your account type. Please try again.",
+          );
           return false;
         }
 
@@ -459,7 +508,7 @@ function DashboardContent({
         return false;
       }
     },
-    [toast, user?.id]
+    [toast, user?.id],
   );
 
   const handleReviewSubmit = async (review: {
@@ -474,16 +523,22 @@ function DashboardContent({
         title: "Submitting Review",
         description: "Please wait while we compress and upload your images...",
       });
-      
+
       // Submit review to Supabase with compression progress callback
-      const result = await submitReview(user, review as ReviewData, (index, originalSize, compressedSize) => {
-        console.log(`Compression progress for image ${index + 1}: ${(originalSize / 1024).toFixed(1)}KB → ${(compressedSize / 1024).toFixed(1)}KB`);
-        // The modal will show the compression progress via its own state
-      });
-      
+      const result = await submitReview(
+        user,
+        review as ReviewData,
+        (index, originalSize, compressedSize) => {
+          console.log(
+            `Compression progress for image ${index + 1}: ${(originalSize / 1024).toFixed(1)}KB → ${(compressedSize / 1024).toFixed(1)}KB`,
+          );
+          // The modal will show the compression progress via its own state
+        },
+      );
+
       // Dismiss loading toast
       loadingToast.dismiss();
-      
+
       if (result.success) {
         // Show success toast
         toast({
@@ -495,7 +550,8 @@ function DashboardContent({
         // Show error toast
         toast({
           title: "Submission Failed",
-          description: result.error || "Failed to submit review. Please try again.",
+          description:
+            result.error || "Failed to submit review. Please try again.",
           variant: "destructive",
         });
         console.error("Review submission failed:", result.error);
@@ -510,33 +566,36 @@ function DashboardContent({
     }
   };
 
-  const shouldPromptReviewAfterWithdrawal = useCallback(
-    async (): Promise<boolean> => {
+  const shouldPromptReviewAfterWithdrawal =
+    useCallback(async (): Promise<boolean> => {
       if (!user?.id) return false;
 
       const supabase = createClient();
 
       // First, use the latest non-null timestamp to apply the 30-day rule.
-      const { data: latestDatedReview, error: latestReviewError } = await supabase
-        .from("user_reviews")
-        .select("created_at")
-        .eq("user_id", user.id)
-        .not("created_at", "is", null)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const { data: latestDatedReview, error: latestReviewError } =
+        await supabase
+          .from("user_reviews")
+          .select("created_at")
+          .eq("user_id", user.id)
+          .not("created_at", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
       if (latestReviewError) {
         console.error(
           "Error checking latest review timestamp for withdrawal prompt:",
-          latestReviewError
+          latestReviewError,
         );
         return false;
       }
 
       if (latestDatedReview?.created_at) {
         const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-        const latestReviewTime = new Date(latestDatedReview.created_at).getTime();
+        const latestReviewTime = new Date(
+          latestDatedReview.created_at,
+        ).getTime();
         const now = Date.now();
         return now - latestReviewTime >= THIRTY_DAYS_MS;
       }
@@ -552,16 +611,14 @@ function DashboardContent({
       if (anyReviewError) {
         console.error(
           "Error checking review existence for withdrawal prompt:",
-          anyReviewError
+          anyReviewError,
         );
         return false;
       }
 
       // No review rows => prompt user. Any row with null created_at => avoid re-prompt spam.
       return !anyReview;
-    },
-    [user?.id]
-  );
+    }, [user?.id]);
 
   const openReviewModalIfEligible = useCallback(
     async ({
@@ -571,8 +628,9 @@ function DashboardContent({
       enforceWithdrawalCooldown?: boolean;
       showEligibilityToasts?: boolean;
     }): Promise<boolean> => {
-      const hasRequiredActivity =
-        await checkReviewActivityEligibility(showEligibilityToasts);
+      const hasRequiredActivity = await checkReviewActivityEligibility(
+        showEligibilityToasts,
+      );
       if (!hasRequiredActivity) return false;
 
       if (enforceWithdrawalCooldown) {
@@ -583,7 +641,7 @@ function DashboardContent({
       setIsReviewModalOpen(true);
       return true;
     },
-    [checkReviewActivityEligibility, shouldPromptReviewAfterWithdrawal]
+    [checkReviewActivityEligibility, shouldPromptReviewAfterWithdrawal],
   );
 
   const handleReviewOpen = async () => {
@@ -592,6 +650,19 @@ function DashboardContent({
       showEligibilityToasts: true,
     });
   };
+
+  // Lets pages (e.g. the creator Help page) open the review modal.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleOpenReview = () => {
+      void openReviewModalIfEligible({
+        enforceWithdrawalCooldown: false,
+        showEligibilityToasts: true,
+      });
+    };
+    window.addEventListener("go:open-review", handleOpenReview);
+    return () => window.removeEventListener("go:open-review", handleOpenReview);
+  }, [openReviewModalIfEligible]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -607,13 +678,13 @@ function DashboardContent({
 
     window.addEventListener(
       WITHDRAWAL_REVIEW_TRIGGER_EVENT,
-      handleWithdrawalReviewTrigger
+      handleWithdrawalReviewTrigger,
     );
 
     return () => {
       window.removeEventListener(
         WITHDRAWAL_REVIEW_TRIGGER_EVENT,
-        handleWithdrawalReviewTrigger
+        handleWithdrawalReviewTrigger,
       );
     };
   }, [openReviewModalIfEligible]);
@@ -640,7 +711,7 @@ function DashboardContent({
 
     if (success === "true" && sessionId && user && !hasProcessedSuccess) {
       console.log(
-        "🎉 Payment successful in dashboard, refreshing subscription data..."
+        "🎉 Payment successful in dashboard, refreshing subscription data...",
       );
       setHasProcessedSuccess(true);
 
@@ -667,7 +738,7 @@ function DashboardContent({
             }));
             console.log(
               "✅ Subscription data refreshed:",
-              advertiserProfile.subscription_info.product_id
+              advertiserProfile.subscription_info.product_id,
             );
           }
         } catch (error) {
@@ -687,7 +758,9 @@ function DashboardContent({
       const supabase = createClient();
       const { data: profile } = await supabase
         .from("users")
-        .select("full_name, profile_picture_url, is_active, user_type, username")
+        .select(
+          "full_name, profile_picture_url, is_active, user_type, username",
+        )
         .eq("id", user.id)
         .single();
 
@@ -704,6 +777,15 @@ function DashboardContent({
 
           subscriptionPlan =
             advertiserProfile?.subscription_info?.product_id || null;
+
+          const { data: liveContests } = await supabase
+            .from("contests_with_status")
+            .select("id")
+            .eq("advertiser_id", user.id)
+            .eq("moderation_status", "published")
+            .eq("status", "active");
+
+          setLiveCampaignCount(liveContests?.length ?? 0);
         }
 
         setProfileData({
@@ -721,7 +803,7 @@ function DashboardContent({
     // Listen for profile update events
     const handleProfileUpdate = () => {
       console.log(
-        "🔄 Profile update event received, refreshing sidebar data..."
+        "🔄 Profile update event received, refreshing sidebar data...",
       );
       fetchProfileData();
     };
@@ -748,9 +830,16 @@ function DashboardContent({
     if (typeof window === "undefined") return;
     try {
       document.documentElement.setAttribute("data-theme", currentMode);
+      document.documentElement.setAttribute("data-brand-theme", currentMode);
+      document.documentElement.setAttribute("data-surface", "brand");
+      if (userRole) {
+        document.documentElement.setAttribute("data-role", userRole);
+      } else {
+        document.documentElement.removeAttribute("data-role");
+      }
       if (currentMode === "dark") {
         document.documentElement.classList.add("dark");
-        document.documentElement.style.backgroundColor = "#07031E";
+        document.documentElement.style.backgroundColor = "#0e0e0e";
         document.documentElement.style.color = "rgb(248, 250, 252)";
       } else {
         document.documentElement.classList.remove("dark");
@@ -760,7 +849,82 @@ function DashboardContent({
     } catch {
       // ignore
     }
-  }, [currentMode]);
+    return () => {
+      try {
+        document.documentElement.removeAttribute("data-surface");
+        document.documentElement.removeAttribute("data-role");
+        document.documentElement.removeAttribute("data-brand-theme");
+      } catch {
+        // ignore
+      }
+    };
+  }, [currentMode, userRole]);
+
+  useEffect(() => {
+    const onThemeChange = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ mode?: string; preference?: string }>
+      ).detail;
+      const preference = detail?.preference;
+      if (
+        preference === "system" ||
+        preference === "light" ||
+        preference === "dark"
+      ) {
+        setThemePreference(preference);
+        setCurrentMode(resolveThemePreference(preference));
+        return;
+      }
+      if (detail?.mode === "light" || detail?.mode === "dark") {
+        setThemePreference(detail.mode);
+        setCurrentMode(detail.mode);
+      }
+    };
+    window.addEventListener("theme-change", onThemeChange);
+    return () => window.removeEventListener("theme-change", onThemeChange);
+  }, []);
+
+  useEffect(() => {
+    if (themePreference !== "system") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => setCurrentMode(media.matches ? "dark" : "light");
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, [themePreference]);
+
+  useEffect(() => {
+    const apply = () =>
+      setSidebarCollapsed(
+        sidebarIsCollapsed(sidebarPreference, window.innerWidth),
+      );
+    apply();
+    if (sidebarPreference !== "automatic") return;
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
+  }, [sidebarPreference]);
+
+  useEffect(() => {
+    const onSidebarPreference = (event: Event) => {
+      const next = (
+        event as CustomEvent<{ preference?: SidebarPreference }>
+      ).detail?.preference;
+      if (
+        next === "automatic" ||
+        next === "expanded" ||
+        next === "collapsed"
+      ) {
+        localStorage.setItem("dashboard-sidebar", next);
+        setSidebarPreference(next);
+      }
+    };
+    window.addEventListener("sidebar-preference-change", onSidebarPreference);
+    return () =>
+      window.removeEventListener(
+        "sidebar-preference-change",
+        onSidebarPreference,
+      );
+  }, []);
 
   // Preset switching function - memoized for performance
   const switchPreset = useCallback((presetKey: PresetKey) => {
@@ -792,15 +956,18 @@ function DashboardContent({
   // Mode switching function - memoized for performance
   const switchMode = useCallback((modeKey: ModeKey) => {
     setCurrentMode(modeKey);
+    setThemePreference(modeKey);
     localStorage.setItem("dashboard-mode", modeKey);
+    localStorage.setItem("dashboard-theme-preference", modeKey);
     localStorage.removeItem("dashboard-preset"); // Clear preset when manually changing
     try {
       document.cookie = `dashboard-mode=${modeKey}; path=/; max-age=31536000`;
       document.cookie = "dashboard-preset=; path=/; max-age=0";
       document.documentElement.setAttribute("data-theme", modeKey);
+      document.documentElement.setAttribute("data-brand-theme", modeKey);
       if (modeKey === "dark") {
         document.documentElement.classList.add("dark");
-        document.documentElement.style.backgroundColor = "#07031E";
+        document.documentElement.style.backgroundColor = "#0e0e0e";
         document.documentElement.style.color = "rgb(248, 250, 252)";
       } else {
         document.documentElement.classList.remove("dark");
@@ -885,8 +1052,7 @@ function DashboardContent({
     user?.user_metadata?.full_name ||
     user?.email?.split("@")[0] ||
     "User";
-    
-  // Get username for AccountSwitcher
+
   const username =
     profileData.username ||
     user?.user_metadata?.username ||
@@ -906,12 +1072,14 @@ function DashboardContent({
     }
     return (
       subscriptionPlans.find(
-        (plan) => plan.id === profileData.subscriptionPlan
+        (plan) => plan.id === profileData.subscriptionPlan,
       ) || subscriptionPlans[0]
     );
   };
 
   const currentPlan = getCurrentPlan();
+  const planLabel =
+    currentPlan.name.charAt(0) + currentPlan.name.slice(1).toLowerCase();
 
   if (!isHydrated) {
     return null;
@@ -921,6 +1089,9 @@ function DashboardContent({
     <div
       className="bg-background text-foreground transition-colors duration-300"
       data-theme={currentMode}
+      data-brand-theme={currentMode}
+      data-surface="brand"
+      data-role={userRole ?? undefined}
       data-color-theme={currentTheme}
     >
       <SimpleLoadingBar />
@@ -928,18 +1099,18 @@ function DashboardContent({
       <style jsx global>{`
         :root {
           --background: ${currentMode === "light"
-            ? "210 20% 98%"
-            : "222.2 84% 4.9%"};
+            ? "240 6% 96.7%"
+            : "0 0% 5.5%"};
           --foreground: ${currentMode === "light"
             ? "220 13% 9%"
             : "210 40% 98%"};
-          --card: ${currentMode === "light" ? "0 0% 96%" : "217.2 32.6% 17.5%"};
+          --card: ${currentMode === "light" ? "0 0% 96%" : "0 0% 8.6%"};
           --card-foreground: ${currentMode === "light"
             ? "220 13% 9%"
             : "210 40% 98%"};
           --popover: ${currentMode === "light"
             ? "0 0% 96%"
-            : "217.2 32.6% 17.5%"};
+            : "0 0% 8.6%"};
           --popover-foreground: ${currentMode === "light"
             ? "220 13% 9%"
             : "210 40% 98%"};
@@ -949,28 +1120,28 @@ function DashboardContent({
             : "222.2 84% 4.9%"};
           --secondary: ${currentMode === "light"
             ? "220 14% 96%"
-            : "217.2 32.6% 17.5%"};
+            : "0 0% 10.2%"};
           --secondary-foreground: ${currentMode === "light"
             ? "220 9% 46%"
             : "210 40% 98%"};
           --muted: ${currentMode === "light"
             ? "220 13% 91%"
-            : "217.2 32.6% 17.5%"};
+            : "0 0% 10.2%"};
           --muted-foreground: ${currentMode === "light"
             ? "220 9% 46%"
             : "215 20.2% 75.1%"};
           --accent: ${currentMode === "light"
             ? "220 13% 91%"
-            : "217.2 32.6% 17.5%"};
+            : "0 0% 10.2%"};
           --accent-foreground: ${currentMode === "light"
             ? "220 13% 9%"
             : "210 40% 98%"};
           --border: ${currentMode === "light"
             ? "220 13% 82%"
-            : "217.2 32.6% 17.5%"};
+            : "0 0% 16%"};
           --input: ${currentMode === "light"
             ? "220 13% 82%"
-            : "217.2 32.6% 17.5%"};
+            : "0 0% 16%"};
           --ring: ${getThemeHSL(currentTheme)};
 
           /* Performance optimized theme variables */
@@ -1018,7 +1189,9 @@ function DashboardContent({
 
         /* Instant theme transitions for immediate switching */
         * {
-          transition: color 0.05s ease, background-color 0.05s ease,
+          transition:
+            color 0.05s ease,
+            background-color 0.05s ease,
             border-color 0.05s ease !important;
         }
 
@@ -1041,7 +1214,8 @@ function DashboardContent({
         /* Animating row padding/size makes virtualizer measurements stale. */
         .dashboard-container tr.contest-virtual-row,
         .dashboard-container tr.contest-virtual-row * {
-          transition-property: color, background-color, border-color, opacity !important;
+          transition-property:
+            color, background-color, border-color, opacity !important;
         }
 
         /* Review Mode overlay sits below dialogs (z-50); hide the page behind it instead. */
@@ -1139,26 +1313,35 @@ function DashboardContent({
         #__next {
           background-color: hsl(var(--background)) !important;
           min-height: 100dvh;
+          font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+        }
+
+        .dashboard-container,
+        aside,
+        button,
+        input,
+        select,
+        textarea {
+          font-family: inherit;
         }
 
         /* Also ensure main content area inherits theme background */
         .dashboard-main-content {
-          background-color: hsl(var(--background));
+          background-color: ${currentMode === "light"
+            ? "#f6f6f7"
+            : "#0e0e0e"};
         }
       `}</style>
 
       {/* Main Layout Container */}
-      <div className="relative flex min-h-screen dashboard-container">
-        {/* Desktop Sidebar — in flow so compact-mode zoom cannot slide the page under a fixed bar */}
-        <aside
+      <aside
           className={cn(
-            "sticky top-0 z-[41] hidden shrink-0 flex-col self-start overflow-visible border-r backdrop-blur-sm transition-[width] duration-300 ease-in-out lg:flex",
+            "fixed top-0 left-0 z-[41] hidden h-dvh min-h-0 flex-col overflow-hidden border-r transition-[width] duration-300 ease-in-out lg:flex",
             sidebarCollapsed ? "w-28" : "w-72",
             currentMode === "dark"
-              ? "bg-[#06021D] text-white border-gray-800"
-              : "bg-white text-slate-900 border-gray-300"
+              ? "bg-[#0e0e0e] text-white border-white/10"
+              : "bg-[#f6f6f7] text-[#1a1a1a] border-[#e8e8ea]",
           )}
-          style={{ height: "calc(100dvh / var(--dashboard-zoom, 1))" }}
           // style={{
           //   background:
           //     currentMode === "light"
@@ -1173,10 +1356,12 @@ function DashboardContent({
           //       : "none",
           // }}
         >
-          {/* Sidebar Header - Premium Styling to Match Main Header */}
           <div
-            // className="relative flex h-16 sm:h-20 items-center justify-center px-3 sm:px-6 border-b border-gray-300"
-            className="relative flex h-16 sm:h-20 items-center justify-center px-3 sm:px-6 border-b"
+            className={cn(
+              "relative flex items-center justify-center border-b px-3",
+              sidebarCollapsed ? "flex-col gap-2 py-3" : "h-20",
+              currentMode === "light" ? "border-[#e6e6e8]" : "border-white/10",
+            )}
           >
             {/* <div
               className="absolute inset-0"
@@ -1202,68 +1387,72 @@ function DashboardContent({
               }}
             ></div> */}
 
-            {/* Logo - Centered and Full Width */}
-            <div className="relative flex items-center justify-center flex-1 z-10">
-              {!sidebarCollapsed ? (
-                <Link
-                  href={MARKETING_HOME_AS_GUEST}
-                  className="flex items-center group transition-all duration-300"
-                >
-                  <div
-                  // className={cn(
-                  //   "relative p-3 rounded-lg transition-all duration-300",
-                  //   currentMode === "light"
-                  //     ? "bg-gradient-to-br from-slate-100 to-white border border-slate-200 shadow-lg hover:shadow-xl"
-                  //     : "hover:bg-white/5"
-                  // )}
-                  // style={{
-                  //   ...(currentMode === "light" && {
-                  //     boxShadow: `0 4px 6px -1px rgba(${theme.primary}, 0.1), 0 2px 4px -1px rgba(${theme.primary}, 0.06)`,
-                  //   }),
-                  // }}
-                  >
-                    <Image
-                      src={currentMode === "dark" ? goldLogoHorizontal : logo}
-                      alt="Game Of Creators Logo"
-                      width={180}
-                      height={100}
-                      className="h-[50px] w-auto "
-                    />
-                  </div>
-                </Link>
+            <Link
+              href={MARKETING_HOME_AS_GUEST}
+              className="flex items-center justify-center"
+            >
+              {sidebarCollapsed && currentMode !== "dark" ? (
+                <Image
+                  src={gocLogoMark}
+                  alt="Game Of Creators Logo"
+                  width={24}
+                  height={24}
+                  className="h-10 w-10 object-contain"
+                />
               ) : (
-                <Link
-                  href={MARKETING_HOME_AS_GUEST}
-                  className="flex items-center justify-center group transition-all duration-300"
-                >
-                  <div
-                  // className={cn(
-                  //   "relative p-2 rounded-lg transition-all duration-300",
-                  //   currentMode === "light"
-                  //     ? "bg-gradient-to-br from-slate-100 to-white border border-slate-200 shadow-lg hover:shadow-xl"
-                  //     : "hover:bg-white/5"
-                  // )}
-                  // style={{
-                  //   ...(currentMode === "light" && {
-                  //     boxShadow: `0 4px 6px -1px rgba(${theme.primary}, 0.1), 0 2px 4px -1px rgba(${theme.primary}, 0.06)`,
-                  //   }),
-                  // }}
-                  >
-                    <Image
-                      src={currentMode === "dark" ? goldSquareLogo : squareLogo}
-                      alt="Game Of Creators"
-                      width={184}
-                      height={100}
-                      className="h-[50px] w-auto transition-all duration-300"
-                    />
-                  </div>
-                </Link>
+                <Image
+                  src={
+                    currentMode === "dark"
+                      ? landingLogoWhite
+                      : sidebarCollapsed
+                        ? gocLogoMark
+                        : gocLogoInk
+                  }
+                  alt="Game Of Creators Logo"
+                  width={196}
+                  height={70}
+                  className={cn(
+                    "w-auto object-contain",
+                    sidebarCollapsed
+                      ? currentMode === "dark"
+                        ? "h-9 max-w-[5.5rem]"
+                        : "h-14 w-14"
+                      : "h-16",
+                  )}
+                />
               )}
-            </div>
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                const next = sidebarCollapsed ? "expanded" : "collapsed";
+                localStorage.setItem("dashboard-sidebar", next);
+                setSidebarPreference(next);
+                window.dispatchEvent(
+                  new CustomEvent("sidebar-preference-change", {
+                    detail: { preference: next },
+                  }),
+                );
+              }}
+              className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors",
+                sidebarCollapsed
+                  ? ""
+                  : "absolute right-3 top-1/2 -translate-y-1/2",
+                currentMode === "light"
+                  ? "border-[#e4e4e7] bg-white text-[#3f3f46] hover:bg-[#fafafa]"
+                  : "border-white/10 bg-white/5 text-white hover:bg-white/10",
+              )}
+              aria-label={
+                sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"
+              }
+            >
+              <PanelLeft className="h-4 w-4" />
+            </button>
           </div>
 
           {/* Sidebar Content */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {userRole && (
               <DashboardSidebar
                 userRole={userRole}
@@ -1275,108 +1464,36 @@ function DashboardContent({
                 collapsed={sidebarCollapsed}
                 mode={currentMode}
                 supportChatEnabled={supportChatEnabled}
+                planName={planLabel}
+                planLimit={currentPlan.features.maxActiveContests}
+                liveCampaignCount={liveCampaignCount}
+                userName={displayName}
+                userEmail={displayEmail}
+                avatarUrl={avatarSrc}
+                onSignOut={handleSignOut}
+                isSigningOut={isSigningOut}
               />
             )}
           </div>
+      </aside>
 
-          {/* Sits on the sidebar edge and sticks with it, including in compact zoom. */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className={cn(
-              "absolute top-6 right-0 z-50 h-8 w-8 translate-x-1/2 rounded-full backdrop-blur-sm",
-              "border items-center justify-center"
-            )}
-            style={{
-            backgroundColor:
-              currentMode === "light"
-                ? `rgba(${mode.background.primary}, 0.9)`
-                : `rgba(${mode.background.secondary}, 0.9)`,
-            borderColor: `rgba(${theme.primary}, ${
-              currentMode === "light" ? "0.2" : "0.15"
-            })`,
-            boxShadow:
-              currentMode === "light"
-                ? "0 1px 2px rgba(0, 0, 0, 0.05)"
-                : `0 1px 2px rgba(${theme.primary}, 0.1)`,
-            transition:
-              "box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
-            e.currentTarget.style.backgroundColor =
-              currentMode === "light"
-                ? `rgba(${theme.primary}, 0.08)`
-                : `rgba(${theme.primary}, 0.12)`;
-            // Subtle glow effect without movement
-            e.currentTarget.style.boxShadow =
-              currentMode === "light"
-                ? `0 0 8px rgba(${theme.primary}, 0.3), 0 2px 4px rgba(0, 0, 0, 0.1)`
-                : `0 0 8px rgba(${theme.primary}, 0.4), 0 2px 4px rgba(${theme.primary}, 0.2)`;
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = `rgba(${theme.primary}, ${
-              currentMode === "light" ? "0.2" : "0.15"
-            })`;
-            e.currentTarget.style.backgroundColor =
-              currentMode === "light"
-                ? `rgba(${mode.background.primary}, 0.9)`
-                : `rgba(${mode.background.secondary}, 0.9)`;
-            e.currentTarget.style.boxShadow =
-              currentMode === "light"
-                ? "0 1px 2px rgba(0, 0, 0, 0.05)"
-                : `0 1px 2px rgba(${theme.primary}, 0.1)`;
-          }}
-        >
-          {sidebarCollapsed ? (
-            // Right arrow for expand (show sidebar)
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M9 18L15 12L9 6"
-                stroke={
-                  currentMode === "light"
-                    ? `rgba(${mode.text.primary}, 0.8)`
-                    : `rgba(${theme.primaryLight}, 0.9)`
-                }
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          ) : (
-            // Left arrow for collapse (hide sidebar)
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M15 18L9 12L15 6"
-                stroke={
-                  currentMode === "light"
-                    ? `rgba(${mode.text.primary}, 0.8)`
-                    : `rgba(${theme.primaryLight}, 0.9)`
-                }
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          )}
-          <span className="sr-only">
-            {sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-          </span>
-        </Button>
-        </aside>
-
+      <div
+        className={cn(
+          "dashboard-container min-h-screen",
+          sidebarCollapsed
+            ? "lg:ml-[calc(7rem/var(--dashboard-zoom,1))]"
+            : "lg:ml-[calc(18rem/var(--dashboard-zoom,1))]",
+        )}
+      >
         {/* Main Content Area */}
-        <div
-          className="flex min-w-0 max-w-full flex-1 flex-col"
-        >
+        <div className="flex min-w-0 max-w-full flex-1 flex-col">
           {/* Premium Dashboard Header */}
           <header
             className={cn(
               "sticky top-0 z-40 w-full",
               currentMode === "dark"
-                ? "bg-[#07031E] text-white border-b border-gray-800"
-                : "bg-white text-slate-900"
+                ? "bg-[#0e0e0e] text-white border-b border-white/10"
+                : "bg-[#f6f6f7] text-slate-900",
             )}
             style={{
               boxShadow:
@@ -1471,11 +1588,11 @@ function DashboardContent({
                       className={cn(
                         "md:w-64 p-0 flex flex-col h-full",
                         currentMode === "dark"
-                          ? "bg-[#06021D] text-white border-gray-800"
-                          : "bg-white text-slate-900"
+                          ? "bg-[#0e0e0e] text-white border-white/10"
+                          : "bg-[#f6f6f7] text-slate-900",
                       )}
                     >
-                      <SheetHeader className="flex h-20 items-center justify-between px-4 flex-shrink-0">
+                      <SheetHeader className="flex h-20 items-center justify-center px-4 flex-shrink-0">
                         {/* Premium Background Effects for Mobile Header */}
                         {/* <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950"></div>
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(139,92,246,0.1),transparent)]"></div>
@@ -1490,12 +1607,14 @@ function DashboardContent({
                         >
                           <Image
                             src={
-                              currentMode === "dark" ? goldLogoHorizontal : logo
+                              currentMode === "dark"
+                                ? landingLogoWhite
+                                : gocLogoInk
                             }
                             alt="Game Of Creators Logo"
-                            width={180}
-                            height={100}
-                            className="h-[50px] mt-5 w-auto transition-all duration-300"
+                            width={196}
+                            height={70}
+                            className="h-16 w-auto"
                           />
                         </Link>
                         <SheetDescription className="sr-only">
@@ -1508,13 +1627,21 @@ function DashboardContent({
                             <DashboardSidebar
                               userRole={userRole}
                               onChatOpen={() => {
-                  setSupportThreadId(null);
-                  setIsChatOpen(true);
-                }}
+                                setSupportThreadId(null);
+                                setIsChatOpen(true);
+                              }}
                               onReviewOpen={handleReviewOpen}
                               collapsed={false}
                               mode={currentMode}
                               supportChatEnabled={supportChatEnabled}
+                              planName={planLabel}
+                              planLimit={currentPlan.features.maxActiveContests}
+                              liveCampaignCount={liveCampaignCount}
+                              userName={displayName}
+                              userEmail={displayEmail}
+                              avatarUrl={avatarSrc}
+                              onSignOut={handleSignOut}
+                              isSigningOut={isSigningOut}
                             />
                           )}
                         </div>
@@ -1528,7 +1655,7 @@ function DashboardContent({
                       "h-6 hidden md:block",
                       currentMode === "light"
                         ? "bg-slate-300"
-                        : "bg-violet-400/20"
+                        : "bg-violet-400/20",
                     )}
                   />
 
@@ -1542,7 +1669,7 @@ function DashboardContent({
                             "transition-colors duration-200",
                             currentMode === "light"
                               ? "text-slate-600 hover:text-slate-900"
-                              : "text-slate-300 hover:text-white"
+                              : "text-slate-300 hover:text-white",
                           )}
                         >
                           Dashboard
@@ -1555,7 +1682,7 @@ function DashboardContent({
                               "hidden md:block",
                               currentMode === "light"
                                 ? "text-slate-400"
-                                : "text-slate-500"
+                                : "text-slate-500",
                             )}
                           />
                           <BreadcrumbItem>
@@ -1564,7 +1691,7 @@ function DashboardContent({
                                 "font-medium text-[14px]",
                                 currentMode === "light"
                                   ? "text-slate-900"
-                                  : "text-white"
+                                  : "text-white",
                               )}
                             >
                               {currentPageTitle}
@@ -1586,7 +1713,9 @@ function DashboardContent({
                         userRole === "admin" ? undefined : openSupportThread
                       }
                       onOpenAdminSupportThread={
-                        userRole === "admin" ? openAdminSupportThread : undefined
+                        userRole === "admin"
+                          ? openAdminSupportThread
+                          : undefined
                       }
                     />
                   )}
@@ -1731,7 +1860,7 @@ function DashboardContent({
                       side="right"
                       className={cn(
                         "w-96 p-0 border-l ",
-                        currentMode === "light" ? "bg-white" : "bg-[#06021D]"
+                        currentMode === "light" ? "bg-white" : "bg-[#0e0e0e]",
                       )}
                       // style={{
                       //   background: `linear-gradient(135deg, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1))`,
@@ -1772,7 +1901,7 @@ function DashboardContent({
                                 "flex rounded-full p-3 items-center",
                                 currentMode === "light"
                                   ? "bg-[#D8C3FF] text-purple-600"
-                                  : "bg-[#FFFFFF42] text-white"
+                                  : "bg-[#FFFFFF42] text-white",
                               )}
                               // style={{
                               //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
@@ -1970,7 +2099,7 @@ function DashboardContent({
                                       "flex rounded-full p-3 items-center",
                                       currentMode === "light"
                                         ? "bg-[#D8C3FF] text-purple-600"
-                                        : "bg-[#FFFFFF42] text-white"
+                                        : "bg-[#FFFFFF42] text-white",
                                     )}
 
                                     // style={{
@@ -2032,7 +2161,7 @@ function DashboardContent({
                                     "flex rounded-full p-3 items-center",
                                     currentMode === "light"
                                       ? "bg-[#D8C3FF] text-purple-600"
-                                      : "bg-[#FFFFFF42] text-white"
+                                      : "bg-[#FFFFFF42] text-white",
                                   )}
                                 >
                                   {currentMode === "light" ? (
@@ -2088,7 +2217,7 @@ function DashboardContent({
                                     "flex rounded-full p-3 items-center",
                                     currentMode === "light"
                                       ? "bg-[#D8C3FF] text-purple-600"
-                                      : "bg-[#FFFFFF42] text-white"
+                                      : "bg-[#FFFFFF42] text-white",
                                   )}
 
                                   // style={{
@@ -2202,619 +2331,16 @@ function DashboardContent({
                     </SheetContent>
                   </Sheet>
 
-                  {/* User Profile Sidebar Trigger - Premium Style */}
-                  <Sheet
-                    open={profileSidebarOpen}
-                    onOpenChange={setProfileSidebarOpen}
-                  >
-                    <SheetTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        className={cn(
-                          "h-auto min-h-9 py-1.5 px-2.5 sm:px-3 gap-0 rounded-xl border transition-colors",
-                          currentMode === "light"
-                            ? "border-transparent hover:border-violet-200 hover:bg-violet-50/90"
-                            : "border-transparent hover:border-violet-500/25 hover:bg-white/[0.06]",
-                        )}
-                        // style={{
-                        //   backgroundColor:
-                        //     currentMode === "light"
-                        //       ? `rgba(${mode.background.tertiary}, 1)`
-                        //       : `rgba(${mode.background.secondary}, 0.5)`,
-                        //   borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.3" : "0.2"
-                        //     })`,
-                        //   color: `rgba(${mode.text.muted}, 1)`,
-                        //   boxShadow:
-                        //     currentMode === "light"
-                        //       ? "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
-                        //       : "none",
-                        // }}
-                        // onMouseEnter={(e) => {
-                        //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
-                        //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
-                        //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
-                        // }}
-                        // onMouseLeave={(e) => {
-                        //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
-                        //   e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.5)`;
-                        //   e.currentTarget.style.color = `rgba(${mode.text.muted}, 1)`;
-                        // }}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          {avatarSrc ? (
-                            <Avatar className="h-9 w-9 ring-2 ring-violet-500/15 shrink-0">
-                              <AvatarImage src={avatarSrc} alt={displayName} />
-                              <AvatarFallback className="bg-gradient-to-br from-violet-600 to-purple-600 text-white text-xs font-bold">
-                                {avatarFallback}
-                              </AvatarFallback>
-                            </Avatar>
-                          ) : (
-                            <div className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center text-white text-sm font-bold ring-2 ring-violet-500/15">
-                              {avatarFallback}
-                            </div>
-                          )}
-                          <div className="hidden sm:flex flex-col items-start min-w-0 text-left">
-                            <span
-                              className={cn(
-                                "text-sm font-semibold leading-tight truncate max-w-[9rem] md:max-w-[11rem]",
-                                currentMode === "light"
-                                  ? "text-slate-900"
-                                  : "text-white",
-                              )}
-                              title={displayName}
-                            >
-                              {displayName}
-                            </span>
-                            {accountTypeLabel ? (
-                              <span
-                                className={cn(
-                                  "mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                                  currentMode === "light"
-                                    ? "bg-violet-100 text-violet-800"
-                                    : "bg-violet-500/20 text-violet-200 ring-1 ring-violet-400/30",
-                                )}
-                              >
-                                {accountTypeLabel}
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                      </Button>
-                    </SheetTrigger>
-
-                    {/* Profile Sidebar Content */}
-                    <SheetContent
-                      side="right"
-                      className={cn(
-                        "w-96 bg-white p-0 border-l",
-                        currentMode === "light" ? " bg-white" : "bg-[#06021D]"
-                      )}
-                      // style={{
-                      //   background:
-                      //     currentMode === "dark"
-                      //       ? `linear-gradient(135deg, rgba(${mode.background.primary}, 0.95), rgba(${mode.background.secondary}, 0.9), rgba(${mode.background.primary}, 0.95))`
-                      //       : `linear-gradient(135deg, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1))`,
-                      //   borderColor: `rgba(${theme.primary}, ${currentMode === "dark" ? "0.3" : "0.2"
-                      //     })`,
-                      // }}
-                    >
-                      {/* Premium Background Effects */}
-                      {/* <div
-                        className="absolute inset-0"
-                        style={{
-                          background: `radial-gradient(circle at 70% 30%, rgba(${theme.primary}, 0.1), transparent)`,
-                        }}
-                      ></div>
-                      <div
-                        className="absolute inset-0"
-                        style={{
-                          background: `radial-gradient(circle at 30% 70%, rgba(${theme.accent}, 0.08), transparent)`,
-                        }}
-                      ></div>
-                      <div
-                        className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"
-                        style={{
-                          opacity: currentMode === "dark" ? 1 : 0.3,
-                        }}
-                      ></div> */}
-
-                      <div className="relative h-full flex flex-col">
-                        {/* Header */}
-                        <SheetHeader
-                          className="p-6 border-b flex-shrink-0 text-left"
-                          style={{
-                            borderColor: `rgba(${theme.primary}, ${
-                              currentMode === "dark" ? "0.2" : "0.15"
-                            })`,
-                          }}
-                        >
-                          <div className="flex items-center gap-4">
-                            {avatarSrc ? (
-                              <Avatar
-                                className="h-16 w-16"
-                                style={{
-                                  border: `2px solid rgba(${theme.primary}, 0.3)`,
-                                }}
-                              >
-                                <AvatarImage
-                                  src={avatarSrc}
-                                  alt={displayName}
-                                />
-                                <AvatarFallback
-                                  className="text-white text-xl font-bold"
-                                  style={{
-                                    background: `linear-gradient(135deg, rgba(${theme.primary}, 1), rgba(${theme.primaryDark}, 1))`,
-                                  }}
-                                >
-                                  {avatarFallback}
-                                </AvatarFallback>
-                              </Avatar>
-                            ) : (
-                              <div
-                                className="w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold"
-                                style={{
-                                  background: `linear-gradient(135deg, rgba(${theme.primary}, 1), rgba(${theme.primaryDark}, 1))`,
-                                  border: `2px solid rgba(${theme.primary}, 0.3)`,
-                                }}
-                              >
-                                {avatarFallback}
-                              </div>
-                            )}
-                            <div className="flex-1 min-w-0 text-left">
-                              <SheetTitle
-                                className="text-lg text-start font-semibold truncate max-w-full"
-                                style={{
-                                  color: `rgba(${mode.text.primary}, 1)`,
-                                }}
-                                title={displayName}
-                              >
-                                {displayName}
-                              </SheetTitle>
-
-                              <div className="mt-1 flex justify-start">
-                                <span
-                                  className={cn(
-                                    "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide",
-                                    currentMode === "light"
-                                      ? "bg-violet-100 text-violet-800 ring-1 ring-violet-200/80"
-                                      : "bg-violet-500/20 text-violet-100 ring-1 ring-violet-400/35",
-                                  )}
-                                >
-                                  {userRole === "advertiser"
-                                    ? "Brand"
-                                    : userRole === "creator"
-                                      ? "Creator"
-                                      : "Admin"}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                          <SheetDescription className="sr-only">
-                            User profile and navigation menu
-                          </SheetDescription>
-                        </SheetHeader>
-
-                        {/* Scrollable Content */}
-                        <div className="flex-1 overflow-y-auto sidebar-scrollbar">
-                          <div className="px-6 py-3 flex gap-3 items-center ">
-                            <div
-                              className={cn(
-                                "flex rounded-full p-3 items-center",
-                                currentMode === "light"
-                                  ? "bg-[#D8C3FF] text-purple-600"
-                                  : "bg-[#FFFFFF42] text-white"
-                              )}
-                            >
-                              <Mail className="w-5 h-5" />
-                            </div>
-                            <p
-                              className="text-md truncate max-w-full"
-                              style={{
-                                color: `rgba(${mode.text.secondary}, 1)`,
-                              }}
-                              title={displayEmail}
-                            >
-                              {displayEmail}
-                            </p>
-                          </div>
-
-                          {/* Account Switcher  - Only for Creators */}
-                          {userRole === "creator" && (
-                            <div className="pl-2 py-4 border-y border-slate-100 dark:border-slate-800/50">
-                              <AccountSwitcher
-                                currentUserId={user?.id || ""}
-                                currentUsername={username}
-                                currentUserEmail={user?.email ?? null}
-                                currentUserJoinedAt={user?.created_at ?? null}
-                                isDark={currentMode === "dark"}
-                                userType={userRole}
-                              />
-                            </div>
-                          )}
-
-                          {/* Content - Unique Information Instead of Duplicate Navigation */}
-                          <div className="px-4 md:pl-4 md:pr-0 py-6 space-y-6">
-                            {/* Account Plan Section - Only for Advertisers */}
-                            {userRole === "advertiser" && (
-                              <div className="space-y-3">
-                                <h3
-                                  className="text-sm font-semibold uppercase tracking-wider"
-                                  style={{
-                                    color: `rgba(${mode.text.muted}, 1)`,
-                                  }}
-                                >
-                                  Current Plan
-                                </h3>
-
-                                <div
-                                  className="flex justify-between items-center border border-[#7F39EC] rounded-lg bg-[#D9C0FF26] px-4 py-3"
-                                  // style={{
-                                  //   background: `linear-gradient(135deg, rgba(${theme.primary}, 0.2), rgba(${theme.primaryDark}, 0.2))`,
-                                  //   borderColor: `rgba(${theme.primary}, 0.3)`,
-                                  // }}
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div
-                                      className={cn(
-                                        "flex rounded-full p-3 items-center mr-2.5",
-                                        currentMode === "light"
-                                          ? "bg-[#D8C3FF] text-purple-600"
-                                          : "bg-[#FFFFFF42] text-white"
-                                      )}
-                                      // style={{
-                                      //   backgroundColor: `rgba(${theme.primary}, 0.3)`,
-                                      // }}
-                                    >
-                                      <Trophy className="h-5 w-5" />
-                                    </div>
-                                    <div>
-                                      <div
-                                        className="font-semibold"
-                                        style={{
-                                          color: `rgba(${mode.text.primary}, 1)`,
-                                        }}
-                                      >
-                                        {currentPlan.name} Plan
-                                      </div>
-                                      <div
-                                        className={cn(
-                                          "text-xs",
-                                          currentMode === "light"
-                                            ? "text-gray-700"
-                                            : "text-white"
-                                        )}
-                                      >
-                                        {currentPlan.price === 0
-                                          ? "Basic features included"
-                                          : `$${(
-                                              currentPlan.price / 100
-                                            ).toFixed(2)}/month`}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  {currentPlan.name !== "CHAMPION" && (
-                                    <Link
-                                      href="/dashboard/billing?tab=subscription"
-                                      onClick={() =>
-                                        setProfileSidebarOpen(false)
-                                      }
-                                      className="bg-[#6C43D0] text-white text-xs px-3 py-2 rounded-xl transition"
-                                      // style={{
-                                      //   color: `rgba(${theme.primary}, 1)`,
-                                      // }}
-                                      // onMouseEnter={(e) => {
-                                      //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
-                                      // }}
-                                      // onMouseLeave={(e) => {
-                                      //   e.currentTarget.style.color = `rgba(${theme.primary}, 1)`;
-                                      // }}
-                                    >
-                                      Upgrade Plan
-                                      {/* <ChevronRight className="h-3 w-3" /> */}
-                                    </Link>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Quick Actions */}
-                            <div className="space-y-3">
-                              <h3
-                                className="text-sm font-semibold uppercase tracking-wider"
-                                style={{
-                                  color: `rgba(${mode.text.muted}, 1)`,
-                                }}
-                              >
-                                Quick Actions
-                              </h3>
-                              <div className="space-y-4">
-                                <Link
-                                  href="/dashboard/profile"
-                                  onClick={() => setProfileSidebarOpen(false)}
-                                  className="flex justify-between items-center border border-[#7F39EC] rounded-lg bg-[#D9C0FF26] px-4 py-3"
-                                  // style={{
-                                  //   backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
-                                  //   borderColor: `rgba(${theme.primary}, 0.2)`,
-                                  //   color: `rgba(${mode.text.secondary}, 1)`,
-                                  // }}
-                                  // onMouseEnter={(e) => {
-                                  //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
-                                  //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
-                                  //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
-                                  // }}
-                                  // onMouseLeave={(e) => {
-                                  //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
-                                  //   e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.3)`;
-                                  //   e.currentTarget.style.color = `rgba(${mode.text.secondary}, 1)`;
-                                  // }}
-                                >
-                                  <div
-                                    // className="w-8 h-8 rounded-lg flex items-center justify-center group-hover:opacity-80 transition-colors"
-                                    // style={{
-                                    //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
-                                    // }}
-
-                                    className={cn(
-                                      "flex rounded-full p-3 items-center mr-2.5",
-                                      currentMode === "light"
-                                        ? "bg-[#D8C3FF] text-purple-600"
-                                        : "bg-[#FFFFFF42] text-white"
-                                    )}
-                                  >
-                                    <User
-                                      className="h-5 w-5"
-                                      // style={{
-                                      //   color: `rgba(${theme.primary}, 1)`,
-                                      // }}
-                                    />
-                                  </div>
-                                  <div className="flex-1">
-                                    <div
-                                      className={cn(
-                                        "font-medium text-md",
-                                        currentMode === "light"
-                                          ? "text-black"
-                                          : "text-white"
-                                      )}
-                                    >
-                                     
-                                     Profile
-                                    </div>
-                                  </div>
-                                  <ChevronRight
-                                    className={cn(
-                                      "h-3 w-3 transition-all group-hover:translate-x-0.5",
-                                      currentMode === "light"
-                                        ? "text-purple-600"
-                                        : "text-white"
-                                    )}
-                                    // style={{
-                                    //   color: `rgba(${mode.text.muted}, 1)`,
-                                    // }}
-                                  />
-                                </Link>
-                                <button
-                                  onClick={() => {
-                                    setProfileSidebarOpen(false);
-                                    setSettingsPanelOpen(true);
-                                  }}
-                                  className="w-full flex justify-between items-center border border-[#7F39EC] rounded-lg bg-[#D9C0FF26] px-4 py-3"
-                                  // style={{
-                                  //   backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
-                                  //   borderColor: `rgba(${theme.primary}, 0.2)`,
-                                  //   color: `rgba(${mode.text.secondary}, 1)`,
-                                  // }}
-                                  // onMouseEnter={(e) => {
-                                  //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
-                                  //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
-                                  //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
-                                  // }}
-                                  // onMouseLeave={(e) => {
-                                  //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
-                                  //   e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.3)`;
-                                  //   e.currentTarget.style.color = `rgba(${mode.text.secondary}, 1)`;
-                                  // }}
-                                >
-                                  <div
-                                    className={cn(
-                                      "flex rounded-full p-3 items-center mr-2.5",
-                                      currentMode === "light"
-                                        ? "bg-[#D8C3FF] text-purple-600"
-                                        : "bg-[#FFFFFF42] text-white"
-                                    )}
-                                    // style={{
-                                    //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
-                                    // }}
-                                  >
-                                    <Settings
-                                      className="h-5 w-5"
-                                      // style={{
-                                      //   color: `rgba(${theme.primary}, 1)`,
-                                      // }}
-                                    />
-                                  </div>
-                                  <div className="flex-1 text-left">
-                                    <div
-                                      className={cn(
-                                        "font-medium text-md",
-                                        currentMode === "light"
-                                          ? "text-black"
-                                          : "text-white"
-                                      )}
-                                    >
-                                      Dashboard Customization
-                                    </div>
-                                  </div>
-                                  <ChevronRight
-                                    className={cn(
-                                      "h-3 w-3 transition-all group-hover:translate-x-0.5",
-                                      currentMode === "light"
-                                        ? "text-purple-600"
-                                        : "text-white"
-                                    )}
-                                    // style={{
-                                    //   color: `rgba(${mode.text.muted}, 1)`,
-                                    // }}
-                                  />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Account Status */}
-                            <div className="space-y-3">
-                              <h3
-                                className="text-sm font-semibold uppercase tracking-wider"
-                                style={{
-                                  color: `rgba(${mode.text.muted}, 1)`,
-                                }}
-                              >
-                                Account Status
-                              </h3>
-                              <div
-                                className="p-3 rounded-lg border"
-                                style={{
-                                  backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
-                                  borderColor: profileData.isActive
-                                    ? "rgba(34, 197, 94, 0.2)"
-                                    : "rgba(244, 63, 94, 0.2)",
-                                }}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <div
-                                    className="w-2 h-2 rounded-full"
-                                    style={{
-                                      backgroundColor: profileData.isActive
-                                        ? "rgba(11, 163, 67, 0.7)"
-                                        : "rgb(244, 63, 94)",
-                                    }}
-                                  ></div>
-                                  <span
-                                    className="text-md font-medium"
-                                    style={{
-                                      color: profileData.isActive
-                                        ? "rgba(11, 163, 67, 0.7)"
-                                        : "rgb(251, 113, 133)",
-                                    }}
-                                  >
-                                    {profileData.isActive
-                                      ? "Active"
-                                      : "Inactive"}
-                                  </span>
-                                </div>
-                                <p
-                                  className="text-sm mt-1"
-                                  style={{
-                                    color: profileData.isActive
-                                      ? "rgba(11, 163, 67, 0.7)"
-                                      : "rgba(244, 63, 94, 0.7)",
-                                  }}
-                                >
-                                  {profileData.isActive
-                                    ? "Your account is active and fully functional"
-                                    : "Your account is currently inactive"}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Footer - Sign Out */}
-                        <div
-                          className="p-6 border-t flex-shrink-0"
-                          style={{
-                            borderColor: `rgba(${theme.primary}, ${
-                              currentMode === "dark" ? "0.2" : "0.15"
-                            })`,
-                          }}
-                        >
-                          <Button
-                            type="button"
-                            onClick={handleSignOut}
-                            disabled={isSigningOut}
-                            aria-busy={isSigningOut}
-                            aria-label={
-                              isSigningOut
-                                ? "Signing out"
-                                : "Sign out, end your session"
-                            }
-                            variant="ghost"
-                            className="w-full border-[#E50000] bg-[#A8000014] hover:bg-[#A8000014] text-black justify-start gap-3 p-3 h-auto border transition-all duration-300 disabled:opacity-90 disabled:pointer-events-none"
-                            // style={{
-                            //   backgroundColor: "rgba(244, 63, 94, 0.2)",
-                            //   borderColor: "rgba(244, 63, 94, 0.2)",
-                            //   color: "rgb(251, 113, 133)",
-                            // }}
-                            // onMouseEnter={(e) => {
-                            //   e.currentTarget.style.borderColor =
-                            //     "rgba(244, 63, 94, 0.4)";
-                            //   e.currentTarget.style.backgroundColor =
-                            //     "rgba(244, 63, 94, 0.1)";
-                            //   e.currentTarget.style.color =
-                            //     "rgb(248, 113, 113)";
-                            // }}
-                            // onMouseLeave={(e) => {
-                            //   e.currentTarget.style.borderColor =
-                            //     "rgba(244, 63, 94, 0.2)";
-                            //   e.currentTarget.style.backgroundColor =
-                            //     "rgba(244, 63, 94, 0.2)";
-                            //   e.currentTarget.style.color =
-                            //     "rgb(251, 113, 133)";
-                            // }}
-                          >
-                            <div
-                              className="w-10 h-10 bg-[#FF323224] rounded-lg flex items-center justify-center shrink-0"
-                              // style={{
-                              //   backgroundColor: "rgba(244, 63, 94, 0.2)",
-                              // }}
-                            >
-                              {isSigningOut ? (
-                                <Loader2
-                                  className="h-5 w-5 animate-spin"
-                                  style={{ color: "rgb(244, 63, 94)" }}
-                                  aria-hidden
-                                />
-                              ) : (
-                                <LogOut
-                                  className="h-5 w-5"
-                                  style={{
-                                    color: "rgb(244, 63, 94)",
-                                  }}
-                                />
-                              )}
-                            </div>
-                            <div className="flex-1 text-left min-w-0">
-                              <div
-                                className={cn(
-                                  "text-md font-semibold",
-                                  currentMode === "light"
-                                    ? "text-black"
-                                    : "text-white"
-                                )}
-                              >
-                                {isSigningOut ? "Signing out…" : "Sign Out"}
-                              </div>
-                              <div
-                                className={cn(
-                                  "text-xs",
-                                  currentMode === "light"
-                                    ? "text-black"
-                                    : "text-white"
-                                )}
-
-                                // style={{
-                                //   color: "rgba(244, 63, 94, 0.8)",
-                                // }}
-                              >
-                                {isSigningOut
-                                  ? "Please wait"
-                                  : "End your session"}
-                              </div>
-                            </div>
-                          </Button>
-                        </div>
-                      </div>
-                    </SheetContent>
-                  </Sheet>
+                  <HeaderAccountMenu
+                    userRole={userRole}
+                    userName={displayName}
+                    userEmail={displayEmail}
+                    avatarUrl={avatarSrc}
+                    avatarFallback={avatarFallback}
+                    isDark={currentMode === "dark"}
+                    isSigningOut={isSigningOut}
+                    onSignOut={handleSignOut}
+                  />
                 </div>
               </div>
             </div>

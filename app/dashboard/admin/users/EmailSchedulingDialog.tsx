@@ -140,7 +140,7 @@ export function EmailSchedulingDialog({
               </div>
               <p className="text-sm text-gray-600">
                 Remaining:{" "}
-                <span className="font-semibold text-[#662EBD]">{remaining}</span>
+                <span className="font-semibold text-[#1a1a1a]">{remaining}</span>
               </p>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs text-gray-500">
@@ -248,7 +248,7 @@ export function EmailSchedulingDialog({
           <Button
             type="button"
             variant="outline"
-            className="w-full sm:w-auto border-[#662EBD] text-[#662EBD] hover:bg-purple-50 hover:text-[#662EBD]"
+            className="w-full sm:w-auto border-[#1a1a1a] text-[#1a1a1a] hover:bg-[#f6f6f7] hover:text-[#1a1a1a]"
             onClick={() => onOpenChange(false)}
           >
             Cancel
@@ -257,7 +257,7 @@ export function EmailSchedulingDialog({
             type="button"
             onClick={handleSave}
             disabled={submitting}
-            className="w-full sm:w-auto bg-[#662EBD] hover:bg-[#5524a8] text-white"
+            className="w-full sm:w-auto bg-[#1a1a1a] hover:bg-black text-white"
           >
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Settings

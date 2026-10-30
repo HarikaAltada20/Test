@@ -13,6 +13,7 @@ import {
 } from "@/utils/supabase/auth-server";
 import { ConditionalFooter } from "./conditional-footer";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import Script from "next/script";
 import { cookies } from "next/headers";
 import { MobileAuthBridge } from "@/components/MobileAuthBridge";
@@ -151,8 +152,18 @@ export default async function RootLayout({
             `,
           }}
         />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Poppins:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
       </head>
-      <body className={inter.className} suppressHydrationWarning>
+      <body className={`${inter.className} font-sans antialiased`} suppressHydrationWarning>
         <div className="relative flex min-h-screen flex-col">
           {/* Capture referral codes from landing links and store in localStorage */}
           <ReferralCapture />
@@ -169,6 +180,7 @@ export default async function RootLayout({
         <Toaster />
         <SonnerToaster />
         <Analytics />
+        <SpeedInsights />
         {process.env.NEXT_PUBLIC_CLARITY_ID ? (
           <Script id="ms-clarity" strategy="afterInteractive">
             {`

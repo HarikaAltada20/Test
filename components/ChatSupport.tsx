@@ -253,56 +253,74 @@ const ChatSupport: React.FC<ChatProps> = ({
 
   const headerTitle =
     view === "compose"
-      ? "Get Touch with Us!"
+      ? "Get in touch"
       : view === "inbox" && userType === "creator"
         ? "My conversations"
         : "Support chat";
+
+  const fieldClass = cn(
+    "w-full resize-none rounded-xl border px-4 py-3 text-base outline-none transition focus:ring-2 focus:ring-[#1a1a1a]/15",
+    isDark
+      ? "border-white/10 bg-white/5 text-white placeholder:text-white/35 focus:ring-white/20"
+      : "border-[#e6e6e8] bg-[#f6f6f7] text-[#1a1a1a] placeholder:text-[#8b8b93]",
+  );
+  const mutedClass = isDark ? "text-white/55" : "text-[#8b8b93]";
+  const communityButtonClass = cn(
+    "inline-flex h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors",
+    isDark
+      ? "border-white/15 text-white hover:bg-white/10"
+      : "border-[#e6e6e8] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
+  );
 
   const renderCreatorCommunityCta = () =>
     userType === "creator" ? (
       <div
         className={cn(
-          "mb-4 p-3 rounded-md border",
+          "mt-3 rounded-xl border p-3",
           isDark
-            ? "bg-[#C9A7FF26] border-[#C9A7FF]"
-            : "bg-purple-50 border-purple-500",
+            ? "border-white/10 bg-white/[0.04]"
+            : "border-[#e6e6e8] bg-[#f6f6f7]",
         )}
       >
-        <div className="flex items-start gap-2">
+        <div className="flex items-start gap-2.5">
           <div
             className={cn(
-              "p-1.5 rounded-full border",
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
               isDark
-                ? "bg-[#06021D] border-gray-500"
-                : "bg-white border-gray-300",
+                ? "bg-[rgb(var(--accent-rgb)/0.22)] text-[rgb(var(--accent-2-rgb))]"
+                : "bg-[rgb(var(--accent-rgb)/0.12)] text-[var(--violet-600)]",
             )}
           >
-            <MessageCircle
-              className={cn(
-                "h-4 w-4",
-                isDark ? "text-[#C9A7FF]" : "text-purple-600",
-              )}
-            />
+            <MessageCircle className="h-4 w-4" />
           </div>
-          <div className={cn("flex-1 text-sm", isDark ? "text-white" : "text-gray-700")}>
-            For quicker responses, join our active Game of creators discord and
-            WhatsApp communities.
-            <div className="mt-2 flex flex-wrap gap-2">
+          <div className="min-w-0 flex-1">
+            <p
+              className={cn(
+                "text-base leading-snug",
+                isDark ? "text-white/80" : "text-[#3a3a40]",
+              )}
+            >
+              For a faster reply, join the Game of Creators Discord and WhatsApp
+              communities.
+            </p>
+            <div className="mt-2.5 flex flex-wrap gap-2">
               <a
                 href={SOCIAL_LINKS.discord}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-purple-600 text-white hover:bg-purple-700 text-sm"
+                className={communityButtonClass}
               >
-                <ExternalLink className="h-4 w-4" /> Join Discord
+                <ExternalLink className="h-3.5 w-3.5" />
+                Discord
               </a>
               <a
                 href={SOCIAL_LINKS.whatsapp}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-[#25D366] text-white hover:bg-[#20BA5A] text-sm"
+                className={communityButtonClass}
               >
-                <ExternalLink className="h-4 w-4" /> Join WhatsApp
+                <ExternalLink className="h-3.5 w-3.5" />
+                WhatsApp
               </a>
             </div>
           </div>
@@ -311,32 +329,25 @@ const ChatSupport: React.FC<ChatProps> = ({
     ) : null;
 
   const renderCompose = () => (
-    <div className="flex-1 overflow-y-auto flex flex-col">
-      <h3 className="font-semibold mb-2 text-base sm:text-lg">Drop us a Query</h3>
-      <p
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <h3
         className={cn(
-          "text-sm sm:text-base mb-4",
-          isDark ? "text-slate-300" : "text-gray-600",
+          "text-lg font-semibold",
+          isDark ? "text-white" : "text-[#1a1a1a]",
         )}
       >
-        Fill in the details below and our team will get in touch with you within
-        24 hours.
+        Drop us a query
+      </h3>
+      <p className={cn("mb-4 mt-1.5 text-base leading-relaxed", mutedClass)}>
+        Tell us what you need. We usually reply within 24 hours.
       </p>
-
       <textarea
-        placeholder="Type your query here*"
+        placeholder="Type your query"
         value={composer}
         onChange={(e) => setComposer(e.target.value)}
-        className={cn(
-          "w-full border px-3 py-2 rounded mb-3 text-sm h-[200px] resize-none focus:outline-none focus:ring-1 focus:ring-purple-500",
-          isDark
-            ? "bg-[#06021D] border-gray-500 text-white"
-            : "bg-white border-gray-300",
-        )}
+        className={cn(fieldClass, "min-h-[150px] flex-1")}
       />
-
       {renderCreatorCommunityCta()}
-
     </div>
   );
 
@@ -344,7 +355,7 @@ const ChatSupport: React.FC<ChatProps> = ({
     <div className="flex-1 overflow-y-auto min-h-0">
       {fetching ? (
         <div className="flex justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
+          <Loader2 className="h-6 w-6 animate-spin text-[var(--violet-600)]" />
         </div>
       ) : threads.length === 0 ? (
         <p
@@ -356,7 +367,7 @@ const ChatSupport: React.FC<ChatProps> = ({
           No conversations yet.
         </p>
       ) : (
-        <ul>
+        <ul className="space-y-1.5">
           {threads.map((t) => (
             <li key={t.id}>
               <button
@@ -368,16 +379,14 @@ const ChatSupport: React.FC<ChatProps> = ({
                   setLoadingThread(true);
                 }}
                 className={cn(
-                  "w-full text-left px-1 py-3 border-b transition",
-                  isDark
-                    ? "border-slate-700 hover:bg-slate-800/50"
-                    : "border-gray-100 hover:bg-purple-50",
+                  "w-full rounded-xl px-3 py-2.5 text-left transition",
+                  isDark ? "hover:bg-white/5" : "hover:bg-[#f6f6f7]",
                 )}
               >
-                <p className="text-sm font-medium truncate">
+                <p className="truncate text-base font-medium">
                   {t.subject || "Support conversation"}
                 </p>
-                <p className="text-xs opacity-70 mt-0.5 capitalize">
+                <p className={cn("mt-0.5 text-sm capitalize", mutedClass)}>
                   {new Date(t.last_message_at).toLocaleString()} · {t.status}
                 </p>
               </button>
@@ -429,8 +438,10 @@ const ChatSupport: React.FC<ChatProps> = ({
       {activeThread?.status === "closed" && (
         <p
           className={cn(
-            "text-sm rounded-md px-3 py-2 mb-3 shrink-0",
-            isDark ? "bg-slate-800 text-slate-200" : "bg-amber-50 text-amber-900 border border-amber-200",
+            "mb-3 shrink-0 rounded-xl border px-3 py-2 text-sm",
+            isDark
+              ? "border-amber-400/30 bg-amber-400/10 text-amber-100"
+              : "border-amber-200 bg-amber-50 text-amber-900",
           )}
         >
           {CLOSED_THREAD_NOTICE}
@@ -462,14 +473,12 @@ const ChatSupport: React.FC<ChatProps> = ({
             >
               <div
                 className={cn(
-                  "max-w-[85%] rounded-lg px-3 py-2 text-sm",
+                  "max-w-[85%] rounded-2xl px-4 py-3 text-base",
                   isCustomerSupportMessage(m.sender_role)
-                    ? isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : "bg-purple-600 text-white"
+                    ? "bg-[var(--accent-btn-base)] text-white"
                     : isDark
-                      ? "bg-slate-800 text-slate-100"
-                      : "bg-gray-100 text-gray-900",
+                      ? "bg-white/10 text-white"
+                      : "bg-[#f3f3f5] text-[#1a1a1a]",
                 )}
               >
                 {!isCustomerSupportMessage(m.sender_role) && (
@@ -489,15 +498,10 @@ const ChatSupport: React.FC<ChatProps> = ({
       )}
       {activeThread?.status !== "closed" && (
         <textarea
-          placeholder="Type your reply..."
+          placeholder="Type your reply"
           value={composer}
           onChange={(e) => setComposer(e.target.value)}
-          className={cn(
-            "w-full border px-3 py-2 rounded mt-3 text-sm h-[100px] resize-none shrink-0 focus:outline-none focus:ring-1 focus:ring-purple-500",
-            isDark
-              ? "bg-[#06021D] border-gray-500 text-white"
-              : "bg-white border-gray-300",
-          )}
+          className={cn(fieldClass, "mt-3 h-[160px] shrink-0")}
         />
       )}
     </div>
@@ -509,53 +513,73 @@ const ChatSupport: React.FC<ChatProps> = ({
 
   return (
     <div
-      className={cn(
-        "fixed inset-0 bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
-        isDark ? "bg-[#100A33]" : "bg-black",
-      )}
+      className="fixed inset-0 z-50 bg-black/45"
       onClick={onClose}
       role="presentation"
     >
       <div
         className={cn(
-          "fixed right-2 sm:right-6 bottom-20 w-[calc(100vw-1rem)] max-w-[380px] sm:w-[380px] max-h-[85vh] shadow-2xl rounded-lg z-50 flex flex-col overflow-hidden",
-          isDark ? "bg-[#06021D]" : "bg-white",
+          "fixed bottom-6 right-2 z-50 flex h-[min(720px,78vh)] w-[calc(100vw-1rem)] max-w-[460px] flex-col overflow-hidden rounded-2xl border shadow-xl sm:right-6 sm:w-[460px]",
+          isDark
+            ? "border-white/10 bg-[#161616] text-white"
+            : "border-[#e6e6e8] bg-white text-[#1a1a1a]",
         )}
         onClick={(e) => e.stopPropagation()}
       >
         <div
           className={cn(
-            "text-white rounded-t-lg p-4 sm:p-6 flex justify-between items-start shrink-0",
-            isDark ? "bg-[#7F39EC]" : "bg-purple-500",
+            "flex shrink-0 items-center gap-2 border-b px-4 py-3.5",
+            isDark ? "border-white/10" : "border-[#eeeef0]",
           )}
         >
-          <div className="flex items-center gap-2 min-w-0">
-            {view !== "compose" && supportChatEnabled && (
-              <button
-                type="button"
-                onClick={handleBack}
-                className="text-white hover:text-gray-200 shrink-0"
-                aria-label="Back"
-              >
-                <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-            )}
-            <h2 className="text-base sm:text-xl truncate">{headerTitle}</h2>
+          {view !== "compose" && supportChatEnabled ? (
+            <button
+              type="button"
+              onClick={handleBack}
+              className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                isDark ? "hover:bg-white/10" : "hover:bg-[#f6f6f7]",
+              )}
+              aria-label="Back"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          ) : (
+            <div
+              className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                isDark
+                  ? "bg-[rgb(var(--accent-rgb)/0.22)] text-[rgb(var(--accent-2-rgb))]"
+                  : "bg-[rgb(var(--accent-rgb)/0.12)] text-[var(--violet-600)]",
+              )}
+            >
+              <MessageCircle className="h-4 w-4" />
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-lg font-semibold">{headerTitle}</h2>
+            {view === "compose" ? (
+              <p className={cn("truncate text-sm", mutedClass)}>
+                We are here to help
+              </p>
+            ) : null}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-white hover:text-gray-200 shrink-0 ml-2"
+            className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+              isDark ? "hover:bg-white/10" : "hover:bg-[#f6f6f7]",
+            )}
+            aria-label="Close"
           >
-            <X className="w-4 h-4 sm:w-5 sm:h-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="p-4 sm:p-5 flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
           {!supportChatEnabled ? (
-            <p className={cn("text-sm", isDark ? "text-slate-300" : "text-gray-600")}>
-              {SUPPORT_DISABLED_MESSAGE}
-            </p>
+            <p className={cn("text-sm", mutedClass)}>{SUPPORT_DISABLED_MESSAGE}</p>
           ) : (
             <>
               {view === "compose" && renderCompose()}
@@ -567,18 +591,13 @@ const ChatSupport: React.FC<ChatProps> = ({
                   type="button"
                   onClick={handleSend}
                   disabled={loading}
-                  className={cn(
-                    "w-full py-3 mt-2 rounded-full font-semibold text-white shrink-0",
-                    isDark
-                      ? "bg-[#7F39EC] hover:bg-[#6B2FD4]"
-                      : "bg-gradient-to-r from-[#7F39EC] to-[#B16FF4]",
-                  )}
+                  className="goc-btn-primary mt-4 h-12 w-full shrink-0 rounded-full text-base font-semibold disabled:opacity-60"
                 >
                   {loading
-                    ? "Submitting..."
+                    ? "Sending..."
                     : view === "thread"
-                      ? "SEND"
-                      : "SUBMIT"}
+                      ? "Send"
+                      : "Submit"}
                 </button>
               )}
             </>

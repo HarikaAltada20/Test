@@ -11,8 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, Star, Users } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Check, Loader2, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ManualPointsModalProps {
@@ -151,10 +150,17 @@ export default function ManualPointsModal({
   };
 
   const getManualTextColor = (value: number) => {
-    if (value > 0) return "text-emerald-400";
-    if (value < 0) return "text-rose-400";
-    return isDark ? "text-white" : "text-slate-900";
+    if (value > 0) return "text-[#16a34a]";
+    if (value < 0) return "text-[#dc2626]";
+    return isDark ? "text-white" : "text-[#1a1a1a]";
   };
+
+  const trimmedCreator = creatorName?.trim();
+  const creatorLabel = !trimmedCreator
+    ? "this creator"
+    : trimmedCreator.startsWith("@") || trimmedCreator.includes(" ")
+      ? trimmedCreator
+      : `@${trimmedCreator}`;
 
   const basePointsValue = basePoints ?? 0;
   const manualPointsValue = manualPoints ?? 0;
@@ -168,6 +174,11 @@ export default function ManualPointsModal({
       ? currentPoints
       : computedTotalPoints;
   const totalManualPointsValue = manualPointsValue;
+  const pointsNum = parseInt(points, 10);
+  const hasAdjustment = points.trim() !== "" && !isNaN(pointsNum);
+  const nextTotal = hasAdjustment
+    ? totalPointsValue + pointsNum
+    : totalPointsValue;
 
   const statCards = [
     {
@@ -186,7 +197,7 @@ export default function ManualPointsModal({
       isManual: true,
     },
     {
-      label: "Creator Manual Points Adjustment",
+      label: "Creator adj.",
       value: creatorAdjustmentValue,
       isManual: true,
     },
@@ -196,66 +207,74 @@ export default function ManualPointsModal({
     <Dialog open={isOpen} onOpenChange={handleClose} isdark={isDark}>
       <DialogContent
         className={cn(
-          "max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto",
-          isDark ? "text-white" : "text-gray-800"
+          "w-[min(540px,95vw)] gap-5 overflow-y-auto rounded-2xl p-5 sm:max-w-[540px] sm:p-6",
+          isDark
+            ? "border-white/10 bg-[#161616] text-white"
+            : "border-[#ececef] bg-white text-[#1a1a1a]",
         )}
       >
-        <DialogHeader className="space-y-3">
-          <div className="flex items-center gap-3">
+        <DialogHeader className="space-y-0 pr-6">
+          <div className="flex items-start gap-3">
             <div
               className={cn(
-                "p-2 rounded-full",
-                isDark ? "bg-purple-900/50" : "bg-purple-100"
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+                isDark ? "bg-white/10 text-white" : "bg-[#f3f3f5] text-[#1a1a1a]",
               )}
             >
-              {isLeaderboard ? (
-                <Users className="h-5 w-5 text-purple-600" />
-              ) : (
-                <Star className="h-5 w-5 text-purple-600" />
-              )}
+              <SlidersHorizontal className="h-4 w-4" />
             </div>
-            <div>
-              <DialogTitle className="text-xl font-semibold">
-                {isLeaderboard
-                  ? "Adjust Creator Points"
-                  : "Adjust Tweet Points"}
+            <div className="min-w-0">
+              <DialogTitle
+                className={cn(
+                  "text-base font-semibold leading-tight",
+                  isDark ? "text-white" : "text-[#1a1a1a]",
+                )}
+              >
+                {isLeaderboard ? "Adjust Creator Points" : "Adjust Tweet Points"}
               </DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground mt-1">
+              <DialogDescription
+                className={cn(
+                  "mt-1 text-[13px] leading-snug",
+                  isDark ? "text-slate-400" : "text-[#737373]",
+                )}
+              >
                 {isLeaderboard
-                  ? `Adjust points for all tweets by ${
-                      creatorName || "this creator"
-                    }. This will affect their total leaderboard score.`
-                  : "Manually adjust points for this specific tweet. Provide a reason for the adjustment."}
+                  ? `Adjust points for all tweets by ${creatorLabel}. Changes are recorded for audit.`
+                  : trimmedCreator
+                    ? `Adjust points for this tweet by ${creatorLabel}. Changes are recorded for audit.`
+                    : "Adjust points for this tweet. Changes are recorded for audit."}
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="space-y-6 py-6 px-1">
-          {/* Points Summary Cards */}
+        <div className="space-y-4">
           {isLeaderboard ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {statCards.map((card) => (
                 <div
                   key={card.label}
                   className={cn(
-                    "rounded-2xl border px-4 py-3 shadow-sm",
-                    isDark
-                      ? "border-slate-800 bg-slate-900"
-                      : "border-slate-200 bg-white"
+                    "rounded-xl px-3 py-2.5",
+                    isDark ? "bg-white/5" : "bg-[#f6f6f7]",
                   )}
                 >
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <p
+                    className={cn(
+                      "text-[12px]",
+                      isDark ? "text-slate-400" : "text-[#737373]",
+                    )}
+                  >
                     {card.label}
                   </p>
                   <p
                     className={cn(
-                      "mt-1 text-2xl font-semibold",
+                      "mt-1 text-[15px] font-semibold tabular-nums leading-none",
                       card.isManual
                         ? getManualTextColor(card.value)
                         : isDark
-                        ? "text-white"
-                        : "text-slate-900"
+                          ? "text-white"
+                          : "text-[#1a1a1a]",
                     )}
                   >
                     {card.isManual
@@ -268,19 +287,22 @@ export default function ManualPointsModal({
           ) : (
             <div
               className={cn(
-                "rounded-2xl border px-4 py-3 shadow-sm max-w-sm",
-                isDark
-                  ? "border-slate-800 bg-slate-900"
-                  : "border-slate-200 bg-white"
+                "w-fit min-w-[120px] rounded-xl px-3 py-2.5",
+                isDark ? "bg-white/5" : "bg-[#f6f6f7]",
               )}
             >
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <p
+                className={cn(
+                  "text-[12px]",
+                  isDark ? "text-slate-400" : "text-[#737373]",
+                )}
+              >
                 Total Points
               </p>
               <p
                 className={cn(
-                  "mt-1 text-2xl font-semibold",
-                  isDark ? "text-white" : "text-slate-900"
+                  "mt-1 text-[15px] font-semibold tabular-nums leading-none",
+                  isDark ? "text-white" : "text-[#1a1a1a]",
                 )}
               >
                 {formatValue(totalPointsValue)}
@@ -288,152 +310,123 @@ export default function ManualPointsModal({
             </div>
           )}
 
-          {/* Points Adjustment Input */}
-          <div className="space-y-3">
-            <Label htmlFor="points-input" className="text-sm font-medium">
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="points-input"
+              className={cn(
+                "text-sm font-semibold",
+                isDark ? "text-white" : "text-[#1a1a1a]",
+              )}
+            >
               Points Adjustment *
             </Label>
             <div className="relative">
               <Input
                 id="points-input"
-                type="number"
-                placeholder={
-                  isLeaderboard ? "e.g., +50 or -20" : "e.g., +10 or -5"
-                }
+                type="text"
+                inputMode="numeric"
+                placeholder="0"
                 value={points}
                 onChange={(e) => setPoints(e.target.value)}
-           
-                className={cn("pr-12",
+                className={cn(
+                  "h-11 rounded-xl border pr-36 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0",
                   isDark
-                    ? "bg-[#06021d] border border-gray-600 text-white"
-                    : "bg-white text-gray-900"
+                    ? "border-white/20 bg-[#161616] text-white"
+                    : "border-[#1a1a1a] bg-white text-[#1a1a1a]",
                 )}
               />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                points
-              </div>
+              {hasAdjustment && (
+                <div
+                  className={cn(
+                    "pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm tabular-nums",
+                    isDark ? "text-slate-400" : "text-[#737373]",
+                  )}
+                >
+                  {formatValue(totalPointsValue)} →{" "}
+                  {nextTotal < 0
+                    ? `-${formatValue(nextTotal)}`
+                    : formatValue(nextTotal)}
+                </div>
+              )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Enter a positive number to add points, or a negative number to
-              subtract points.
+            <p className={cn("text-xs", isDark ? "text-slate-400" : "text-[#737373]")}>
+              Use a minus sign to subtract, for example -20.
             </p>
-            {points && !isNaN(parseInt(points, 10)) && (
-              <div
-                className={cn(
-                  "p-2 rounded text-sm",
-                  parseInt(points, 10) > 0
-                    ? isDark
-                      ? "bg-green-900/20 text-green-400"
-                      : "bg-green-50 text-green-700"
-                    : isDark
-                    ? "bg-red-900/20 text-red-400"
-                    : "bg-red-50 text-red-700"
-                )}
-              >
-                {parseInt(points, 10) > 0 ? "+" : ""}
-                {parseInt(points, 10)} points will be{" "}
-                {parseInt(points, 10) > 0 ? "added" : "subtracted"}
-              </div>
-            )}
           </div>
 
-          {/* Reason Input */}
-          <div className="space-y-3">
-            <Label htmlFor="reason-textarea" className="text-sm font-medium">
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="reason-textarea"
+              className={cn(
+                "text-sm font-semibold",
+                isDark ? "text-white" : "text-[#1a1a1a]",
+              )}
+            >
               Reason for Adjustment *
             </Label>
             <div className="relative">
               <Textarea
                 id="reason-textarea"
-                placeholder="Please provide a detailed reason for this points adjustment. This will be recorded for audit purposes..."
+                placeholder="Explain why these points are changing."
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 rows={4}
-                className="resize-none pr-12"
                 maxLength={500}
+                className={cn(
+                  "min-h-[112px] resize-none rounded-xl pb-7 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0",
+                  isDark
+                    ? "border-white/15 bg-[#161616] text-white placeholder:text-slate-500"
+                    : "border-[#e5e5e5] bg-white text-[#1a1a1a] placeholder:text-[#a3a3a3]",
+                )}
               />
-              <div className="absolute bottom-2 right-2 text-xs text-muted-foreground">
+              <div
+                className={cn(
+                  "absolute bottom-2.5 right-3 text-xs tabular-nums",
+                  isDark ? "text-slate-500" : "text-[#a3a3a3]",
+                )}
+              >
                 {reason.length}/500
               </div>
             </div>
             {getValidationMessage() && (
-              <Alert
-                className={cn(
-                  isDark
-                    ? "border-red-800 bg-red-900/20"
-                    : "border-red-200 bg-red-50"
-                )}
-              >
-                <AlertDescription
-                  className={cn(isDark ? "text-red-400" : "text-red-800")}
-                >
-                  {getValidationMessage()}
-                </AlertDescription>
-              </Alert>
+              <p className="text-xs text-[#dc2626]">{getValidationMessage()}</p>
             )}
           </div>
-
-          {/* Info Alert */}
-          <Alert
-            className={cn(
-              isDark
-                ? "bg-[#7F39EC17] border-[#7F39EC17]"
-                : "border-purple-200 bg-purple-50"
-            )}
-          >
-            <AlertDescription
-              className={cn(isDark ? "text-purple-300" : "text-purple-800")}
-            >
-              <span className="font-medium">Note:</span>{" "}
-              {isLeaderboard
-                ? "This adjustment will be applied to the creator's total leaderboard score and will affect their ranking."
-                : "This adjustment will be added to the tweet's calculated points. The reason will be visible in the submission details."}
-            </AlertDescription>
-          </Alert>
-          {isLeaderboard && (
-            <p className={cn("text-sm text-muted-foreground mt-2 px-1")}>
-              Creator manual point adjustments are now cumulative, ensuring new
-              points are added to the existing total without overriding previous
-              values.
-            </p>
-          )}
         </div>
 
-        <DialogFooter className="gap-3 pt-6 border-t mt-6">
-          <button
-            onClick={handleConfirm}
-            disabled={isConfirmDisabled() || isLoading}
-            className={cn(
-              "w-full text-md rounded-full flex-1 sm:flex-none",
-              isDark
-                ? "bg-[#7F39EC] py-3 text-white"
-                : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
-            )}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin inline" />
-                Adjusting...
-              </>
-            ) : (
-              <>
-                <Star className="h-4 w-4 mr-2 inline" />
-                Confirm Adjustment
-              </>
-            )}
-          </button>
-          <button
+        <DialogFooter className="flex-row justify-end gap-2 sm:space-x-0">
+          <Button
+            type="button"
+            variant="outline"
             onClick={handleClose}
             disabled={isLoading}
             className={cn(
-              "w-full text-md rounded-full flex-1 sm:flex-none",
+              "h-10 rounded-full px-4 text-sm font-medium shadow-none",
               isDark
-                ? "py-3 border border-[#FF5353] text-[#FF5353]"
-                : "bg-[#FF323224] text-[#E50000] py-4"
+                ? "border-white/15 bg-transparent text-white hover:bg-white/10"
+                : "border-[#e5e5e5] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7]",
             )}
           >
             Cancel
-          </button>
+          </Button>
+          <Button
+            type="button"
+            onClick={handleConfirm}
+            disabled={isConfirmDisabled() || isLoading}
+            className={cn(
+              "h-10 rounded-full px-4 text-sm font-medium shadow-none",
+              isDark
+                ? "bg-white text-[#1a1a1a] hover:bg-[#f3f3f5]"
+                : "bg-[#1a1a1a] text-white hover:bg-black",
+            )}
+          >
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="h-4 w-4" />
+            )}
+            {isLoading ? "Applying..." : "Apply adjustment"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

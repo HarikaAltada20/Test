@@ -628,7 +628,7 @@ export function SequenceTab({
                           size="sm"
                           variant="outline"
                           onClick={handleAddStep}
-                          className="w-full flex items-center gap-2 text-[#8B5CF6] border-[#8B5CF6]/50 hover:bg-purple-50 h-9"
+                          className="w-full flex items-center gap-2 text-[#8B5CF6] border-[#8B5CF6]/50 hover:bg-[#f6f6f7] h-9"
                         >
                           <Plus className="w-4 h-4" />
                           Add Step

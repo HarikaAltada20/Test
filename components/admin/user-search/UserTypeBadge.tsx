@@ -18,8 +18,8 @@ export function UserTypeBadge({
           ? "bg-sky-900/40 text-sky-300"
           : "bg-sky-50 text-sky-700"
         : isDark
-          ? "bg-[#2a1760] text-[#d6c6ff]"
-          : "bg-[#efe8fb] text-[#4A00BE]";
+          ? "bg-white/10 text-white"
+          : "bg-[#f3f3f5] text-[#1a1a1a]";
   return (
     <span
       className={cn(

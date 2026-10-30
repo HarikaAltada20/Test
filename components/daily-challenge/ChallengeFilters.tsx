@@ -8,92 +8,67 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import {
-  type Scope,
-  type UiLeaderboardPeriod,
-} from "./utils";
+import { type Scope } from "./utils";
 
 type Option<T extends string> = { value: T; label: string };
 
-type ChallengeFiltersProps = {
+type ScopeControlProps = {
   isDark: boolean;
-  leaderboardPeriod: UiLeaderboardPeriod;
   scope: Scope;
-  periodOptions: Option<UiLeaderboardPeriod>[];
   scopeOptions: Option<Scope>[];
-  onPeriodChange: (value: UiLeaderboardPeriod) => void;
   onScopeChange: (value: Scope) => void;
+  className?: string;
 };
 
-export function ChallengeFilters({
+export function ScopeControl({
   isDark,
-  leaderboardPeriod,
   scope,
-  periodOptions,
   scopeOptions,
-  onPeriodChange,
   onScopeChange,
-}: ChallengeFiltersProps) {
+  className,
+}: ScopeControlProps) {
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-4 border-y px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between",
-        isDark ? "border-white/10 bg-white/[0.025]" : "border-slate-200 bg-slate-50/60",
-      )}
+    <Select
+      value={scope}
+      onValueChange={(value) => onScopeChange(value as Scope)}
     >
-      <div className="min-w-0">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Competition window
-        </p>
-        <div
-          className="flex max-w-full items-center gap-1 overflow-x-auto pb-1"
-          role="tablist"
-          aria-label="Competition window"
-        >
-          {periodOptions.map((option) => {
-            const active = leaderboardPeriod === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => onPeriodChange(option.value)}
-                className={cn(
-                  "shrink-0 rounded-md px-3.5 py-2 text-sm font-semibold transition-colors",
-                  active
-                    ? "bg-violet-600 text-white shadow-sm"
-                    : isDark
-                      ? "text-slate-300 hover:bg-white/5 hover:text-white"
-                      : "text-slate-600 hover:bg-white hover:text-slate-950",
-                )}
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="flex items-end gap-3 lg:justify-end">
-        <div className="w-full space-y-1.5 sm:w-[210px]">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Submission status
-          </p>
-          <Select value={scope} onValueChange={(v) => onScopeChange(v as Scope)}>
-            <SelectTrigger isDark={isDark} className="h-9 bg-background text-sm">
-              <SelectValue placeholder="Select status" />
-            </SelectTrigger>
-            <SelectContent isDark={isDark}>
-              {scopeOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value} isDark={isDark}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-    </div>
+      <SelectTrigger
+        isDark={isDark}
+        aria-label="Counting"
+        className={cn(
+          "h-auto w-[156px] min-w-[156px] justify-start gap-2 rounded-xl px-3 py-2 text-left shadow-sm [&>span]:line-clamp-none [&>span]:whitespace-normal [&>svg]:h-4 [&>svg]:w-4 [&>svg]:text-[#292524] [&>svg]:opacity-100",
+          isDark
+            ? "border-white/10 bg-[#1a1a1a] text-white"
+            : "border-[#e7e5e4] bg-white text-[#171717]",
+          className,
+        )}
+      >
+        <span className="flex min-w-0 flex-col items-start leading-tight">
+          <span
+            className={cn(
+              "text-xs font-semibold",
+              isDark ? "text-neutral-200" : "text-[#292524]",
+            )}
+          >
+            Counting
+          </span>
+          <span
+            className={cn(
+              "text-base font-semibold",
+              isDark ? "text-white" : "text-[#171717]",
+            )}
+          >
+            <SelectValue />
+          </span>
+        </span>
+      </SelectTrigger>
+      <SelectContent isDark={isDark} className="min-w-[160px]">
+        {scopeOptions.map((option) => (
+          <SelectItem key={option.value} value={option.value} isDark={isDark}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

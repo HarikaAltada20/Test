@@ -354,7 +354,7 @@ export const ReviewPlayer = forwardRef<ReviewPlayerHandle, ReviewPlayerProps>(
         />
       </>
     ) : (
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-900 to-slate-800" />
+      <div className="absolute inset-0 bg-[#111113]" />
     );
 
     if (!live) {
@@ -376,7 +376,7 @@ export const ReviewPlayer = forwardRef<ReviewPlayerHandle, ReviewPlayerProps>(
             </div>
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/65 px-6 text-center text-white backdrop-blur-sm">
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-white/10">
                 <Instagram className="h-6 w-6" />
               </span>
               <p className="text-sm font-semibold">This reel can&apos;t play inside Game of Creators</p>

@@ -299,8 +299,8 @@ export function AdminEmailView({
     return (
       <Card
         className={cn(
-          "rounded-xl shadow",
-          isDark ? "bg-[#170337]" : "bg-white",
+          "rounded-2xl border shadow-[0_8px_28px_-18px_rgba(26,26,26,0.28)]",
+          isDark ? "border-white/10 bg-[#161616]" : "border-[#ececef] bg-white",
         )}
       >
         <CardContent className="p-6">

@@ -95,7 +95,7 @@ export default function AffiliateTransactionsPage() {
       <Card
         className={cn(
           "shadow-md hover:shadow-lg transition-shadow duration-200",
-          isDark ? "bg-[#170337]" : "bg-white border-gray-200"
+          isDark ? "bg-[#161616]" : "bg-white border-gray-200"
         )}
       >
         <CardHeader>

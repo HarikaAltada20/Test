@@ -48,6 +48,7 @@ import type {
 const HINT_STORAGE_KEY = "goviral_review_mode_hint_dismissed_v2";
 const AUTO_ADVANCE_STORAGE_KEY = "goviral_review_mode_auto_advance";
 const SPEED_STORAGE_KEY = "goviral_review_mode_speed";
+const COMPARE_DRAFT_STORAGE_KEY = "goviral_review_mode_compare_draft";
 const PLAYBACK_RATES = [1, 1.25, 1.5, 2] as const;
 /** Give up waiting for a status change (e.g. quality dialog cancelled). */
 const AWAIT_TIMEOUT_MS = 5 * 60 * 1000;
@@ -85,6 +86,8 @@ export type ReviewModeProps = {
   /** Review Mode is always dark; kept so callers don't need to special-case it. */
   isDark: boolean;
   onExit: () => void;
+  /** Leaves Review Mode and opens a draft's history in the Drafts tab. */
+  onOpenDraft?: (draftId: string) => void;
 };
 
 type SessionStats = { approved: number; rejected: number };
@@ -100,6 +103,8 @@ export function ReviewMode(props: ReviewModeProps) {
   const [muted, setMuted] = useState(false);
   const [autoAdvance, setAutoAdvance] = useState(true);
   const [playbackRate, setPlaybackRate] = useState<number>(1);
+  // Show the approved draft next to clips that were posted from one.
+  const [compareDraft, setCompareDraft] = useState(true);
   const [stats, setStats] = useState<SessionStats>({ approved: 0, rejected: 0 });
   const baseQueueRef = useRef(queueIds);
 
@@ -113,6 +118,7 @@ export function ReviewMode(props: ReviewModeProps) {
     if (activation && !activation.hasBeenActive) setMuted(true);
     try {
       setAutoAdvance(localStorage.getItem(AUTO_ADVANCE_STORAGE_KEY) !== "false");
+      setCompareDraft(localStorage.getItem(COMPARE_DRAFT_STORAGE_KEY) !== "false");
       const savedRate = Number(localStorage.getItem(SPEED_STORAGE_KEY));
       if ((PLAYBACK_RATES as readonly number[]).includes(savedRate)) {
         setPlaybackRate(savedRate);
@@ -169,6 +175,13 @@ export function ReviewMode(props: ReviewModeProps) {
     } catch (_) {}
   };
 
+  const setCompareDraftPersisted = (value: boolean) => {
+    setCompareDraft(value);
+    try {
+      localStorage.setItem(COMPARE_DRAFT_STORAGE_KEY, String(value));
+    } catch (_) {}
+  };
+
   if (!mounted) return null;
 
   return createPortal(
@@ -181,6 +194,8 @@ export function ReviewMode(props: ReviewModeProps) {
       onMutedChange={setMuted}
       playbackRate={playbackRate}
       onPlaybackRateChange={setPlaybackRatePersisted}
+      compareDraft={compareDraft}
+      onCompareDraftChange={setCompareDraftPersisted}
       autoAdvance={autoAdvance}
       onAutoAdvanceChange={setAutoAdvancePersisted}
       unreviewedOnly={unreviewedOnly}
@@ -210,6 +225,8 @@ type ReviewSessionProps = ReviewModeProps & {
   onMutedChange: (muted: boolean) => void;
   playbackRate: number;
   onPlaybackRateChange: (rate: number) => void;
+  compareDraft: boolean;
+  onCompareDraftChange: (value: boolean) => void;
   autoAdvance: boolean;
   onAutoAdvanceChange: (value: boolean) => void;
   unreviewedOnly: boolean;
@@ -224,10 +241,12 @@ function NeighbourCard({
   label,
   submission,
   onClick,
+  isDark = false,
 }: {
   label: string;
   submission: ReviewSubmission | undefined;
   onClick: () => void;
+  isDark?: boolean;
 }) {
   const [thumbFailed, setThumbFailed] = useState(false);
   const thumb = submission?.videoThumbnailUrl;
@@ -241,10 +260,15 @@ function NeighbourCard({
       className="group flex w-[92px] flex-col gap-1 text-left"
       title={`${label}: ${handle ?? "submission"}`}
     >
-      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+      <span className={cn("text-[10px] font-bold uppercase tracking-wider", isDark ? "text-slate-500" : "text-slate-500")}>
         {label}
       </span>
-      <span className="relative block h-[132px] w-[92px] overflow-hidden rounded-xl bg-slate-800 ring-1 ring-white/10 transition-all group-hover:ring-violet-400/60">
+      <span className={cn(
+        "relative block h-[132px] w-[92px] overflow-hidden rounded-xl transition-all shadow-xs group-hover:ring-2",
+        isDark
+          ? "bg-[#161616] ring-1 ring-white/10 group-hover:ring-white/40"
+          : "bg-white border border-slate-200/90 shadow-sm group-hover:ring-slate-300",
+      )}>
         {thumb && !thumbFailed ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -252,15 +276,18 @@ function NeighbourCard({
             alt=""
             referrerPolicy="no-referrer"
             onError={() => setThumbFailed(true)}
-            className="h-full w-full object-cover opacity-50 blur-[1px] transition-opacity group-hover:opacity-80"
+            className="h-full w-full object-cover opacity-75 blur-[0.5px] transition-all group-hover:opacity-100 group-hover:blur-none group-hover:scale-105"
             decoding="async"
           />
         ) : (
-          <span className="block h-full w-full bg-gradient-to-br from-slate-800 to-slate-900" />
+          <span className={cn("block h-full w-full", isDark ? "bg-[#161616]" : "bg-gradient-to-br from-slate-100 to-slate-200")} />
         )}
       </span>
       {handle && (
-        <span className="truncate text-[11px] text-slate-400 group-hover:text-white">
+        <span className={cn(
+          "truncate text-[11px] font-medium transition-colors",
+          isDark ? "text-slate-400 group-hover:text-white" : "text-slate-600 group-hover:text-slate-900",
+        )}>
           @{handle.replace(/^@/, "")}
         </span>
       )}
@@ -269,6 +296,7 @@ function NeighbourCard({
 }
 
 function ReviewSession({
+  isDark,
   queue,
   startId,
   campaignTitle,
@@ -298,6 +326,9 @@ function ReviewSession({
   onMutedChange,
   playbackRate,
   onPlaybackRateChange,
+  compareDraft,
+  onCompareDraftChange,
+  onOpenDraft,
   autoAdvance,
   onAutoAdvanceChange,
   unreviewedOnly,
@@ -516,6 +547,9 @@ function ReviewSession({
       ? getReviewOpenUrl(activePlatform, activeSubmission.contentLink, activeIsVertical)
       : null;
 
+  const activeDraft = activeSubmission?.draft ?? null;
+  const toggleCompareDraft = () => onCompareDraftChange(!compareDraft);
+
   useReviewKeyboard({
     next,
     prev,
@@ -541,6 +575,7 @@ function ReviewSession({
     openOriginal: () => {
       if (activeOpenUrl) window.open(activeOpenUrl, "_blank", "noopener,noreferrer");
     },
+    toggleCompare: activeDraft ? toggleCompareDraft : undefined,
     exit: () => {
       if (rejectPickerOpen) setRejectPickerOpen(false);
       else onExit();
@@ -577,14 +612,27 @@ function ReviewSession({
   const progress = queue.length > 0 ? (position / queue.length) * 100 : 0;
   const settingsControls = (
     <>
-      <label className="flex items-center gap-2 text-xs font-medium text-slate-200">
-        <Switch checked={autoAdvance} onCheckedChange={onAutoAdvanceChange} />
+      <label className={cn("flex items-center gap-2 text-xs font-semibold cursor-pointer", isDark ? "text-neutral-200" : "text-slate-700")}>
+        <Switch
+          checked={autoAdvance}
+          onCheckedChange={onAutoAdvanceChange}
+          className={
+            isDark
+              ? "data-[state=checked]:bg-white data-[state=unchecked]:bg-white/15 [&>span]:data-[state=checked]:bg-[#0a0a0a]"
+              : undefined
+          }
+        />
         Auto-advance
       </label>
-      <label className="flex items-center gap-2 text-xs font-medium text-slate-200">
+      <label className={cn("flex items-center gap-2 text-xs font-semibold cursor-pointer", isDark ? "text-neutral-200" : "text-slate-700")}>
         <Switch
           checked={unreviewedOnly}
           onCheckedChange={(v) => onUnreviewedOnlyChange(v, activeId)}
+          className={
+            isDark
+              ? "data-[state=checked]:bg-white data-[state=unchecked]:bg-white/15 [&>span]:data-[state=checked]:bg-[#0a0a0a]"
+              : undefined
+          }
         />
         Unreviewed only
       </label>
@@ -593,7 +641,12 @@ function ReviewSession({
           size="sm"
           variant="outline"
           onClick={() => onFocusSelection(false, activeId)}
-          className="h-8 border-slate-700 bg-transparent text-slate-200 hover:bg-white/10 hover:text-white"
+          className={cn(
+            "h-8 border",
+            isDark
+              ? "border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white"
+              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs font-medium",
+          )}
         >
           Show all
         </Button>
@@ -603,8 +656,10 @@ function ReviewSession({
         size="sm"
         onClick={cycleSpeed}
         className={cn(
-          "h-8 gap-1 px-2 tabular-nums hover:bg-white/10 hover:text-white",
-          playbackRate !== 1 ? "text-violet-300" : "text-slate-200",
+          "h-8 gap-1 px-2 tabular-nums font-semibold transition-colors",
+          isDark
+            ? cn("hover:bg-white/10 hover:text-white", playbackRate !== 1 ? "text-white" : "text-neutral-200")
+            : cn("hover:bg-slate-100 hover:text-slate-900", playbackRate !== 1 ? "text-violet-600 font-bold" : "text-slate-700"),
         )}
         title="Playback speed (< / >). Applies to YouTube and direct videos."
       >
@@ -622,51 +677,105 @@ function ReviewSession({
 
   return (
     <div
-      className="fixed inset-0 z-[45] flex flex-col bg-slate-950 text-white"
+      className={cn(
+        "fixed inset-0 z-[45] flex flex-col",
+        isDark ? "bg-[#0a0a0a] text-white" : "bg-[#f8f9fa] text-slate-900",
+      )}
       role="region"
       aria-label="Review Mode"
     >
-      <header className="relative border-b border-slate-800">
-        <div className="flex items-center gap-2 px-2 py-1.5 sm:gap-x-4 sm:px-3 sm:py-2 lg:px-5">
+      <header
+        className={cn(
+          "relative border-b",
+          isDark
+            ? "border-white/10 bg-[#0a0a0a] text-white"
+            : "border-slate-200 bg-white text-slate-900",
+        )}
+      >
+        <div className="flex items-center gap-2 px-2 py-1.5 sm:gap-x-4 sm:px-3 sm:py-2.5 lg:px-5">
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             onClick={onExit}
             aria-label="Exit Review Mode"
-            className="shrink-0 gap-1.5 px-2 text-slate-200 hover:bg-white/10 hover:text-white sm:px-3"
+            className={cn(
+              "shrink-0 gap-1.5 px-3 rounded-lg border text-sm font-semibold transition-colors",
+              isDark
+                ? "border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+            )}
           >
             <X className="h-4 w-4" />
             <span className="hidden sm:inline">Exit</span>
           </Button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">
+            <p className="truncate text-sm font-bold">
               <span className="hidden sm:inline">Review Mode · </span>
               {campaignTitle}
             </p>
             {contextLabel && (
-              <p className="hidden truncate text-xs text-slate-400 sm:block">{contextLabel}</p>
+              <p
+                className={cn(
+                  "hidden truncate text-xs sm:block",
+                  isDark ? "text-slate-400" : "text-slate-500",
+                )}
+              >
+                {contextLabel}
+              </p>
             )}
           </div>
 
-          <div className="hidden items-center gap-3 text-xs font-semibold tabular-nums md:flex">
-            <span className="flex items-center gap-1 text-emerald-400" title="Approved this session">
+          <div className="hidden items-center gap-2.5 text-xs font-semibold tabular-nums md:flex">
+            <span
+              className={cn(
+                "flex items-center gap-1 rounded-full px-2.5 py-0.5 border text-xs font-semibold",
+                isDark
+                  ? "border-emerald-800/60 bg-emerald-950/40 text-emerald-300"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700",
+              )}
+              title="Approved this session"
+            >
               <Check className="h-3.5 w-3.5" />
-              {stats.approved}
+              {stats.approved} approved
             </span>
-            <span className="flex items-center gap-1 text-red-400" title="Rejected this session">
+            <span
+              className={cn(
+                "flex items-center gap-1 rounded-full px-2.5 py-0.5 border text-xs font-semibold",
+                isDark
+                  ? "border-rose-800/60 bg-rose-950/40 text-rose-300"
+                  : "border-rose-200 bg-rose-50 text-rose-700",
+              )}
+              title="Rejected this session"
+            >
               <X className="h-3.5 w-3.5" />
-              {stats.rejected}
+              {stats.rejected} rejected
             </span>
-            <span className="text-slate-400" title="Pending in this queue">
+            <span
+              className={cn(
+                "px-1 text-xs font-medium",
+                isDark ? "text-slate-400" : "text-slate-500",
+              )}
+              title="Pending in this queue"
+            >
               {pendingLeft} pending
             </span>
           </div>
 
           <div className="flex shrink-0 items-center gap-2 text-xs font-semibold tabular-nums sm:text-sm">
-            {queue.length > 0 ? `${position} / ${queue.length}` : "0 / 0"}
-            <div className="hidden h-1.5 w-28 overflow-hidden rounded-full bg-slate-800 sm:block">
+            <span className={isDark ? "text-white" : "text-slate-800 font-bold"}>
+              {queue.length > 0 ? `${position} / ${queue.length}` : "0 / 0"}
+            </span>
+            <div
+              className={cn(
+                "hidden h-2 w-28 overflow-hidden rounded-full sm:block",
+                isDark ? "bg-white/15" : "bg-slate-200",
+              )}
+            >
               <div
-                className="h-full rounded-full bg-violet-500 transition-[width] duration-300"
+                className={cn(
+                  "h-full rounded-full transition-[width] duration-300",
+                  isDark ? "bg-white" : "bg-[#0a0a0a]",
+                )}
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -681,10 +790,10 @@ function ReviewSession({
             aria-label="Review settings"
             aria-expanded={settingsOpen}
             className={cn(
-              "h-8 w-8 shrink-0 hover:bg-white/10 hover:text-white lg:hidden",
-              settingsOpen || autoAdvance || unreviewedOnly || playbackRate !== 1
-                ? "text-violet-300"
-                : "text-slate-200",
+              "h-8 w-8 shrink-0 lg:hidden transition-colors",
+              isDark
+                ? cn("hover:bg-white/10 hover:text-white", settingsOpen || autoAdvance || unreviewedOnly || playbackRate !== 1 ? "text-white" : "text-neutral-200")
+                : cn("hover:bg-slate-100 hover:text-slate-900", settingsOpen || autoAdvance || unreviewedOnly || playbackRate !== 1 ? "text-violet-600" : "text-slate-700"),
             )}
           >
             <SlidersHorizontal className="h-4 w-4" />
@@ -695,32 +804,38 @@ function ReviewSession({
             onClick={toggleMute}
             aria-label={muted ? "Unmute" : "Mute"}
             title={muted ? "Unmute (M)" : "Mute (M)"}
-            className="h-8 w-8 shrink-0 text-slate-200 hover:bg-white/10 hover:text-white sm:h-10 sm:w-10"
+            className={cn(
+              "h-8 w-8 shrink-0 sm:h-10 sm:w-10 transition-colors",
+              isDark ? "text-slate-200 hover:bg-white/10 hover:text-white" : "text-slate-700 hover:bg-slate-100 hover:text-slate-900",
+            )}
           >
             {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
           </Button>
         </div>
 
         {settingsOpen && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-800 px-3 py-2 lg:hidden">
+          <div className={cn(
+            "flex flex-wrap items-center gap-x-4 gap-y-2 border-t px-3 py-2 lg:hidden",
+            isDark ? "border-white/10 bg-[#0a0a0a]" : "border-slate-200 bg-slate-50",
+          )}>
             {settingsControls}
             <div className="flex items-center gap-3 text-xs font-semibold tabular-nums md:hidden">
-              <span className="flex items-center gap-1 text-emerald-400">
+              <span className={isDark ? "flex items-center gap-1 text-emerald-400" : "flex items-center gap-1 text-emerald-700 font-bold"}>
                 <Check className="h-3.5 w-3.5" />
                 {stats.approved}
               </span>
-              <span className="flex items-center gap-1 text-red-400">
+              <span className={isDark ? "flex items-center gap-1 text-red-400" : "flex items-center gap-1 text-rose-700 font-bold"}>
                 <X className="h-3.5 w-3.5" />
                 {stats.rejected}
               </span>
-              <span className="text-slate-400">{pendingLeft} pending</span>
+              <span className={isDark ? "text-slate-400" : "text-slate-600 font-medium"}>{pendingLeft} pending</span>
             </div>
           </div>
         )}
 
         <div className="h-0.5 bg-slate-800 sm:hidden">
           <div
-            className="h-full bg-violet-500 transition-[width] duration-300"
+            className="h-full bg-white transition-[width] duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -733,6 +848,7 @@ function ReviewSession({
         canDownload={canDownload}
         downloading={downloading}
         isFocusedOnSelection={focusedOnSelection}
+        isDark={isDark}
         onModerate={onBulkModerate}
         onDownload={onDownloadSelected}
         onReviewOnlySelected={() => onFocusSelection(true, activeId)}
@@ -741,7 +857,10 @@ function ReviewSession({
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div
-          className="relative min-h-0 flex-1 bg-neutral-950"
+          className={cn(
+            "relative min-h-0 flex-1",
+            isDark ? "bg-black" : "bg-[#f4f4f5]",
+          )}
           onMouseMove={pokeOverlays}
         >
           <div
@@ -763,15 +882,19 @@ function ReviewSession({
                   playbackRate={playbackRate}
                   canSeeCore={canSeeCore}
                   overlaysVisible={overlaysVisible}
+                  isDark={isDark}
                   onWheelForward={forwardWheel}
                   onWatchedChange={distance === 0 ? setWatchedPercent : undefined}
                   onDurationChange={distance === 0 ? setPlayerDuration : undefined}
+                  compareDraft={
+                    distance === 0 && compareDraft ? (submission?.draft ?? null) : null
+                  }
                 />
               );
             })}
             <div className="flex h-full w-full snap-start snap-always items-center justify-center p-6">
-              <div className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900 p-6 text-center text-white shadow-2xl">
-                <PartyPopper className="mx-auto mb-3 h-10 w-10 text-violet-400" />
+              <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#161616] p-6 text-center text-white shadow-2xl">
+                <PartyPopper className="mx-auto mb-3 h-10 w-10 text-white" />
                 <h2 className="text-lg font-bold">You reached the end</h2>
                 <p className="mt-1 text-sm text-slate-400">
                   Reviewed {visitedRef.current.size} of {queue.length} clips
@@ -785,8 +908,8 @@ function ReviewSession({
                     <p className="text-xl font-bold text-red-400">{stats.rejected}</p>
                     <p className="text-xs text-slate-400">rejected</p>
                   </div>
-                  <div className="rounded-xl bg-violet-500/10 p-3">
-                    <p className="text-xl font-bold text-violet-300">{selectedCount}</p>
+                  <div className="rounded-xl bg-white/10 p-3">
+                    <p className="text-xl font-bold text-white">{selectedCount}</p>
                     <p className="text-xs text-slate-400">selected</p>
                   </div>
                 </div>
@@ -798,7 +921,12 @@ function ReviewSession({
                   >
                     Back to start
                   </Button>
-                  <Button onClick={onExit}>Exit Review Mode</Button>
+                  <Button
+                    className="bg-white text-[#0a0a0a] hover:bg-white/90"
+                    onClick={onExit}
+                  >
+                    Exit Review Mode
+                  </Button>
                 </div>
               </div>
             </div>
@@ -810,32 +938,44 @@ function ReviewSession({
             </div>
           )}
 
-          {!isSummary && queue.length > 0 && activeIsVertical && (
+          {!isSummary && queue.length > 0 && activeIsVertical && !(compareDraft && activeDraft) && (
             <div className="pointer-events-none absolute inset-y-0 left-6 z-40 hidden flex-col justify-center gap-6 xl:flex">
               <div className="pointer-events-auto">
-                <NeighbourCard label="Previous" submission={prevSubmission} onClick={prev} />
+                <NeighbourCard label="Previous" submission={prevSubmission} onClick={prev} isDark={isDark} />
               </div>
               <div className="pointer-events-auto">
-                <NeighbourCard label="Up next" submission={nextSubmission} onClick={next} />
+                <NeighbourCard label="Up next" submission={nextSubmission} onClick={next} isDark={isDark} />
               </div>
             </div>
           )}
 
           {hintVisible && (
-            <div className="absolute inset-x-0 top-3 z-50 hidden justify-center px-4 lg:flex [@media(pointer:coarse)]:hidden">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-full bg-black/75 px-4 py-2 text-xs text-white shadow-lg backdrop-blur">
-                <Keyboard className="h-4 w-4 text-violet-300" />
+            <div className="absolute inset-x-0 bottom-4 z-50 flex justify-center px-4 [@media(pointer:coarse)]:hidden">
+              <div
+                className={cn(
+                  "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-full border px-4 py-2 text-xs font-medium shadow-md backdrop-blur",
+                  isDark
+                    ? "border-white/10 bg-black/80 text-white"
+                    : "border-slate-200 bg-white/95 text-slate-700",
+                )}
+              >
+                <Keyboard className={cn("h-4 w-4", isDark ? "text-white" : "text-slate-500")} />
                 <span>↑ ↓ browse</span>
-                <span>Click / Space play</span>
+                <span>Space play</span>
                 <span>M mute</span>
-                <span>&lt; &gt; speed</span>
                 <span>S select</span>
+                <span>D draft</span>
                 {canBulkModerate && <span>A approve · R reject · P pending</span>}
                 <span>Esc exit</span>
                 <button
                   type="button"
                   onClick={dismissHint}
-                  className="ml-1 rounded-full px-2 py-0.5 font-semibold text-violet-300 hover:bg-white/10"
+                  className={cn(
+                    "ml-1 rounded-full px-2 py-0.5 font-bold transition-colors",
+                    isDark
+                      ? "text-white hover:bg-white/10"
+                      : "text-slate-900 hover:bg-slate-100",
+                  )}
                 >
                   Got it
                 </button>
@@ -847,6 +987,7 @@ function ReviewSession({
 
         {activeSubmission && activeId && (
           <ReviewSidePanel
+            isDark={isDark}
             submission={activeSubmission}
             metrics={getMetrics(activeId)}
             reward={getReward(activeId)}
@@ -869,6 +1010,9 @@ function ReviewSession({
             onPickReason={rejectWithReason}
             onCustomReason={() => moderateActive("reject")}
             onCancelReject={() => setRejectPickerOpen(false)}
+            compareDraftOn={compareDraft}
+            onToggleCompareDraft={toggleCompareDraft}
+            onOpenDraft={onOpenDraft}
           />
         )}
       </div>

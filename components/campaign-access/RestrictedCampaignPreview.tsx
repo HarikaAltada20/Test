@@ -8,6 +8,7 @@ import {
   CircleCheck,
   ClipboardList,
   Clock,
+  Crown,
   Hourglass,
   Info,
   Loader2,
@@ -47,6 +48,7 @@ import { useDashboardDark } from "@/hooks/use-dashboard-dark";
 import { cn } from "@/lib/utils";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { resolveCampaignPrizeCents } from "@/lib/campaign-prize";
+import { isHighestPlatformPayoutOnly } from "@/lib/highest-platform-payout";
 import {
   ANSWER_MAX_LENGTH,
   APPLICATION_RESULT_MESSAGES,
@@ -71,12 +73,23 @@ type Props = {
   onChanged: () => void;
   /** Brand-side preview from the campaign editor: nothing is sent or saved. */
   previewMode?: boolean;
+  accent?: "purple" | "ink";
 };
 
-const fieldClass = "dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500";
-const outlineDark = "dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
+const fieldClass =
+  "h-11 rounded-2xl border-[#e6e6ea] bg-white text-[15px] shadow-[inset_0_1px_0_rgba(26,26,26,0.02)] dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500 dark:shadow-none";
+const outlineDark =
+  "rounded-full border-[#d5d5db] bg-white text-[#1a1a1a] hover:bg-[#f6f6f7] dark:border-white/15 dark:bg-transparent dark:text-gray-200 dark:hover:bg-white/10";
 const cardClass =
-  "rounded-2xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-[#170337]";
+  "rounded-[28px] border border-[#ececef] bg-white p-6 sm:p-8 lg:p-10 dark:border-white/10 dark:bg-[#161616]";
+const btnRow =
+  "inline-flex !h-10 !w-auto shrink-0 items-center justify-center !gap-1.5 rounded-full px-5 text-[15px] font-medium";
+/** Neutral accents — avoid creator-role orange CSS vars on this surface. */
+const inkAccent = "text-[#1a1a1a] dark:text-white";
+const inkSoft = "bg-[#f3f3f5] text-[#1a1a1a] dark:bg-white/10 dark:text-white";
+const inkBar = "bg-[#1a1a1a] dark:bg-white";
+const radioItemClass = "border-[#1a1a1a] text-[#1a1a1a] dark:border-white dark:text-white";
+const radioIndicatorClass = "text-[#1a1a1a] dark:text-white";
 
 const HOW_IT_WORKS: { icon: typeof Send; title: string; text: string }[] = [
   { icon: Send, title: "Apply", text: "Answer the brand's questions." },
@@ -140,7 +153,7 @@ function QuestionField({
     .join(" ") || undefined;
 
   const label = (
-    <Label htmlFor={id} className="font-medium text-gray-900 dark:text-gray-100">
+    <Label htmlFor={id} className="text-[15px] font-semibold text-[#1a1a1a] dark:text-gray-100">
       {question.prompt}
       {question.required ? (
         <>
@@ -151,7 +164,7 @@ function QuestionField({
           <span className="sr-only"> (required)</span>
         </>
       ) : (
-        <span className="text-xs font-normal text-gray-400 dark:text-gray-500"> (optional)</span>
+        <span className="text-xs font-normal text-[#8d8d95] dark:text-gray-500"> (optional)</span>
       )}
     </Label>
   );
@@ -164,7 +177,10 @@ function QuestionField({
           id={id}
           rows={4}
           maxLength={max}
-          className={cn(fieldClass, error && "border-red-500 dark:border-red-500")}
+          className={cn(
+            "min-h-[120px] rounded-2xl border-[#e6e6ea] bg-white text-[15px] shadow-[inset_0_1px_0_rgba(26,26,26,0.02)] dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder:text-gray-500 dark:shadow-none",
+            error && "border-red-500 dark:border-red-500",
+          )}
           required={question.required}
           aria-invalid={!!error}
           aria-describedby={describedBy}
@@ -195,15 +211,20 @@ function QuestionField({
           aria-label={question.prompt}
           aria-invalid={!!error}
           aria-describedby={error ? errorId : undefined}
-          className="gap-2"
+          className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-2"
         >
           {options.map((o, i) => (
             <label
               key={o.value}
-              className="flex cursor-pointer items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 has-[[data-state=checked]]:border-[#7F39EC] has-[[data-state=checked]]:bg-purple-50/60 dark:border-white/10 dark:text-gray-200 dark:has-[[data-state=checked]]:bg-[#7F39EC]/15"
+              className="flex w-fit cursor-pointer items-center gap-2 text-sm text-[#1a1a1a] dark:text-gray-200"
             >
-              <RadioGroupItem id={`${id}-${i}`} value={o.value} />
-              {o.label}
+              <RadioGroupItem
+                id={`${id}-${i}`}
+                value={o.value}
+                className={radioItemClass}
+                indicatorClassName={radioIndicatorClass}
+              />
+              <span className="leading-snug">{o.label}</span>
             </label>
           ))}
         </RadioGroup>
@@ -273,24 +294,52 @@ function StatusBox({
   children?: ReactNode;
 }) {
   const tones = {
-    amber: "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100",
-    red: "border-red-200 bg-red-50 text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100",
-    gray: "border-gray-200 bg-gray-50 text-gray-800 dark:border-white/10 dark:bg-white/5 dark:text-gray-100",
-    green: "border-green-200 bg-green-50 text-green-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100",
+    amber: {
+      box: "border-amber-200/80 bg-amber-50 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-50",
+      bar: "bg-amber-500",
+      icon: "text-amber-600 dark:text-amber-300",
+    },
+    red: {
+      box: "border-red-200/80 bg-red-50 text-red-950 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-50",
+      bar: "bg-red-500",
+      icon: "text-red-600 dark:text-red-300",
+    },
+    gray: {
+      box: "border-[#ececef] bg-[#fafafa] text-[#1a1a1a] dark:border-white/10 dark:bg-white/5 dark:text-gray-100",
+      bar: "bg-[#a1a1aa]",
+      icon: "text-[#55555E] dark:text-gray-300",
+    },
+    green: {
+      box: "border-emerald-200/80 bg-emerald-50 text-emerald-950 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-50",
+      bar: "bg-emerald-500",
+      icon: "text-emerald-600 dark:text-emerald-300",
+    },
   };
+  const t = tones[tone];
   return (
-    <div role="status" className={cn("rounded-2xl border p-5", tones[tone])}>
-      <p className="flex items-center gap-2 font-semibold">
-        <Icon className="h-5 w-5 shrink-0" aria-hidden="true" /> {title}
+    <div role="status" className={cn("relative overflow-hidden rounded-3xl border p-5 sm:p-6", t.box)}>
+      <div className={cn("absolute inset-y-0 left-0 w-1", t.bar)} aria-hidden="true" />
+      <p className="flex items-center gap-2 pl-2 text-[17px] font-semibold tracking-tight">
+        <Icon className={cn("h-5 w-5 shrink-0", t.icon)} aria-hidden="true" /> {title}
       </p>
-      {children && <div className="mt-2 space-y-3 text-sm opacity-90">{children}</div>}
+      {children && <div className="mt-3 space-y-3 pl-2 text-sm opacity-90">{children}</div>}
     </div>
   );
 }
 
-export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: Props) {
+export function RestrictedCampaignPreview({ preview, onChanged, previewMode, accent: _accent = "purple" }: Props) {
   const router = useRouter();
   const isDark = useDashboardDark();
+  // Keep CTAs ink/neutral so creator-role orange tokens don't flood this page.
+  void _accent;
+  const primaryBtn = cn(
+    btnRow,
+    "bg-[#1a1a1a] text-white hover:bg-black dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-white/90",
+  );
+  const accentIcon = inkAccent;
+  const accentChip = inkSoft;
+  const accentBar = inkBar;
+  const secondaryBtn = cn(btnRow, outlineDark);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Set<string>>(new Set());
@@ -447,26 +496,28 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
           We&apos;ll notify you when the brand decides. Sent{" "}
           <RelativeTime value={justSubmittedAt} />.
         </p>
-        <Button size="sm" variant="outline" className={outlineDark} onClick={browse}>
+        <Button size="sm" variant="outline" className={secondaryBtn} onClick={browse}>
           Browse other campaigns
         </Button>
       </StatusBox>
     ) : (
       <StatusBox tone="amber" icon={Clock} title="Application under review">
-        <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <li className="flex items-center gap-1.5">
-            <CircleCheck className="h-4 w-4" aria-hidden="true" />
+        <ol className="grid gap-2 sm:grid-cols-2">
+          <li className="flex items-center gap-2 rounded-xl border border-amber-200/70 bg-white/70 px-3 py-2 dark:border-amber-500/20 dark:bg-black/20">
+            <CircleCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
             <RelativeTime value={app.created_at} prefix="Applied" />
           </li>
-          <li aria-hidden="true">·</li>
-          <li className="flex items-center gap-1.5">
-            <Hourglass className="h-4 w-4" aria-hidden="true" /> Under review
+          <li className="flex items-center gap-2 rounded-xl border border-amber-200/70 bg-white/70 px-3 py-2 dark:border-amber-500/20 dark:bg-black/20">
+            <Hourglass className="h-4 w-4 text-amber-600 dark:text-amber-300" aria-hidden="true" /> Under review
           </li>
         </ol>
         <p>You&apos;ll get a notification when the brand decides.</p>
         <button
           type="button"
-          className="rounded-sm text-sm font-medium underline underline-offset-4 opacity-80 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7F39EC]"
+          className={cn(
+            "rounded-sm text-sm font-medium underline underline-offset-4 opacity-80 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2",
+            "focus-visible:ring-[#1a1a1a] dark:focus-visible:ring-white",
+          )}
           disabled={busy}
           onClick={() => setConfirmWithdraw(true)}
         >
@@ -484,7 +535,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
         ) : (
           <p>The brand didn&apos;t give a reason.</p>
         )}
-        <Button size="sm" variant="outline" className={outlineDark} onClick={browse}>
+        <Button size="sm" variant="outline" className={secondaryBtn} onClick={browse}>
           Find similar campaigns
         </Button>
       </StatusBox>
@@ -502,7 +553,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
     statusBox = (
       <StatusBox tone="green" icon={CircleCheck} title="You're approved!">
         <p>You can now see the full brief and submit your content.</p>
-        <Button className="bg-[#7F39EC] text-white hover:bg-[#7F39EC]/90" onClick={onChanged}>
+        <Button className={primaryBtn} onClick={onChanged}>
           Open the campaign
         </Button>
       </StatusBox>
@@ -511,7 +562,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
     statusBox = (
       <StatusBox tone="gray" icon={CalendarDays} title="This campaign has ended">
         <p>Applications are closed.</p>
-        <Button size="sm" variant="outline" className={outlineDark} onClick={browse}>
+        <Button size="sm" variant="outline" className={secondaryBtn} onClick={browse}>
           Browse open campaigns
         </Button>
       </StatusBox>
@@ -525,7 +576,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {!previewMode && <NotifyWhenReopenButton contestId={preview.id} />}
-          <Button size="sm" variant="outline" className={outlineDark} onClick={browse}>
+          <Button size="sm" variant="outline" className={secondaryBtn} onClick={browse}>
             Browse open campaigns
           </Button>
         </div>
@@ -537,13 +588,19 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
   if (prizeCents > 0) facts.push({ icon: Trophy, text: formatCurrencyFromCents(prizeCents), strong: true });
   if (start || end) facts.push({ icon: CalendarDays, text: `${start ?? "?"} – ${end ?? "?"}` });
   if (preview.platform) facts.push({ icon: Sparkles, text: <span className="capitalize">{preview.platform}</span> });
+  if (isHighestPlatformPayoutOnly(preview)) facts.push({ icon: Crown, text: "Paid for your best platform only" });
   if (daysLeft !== null)
     facts.push({ icon: Hourglass, text: `${daysLeft} day${daysLeft === 1 ? "" : "s"} left to apply` });
 
   return (
-    <div className={cn("mx-auto max-w-3xl space-y-6 px-0 py-4 sm:px-4 sm:py-8", isDark && "dark")}>
-      <div className="overflow-hidden rounded-2xl border border-purple-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#170337]">
-        <div className="relative flex h-56 items-center justify-center bg-gradient-to-br from-[#7F39EC]/20 to-[#4A00BE]/30 sm:h-72">
+    <div className={cn("mx-auto w-full max-w-7xl space-y-8 px-0 py-2 sm:py-6", isDark && "dark")}>
+      <div
+        className={cn(
+          "overflow-hidden rounded-[28px] border bg-white shadow-[0_12px_40px_-28px_rgba(26,26,26,0.35)] dark:bg-[#161616] dark:shadow-none",
+          "border-[#ececef] dark:border-white/10",
+        )}
+      >
+        <div className="relative aspect-[21/9] min-h-[160px] w-full bg-[#f3f3f5] dark:bg-[#0e0e0e] sm:min-h-[220px]">
           {preview.thumbnail_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -552,20 +609,27 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
               className="absolute inset-0 h-full w-full object-cover"
             />
           ) : (
-            <Trophy className="h-14 w-14 text-white/60" aria-hidden="true" />
+            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#ececef] to-[#d9d9de] dark:from-[#1a1a1a] dark:to-[#2a2a2e]">
+              <Trophy className="h-14 w-14 text-[#a1a1aa] dark:text-white/35" aria-hidden="true" />
+            </div>
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-          <div className="absolute inset-x-0 bottom-0 space-y-2 p-5 sm:p-6">
+        </div>
+        <div className="space-y-5 p-6 sm:p-8 lg:p-10">
+          <div className="space-y-3">
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    className="inline-flex w-fit items-center gap-1.5 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a1a1a]/30"
                     aria-label="Restricted, apply to join. The brand reviews applications; you'll see the full brief once approved."
                   >
-                    <AccessModeBadge mode="restricted" label="Restricted · apply to join" />
-                    <Info className="h-4 w-4 text-white/80" aria-hidden="true" />
+                    <AccessModeBadge
+                      mode="restricted"
+                      label="Restricted · apply to join"
+                      className="border-[#ececef] bg-[#f3f3f5] text-[#1a1a1a] dark:border-white/15 dark:bg-white/10 dark:text-white"
+                    />
+                    <Info className="h-4 w-4 text-[#8d8d95]" aria-hidden="true" />
                   </button>
                 </TooltipTrigger>
                 <TooltipPortal>
@@ -575,49 +639,54 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
                 </TooltipPortal>
               </Tooltip>
             </TooltipProvider>
-            <h1 className="text-2xl font-bold text-white drop-shadow sm:text-3xl">
+            <h1 className="max-w-4xl text-[28px] font-bold leading-tight tracking-tight text-[#1a1a1a] dark:text-white sm:text-[36px]">
               {preview.title || "Untitled campaign"}
             </h1>
-            {preview.brand_name && <p className="text-sm text-white/85">by {preview.brand_name}</p>}
+            {preview.brand_name && (
+              <p className="text-[15px] text-[#55555E] dark:text-gray-300">by {preview.brand_name}</p>
+            )}
           </div>
-        </div>
-        <div className="space-y-4 p-5 sm:p-6">
           {facts.length > 0 && (
-            <ul className="flex flex-wrap gap-2">
+            <ul className="flex flex-wrap gap-2.5">
               {facts.map((f, i) => (
                 <li
                   key={i}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1 text-sm text-gray-700 dark:border-white/10 dark:text-gray-200",
-                    f.strong && "font-semibold text-gray-900 dark:text-white",
+                    "inline-flex w-fit items-center gap-1.5 rounded-full border border-[#ececef] bg-[#fafafa] px-3.5 py-1.5 text-sm text-[#55555E] dark:border-white/10 dark:bg-white/5 dark:text-gray-200",
+                    f.strong && "font-semibold text-[#1a1a1a] dark:text-white",
                   )}
                 >
-                  <f.icon className="h-4 w-4 text-[#7F39EC] dark:text-purple-300" aria-hidden="true" />
+                  <f.icon className={cn("h-4 w-4", accentIcon)} aria-hidden="true" />
                   {f.text}
                 </li>
               ))}
             </ul>
           )}
           {preview.preview_description && (
-            <p className="whitespace-pre-wrap text-sm leading-6 text-gray-700 dark:text-gray-300">
+            <p className="max-w-4xl whitespace-pre-wrap text-[15px] leading-7 text-[#55555E] dark:text-gray-300">
               {preview.preview_description}
             </p>
           )}
         </div>
       </div>
 
-      <section aria-labelledby="how-it-works" className="space-y-3">
-        <h2 id="how-it-works" className="text-sm font-semibold text-gray-900 dark:text-white">
+      <section aria-labelledby="how-it-works" className="space-y-4">
+        <h2 id="how-it-works" className="text-[17px] font-semibold tracking-tight text-[#1a1a1a] dark:text-white">
           How it works
         </h2>
-        <ol className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <ol className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {HOW_IT_WORKS.map((step, i) => (
             <li
               key={step.title}
-              className="rounded-xl border border-gray-200 bg-white p-3 dark:border-white/10 dark:bg-white/5"
+              className="rounded-2xl border border-[#ececef] bg-white p-4 sm:p-5 dark:border-white/10 dark:bg-[#161616]"
             >
-              <span className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-50 text-[#7F39EC] dark:bg-[#7F39EC]/20 dark:text-purple-200">
+              <span className="flex items-center gap-2.5 text-[15px] font-semibold text-[#1a1a1a] dark:text-white">
+                <span
+                  className={cn(
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+                    accentChip,
+                  )}
+                >
                   <step.icon className="h-4 w-4" aria-hidden="true" />
                 </span>
                 <span>
@@ -625,7 +694,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
                   {step.title}
                 </span>
               </span>
-              <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">{step.text}</p>
+              <p className="mt-2.5 text-sm leading-relaxed text-[#8d8d95] dark:text-gray-400">{step.text}</p>
             </li>
           ))}
         </ol>
@@ -634,14 +703,16 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
       {statusBox}
 
       {canApply && !justSubmittedAt && (
-        <div ref={formRef} className={cn("space-y-5", cardClass)}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
-                <ClipboardList className="h-5 w-5" aria-hidden="true" />
+        <div ref={formRef} className={cn("space-y-0", cardClass)}>
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#ececef] pb-5 dark:border-white/10">
+            <div className="max-w-3xl space-y-1">
+              <h2 className="flex items-center gap-2.5 text-[20px] font-bold tracking-tight text-[#1a1a1a] dark:text-white">
+                <span className={cn("flex h-9 w-9 items-center justify-center rounded-full", accentChip)}>
+                  <ClipboardList className="h-4 w-4" aria-hidden="true" />
+                </span>
                 {reviewing ? "Check your answers" : "Apply to this campaign"}
               </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm text-[#8d8d95] dark:text-gray-400">
                 {reviewing
                   ? "This is what the brand will see. You can't edit it after sending."
                   : "The brand reviews every application. You'll see the full brief once you're approved."}
@@ -649,7 +720,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
             </div>
             {questions.length > 0 && !reviewing && (
               <p
-                className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 dark:bg-white/10 dark:text-gray-200"
+                className="inline-flex w-fit rounded-full border border-[#ececef] bg-[#fafafa] px-3 py-1 text-xs font-medium text-[#55555E] dark:border-white/10 dark:bg-white/10 dark:text-gray-200"
                 aria-live="polite"
               >
                 {answered} of {questions.length} answered
@@ -657,80 +728,94 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
             )}
           </div>
 
-          {questions.length > 0 && !reviewing && (
-            <div
-              className="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-white/10"
-              role="progressbar"
-              aria-label="Questions answered"
-              aria-valuemin={0}
-              aria-valuemax={questions.length}
-              aria-valuenow={answered}
-            >
+          <div className="space-y-6 pt-6">
+            {questions.length > 0 && !reviewing && (
               <div
-                className="h-full rounded-full bg-[#7F39EC] transition-all"
-                style={{ width: `${(answered / questions.length) * 100}%` }}
-              />
-            </div>
-          )}
+                className="h-1.5 overflow-hidden rounded-full bg-[#f3f3f5] dark:bg-white/10"
+                role="progressbar"
+                aria-label="Questions answered"
+                aria-valuemin={0}
+                aria-valuemax={questions.length}
+                aria-valuenow={answered}
+              >
+                <div
+                  className={cn("h-full rounded-full transition-all", accentBar)}
+                  style={{ width: `${(answered / questions.length) * 100}%` }}
+                />
+              </div>
+            )}
 
-          {draftRestored && !reviewing && (
-            <p className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-              <Info className="h-3.5 w-3.5" aria-hidden="true" /> We restored the answers you
-              started earlier.
-            </p>
-          )}
+            {draftRestored && !reviewing && (
+              <p className="flex items-center gap-2 text-xs text-[#8d8d95] dark:text-gray-400">
+                <Info className="h-3.5 w-3.5" aria-hidden="true" /> We restored the answers you
+                started earlier.
+              </p>
+            )}
 
-          {reviewing ? (
-            <div className="rounded-xl bg-gray-50 p-4 dark:bg-white/5">
-              <AnswersList
-                answers={questions.map((q) => ({
-                  question_id: q.id,
-                  prompt: q.prompt,
-                  kind: q.kind,
-                  answer: answers[q.id] ?? "",
-                }))}
-              />
-            </div>
-          ) : (
-            questions.map((q) => (
-              <QuestionField
-                key={q.id}
-                question={q}
-                value={answers[q.id] ?? ""}
-                error={touched.has(q.id) ? errors[q.id] : undefined}
-                disabled={busy}
-                onChange={(v) => setAnswer(q.id, v)}
-                onBlur={() => touch(q.id)}
-              />
-            ))
-          )}
+            {reviewing ? (
+              <div className="w-fit max-w-full rounded-2xl border border-[#ececef] bg-[#fafafa] p-5 dark:border-white/10 dark:bg-white/5">
+                <AnswersList
+                  answers={questions.map((q) => ({
+                    question_id: q.id,
+                    prompt: q.prompt,
+                    kind: q.kind,
+                    answer: answers[q.id] ?? "",
+                  }))}
+                />
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {questions.map((q) => (
+                  <QuestionField
+                    key={q.id}
+                    question={q}
+                    value={answers[q.id] ?? ""}
+                    error={touched.has(q.id) ? errors[q.id] : undefined}
+                    disabled={busy}
+                    onChange={(v) => setAnswer(q.id, v)}
+                    onBlur={() => touch(q.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
 
-          <div className="flex flex-col-reverse gap-3 sm:flex-row">
+          <div className="mt-8 flex flex-wrap items-center justify-start gap-2.5 border-t border-[#ececef] pt-6 dark:border-white/10">
             {reviewing ? (
               <>
-                <Button variant="outline" className={outlineDark} disabled={busy} onClick={() => setReviewing(false)}>
-                  <Pencil className="mr-2 h-4 w-4" /> Edit answers
-                </Button>
                 <Button
-                  className="bg-[#4A00BE] text-white hover:bg-[#4A00BE]/90"
+                  variant="outline"
+                  className={secondaryBtn}
                   disabled={busy}
-                  onClick={submit}
+                  onClick={() => setReviewing(false)}
                 >
-                  {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                  <Pencil className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  Edit answers
+                </Button>
+                <Button className={primaryBtn} disabled={busy} onClick={submit}>
+                  {busy ? (
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Send className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  )}
                   Send application
                 </Button>
               </>
             ) : (
               <>
-                <Button variant="outline" className={outlineDark} onClick={browse}>
+                <Button
+                  variant="outline"
+                  className={secondaryBtn}
+                  onClick={browse}
+                >
                   Browse campaigns
                 </Button>
                 <Button
-                  className="bg-[#4A00BE] text-white hover:bg-[#4A00BE]/90"
+                  className={primaryBtn}
                   disabled={busy}
                   onClick={questions.length > 0 ? goToReview : submit}
                 >
-                  {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {busy && <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />}
                   {questions.length > 0 ? "Review application" : "Send application"}
                 </Button>
               </>
@@ -740,7 +825,7 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
       )}
 
       <AlertDialog open={confirmWithdraw} onOpenChange={(o) => !o && setConfirmWithdraw(false)}>
-        <AlertDialogContent className={cn(isDark ? "dark border-white/10 bg-[#06021D] text-white" : "text-gray-900")}>
+        <AlertDialogContent className={cn(isDark ? "dark border-white/10 bg-[#161616] text-white" : "text-gray-900")}>
           <AlertDialogHeader>
             <AlertDialogTitle>Withdraw your application?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -748,18 +833,18 @@ export function RestrictedCampaignPreview({ preview, onChanged, previewMode }: P
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className={outlineDark} disabled={busy}>
+            <AlertDialogCancel className={cn(btnRow, outlineDark)} disabled={busy}>
               Keep it
             </AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
+              className={cn(btnRow, "bg-red-600 text-white hover:bg-red-700")}
               disabled={busy}
               onClick={(e) => {
                 e.preventDefault();
                 withdraw();
               }}
             >
-              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
               Withdraw
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -166,7 +166,7 @@ export default function AffiliateEarnersPage() {
       <Card
         className={cn(
           "shadow-md hover:shadow-lg transition-shadow duration-200",
-          isDark ? "bg-[#170337]" : "bg-white border-gray-200"
+          isDark ? "bg-[#161616]" : "bg-white border-gray-200"
         )}
       >
         <CardHeader>
@@ -180,7 +180,7 @@ export default function AffiliateEarnersPage() {
               onChange={(e) => setQ(e.target.value)}
               className={cn(
                 isDark
-                  ? "bg-[#170337] border border-gray-600 text-white"
+                  ? "bg-[#161616] border border-gray-600 text-white"
                   : "bg-white text-black"
               )}
             />
@@ -201,7 +201,7 @@ export default function AffiliateEarnersPage() {
       <Card
         className={cn(
           "shadow-md hover:shadow-lg transition-shadow duration-200",
-          isDark ? "bg-[#170337]" : "bg-white border-gray-200"
+          isDark ? "bg-[#161616]" : "bg-white border-gray-200"
         )}
       >
         <CardContent>

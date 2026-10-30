@@ -110,20 +110,25 @@ export default function PaymentModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose} isdark={isDark}>
-      <DialogContent className="max-w-2xl w-[95vw] max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle
-            className={cn(
-              "flex items-center gap-2",
-              isDark ? "text-white" : "text-gray-700"
-            )}
-          >
-            {/* <DollarSign className="h-5 w-5 text-green-600" /> */}
-            Mark Submission as Paid
-          </DialogTitle>
-        </DialogHeader>
+      <DialogContent className={cn(
+        "max-w-xl w-[95vw] max-h-[90vh] overflow-y-auto rounded-2xl border border-[#e5e5e5] dark:border-white/10 bg-white dark:bg-[#111113] p-4 shadow-2xl",
+        isDark ? "text-white" : "text-[#0a0a0a]",
+      )}>
+        <div className="flex items-start gap-4 mb-2">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600">
+            <DollarSign className="h-6 w-6" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <DialogTitle className="text-xl font-bold tracking-tight text-[#0a0a0a] dark:text-white">
+              Mark Submission as Paid
+            </DialogTitle>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Record payout and update submission status.
+            </p>
+          </div>
+        </div>
 
-        <div className="space-y-8">
+        <div className="space-y-6">
           {showModeSwitcher && (
             <EnhancedTabs
               tabs={[
@@ -134,7 +139,7 @@ export default function PaymentModal({
               isDark={isDark}
               light={!isDark}
               onTabChange={(id) => setMode(id as "standard" | "custom")}
-              className="mt-4 text-md"
+              className="mt-2 text-md"
             />
           )}
 
@@ -153,7 +158,7 @@ export default function PaymentModal({
                 step="0.01"
                 className={cn(
                   isDark
-                    ? "bg-[#06021D] border border-gray-600 text-white"
+                    ? "bg-[#161616] border border-white/10 text-white"
                     : "bg-white text-black"
                 )}
                 placeholder="0.00"
@@ -182,7 +187,7 @@ export default function PaymentModal({
                 value={customMessage}
                 className={cn(
                   isDark
-                    ? "bg-[#06021D] border border-gray-600 text-white"
+                    ? "bg-[#161616] border border-white/10 text-white"
                     : "bg-white text-black"
                 )}
                 onChange={(e) => setCustomMessage(e.target.value)}
@@ -213,7 +218,7 @@ export default function PaymentModal({
                 disabled={isLoading}
                 className={cn(
                   isDark
-                    ? "bg-[#06021D] border border-gray-600 text-white"
+                    ? "bg-[#161616] border border-white/10 text-white"
                     : "bg-white text-black"
                 )}
               />
@@ -240,7 +245,7 @@ export default function PaymentModal({
                 rows={3}
                 className={cn(
                   isDark
-                    ? "bg-[#06021D] border border-gray-600 text-white"
+                    ? "bg-[#161616] border border-white/10 text-white"
                     : "bg-white text-black"
                 )}
               />
@@ -251,9 +256,18 @@ export default function PaymentModal({
           )}
         </div>
 
-        <div className="flex flex-col w-full gap-3 pt-4">
-         
-          <button
+        <div className="flex items-center justify-end gap-3 pt-5 border-t border-slate-100 dark:border-white/10 mt-6">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleClose}
+            disabled={isLoading}
+            className="h-11 rounded-xl border-slate-200 dark:border-white/10 font-semibold px-5 hover:bg-slate-50 dark:hover:bg-white/5"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
             onClick={handleConfirm}
             disabled={
               isLoading ||
@@ -262,34 +276,19 @@ export default function PaymentModal({
                   isNaN(parseFloat(customAmount)) ||
                   parseFloat(customAmount) <= 0))
             }
-            className={cn(
-              "w-full text-md rounded-full inline-flex items-center justify-center gap-2",
-              isDark
-                ? "bg-[#7F39EC] py-3 text-white"
-                : " bg-[#D9C0FF61] py-3.5 text-[#7F39EC] "
-            )}
+            className="h-11 rounded-xl bg-black dark:bg-white text-white dark:text-black hover:bg-slate-900 dark:hover:bg-slate-100 font-semibold px-6 shadow-xs"
           >
             {isLoading ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 Processing...
               </>
+            ) : mode === "custom" ? (
+              "Confirm Custom Pay"
             ) : (
-              <>
-                {/* <DollarSign className="h-4 w-4 mr-2" /> */}
-                {mode === "custom" ? "Confirm Custom Pay" : "Mark as Paid"}
-              </>
+              "Mark as Paid"
             )}
-          </button>
-          <button onClick={handleClose} disabled={isLoading}
-          className={cn(
-            "w-full text-md rounded-full text-md",
-            isDark
-              ? "py-3 border border-[#FF5353] text-[#FF5353]"
-              : "bg-[#FF323224] text-[#E50000] py-3.5"
-          )}>
-            Cancel
-          </button>
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

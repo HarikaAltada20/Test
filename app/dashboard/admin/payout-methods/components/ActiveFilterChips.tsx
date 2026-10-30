@@ -72,7 +72,7 @@ export function ActiveFilterChips({
           key={c.key}
           className={cn(
             "inline-flex items-center gap-1 rounded-full border py-0.5 pl-3 pr-1 text-xs",
-            isDark ? "border-[#7F39EC]/60 bg-[#7F39EC]/15" : "border-[#D9C0FF] bg-[#F5EEFF] text-[#4A00BE]"
+            isDark ? "border-white/20 bg-white/10 text-white" : "border-[#e6e6e8] bg-[#f6f6f7] text-[#1a1a1a]"
           )}
         >
           {c.label}

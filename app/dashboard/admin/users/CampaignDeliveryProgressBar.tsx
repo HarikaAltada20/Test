@@ -46,13 +46,13 @@ export function CampaignDeliveryProgressBar({
             !compact && "font-medium text-foreground",
           )}
         >
-          <Loader2 className="h-3 w-3 animate-spin text-[#4A00BE]" />
+          <Loader2 className="h-3 w-3 animate-spin text-[#1a1a1a]" />
           {compact ? `${processedCount}/${recipientCount}` : "Delivering notifications"}
         </span>
         <span
           className={cn(
             "tabular-nums font-semibold",
-            compact ? "text-foreground" : "text-[#4A00BE]",
+            compact ? "text-foreground" : "text-[#1a1a1a]",
           )}
         >
           {percentComplete}%
@@ -60,7 +60,7 @@ export function CampaignDeliveryProgressBar({
       </div>
       <Progress
         value={percentComplete}
-        className={cn(compact ? "h-2" : "h-2.5", "[&>div]:bg-[#4A00BE]")}
+        className={cn(compact ? "h-2" : "h-2.5", "[&>div]:bg-[#1a1a1a]")}
       />
       {!compact && (
         <p className="text-xs text-muted-foreground tabular-nums">

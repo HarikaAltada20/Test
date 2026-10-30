@@ -123,7 +123,7 @@ function CopyButton({ value, label = "Copy", isDark }: { value: string; label?: 
       aria-label={`${label}: ${value}`}
       className={cn(
         "inline-flex items-center gap-1 rounded px-1 py-0.5 text-[11px] font-medium",
-        isDark ? "text-gray-400 hover:bg-[#2a1760] hover:text-white" : "text-gray-500 hover:bg-[#efe8fb] hover:text-[#4A00BE]"
+        isDark ? "text-gray-400 hover:bg-white/10 hover:text-white" : "text-gray-500 hover:bg-[#f3f3f5] hover:text-[#1a1a1a]"
       )}
     >
       {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
@@ -651,7 +651,7 @@ export function UserDetailsModal({ userId, open, onOpenChange, isDark }: UserDet
                   className={cn(
                     "whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
                     tab === t.key
-                      ? isDark ? "border-[#9466ff] text-white" : "border-[#4A00BE] text-gray-900"
+                      ? isDark ? "border-[#9466ff] text-white" : "border-[#1a1a1a] text-gray-900"
                       : cn("border-transparent", muted, isDark ? "hover:text-white" : "hover:text-gray-900")
                   )}
                 >
@@ -707,7 +707,7 @@ export function UserDetailsModal({ userId, open, onOpenChange, isDark }: UserDet
             onClick={() => onOpenChange(false)}
             className={cn(
               "rounded-md px-4 py-2 text-sm font-semibold text-white",
-              isDark ? "bg-[#5F2BB1] hover:bg-[#4A00BE]" : "bg-[#4A00BE] hover:bg-[#5F2BB1]"
+              isDark ? "bg-[#1a1a1a] hover:bg-black" : "bg-[#1a1a1a] hover:bg-black"
             )}
           >
             Back to manual entry

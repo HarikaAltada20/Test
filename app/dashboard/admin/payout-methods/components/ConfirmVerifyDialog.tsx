@@ -30,7 +30,7 @@ export function ConfirmVerifyDialog({
 }) {
   return (
     <AlertDialog open={request !== null} onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogContent className={cn(isDark && "border-gray-700 bg-[#0B0629] text-white")}>
+      <AlertDialogContent className={cn(isDark && "border-gray-700 bg-[#161616] text-white")}>
         <AlertDialogHeader>
           <AlertDialogTitle>{request?.title}</AlertDialogTitle>
           <AlertDialogDescription className={cn(isDark && "text-gray-400")}>
