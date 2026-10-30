@@ -1543,7 +1543,7 @@ export default function OpportunitiesPage({
     return (
       <span className={cn("inline-flex", isDark && "dark")}>
         {!contest.is_preview ? (
-          <AccessModeBadge mode="restricted" size={size} />
+          <AccessModeBadge mode="restricted" label="Restricted · You're in" size={size} />
         ) : contest.my_application_status === "pending" ? (
           <ApplicationStatusBadge status="pending" label="Applied" size={size} />
         ) : contest.my_application_status === "rejected" ? (
@@ -1666,8 +1666,9 @@ export default function OpportunitiesPage({
               : "N/A";
 
   /**
-   * Card for Restricted campaigns: says clearly that it's Restricted, where the
-   * creator stands, and what to do next. No budget tracker or counts.
+   * Card for Restricted campaigns the creator can't open yet: says clearly that
+   * it's Restricted, where the creator stands, and what to do next. No budget
+   * tracker or counts. Creators with access get the regular card instead.
    */
   const renderRestrictedOpportunityCard = (
     contest: any,
@@ -1888,7 +1889,7 @@ export default function OpportunitiesPage({
 
   // Render list view item for opportunities
   const renderOpportunityListItem = (contest: any) => {
-    if (contest.access_mode === "restricted") {
+    if (contest.access_mode === "restricted" && contest.is_preview) {
       return renderRestrictedOpportunityCard(contest, "list");
     }
     const opportunityBudgetTracker = getOpportunityBudgetTrackerMeta(contest);
@@ -2744,7 +2745,7 @@ export default function OpportunitiesPage({
                 </div>
               ) : paginatedContests && paginatedContests.length > 0 ? (
                 paginatedContests.map((contest) => {
-                  if (contest.access_mode === "restricted") {
+                  if (contest.access_mode === "restricted" && contest.is_preview) {
                     return renderRestrictedOpportunityCard(contest, "grid");
                   }
                   const opportunityBudgetTracker = getOpportunityBudgetTrackerMeta(contest);
